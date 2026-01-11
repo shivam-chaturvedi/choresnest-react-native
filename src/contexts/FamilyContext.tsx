@@ -187,7 +187,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const addMember = (member: Omit<FamilyMember, "id" | "isActive">) => {
     const newMember: FamilyMember = {
       ...member,
-      id: Date.now().toString(),
+      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
       isActive: false,
     };
     setMembers((prev) => [...prev, newMember]);
@@ -203,7 +203,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   };
 
   const addDocument = (doc: Omit<VaultDocument, "id">) => {
-    const newDoc: VaultDocument = { ...doc, id: Date.now().toString() };
+    const newDoc: VaultDocument = { ...doc, id: Date.now().toString() + Math.random().toString(36).substr(2, 9) };
     if (doc.memberId === "global") {
       setGlobalVault((prev) => [...prev, newDoc]);
     } else {
@@ -230,12 +230,12 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   };
 
   const addEvent = (event: Omit<CalendarEvent, "id">) => {
-    const newEvent: CalendarEvent = { ...event, id: Date.now().toString() };
+    const newEvent: CalendarEvent = { ...event, id: Date.now().toString() + Math.random().toString(36).substr(2, 9) };
     setEvents((prev) => [...prev, newEvent]);
   };
 
   const addGroceryItem = (item: Omit<GroceryItem, "id">) => {
-    const newItem: GroceryItem = { ...item, id: Date.now().toString() };
+    const newItem: GroceryItem = { ...item, id: Date.now().toString() + Math.random().toString(36).substr(2, 9) };
     setGroceryList((prev) => [...prev, newItem]);
   };
 

@@ -153,10 +153,6 @@ export const ListsScreen: React.FC = () => {
               <Pressable style={styles.roundButton} onPress={handleOpenImport}>
                 <AppIcon source="📅" size={18} color={theme.colors.foreground} />
               </Pressable>
-
-              <Pressable style={styles.roundButton}>
-                <AppIcon source="🎙️" size={18} color={theme.colors.foreground} />
-              </Pressable>
             </View>
           </View>
 

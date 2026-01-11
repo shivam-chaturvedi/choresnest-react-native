@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
+  Alert,
 } from "react-native";
 import { useNavigation, NavigationProp } from "@react-navigation/native";
 import { AppLayout } from "../components/layout/AppLayout";
@@ -46,6 +47,14 @@ const sections: MenuSection[] = [
         color: "rgba(239, 68, 68, 0.15)", // bg-danger-light
         iconColor: theme.colors.danger,
         route: "Nutrition"
+      },
+      {
+        label: "Notes",
+        description: "Ideas & memos",
+        icon: "file",
+        color: "rgba(234, 179, 8, 0.15)", // bg-warning-light
+        iconColor: theme.colors.warning,
+        route: "Notes"
       },
       {
         label: "Expenses & Finance",
@@ -122,6 +131,24 @@ export const MoreScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<Record<string, undefined>>>();
   const { openSidebar } = useSidebar();
 
+  const handleLogout = () => {
+    Alert.alert(
+      "Sign Out",
+      "Are you sure you want to sign out?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        {
+          text: "Sign Out",
+          style: "destructive",
+          onPress: () => console.log("Sign out confirmed")
+        }
+      ]
+    );
+  };
+
   return (
     <>
       <AppLayout showNav={false}>
@@ -186,7 +213,7 @@ export const MoreScreen: React.FC = () => {
             </View>
           ))}
 
-          <Pressable style={styles.logoutButton}>
+          <Pressable style={styles.logoutButton} onPress={handleLogout}>
             <AppIcon name="logOut" size={20} color={theme.colors.danger} />
             <Text style={styles.logoutText}>Sign Out</Text>
           </Pressable>
@@ -212,8 +239,8 @@ const styles = StyleSheet.create({
   menuButton: {
     width: 40,
     height: 40,
-    borderRadius: 12,
-    backgroundColor: theme.colors.card, // Squared look matches new UI from previous screens
+    borderRadius: 0,
+    backgroundColor: theme.colors.card,
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#0a1a3c",
@@ -232,7 +259,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: theme.colors.card,
-    borderRadius: 20, // Squared look
+    borderRadius: 0,
     padding: theme.spacing.md,
     marginBottom: theme.spacing.lg,
     shadowColor: "#0a1a3c",
@@ -248,7 +275,7 @@ const styles = StyleSheet.create({
   avatar: {
     width: 64,
     height: 64,
-    borderRadius: 16, // Squared avatar
+    borderRadius: 0,
     backgroundColor: "rgba(46, 94, 153, 0.1)",
     justifyContent: "center",
     alignItems: "center",
@@ -259,7 +286,7 @@ const styles = StyleSheet.create({
     right: -4,
     width: 24,
     height: 24,
-    borderRadius: 12,
+    borderRadius: 0,
     backgroundColor: theme.colors.card,
     justifyContent: "center",
     alignItems: "center",
@@ -288,7 +315,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(123, 164, 208, 0.2)",
     paddingHorizontal: 10,
     paddingVertical: 2,
-    borderRadius: 99,
+    borderRadius: 0,
   },
   roleText: {
     fontSize: 12,
@@ -309,8 +336,8 @@ const styles = StyleSheet.create({
   },
   sectionCard: {
     backgroundColor: theme.colors.card,
-    borderRadius: 20, // Squared look
-    padding: 8, // Padding around the items
+    borderRadius: 0,
+    padding: 8,
     shadowColor: "#0a1a3c",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
@@ -321,7 +348,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     padding: 12,
-    borderRadius: 12,
+    borderRadius: 0,
   },
   itemBorder: {
     borderBottomWidth: 1,
@@ -330,7 +357,7 @@ const styles = StyleSheet.create({
   itemIcon: {
     width: 40,
     height: 40,
-    borderRadius: 12, // Squared icon bg
+    borderRadius: 0,
     justifyContent: "center",
     alignItems: "center",
     marginRight: theme.spacing.md,
@@ -351,7 +378,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 99,
+    borderRadius: 0,
     marginRight: 8,
   },
   badgeText: {
@@ -365,7 +392,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: theme.colors.card,
     paddingVertical: 16,
-    borderRadius: 16,
+    borderRadius: 0,
     gap: 8,
     marginBottom: theme.spacing.md,
     borderWidth: 1,

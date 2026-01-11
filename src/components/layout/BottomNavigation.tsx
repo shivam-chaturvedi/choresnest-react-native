@@ -24,7 +24,7 @@ interface BottomNavigationProps {
 }
 
 export const BottomNavigation: React.FC<BottomNavigationProps> = ({
-  activeRoute = "home",
+  activeRoute,
   onNavigate,
 }) => {
   return (

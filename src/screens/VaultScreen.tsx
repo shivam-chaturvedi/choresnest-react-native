@@ -97,7 +97,7 @@ export const VaultScreen: React.FC = () => {
             <Search size={16} color={theme.colors.mutedForeground} style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search documents, warranties..."
+              placeholder="Search vault, warranties..."
               placeholderTextColor={theme.colors.mutedForeground}
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -175,7 +175,7 @@ export const VaultScreen: React.FC = () => {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>
-                {selectedCategory ? categories.find(c => c.id === selectedCategory)?.name : 'Recent Documents'}
+                {selectedCategory ? categories.find(c => c.id === selectedCategory)?.name : 'Recent Vault Items'}
               </Text>
               <Text style={styles.viewAll}>See All</Text>
             </View>

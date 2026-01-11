@@ -6,6 +6,7 @@ import {
   ScrollView,
   Pressable,
   TextInput,
+  Image,
 } from "react-native";
 import { theme } from "../theme";
 import { AppIcon } from "../components/ui/AppIcon";
@@ -165,8 +166,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           </View>
 
           <Pressable style={styles.googleButton}>
-            <View style={{ marginRight: 12 }}>
-              <Text style={{ fontSize: 24, fontWeight: "900", color: "#4285F4" }}>G</Text>
+            <View style={styles.googleIconWrapper}>
+              <Image
+                source={require('../assets/images/google.png')}
+                style={{ width: 24, height: 24 }}
+                resizeMode="contain"
+              />
             </View>
             <Text style={styles.googleButtonText}>Continue with Google</Text>
           </Pressable>
@@ -372,28 +377,28 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "#CBD5E1", // Slate 300
     borderRadius: 16,
     paddingVertical: 16,
     justifyContent: "center",
     backgroundColor: "#fff",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
+    shadowColor: "#0a1a3c",
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 2,
+    shadowRadius: 4,
     elevation: 2,
+    marginTop: 8,
   },
-  googleIcon: {
+  googleIconWrapper: {
     marginRight: 12,
-  },
-  googleIconText: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: theme.colors.foreground,
+    width: 24,
+    height: 24,
+    alignItems: "center",
+    justifyContent: "center",
   },
   googleButtonText: {
-    fontWeight: "700",
-    color: "#1E293B",
+    fontWeight: "600",
+    color: "#1E293B", // Slate 800
     fontSize: 16,
   },
   infoCard: {

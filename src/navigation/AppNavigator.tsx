@@ -17,11 +17,15 @@ const Stack = createNativeStackNavigator();
 
 import { ErrorBoundary } from "../components/ErrorBoundary";
 
+import { NotesProvider } from "../contexts/NotesContext";
+
 export const AppNavigator = () => (
   <ErrorBoundary>
-    <NavigationContainer>
-      <AppNavigatorInner />
-    </NavigationContainer>
+    <NotesProvider>
+      <NavigationContainer>
+        <AppNavigatorInner />
+      </NavigationContainer>
+    </NotesProvider>
   </ErrorBoundary>
 );
 

@@ -110,7 +110,6 @@ export const HomeScreen: React.FC = () => {
     { label: "Item", iconName: "shoppingCart", action: () => setShowAddItem(true), color: "#EA580C", bg: "#FFEDD5" },
     // { label: "Recipe", iconName: "utensils", action: () => { }, color: "#4F46E5", bg: "#E0E7FF" },
     { label: "Recipe", iconName: "utensils", action: () => navigation.navigate("Recipes" as never), color: theme.colors.primary, bg: theme.colors.muted },
-    { label: "Document", iconName: "file", action: () => navigation.navigate("Documents" as never), color: "#0891B2", bg: "#CFFAFE" },
   ];
 
   const todayKey = new Date().toISOString().split("T")[0];
@@ -138,7 +137,7 @@ export const HomeScreen: React.FC = () => {
 
   return (
     <>
-      <AppLayout style={styles.layout} showNav={false} onAddPress={() => setShowAddEvent(true)}>
+      <AppLayout>
         <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
           {/* Header */}
           <View style={styles.topBar}>
@@ -534,12 +533,12 @@ const styles = StyleSheet.create({
   },
   quickActionsRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    gap: 8,
     marginTop: 12,
   },
   quickActionItem: {
-    width: '18%', // Approx
-    aspectRatio: 0.8,
+    flex: 1,
+    aspectRatio: 0.9,
     backgroundColor: theme.colors.card,
     borderRadius: SMALL_RADIUS,
     alignItems: "center",

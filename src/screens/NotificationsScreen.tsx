@@ -367,7 +367,7 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     padding: 8,
-    borderRadius: 8,
+    borderRadius: 0,
     backgroundColor: 'transparent',
   },
   headerTitle: {
@@ -377,7 +377,7 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: theme.colors.card,
-    borderRadius: 16,
+    borderRadius: 0,
     padding: 16,
     marginBottom: 16,
     shadowColor: '#000',
@@ -391,7 +391,7 @@ const styles = StyleSheet.create({
   mainIconBg: {
     width: 48,
     height: 48,
-    borderRadius: 12,
+    borderRadius: 0,
     backgroundColor: 'rgba(59, 130, 246, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -409,7 +409,7 @@ const styles = StyleSheet.create({
   enableBtn: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 8,
+    borderRadius: 0,
     backgroundColor: theme.colors.muted,
   },
   enableBtnActive: {
@@ -446,7 +446,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.muted,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 8,
+    borderRadius: 0,
     gap: 8,
     minWidth: 120,
     justifyContent: 'space-between',
@@ -477,7 +477,7 @@ const styles = StyleSheet.create({
   typeIconBg: {
     width: 40,
     height: 40,
-    borderRadius: 12,
+    borderRadius: 0,
     backgroundColor: theme.colors.muted,
     alignItems: 'center',
     justifyContent: 'center',
@@ -487,14 +487,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: theme.colors.muted,
     padding: 12,
-    borderRadius: 12,
+    borderRadius: 0,
     gap: 12,
   },
   timeInput: {
     backgroundColor: theme.colors.card, // White/Dark
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 8,
+    borderRadius: 0,
     minWidth: 80,
     textAlign: 'center',
     fontSize: 14,
@@ -513,7 +513,7 @@ const styles = StyleSheet.create({
     right: 0,
     marginTop: 4,
     backgroundColor: theme.colors.card,
-    borderRadius: 12,
+    borderRadius: 0,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,

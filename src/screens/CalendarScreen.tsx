@@ -213,7 +213,7 @@ export const CalendarScreen: React.FC = () => {
   );
 
   return (
-    <AppLayout showNav={false} showAddButton={false}>
+    <AppLayout showNav={false} showAddButton={true} onAddPress={() => setShowAddEventModal(true)}>
       <View style={styles.container}>
         {/* Header Section */}
         <View style={styles.header}>
@@ -334,13 +334,7 @@ export const CalendarScreen: React.FC = () => {
           <View style={{ height: 100 }} />
         </ScrollView>
 
-        {/* FAB */}
-        <Pressable
-          style={styles.fab}
-          onPress={() => setShowAddEventModal(true)}
-        >
-          <AppIcon name="plus" size={24} color="#fff" />
-        </Pressable>
+
 
         <AddEventModal
           open={showAddEventModal}
@@ -693,20 +687,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: theme.colors.mutedForeground,
   },
-  fab: {
-    position: "absolute",
-    bottom: 100,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: theme.colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: theme.colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
+
 });

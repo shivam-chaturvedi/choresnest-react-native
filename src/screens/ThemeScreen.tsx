@@ -21,8 +21,6 @@ const themes = [
 ];
 
 const accentColors = [
-  { id: 'blue', name: 'Ocean Blue', color: '#1f4c85' }, // Matching approx logic or hex
-  // Updating to match HSL from ReactJS roughly to Hex for RN
   // ReactJS: bg-[hsl(210,55%,39%)] -> ~#2D5E8E. Let's use the list from ReactJS logic
   { id: 'blue', name: 'Ocean Blue', color: '#2D5E8E' },
   { id: 'green', name: 'Forest Green', color: '#339966' },
@@ -166,7 +164,7 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: 8,
-    borderRadius: 8,
+    borderRadius: 0,
     marginRight: 12,
   },
   title: {
@@ -178,7 +176,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: theme.colors.primary,
-    borderRadius: 20,
+    borderRadius: 0,
     padding: 16,
     marginBottom: 24,
     shadowColor: theme.colors.primary,
@@ -190,7 +188,7 @@ const styles = StyleSheet.create({
   heroIcon: {
     width: 56,
     height: 56,
-    borderRadius: 16,
+    borderRadius: 0,
     backgroundColor: "rgba(255,255,255,0.2)",
     justifyContent: "center",
     alignItems: "center",
@@ -219,7 +217,7 @@ const styles = StyleSheet.create({
   themeCard: {
     flex: 1,
     backgroundColor: theme.colors.card,
-    borderRadius: 16,
+    borderRadius: 0,
     padding: 16,
     alignItems: 'center',
     borderWidth: 2,
@@ -236,7 +234,7 @@ const styles = StyleSheet.create({
   themeIconBox: {
     width: 48,
     height: 48,
-    borderRadius: 12,
+    borderRadius: 0,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
@@ -248,7 +246,7 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: theme.colors.card,
-    borderRadius: 16,
+    borderRadius: 0,
     padding: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -258,7 +256,7 @@ const styles = StyleSheet.create({
   },
   accentCard: {
     backgroundColor: theme.colors.card,
-    borderRadius: 16,
+    borderRadius: 0,
     padding: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -275,7 +273,7 @@ const styles = StyleSheet.create({
   colorDot: {
     width: 48,
     height: 48,
-    borderRadius: 12,
+    borderRadius: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -293,19 +291,19 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 8,
     backgroundColor: theme.colors.muted,
-    borderRadius: 4,
+    borderRadius: 0,
     marginHorizontal: 16,
     justifyContent: 'center',
   },
   sliderTrackFill: {
     height: 8,
     backgroundColor: theme.colors.primary,
-    borderRadius: 4,
+    borderRadius: 0,
   },
   sliderThumb: {
     width: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: 0,
     backgroundColor: theme.colors.primary,
     position: 'absolute',
     marginLeft: -10, // center
@@ -318,14 +316,14 @@ const styles = StyleSheet.create({
   },
   previewBox: {
     backgroundColor: theme.colors.muted,
-    borderRadius: 12,
+    borderRadius: 0,
     padding: 16,
   },
   previewAvatar: {
     width: 40,
     height: 40,
     backgroundColor: theme.colors.primary,
-    borderRadius: 8,
+    borderRadius: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -342,7 +340,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#dbeafe', // light blue
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: 0,
   },
   tagHighText: {
     fontSize: 11,
@@ -353,7 +351,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#dcfce7', // light green
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: 0,
   },
   tagCompleteText: {
     fontSize: 11,

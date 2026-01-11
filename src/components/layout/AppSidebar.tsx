@@ -10,9 +10,8 @@ import {
   useWindowDimensions,
   TouchableWithoutFeedback,
 } from "react-native";
-import { useNavigation, NavigationProp } from "@react-navigation/native";
+import { useNavigation, NavigationProp, CommonActions } from "@react-navigation/native";
 import { theme } from "../../theme";
-import { AppIcon } from "../ui/AppIcon";
 import { useFamily, FamilyMember } from "../../contexts/FamilyContext";
 import {
   Settings,
@@ -22,8 +21,14 @@ import {
   HelpCircle,
   Check,
   ChevronRight,
+  ChevronDown,
   User,
-  X
+  X,
+  Utensils,
+  Calendar,
+  ClipboardList,
+  StickyNote,
+  Users
 } from "lucide-react-native";
 
 interface AppSidebarProps {
@@ -43,6 +48,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   const translateX = useRef(new Animated.Value(open ? 0 : -sidebarWidth)).current;
   const overlayOpacity = useRef(new Animated.Value(open ? 1 : 0)).current;
 
+  // Dropdown state for profile switcher
+  const [isProfilesOpen, setIsProfilesOpen] = useState(false);
+
   const navigation = useNavigation<NavigationProp<Record<string, undefined>>>();
   const { members, activeMember, setActiveMember, familyName } = useFamily();
 
@@ -50,16 +58,49 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     if (onNavigate) {
       onNavigate(route);
     } else {
-      navigation.navigate(route as never);
+      // Helper to handle nested navigation
+      const navigateToNested = (tabName: string, screenName?: string) => {
+        navigation.dispatch(
+          CommonActions.navigate({
+            name: tabName,
+            params: screenName ? { screen: screenName } : undefined,
+          })
+        );
+      };
+
+      switch (route) {
+        // More Stack
+        case 'Theme':
+        case 'Privacy':
+        case 'Help':
+        case 'Notifications':
+        case 'Export':
+        case 'DataExport':
+          navigateToNested('more', route);
+          break;
+
+        // Home Stack
+        case 'Recipes':
+        case 'MealPlan':
+        case 'Family':
+        case 'Vault':
+        case 'Expenses':
+        case 'Notes':
+        case 'Nutrition':
+          navigateToNested('home', route);
+          break;
+
+        // Tabs or Direct Routes
+        default:
+          navigation.navigate(route as never);
+      }
     }
     onClose();
   };
 
   const handleSwitchMember = (member: FamilyMember) => {
     setActiveMember(member);
-    // Optional: Close sidebar on switch or keep open? ReactJS logic keeps it open usually until nav.
-    // We'll keep it open for quick switching, or maybe specific user preference? 
-    // Let's keep it open to show the switch happened (active state changes).
+    setIsProfilesOpen(false); // Close dropdown after selection
   };
 
   useEffect(() => {
@@ -98,8 +139,13 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   }
 
   const shortcuts = [
-    { icon: FileText, label: 'Documents', route: 'Documents' },
+    { icon: Utensils, label: 'Recipes', route: 'Recipes' },
+    { icon: Calendar, label: 'Meal Plan', route: 'MealPlan' },
+    { icon: ClipboardList, label: 'Shopping Lists', route: 'lists' }, // Fixed route name to lowercase 'lists' tab
+    { icon: Users, label: 'Family', route: 'Family' },
+    { icon: FileText, label: 'Vault', route: 'Vault' },
     { icon: DollarSign, label: 'Expenses', route: 'Expenses' },
+    { icon: StickyNote, label: 'Notes', route: 'Notes' },
   ];
 
   const bottomLinks = [
@@ -157,29 +203,42 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             showsVerticalScrollIndicator
             nestedScrollEnabled
           >
-            {/* Switch Profile Section */}
+            {/* Switch Profile Section - Dropdown Style */}
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Switch Profile</Text>
-              <View style={{ gap: 8 }}>
-                {members.map((member) => (
-                  <Pressable
-                    key={member.id}
-                    style={[
-                      styles.profileRow,
-                      member.isActive && styles.profileRowActive
-                    ]}
-                    onPress={() => handleSwitchMember(member)}
-                  >
-                    <View style={[styles.profileAvatar, { backgroundColor: member.isActive ? '#dbeafe' : '#f3f4f6' }]}>
-                      <Text style={{ fontSize: 20 }}>{member.symbol}</Text>
-                    </View>
-                    <Text style={[styles.profileText, member.isActive && styles.profileTextActive]}>
-                      {member.name}
-                    </Text>
-                    {member.isActive && <Check size={20} color={theme.colors.primary} />}
-                  </Pressable>
-                ))}
-              </View>
+              <Pressable
+                style={styles.dropdownHeader}
+                onPress={() => setIsProfilesOpen(!isProfilesOpen)}
+              >
+                <Text style={styles.sectionLabel}>Switch Profile</Text>
+                {isProfilesOpen ? (
+                  <ChevronDown size={16} color={theme.colors.mutedForeground} />
+                ) : (
+                  <ChevronRight size={16} color={theme.colors.mutedForeground} />
+                )}
+              </Pressable>
+
+              {isProfilesOpen && (
+                <View style={{ gap: 8, marginTop: 8 }}>
+                  {members.map((member) => (
+                    <Pressable
+                      key={member.id}
+                      style={[
+                        styles.profileRow,
+                        member.isActive && styles.profileRowActive
+                      ]}
+                      onPress={() => handleSwitchMember(member)}
+                    >
+                      <View style={[styles.profileAvatar, { backgroundColor: member.isActive ? '#dbeafe' : '#f3f4f6' }]}>
+                        <Text style={{ fontSize: 20 }}>{member.symbol}</Text>
+                      </View>
+                      <Text style={[styles.profileText, member.isActive && styles.profileTextActive]}>
+                        {member.name}
+                      </Text>
+                      {member.isActive && <Check size={20} color={theme.colors.primary} />}
+                    </Pressable>
+                  ))}
+                </View>
+              )}
             </View>
 
             <View style={styles.separator} />
@@ -241,7 +300,7 @@ const styles = StyleSheet.create({
   },
   sidebar: {
     backgroundColor: theme.colors.background,
-    borderTopRightRadius: 0, // ReactJS design typically doesn't round these much, or uses specific styles
+    borderTopRightRadius: 0,
     minHeight: "100%",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 0 },
@@ -267,7 +326,7 @@ const styles = StyleSheet.create({
   },
   avatar: {
     width: 64,
-    height: 64, // w-16 h-16 approx (w-20 h-24 in ReactJS is bigger)
+    height: 64,
     borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: "center",
@@ -312,13 +371,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
   },
+  dropdownHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    paddingVertical: 4,
+  },
   sectionLabel: {
     fontSize: 12,
     fontWeight: '600',
     color: theme.colors.mutedForeground,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 12,
   },
   profileRow: {
     flexDirection: "row",

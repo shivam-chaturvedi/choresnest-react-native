@@ -4,6 +4,9 @@ import { NavigationProp, useNavigation } from "@react-navigation/native";
 import { theme } from "../../theme";
 import { BottomNavigation, BottomNavRoute } from "./BottomNavigation";
 import { AppIcon } from "../ui/AppIcon";
+import { QuickAddModal } from "../modals/QuickAddModal";
+import { AddEventModal } from "../modals/AddEventModal";
+import { AddTaskModal } from "../modals/AddTaskModal";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -37,11 +40,15 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     [navigation]
   );
 
+  const [showQuickAdd, setShowQuickAdd] = React.useState(false);
+  const [showAddEvent, setShowAddEvent] = React.useState(false);
+  const [showAddTask, setShowAddTask] = React.useState(false);
+
   return (
     <View style={[styles.container, style]}>
       <View style={styles.content}>{children}</View>
       {showAddButton && (
-        <Pressable style={styles.addButton} onPress={onAddPress}>
+        <Pressable style={styles.addButton} onPress={() => setShowQuickAdd(true)}>
           <AppIcon name="plus" size={34} color={theme.colors.primaryForeground} />
         </Pressable>
       )}
@@ -51,6 +58,16 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           onNavigate={navOnNavigate ?? handleNavigate}
         />
       )}
+
+      <QuickAddModal
+        open={showQuickAdd}
+        onClose={() => setShowQuickAdd(false)}
+        onAddEvent={() => setShowAddEvent(true)}
+        onAddTask={() => setShowAddTask(true)}
+      />
+
+      <AddEventModal open={showAddEvent} onOpenChange={setShowAddEvent} />
+      <AddTaskModal open={showAddTask} onClose={() => setShowAddTask(false)} />
     </View>
   );
 };
@@ -67,7 +84,7 @@ const styles = StyleSheet.create({
   addButton: {
     position: "absolute",
     right: 24,
-    bottom: 90,
+    bottom: 20,
     width: 56,
     height: 56,
     borderRadius: 16,

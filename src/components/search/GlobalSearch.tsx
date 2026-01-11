@@ -55,11 +55,11 @@ const sampleData: SearchResult[] = [
   { id: "r5", type: "recipe", title: "Veggie Stir Fry", subtitle: "Quick & Healthy", icon: "🥦", path: "Recipes", meta: "20 mins" },
 
   // Documents
-  { id: "d1", type: "document", title: "Passport - Dad", subtitle: "ID Document", icon: "📘", path: "Documents", meta: "Expires 2026" },
-  { id: "d2", type: "document", title: "Car Insurance", subtitle: "Insurance Policy", icon: "🚗", path: "Documents", meta: "Expires Mar 2025" },
-  { id: "d3", type: "document", title: "TV Warranty", subtitle: "Warranty Card", icon: "📺", path: "Documents", meta: "Expires Feb 2025" },
-  { id: "d4", type: "document", title: "Medical Records", subtitle: "Health Documents", icon: "🏥", path: "Documents", meta: "Updated Jan 2024" },
-  { id: "d5", type: "document", title: "Property Papers", subtitle: "Legal Documents", icon: "🏠", path: "Documents", meta: "Permanent" },
+  { id: "d1", type: "document", title: "Passport - Dad", subtitle: "ID Document", icon: "📘", path: "Vault", meta: "Expires 2026" },
+  { id: "d2", type: "document", title: "Car Insurance", subtitle: "Insurance Policy", icon: "🚗", path: "Vault", meta: "Expires Mar 2025" },
+  { id: "d3", type: "document", title: "TV Warranty", subtitle: "Warranty Card", icon: "📺", path: "Vault", meta: "Expires Feb 2025" },
+  { id: "d4", type: "document", title: "Medical Records", subtitle: "Health Documents", icon: "🏥", path: "Vault", meta: "Updated Jan 2024" },
+  { id: "d5", type: "document", title: "Property Papers", subtitle: "Legal Documents", icon: "🏠", path: "Vault", meta: "Permanent" },
 ];
 
 const typeConfig: Record<string, { label: string; icon: AppIconName; color: string; bg: string }> = {
@@ -67,7 +67,7 @@ const typeConfig: Record<string, { label: string; icon: AppIconName; color: stri
   task: { label: "Tasks", icon: "checkSquare", color: "#16A34A", bg: "#DCFCE7" },
   grocery: { label: "Grocery", icon: "shoppingCart", color: "#EA580C", bg: "#FFEDD5" },
   recipe: { label: "Recipes", icon: "utensils", color: "#4F46E5", bg: "#E0E7FF" },
-  document: { label: "Documents", icon: "file", color: "#0891B2", bg: "#CFFAFE" },
+  document: { label: "Vault", icon: "file", color: "#0891B2", bg: "#CFFAFE" },
 };
 
 interface GlobalSearchProps {
@@ -129,7 +129,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
               <AppIcon name="search" size={20} color={theme.colors.mutedForeground} style={styles.searchIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Search events, tasks, recipes, documents..."
+                placeholder="Search events, tasks, recipes, vault..."
                 placeholderTextColor={theme.colors.mutedForeground}
                 value={query}
                 onChangeText={setQuery}

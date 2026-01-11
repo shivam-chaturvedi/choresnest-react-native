@@ -54,7 +54,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   return (
     <View style={styles.screenContainer}>
       <View style={styles.skipRow}>
-        <Pressable onPress={onSkip}>
+        <Pressable onPress={onSkip} style={styles.skipButton}>
           <Text style={styles.skipText}>Skip</Text>
         </Pressable>
       </View>
@@ -110,8 +110,14 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     paddingHorizontal: theme.spacing.lg,
   },
+  skipButton: {
+    backgroundColor: "#E2E8F0", // Light gray
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
   skipText: {
-    color: theme.colors.mutedForeground,
+    color: theme.colors.foreground,
     fontWeight: "600",
   },
   content: {

@@ -1,5 +1,6 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { getFocusedRouteNameFromRoute } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import HomeScreen from "../screens/HomeScreen";
@@ -18,6 +19,8 @@ import { ExportScreen } from "../screens/UtilityScreens";
 import { VaultScreen } from "../screens/VaultScreen";
 import { ExpensesScreen } from "../screens/ExpensesScreen";
 import { FamilyScreen } from "../screens/FamilyScreen";
+import { NotesScreen } from "../screens/NotesScreen";
+import { NoteDetailScreen } from "../screens/NoteDetailScreen";
 
 // More Stack Screens
 import { NotificationsScreen } from "../screens/NotificationsScreen";
@@ -36,9 +39,11 @@ const HomeStack = () => (
     <Stack.Screen name="RecipeDetail" component={RecipeDetailScreen} />
     <Stack.Screen name="MealPlan" component={MealPlanScreen} />
     <Stack.Screen name="Nutrition" component={NutritionScreen} />
-    <Stack.Screen name="Documents" component={VaultScreen} />
+    <Stack.Screen name="Vault" component={VaultScreen} />
     <Stack.Screen name="Expenses" component={ExpensesScreen} />
     <Stack.Screen name="Family" component={FamilyScreen} />
+    <Stack.Screen name="Notes" component={NotesScreen} />
+    <Stack.Screen name="NoteDetail" component={NoteDetailScreen} />
   </Stack.Navigator>
 );
 
@@ -59,21 +64,42 @@ export const TabNavigator = () => (
     screenOptions={{
       headerShown: false,
     }}
-    tabBar={(props) => (
-      <BottomNavigation
-        activeRoute={props.state.routeNames[props.state.index] as BottomNavRoute}
-        onNavigate={(route) => {
-          if (route === 'home') {
-            props.navigation.reset({
-              index: 0,
-              routes: [{ name: 'home' }],
-            });
-          } else {
-            props.navigation.navigate(route);
-          }
-        }}
-      />
-    )}
+    tabBar={(props) => {
+      // Get the current route name for the 'home' tab
+      // We need to check if we are on the 'home' tab AND specifically on the 'HomeMain' screen
+      // If we are deeper in the stack (Recipes, etc), we don't want to show 'active' state
+
+      const homeRoute = props.state.routes.find(r => r.name === 'home');
+      const focusedRouteName = homeRoute && getFocusedRouteNameFromRoute(homeRoute);
+
+      let activeRoute = props.state.routeNames[props.state.index] as BottomNavRoute;
+
+      // If we are on the 'home' tab, check the nested stack route
+      if (activeRoute === 'home') {
+        // If focusedRouteName is defined (we navigated within stack) and NOT 'HomeMain',
+        // then we are on a deeper screen
+        if (focusedRouteName && focusedRouteName !== 'HomeMain') {
+          // @ts-ignore - Intentionally setting to undefined/unmatched to show no active tab
+          activeRoute = undefined;
+        }
+      }
+
+      return (
+        <BottomNavigation
+          activeRoute={activeRoute}
+          onNavigate={(route) => {
+            if (route === 'home') {
+              props.navigation.reset({
+                index: 0,
+                routes: [{ name: 'home' }],
+              });
+            } else {
+              props.navigation.navigate(route);
+            }
+          }}
+        />
+      );
+    }}
   >
     <Tab.Screen name="home" component={HomeStack} />
     <Tab.Screen name="calendar" component={CalendarScreen} />
