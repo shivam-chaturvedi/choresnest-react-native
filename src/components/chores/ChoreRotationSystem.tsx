@@ -158,38 +158,38 @@ export const ChoreRotationSystem: React.FC = () => {
                     const starsToNextReward = nextReward ? nextReward.starsRequired - kid.totalStars : 0;
 
                     return (
-                        <View key={kid.id} style={styles.kidCard}>
+                        <View key={kid.id} style={[styles.kidCard, { backgroundColor: theme.colors.card }]}>
                             <View style={styles.kidHeader}>
                                 <View style={styles.avatarContainer}>
                                     <Text style={{ fontSize: 24 }}>{kid.avatar}</Text>
                                 </View>
                                 <View style={{ flex: 1, marginLeft: 12 }}>
-                                    <Text style={styles.kidName}>{kid.name}</Text>
+                                    <Text style={[styles.kidName, { color: theme.colors.foreground }]}>{kid.name}</Text>
                                     <View style={styles.starsRow}>
                                         <AppIcon name="star" size={14} color={theme.colors.warning} />
-                                        <Text style={styles.starsText}>{kid.totalStars}</Text>
-                                        <Text style={styles.starsLabel}>total stars</Text>
+                                        <Text style={[styles.starsText, { color: theme.colors.foreground }]}>{kid.totalStars}</Text>
+                                        <Text style={[styles.starsLabel, { color: theme.colors.mutedForeground }]}>total stars</Text>
                                     </View>
                                 </View>
                                 <Pressable
-                                    style={styles.rewardsButton}
+                                    style={[styles.rewardsButton, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
                                     onPress={() => {
                                         setSelectedKid(kid);
                                         setShowRewardModal(true);
                                     }}
                                 >
                                     <AppIcon name="gift" size={16} color={theme.colors.foreground} />
-                                    <Text style={styles.rewardsButtonText}>Rewards</Text>
+                                    <Text style={[styles.rewardsButtonText, { color: theme.colors.foreground }]}>Rewards</Text>
                                 </Pressable>
                             </View>
 
                             {/* Progress Bar */}
                             <View style={styles.progressSection}>
                                 <View style={styles.progressMeta}>
-                                    <Text style={styles.progressLabel}>Today's Progress</Text>
-                                    <Text style={styles.progressValue}>{completedChores}/{kidChores.length}</Text>
+                                    <Text style={[styles.progressLabel, { color: theme.colors.mutedForeground }]}>Today's Progress</Text>
+                                    <Text style={[styles.progressValue, { color: theme.colors.foreground }]}>{completedChores}/{kidChores.length}</Text>
                                 </View>
-                                <View style={styles.progressBarBg}>
+                                <View style={[styles.progressBarBg, { backgroundColor: theme.colors.muted }]}>
                                     <View
                                         style={[styles.progressBarFill, { width: `${progressPercent}%`, backgroundColor: theme.colors.success }]}
                                     />
@@ -201,7 +201,7 @@ export const ChoreRotationSystem: React.FC = () => {
                                 <View style={styles.nextRewardCard}>
                                     <View style={styles.nextRewardHeader}>
                                         <Text style={{ fontSize: 16 }}>{nextReward.icon}</Text>
-                                        <Text style={styles.nextRewardText}>
+                                        <Text style={[styles.nextRewardText, { color: theme.colors.foreground }]}>
                                             {starsToNextReward} more stars for: {nextReward.name}
                                         </Text>
                                     </View>
@@ -209,7 +209,7 @@ export const ChoreRotationSystem: React.FC = () => {
                                         <View
                                             style={[
                                                 styles.rewardProgressBarFill,
-                                                { width: `${(kid.totalStars / nextReward.starsRequired) * 100}%` },
+                                                { width: `${(kid.totalStars / nextReward.starsRequired) * 100}%`, backgroundColor: theme.colors.warning },
                                             ]}
                                         />
                                     </View>
@@ -221,17 +221,17 @@ export const ChoreRotationSystem: React.FC = () => {
             </View>
 
             {/* Rotate Button */}
-            <Pressable style={styles.rotateButton} onPress={rotateChores}>
+            <Pressable style={[styles.rotateButton, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]} onPress={rotateChores}>
                 <AppIcon name="repeat" size={16} color={theme.colors.foreground} style={{ marginRight: 8 }} />
-                <Text style={styles.rotateButtonText}>Rotate Chores Between Kids</Text>
+                <Text style={[styles.rotateButtonText, { color: theme.colors.foreground }]}>Rotate Chores Between Kids</Text>
             </Pressable>
 
             {/* Daily Chores List */}
             <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Today's Chores</Text>
+                <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>Today's Chores</Text>
                 <Pressable onPress={() => setShowAddChoreModal(true)} style={styles.addButton}>
                     <AppIcon name="plus" size={16} color={theme.colors.primary} style={{ marginRight: 4 }} />
-                    <Text style={styles.addButtonText}>Add</Text>
+                    <Text style={[styles.addButtonText, { color: theme.colors.foreground }]}>Add</Text>
                 </Pressable>
             </View>
 
@@ -241,10 +241,10 @@ export const ChoreRotationSystem: React.FC = () => {
                     .map((chore) => {
                         const kid = getKidById(chore.assignedTo);
                         return (
-                            <View key={chore.id} style={[styles.choreCard, chore.completed && styles.choreCompleted]}>
+                            <View key={chore.id} style={[styles.choreCard, { backgroundColor: theme.colors.card }, chore.completed && styles.choreCompleted]}>
                                 <Pressable
                                     onPress={() => toggleChoreComplete(chore.id)}
-                                    style={[styles.checkCircle, chore.completed && styles.checkCircleActive]}
+                                    style={[styles.checkCircle, { borderColor: theme.colors.border }, chore.completed && { backgroundColor: theme.colors.success, borderColor: theme.colors.success }]}
                                 >
                                     {chore.completed && <AppIcon name="check" size={12} color="#fff" />}
                                 </Pressable>
@@ -252,11 +252,11 @@ export const ChoreRotationSystem: React.FC = () => {
                                 <Text style={styles.choreIcon}>{chore.icon}</Text>
 
                                 <View style={{ flex: 1 }}>
-                                    <Text style={[styles.choreName, chore.completed && styles.choreNameCompleted]}>
+                                    <Text style={[styles.choreName, { color: theme.colors.foreground }, chore.completed && styles.choreNameCompleted]}>
                                         {chore.name}
                                     </Text>
                                     <View style={styles.choreMeta}>
-                                        <Text style={styles.choreAssignee}>{kid?.avatar} {kid?.name}</Text>
+                                        <Text style={[styles.choreAssignee, { color: theme.colors.mutedForeground }]}>{kid?.avatar} {kid?.name}</Text>
                                         <View style={styles.choreStars}>
                                             {Array.from({ length: chore.stars }).map((_, i) => (
                                                 <Text key={i} style={{ fontSize: 10 }}>⭐</Text>
@@ -271,7 +271,7 @@ export const ChoreRotationSystem: React.FC = () => {
 
             {/* Weekly Chores List */}
             <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Weekly Chores</Text>
+                <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>Weekly Chores</Text>
             </View>
             <View style={styles.choresList}>
                 {chores
@@ -279,10 +279,10 @@ export const ChoreRotationSystem: React.FC = () => {
                     .map((chore) => {
                         const kid = getKidById(chore.assignedTo);
                         return (
-                            <View key={chore.id} style={[styles.choreCard, chore.completed && styles.choreCompleted]}>
+                            <View key={chore.id} style={[styles.choreCard, { backgroundColor: theme.colors.card }, chore.completed && styles.choreCompleted]}>
                                 <Pressable
                                     onPress={() => toggleChoreComplete(chore.id)}
-                                    style={[styles.checkCircle, chore.completed && styles.checkCircleActive]}
+                                    style={[styles.checkCircle, { borderColor: theme.colors.border }, chore.completed && { backgroundColor: theme.colors.success, borderColor: theme.colors.success }]}
                                 >
                                     {chore.completed && <AppIcon name="check" size={12} color="#fff" />}
                                 </Pressable>
@@ -290,11 +290,11 @@ export const ChoreRotationSystem: React.FC = () => {
                                 <Text style={styles.choreIcon}>{chore.icon}</Text>
 
                                 <View style={{ flex: 1 }}>
-                                    <Text style={[styles.choreName, chore.completed && styles.choreNameCompleted]}>
+                                    <Text style={[styles.choreName, { color: theme.colors.foreground }, chore.completed && styles.choreNameCompleted]}>
                                         {chore.name}
                                     </Text>
                                     <View style={styles.choreMeta}>
-                                        <Text style={styles.choreAssignee}>{kid?.avatar} {kid?.name}</Text>
+                                        <Text style={[styles.choreAssignee, { color: theme.colors.mutedForeground }]}>{kid?.avatar} {kid?.name}</Text>
                                         <View style={styles.choreStars}>
                                             {Array.from({ length: chore.stars }).map((_, i) => (
                                                 <Text key={i} style={{ fontSize: 10 }}>⭐</Text>
@@ -309,11 +309,11 @@ export const ChoreRotationSystem: React.FC = () => {
 
             {/* Rewards Modal */}
             <Modal visible={showRewardModal} transparent animationType="fade" onRequestClose={() => setShowRewardModal(false)}>
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContainer}>
+                <View style={[styles.modalOverlay, { backgroundColor: "rgba(0,0,0,0.5)" }]}>
+                    <View style={[styles.modalContainer, { backgroundColor: theme.colors.card }]}>
                         <View style={styles.modalHeader}>
                             <AppIcon name="gift" size={24} color={theme.colors.primary} />
-                            <Text style={styles.modalTitle}>{selectedKid?.name}'s Rewards</Text>
+                            <Text style={[styles.modalTitle, { color: theme.colors.foreground }]}>{selectedKid?.name}'s Rewards</Text>
                             <Pressable onPress={() => setShowRewardModal(false)} style={styles.closeButton}>
                                 <AppIcon name="x" size={24} color={theme.colors.mutedForeground} />
                             </Pressable>
@@ -325,30 +325,30 @@ export const ChoreRotationSystem: React.FC = () => {
                                     <View style={styles.starsCard}>
                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                                             <AppIcon name="star" size={24} color={theme.colors.warning} />
-                                            <Text style={styles.starsCardValue}>{selectedKid.totalStars}</Text>
+                                            <Text style={[styles.starsCardValue, { color: theme.colors.foreground }]}>{selectedKid.totalStars}</Text>
                                         </View>
-                                        <Text style={styles.starsCardLabel}>Available Stars</Text>
+                                        <Text style={[styles.starsCardLabel, { color: theme.colors.mutedForeground }]}>Available Stars</Text>
                                     </View>
 
                                     <View style={styles.rewardsList}>
                                         {rewards.map((reward) => {
                                             const canClaim = selectedKid.totalStars >= reward.starsRequired;
                                             return (
-                                                <View key={reward.id} style={[styles.rewardItem, canClaim && styles.rewardItemActive]}>
+                                                <View key={reward.id} style={[styles.rewardItem, { backgroundColor: theme.colors.background, borderColor: "transparent" }, canClaim && { borderColor: theme.colors.success, backgroundColor: "rgba(46, 94, 153, 0.05)" }]}>
                                                     <Text style={{ fontSize: 32 }}>{reward.icon}</Text>
                                                     <View style={{ flex: 1 }}>
-                                                        <Text style={styles.rewardName}>{reward.name}</Text>
+                                                        <Text style={[styles.rewardName, { color: theme.colors.foreground }]}>{reward.name}</Text>
                                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                                                             <AppIcon name="star" size={12} color={theme.colors.warning} />
-                                                            <Text style={styles.rewardCost}>{reward.starsRequired} stars</Text>
+                                                            <Text style={[styles.rewardCost, { color: theme.colors.mutedForeground }]}>{reward.starsRequired} stars</Text>
                                                         </View>
                                                     </View>
                                                     <Pressable
                                                         onPress={() => claimReward(reward, selectedKid)}
                                                         disabled={!canClaim}
-                                                        style={[styles.claimButton, !canClaim && styles.claimButtonDisabled]}
+                                                        style={[styles.claimButton, { backgroundColor: theme.colors.primary }, !canClaim && { backgroundColor: "transparent", borderWidth: 1, borderColor: theme.colors.border }]}
                                                     >
-                                                        <Text style={[styles.claimButtonText, !canClaim && styles.claimButtonTextDisabled]}>
+                                                        <Text style={[styles.claimButtonText, !canClaim && { color: theme.colors.foreground }]}>
                                                             {canClaim ? 'Claim' : `${reward.starsRequired - selectedKid.totalStars} more`}
                                                         </Text>
                                                     </Pressable>
@@ -365,11 +365,11 @@ export const ChoreRotationSystem: React.FC = () => {
 
             {/* Add Chore Modal */}
             <Modal visible={showAddChoreModal} transparent animationType="fade" onRequestClose={() => setShowAddChoreModal(false)}>
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContainer}>
+                <View style={[styles.modalOverlay, { backgroundColor: "rgba(0,0,0,0.5)" }]}>
+                    <View style={[styles.modalContainer, { backgroundColor: theme.colors.card }]}>
                         <View style={styles.modalHeader}>
                             <AppIcon name="plus" size={24} color={theme.colors.primary} />
-                            <Text style={styles.modalTitle}>Add New Chore</Text>
+                            <Text style={[styles.modalTitle, { color: theme.colors.foreground }]}>Add New Chore</Text>
                             <Pressable onPress={() => setShowAddChoreModal(false)} style={styles.closeButton}>
                                 <AppIcon name="x" size={24} color={theme.colors.mutedForeground} />
                             </Pressable>
@@ -377,18 +377,18 @@ export const ChoreRotationSystem: React.FC = () => {
 
                         <ScrollView style={styles.modalContent}>
                             <View style={styles.formGroup}>
-                                <Text style={styles.label}>Chore Name</Text>
+                                <Text style={[styles.label, { color: theme.colors.foreground }]}>Chore Name</Text>
                                 <TextInput
                                     value={newChore.name}
                                     onChangeText={(text) => setNewChore(prev => ({ ...prev, name: text }))}
                                     placeholder="e.g., Clean room"
                                     placeholderTextColor={theme.colors.mutedForeground}
-                                    style={styles.input}
+                                    style={[styles.input, { backgroundColor: theme.colors.background, color: theme.colors.foreground }]}
                                 />
                             </View>
 
                             <View style={styles.formGroup}>
-                                <Text style={styles.label}>Stars Reward</Text>
+                                <Text style={[styles.label, { color: theme.colors.foreground }]}>Stars Reward</Text>
                                 <View style={styles.starsSelector}>
                                     {[1, 2, 3, 4, 5].map((num) => (
                                         <Pressable
@@ -396,7 +396,8 @@ export const ChoreRotationSystem: React.FC = () => {
                                             onPress={() => setNewChore(prev => ({ ...prev, stars: num }))}
                                             style={[
                                                 styles.starOption,
-                                                newChore.stars === num && styles.starOptionActive
+                                                { borderColor: theme.colors.border },
+                                                newChore.stars === num && { borderColor: theme.colors.warning, backgroundColor: "rgba(245, 166, 35, 0.15)" }
                                             ]}
                                         >
                                             <Text style={{ fontSize: 16 }}>{Array(num).fill('⭐').join('')}</Text>
@@ -406,7 +407,7 @@ export const ChoreRotationSystem: React.FC = () => {
                             </View>
 
                             <View style={styles.formGroup}>
-                                <Text style={styles.label}>Icon</Text>
+                                <Text style={[styles.label, { color: theme.colors.foreground }]}>Icon</Text>
                                 <View style={styles.iconSelector}>
                                     {['🧹', '🍽️', '🛏️', '🐕', '🗑️', '🌱', '📚', '🧺', '🚿', '🪥'].map((icon) => (
                                         <Pressable
@@ -414,7 +415,8 @@ export const ChoreRotationSystem: React.FC = () => {
                                             onPress={() => setNewChore(prev => ({ ...prev, icon }))}
                                             style={[
                                                 styles.iconOption,
-                                                newChore.icon === icon && styles.iconOptionActive
+                                                { borderColor: theme.colors.border },
+                                                newChore.icon === icon && { borderColor: theme.colors.primary, backgroundColor: "rgba(59, 130, 246, 0.1)" }
                                             ]}
                                         >
                                             <Text style={{ fontSize: 20 }}>{icon}</Text>
@@ -424,7 +426,7 @@ export const ChoreRotationSystem: React.FC = () => {
                             </View>
 
                             <Pressable
-                                style={[styles.saveButton, !newChore.name && styles.saveButtonDisabled]}
+                                style={[styles.saveButton, { backgroundColor: theme.colors.primary }, !newChore.name && { opacity: 0.5 }]}
                                 onPress={addNewChore}
                                 disabled={!newChore.name}
                             >
@@ -446,7 +448,6 @@ const styles = StyleSheet.create({
         gap: 12,
     },
     kidCard: {
-        backgroundColor: theme.colors.card,
         borderRadius: 20,
         padding: 16,
         shadowColor: "#000",
@@ -471,7 +472,6 @@ const styles = StyleSheet.create({
     kidName: {
         fontSize: 18,
         fontWeight: "700",
-        color: theme.colors.foreground,
     },
     starsRow: {
         flexDirection: "row",
@@ -481,14 +481,11 @@ const styles = StyleSheet.create({
     starsText: {
         fontSize: 16,
         fontWeight: "700",
-        color: theme.colors.foreground,
     },
     starsLabel: {
         fontSize: 12,
-        color: theme.colors.mutedForeground,
     },
     rewardsButton: {
-        backgroundColor: theme.colors.background,
         paddingHorizontal: 12,
         paddingVertical: 8,
         borderRadius: 12,
@@ -496,12 +493,10 @@ const styles = StyleSheet.create({
         alignItems: "center",
         gap: 6,
         borderWidth: 1,
-        borderColor: theme.colors.border,
     },
     rewardsButtonText: {
         fontWeight: "600",
         fontSize: 14,
-        color: theme.colors.foreground,
     },
     progressSection: {
         marginBottom: 12,
@@ -513,16 +508,13 @@ const styles = StyleSheet.create({
     },
     progressLabel: {
         fontSize: 12,
-        color: theme.colors.mutedForeground,
     },
     progressValue: {
         fontSize: 12,
         fontWeight: "600",
-        color: theme.colors.foreground,
     },
     progressBarBg: {
         height: 8,
-        backgroundColor: theme.colors.muted,
         borderRadius: 999,
         overflow: "hidden",
     },
@@ -544,7 +536,6 @@ const styles = StyleSheet.create({
     nextRewardText: {
         fontSize: 12,
         fontWeight: "600",
-        color: theme.colors.foreground,
     },
     rewardProgressBarBg: {
         height: 6,
@@ -554,7 +545,6 @@ const styles = StyleSheet.create({
     },
     rewardProgressBarFill: {
         height: "100%",
-        backgroundColor: theme.colors.warning,
         borderRadius: 999,
     },
     rotateButton: {
@@ -564,12 +554,9 @@ const styles = StyleSheet.create({
         padding: 14,
         borderRadius: 16,
         borderWidth: 1,
-        borderColor: theme.colors.border,
-        backgroundColor: theme.colors.background,
     },
     rotateButtonText: {
         fontWeight: "600",
-        color: theme.colors.foreground,
     },
     sectionHeader: {
         flexDirection: "row",
@@ -581,7 +568,6 @@ const styles = StyleSheet.create({
     sectionTitle: {
         fontSize: 16,
         fontWeight: "600",
-        color: theme.colors.foreground,
     },
     addButton: {
         flexDirection: "row",
@@ -592,7 +578,6 @@ const styles = StyleSheet.create({
     addButtonText: {
         fontSize: 14,
         fontWeight: "500",
-        color: theme.colors.foreground,
     },
     choresList: {
         gap: 8,
@@ -600,7 +585,6 @@ const styles = StyleSheet.create({
     choreCard: {
         flexDirection: "row",
         alignItems: "center",
-        backgroundColor: theme.colors.card,
         borderRadius: 16,
         padding: 12,
         gap: 12,
@@ -618,13 +602,8 @@ const styles = StyleSheet.create({
         height: 32,
         borderRadius: 10,
         borderWidth: 2,
-        borderColor: theme.colors.border,
         alignItems: "center",
         justifyContent: "center",
-    },
-    checkCircleActive: {
-        backgroundColor: theme.colors.success,
-        borderColor: theme.colors.success,
     },
     choreIcon: {
         fontSize: 24,
@@ -632,7 +611,6 @@ const styles = StyleSheet.create({
     choreName: {
         fontSize: 16,
         fontWeight: "600",
-        color: theme.colors.foreground,
     },
     choreNameCompleted: {
         textDecorationLine: "line-through",
@@ -645,7 +623,6 @@ const styles = StyleSheet.create({
     },
     choreAssignee: {
         fontSize: 12,
-        color: theme.colors.mutedForeground,
     },
     choreStars: {
         flexDirection: "row",
@@ -654,12 +631,10 @@ const styles = StyleSheet.create({
     // Modal Styles
     modalOverlay: {
         flex: 1,
-        backgroundColor: "rgba(0,0,0,0.5)",
         justifyContent: "center",
         padding: 16,
     },
     modalContainer: {
-        backgroundColor: theme.colors.card,
         borderRadius: 24,
         maxHeight: "80%",
         padding: 20,
@@ -678,7 +653,6 @@ const styles = StyleSheet.create({
     modalTitle: {
         fontSize: 20,
         fontWeight: "700",
-        color: theme.colors.foreground,
         flex: 1,
     },
     closeButton: {
@@ -697,11 +671,9 @@ const styles = StyleSheet.create({
     starsCardValue: {
         fontSize: 32,
         fontWeight: "700",
-        color: theme.colors.foreground,
     },
     starsCardLabel: {
         fontSize: 14,
-        color: theme.colors.mutedForeground,
         marginTop: 4,
     },
     rewardsList: {
@@ -712,43 +684,26 @@ const styles = StyleSheet.create({
         alignItems: "center",
         padding: 12,
         borderRadius: 16,
-        backgroundColor: theme.colors.background,
         gap: 12,
         borderWidth: 1,
-        borderColor: "transparent",
-    },
-    rewardItemActive: {
-        borderColor: theme.colors.success,
-        backgroundColor: "rgba(46, 94, 153, 0.05)",
     },
     rewardName: {
         fontSize: 16,
         fontWeight: "600",
-        color: theme.colors.foreground,
         marginBottom: 4,
     },
     rewardCost: {
         fontSize: 12,
-        color: theme.colors.mutedForeground,
     },
     claimButton: {
-        backgroundColor: theme.colors.primary,
         paddingHorizontal: 16,
         paddingVertical: 8,
         borderRadius: 12,
-    },
-    claimButtonDisabled: {
-        backgroundColor: "transparent",
-        borderWidth: 1,
-        borderColor: theme.colors.border,
     },
     claimButtonText: {
         color: "#fff",
         fontWeight: "600",
         fontSize: 12,
-    },
-    claimButtonTextDisabled: {
-        color: theme.colors.foreground,
     },
     formGroup: {
         marginBottom: 20,
@@ -756,15 +711,12 @@ const styles = StyleSheet.create({
     label: {
         fontSize: 14,
         fontWeight: "600",
-        color: theme.colors.foreground,
         marginBottom: 8,
     },
     input: {
-        backgroundColor: theme.colors.background,
         borderRadius: 12,
         padding: 12,
         fontSize: 16,
-        color: theme.colors.foreground,
     },
     starsSelector: {
         flexDirection: "row",
@@ -775,13 +727,8 @@ const styles = StyleSheet.create({
         height: 48,
         borderRadius: 12,
         borderWidth: 2,
-        borderColor: theme.colors.border,
         alignItems: "center",
         justifyContent: "center",
-    },
-    starOptionActive: {
-        borderColor: theme.colors.warning,
-        backgroundColor: "rgba(245, 166, 35, 0.15)",
     },
     iconSelector: {
         flexDirection: "row",
@@ -793,22 +740,13 @@ const styles = StyleSheet.create({
         height: 56,
         borderRadius: 16,
         borderWidth: 2,
-        borderColor: theme.colors.border,
         alignItems: "center",
         justifyContent: "center",
     },
-    iconOptionActive: {
-        borderColor: theme.colors.primary,
-        backgroundColor: "rgba(46, 94, 153, 0.1)",
-    },
     saveButton: {
-        backgroundColor: theme.colors.primary,
         padding: 16,
         borderRadius: 16,
         alignItems: "center",
-    },
-    saveButtonDisabled: {
-        opacity: 0.5,
     },
     saveButtonText: {
         color: "#fff",

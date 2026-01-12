@@ -1,7 +1,8 @@
 import React from "react";
-import { NavigationContainer } from "@react-navigation/native";
+import { DefaultTheme, DarkTheme, NavigationContainer } from "@react-navigation/native";
+import { theme } from "../theme";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { enableScreens } from "react-native-screens";
+
 
 import { SplashScreen } from "../screens/SplashScreen";
 import { OnboardingScreen } from "../screens/OnboardingScreen";
@@ -10,24 +11,47 @@ import { ForgotPasswordScreen } from "../screens/ForgotPasswordScreen";
 import { TabNavigator } from "./TabNavigator";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { useSidebar } from "../contexts/SidebarContext";
+import { ErrorBoundary } from "../components/ErrorBoundary";
+import { NotesProvider } from "../contexts/NotesContext";
+import { useTheme } from "../contexts/ThemeContext";
 
-enableScreens();
+
+
 
 const Stack = createNativeStackNavigator();
 
-import { ErrorBoundary } from "../components/ErrorBoundary";
+export const AppNavigator = () => {
+  const { themeMode, currentPalette, isDark } = useTheme();
+  const [navState, setNavState] = React.useState<any>();
 
-import { NotesProvider } from "../contexts/NotesContext";
+  // Construct React Navigation compatible theme
+  const navigationTheme = {
+    ...(isDark ? DarkTheme : DefaultTheme),
+    colors: {
+      ...(isDark ? DarkTheme.colors : DefaultTheme.colors),
+      primary: theme.colors.primary,
+      background: theme.colors.background,
+      card: theme.colors.card,
+      text: theme.colors.foreground,
+      border: theme.colors.border,
+      notification: theme.colors.danger,
+    },
+  };
 
-export const AppNavigator = () => (
-  <ErrorBoundary>
-    <NotesProvider>
-      <NavigationContainer>
-        <AppNavigatorInner />
-      </NavigationContainer>
-    </NotesProvider>
-  </ErrorBoundary>
-);
+  return (
+    <ErrorBoundary>
+      <NotesProvider>
+        <NavigationContainer
+          theme={navigationTheme}
+          initialState={navState}
+          onStateChange={(state) => setNavState(state)}
+        >
+          <AppNavigatorInner />
+        </NavigationContainer>
+      </NotesProvider>
+    </ErrorBoundary>
+  );
+};
 
 const AppNavigatorInner = () => {
   const { isSidebarOpen, closeSidebar } = useSidebar();

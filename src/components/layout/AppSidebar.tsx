@@ -169,7 +169,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           ]}
         >
           {/* Profile Section (Gradient Header) */}
-          <View style={styles.headerGradient}>
+          <View style={[styles.headerGradient, { backgroundColor: theme.colors.primary }]}>
             <Pressable onPress={onClose} style={styles.closeIcon}>
               <X size={24} color="#f5f8ff" />
             </Pressable>
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   headerGradient: {
-    backgroundColor: "#0f3a6d", // Approximate for gradient-primary
+    // START_FIX: Use inline style for dynamic color
     padding: 24,
     paddingTop: 60, // status bar space
   },

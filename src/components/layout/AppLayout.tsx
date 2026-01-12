@@ -7,6 +7,7 @@ import { AppIcon } from "../ui/AppIcon";
 import { QuickAddModal } from "../modals/QuickAddModal";
 import { AddEventModal } from "../modals/AddEventModal";
 import { AddTaskModal } from "../modals/AddTaskModal";
+import { useTheme } from "../../contexts/ThemeContext";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -32,6 +33,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   };
 
   const navigation = useNavigation<NavigationProp<MainTabsParamList>>();
+  const { themeVersion } = useTheme(); // Force re-render on theme change
 
   const handleNavigate = useCallback(
     (route: BottomNavRoute) => {
@@ -45,10 +47,14 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const [showAddTask, setShowAddTask] = React.useState(false);
 
   return (
-    <View style={[styles.container, style]}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }, style]}>
       <View style={styles.content}>{children}</View>
       {showAddButton && (
-        <Pressable style={styles.addButton} onPress={() => setShowQuickAdd(true)}>
+        <Pressable
+          key={`fab-${themeVersion}`}
+          style={[styles.addButton, { backgroundColor: theme.colors.primary }]}
+          onPress={() => setShowQuickAdd(true)}
+        >
           <AppIcon name="plus" size={34} color={theme.colors.primaryForeground} />
         </Pressable>
       )}
@@ -88,10 +94,9 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 16,
-    backgroundColor: theme.colors.primary,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#0a1a3c",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.2,
     shadowRadius: 12,

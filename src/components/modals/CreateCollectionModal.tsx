@@ -1,187 +1,149 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
     Modal,
     View,
     Text,
     StyleSheet,
+    TouchableOpacity,
     TextInput,
-    Pressable,
     ScrollView,
-    Alert,
-} from 'react-native';
-import { AppIcon } from '../ui/AppIcon'; // Assuming AppIcon is available
-import { theme } from '../../theme';
-import { recipes, Recipe } from '../../data/recipes';
-
-interface Collection {
-    id: string;
-    name: string;
-    emoji: string;
-    color: string;
-    recipeIds: number[];
-}
+    Pressable,
+} from "react-native";
+import { AppIcon } from "../ui/AppIcon";
+import { theme } from "../../theme";
+import { recipes } from "../../data/recipes";
 
 interface CreateCollectionModalProps {
     open: boolean;
     onClose: () => void;
-    onCreate: (collection: Omit<Collection, 'id'>) => void;
 }
 
 const EMOJI_OPTIONS = ['🍳', '🥗', '🍕', '🍜', '🍰', '🥘', '🌮', '🍱', '🥙', '🍲'];
 const COLOR_OPTIONS = [
-    '#E6F0FF', // bg-primary-light (approx)
-    '#F0FDF4', // bg-secondary (approx)
-    '#F0FDF4', // bg-success-light (approx - using similar light greens)
-    '#FFFBEB', // bg-warning-light (approx)
-    '#EFF6FF', // bg-info-light (approx)
-    '#F5F3FF', // bg-accent (approx)
+    '#DBEAFE', // bg-primary-light (blue-100)
+    '#E0E7FF', // bg-secondary (indigo-100)
+    '#DCFCE7', // bg-success-light (green-100)
+    '#FEF3C7', // bg-warning-light (amber-100)
+    '#F1F5F9', // bg-accent (slate-100)
+    '#1E293B', // Dark Navy
 ];
 
-// Map hex to tailwind-like names or use direct hex. 
-// For simplicity in React Native, we will use the hex values directly.
-
-export const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({
-    open,
-    onClose,
-    onCreate,
-}) => {
-    const [name, setName] = useState('');
-    const [selectedEmoji, setSelectedEmoji] = useState('🍳');
+export const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({ open, onClose }) => {
+    const [name, setName] = useState("");
+    const [selectedEmoji, setSelectedEmoji] = useState("🍳");
     const [selectedColor, setSelectedColor] = useState(COLOR_OPTIONS[0]);
     const [selectedRecipes, setSelectedRecipes] = useState<number[]>([]);
 
-    const handleCreate = () => {
-        if (!name.trim()) {
-            Alert.alert('Error', 'Please enter a collection name');
-            return;
+    const toggleRecipe = (id: number) => {
+        if (selectedRecipes.includes(id)) {
+            setSelectedRecipes(selectedRecipes.filter(rid => rid !== id));
+        } else {
+            setSelectedRecipes([...selectedRecipes, id]);
         }
-        onCreate({
-            name,
-            emoji: selectedEmoji,
-            color: selectedColor,
-            recipeIds: selectedRecipes,
-        });
-        // Reset form
-        setName('');
-        setSelectedEmoji('🍳');
-        setSelectedColor(COLOR_OPTIONS[0]);
-        setSelectedRecipes([]);
-        onClose();
     };
 
-    const toggleRecipe = (id: number) => {
-        setSelectedRecipes((prev) =>
-            prev.includes(id) ? prev.filter((r) => r !== id) : [...prev, id]
-        );
+    const handleCreate = () => {
+        // Logic to create would go here
+        console.log("Creating collection:", { name, emoji: selectedEmoji, color: selectedColor, recipes: selectedRecipes });
+        onClose();
+        setName("");
+        setSelectedRecipes([]);
     };
 
     return (
-        <Modal
-            visible={open}
-            animationType="slide"
-            transparent={true}
-            onRequestClose={onClose}
-        >
-            <View style={styles.modalOverlay}>
-                <View style={styles.modalContent}>
+        <Modal visible={open} animationType="slide" transparent>
+            <View style={styles.overlay}>
+                <View style={[styles.container, { backgroundColor: '#F8FAFC' }]}>
+                    {/* Header */}
                     <View style={styles.header}>
-                        <View style={styles.titleRow}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                             <AppIcon name="plus" size={20} color={theme.colors.primary} style={{ marginRight: 8 }} />
                             <Text style={styles.title}>Create Collection</Text>
                         </View>
-                        <Pressable onPress={onClose} hitSlop={10}>
+                        <TouchableOpacity onPress={onClose}>
                             <AppIcon name="x" size={20} color={theme.colors.mutedForeground} />
-                        </Pressable>
+                        </TouchableOpacity>
                     </View>
 
-                    <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-                        {/* Collection Name */}
-                        <View style={styles.section}>
-                            <Text style={styles.label}>Collection Name</Text>
-                            <TextInput
-                                style={styles.input}
-                                value={name}
-                                onChangeText={setName}
-                                placeholder="e.g., Weekly Dinners, Kids Favorites"
-                                placeholderTextColor={theme.colors.mutedForeground}
-                            />
+                    <ScrollView contentContainerStyle={styles.content}>
+                        {/* Name */}
+                        <Text style={styles.label}>Collection Name</Text>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="e.g., Weekly Dinners, Kids Favorites"
+                            placeholderTextColor={theme.colors.mutedForeground}
+                            value={name}
+                            onChangeText={setName}
+                        />
+
+                        {/* Icon Picker */}
+                        <Text style={styles.label}>Choose Icon</Text>
+                        <View style={styles.emojiRow}>
+                            {EMOJI_OPTIONS.map(emoji => (
+                                <TouchableOpacity
+                                    key={emoji}
+                                    style={[
+                                        styles.emojiBtn,
+                                        selectedEmoji === emoji && styles.emojiBtnActive
+                                    ]}
+                                    onPress={() => setSelectedEmoji(emoji)}
+                                >
+                                    <Text style={{ fontSize: 24 }}>{emoji}</Text>
+                                </TouchableOpacity>
+                            ))}
                         </View>
 
-                        {/* Choose Icon */}
-                        <View style={styles.section}>
-                            <Text style={styles.label}>Choose Icon</Text>
-                            <View style={styles.emojiGrid}>
-                                {EMOJI_OPTIONS.map((emoji) => (
+                        {/* Color Picker */}
+                        <Text style={styles.label}>Choose Color</Text>
+                        <View style={styles.colorRow}>
+                            {COLOR_OPTIONS.map(color => (
+                                <TouchableOpacity
+                                    key={color}
+                                    style={[
+                                        styles.colorBtn,
+                                        { backgroundColor: color },
+                                        selectedColor === color && styles.colorBtnActive
+                                    ]}
+                                    onPress={() => setSelectedColor(color)}
+                                />
+                            ))}
+                        </View>
+
+                        {/* Recipe Selector */}
+                        <Text style={styles.label}>Add Recipes ({selectedRecipes.length} selected)</Text>
+                        <View style={styles.recipeList}>
+                            {recipes.map(recipe => {
+                                const isSelected = selectedRecipes.includes(recipe.id);
+                                return (
                                     <Pressable
-                                        key={emoji}
-                                        onPress={() => setSelectedEmoji(emoji)}
+                                        key={recipe.id}
                                         style={[
-                                            styles.emojiButton,
-                                            selectedEmoji === emoji && styles.emojiSelected,
+                                            styles.recipeRow,
+                                            isSelected && styles.recipeRowActive
                                         ]}
+                                        onPress={() => toggleRecipe(recipe.id)}
                                     >
-                                        <Text style={styles.emojiText}>{emoji}</Text>
+                                        <Text style={{ fontSize: 24, marginRight: 12 }}>{recipe.image}</Text>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={styles.recipeName}>{recipe.name}</Text>
+                                            <Text style={styles.recipeMeta}>{recipe.ingredients.length} ingredients</Text>
+                                        </View>
+                                        {isSelected && <AppIcon name="check" size={20} color={theme.colors.primary} />}
                                     </Pressable>
-                                ))}
-                            </View>
+                                );
+                            })}
                         </View>
 
-                        {/* Choose Color */}
-                        <View style={styles.section}>
-                            <Text style={styles.label}>Choose Color</Text>
-                            <View style={styles.colorRow}>
-                                {COLOR_OPTIONS.map((color) => (
-                                    <Pressable
-                                        key={color}
-                                        onPress={() => setSelectedColor(color)}
-                                        style={[
-                                            styles.colorButton,
-                                            { backgroundColor: color },
-                                            selectedColor === color && styles.colorSelected,
-                                        ]}
-                                    />
-                                ))}
-                            </View>
-                        </View>
-
-                        {/* Add Recipes */}
-                        <View style={styles.section}>
-                            <Text style={styles.label}>Add Recipes ({selectedRecipes.length} selected)</Text>
-                            <View style={styles.recipeList}>
-                                {recipes.map((recipe) => {
-                                    const isSelected = selectedRecipes.includes(recipe.id);
-                                    return (
-                                        <Pressable
-                                            key={recipe.id}
-                                            onPress={() => toggleRecipe(recipe.id)}
-                                            style={[
-                                                styles.recipeCard,
-                                                isSelected && styles.recipeSelected,
-                                            ]}
-                                        >
-                                            <View style={styles.recipeContent}>
-                                                <Text style={styles.recipeEmoji}>{recipe.image}</Text>
-                                                <View style={{ flex: 1 }}>
-                                                    <Text style={styles.recipeName}>{recipe.name}</Text>
-                                                    <Text style={styles.recipeMeta}>{recipe.ingredients.length} ingredients</Text>
-                                                </View>
-                                            </View>
-                                            {isSelected && <AppIcon name="check" size={18} color={theme.colors.primary} />}
-                                        </Pressable>
-                                    );
-                                })}
-                            </View>
-                        </View>
                     </ScrollView>
 
-                    {/* Footer Actions */}
+                    {/* Footer */}
                     <View style={styles.footer}>
-                        <Pressable style={styles.cancelButton} onPress={onClose}>
+                        <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
                             <Text style={styles.cancelText}>Cancel</Text>
-                        </Pressable>
-                        <Pressable style={styles.createButton} onPress={handleCreate}>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.createBtn} onPress={handleCreate}>
                             <Text style={styles.createText}>Create Collection</Text>
-                        </Pressable>
+                        </TouchableOpacity>
                     </View>
                 </View>
             </View>
@@ -190,16 +152,16 @@ export const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({
 };
 
 const styles = StyleSheet.create({
-    modalOverlay: {
+    overlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: "rgba(0,0,0,0.5)",
         justifyContent: 'center',
-        padding: 16,
+        alignItems: 'center',
     },
-    modalContent: {
-        backgroundColor: theme.colors.card,
+    container: {
+        width: '90%',
+        maxHeight: '90%',
         borderRadius: 24,
-        maxHeight: '85%',
         overflow: 'hidden',
     },
     header: {
@@ -207,136 +169,121 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: 20,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    titleRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
+        paddingBottom: 10,
     },
     title: {
         fontSize: 18,
         fontWeight: '700',
-        color: theme.colors.foreground,
+        color: '#0F172A',
     },
-    scrollContainer: {
+    content: {
         padding: 20,
-    },
-    section: {
-        marginBottom: 20,
+        paddingTop: 10,
     },
     label: {
         fontSize: 14,
         fontWeight: '600',
-        color: theme.colors.foreground,
-        marginBottom: 10,
+        color: '#334155',
+        marginBottom: 8,
+        marginTop: 16,
     },
     input: {
-        backgroundColor: theme.colors.muted,
-        borderRadius: 14,
-        padding: 14,
-        fontSize: 16,
-        color: theme.colors.foreground,
+        backgroundColor: '#fff',
         borderWidth: 1,
-        borderColor: theme.colors.border,
+        borderColor: '#CBD5E1',
+        borderRadius: 12,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        fontSize: 15,
+        color: '#0F172A',
+        marginTop: 0,
     },
-    emojiGrid: {
+    emojiRow: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: 8,
     },
-    emojiButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
+    emojiBtn: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: theme.colors.card,
+        backgroundColor: '#fff',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
     },
-    emojiSelected: {
+    emojiBtnActive: {
         borderColor: theme.colors.primary,
-        backgroundColor: 'rgba(46, 94, 153, 0.1)',
-    },
-    emojiText: {
-        fontSize: 20,
+        backgroundColor: '#EFF6FF',
     },
     colorRow: {
         flexDirection: 'row',
         gap: 12,
     },
-    colorButton: {
+    colorBtn: {
         width: 40,
         height: 40,
         borderRadius: 20,
         borderWidth: 2,
         borderColor: 'transparent',
     },
-    colorSelected: {
-        borderColor: theme.colors.foreground,
+    colorBtnActive: {
+        borderColor: '#0F172A',
         transform: [{ scale: 1.1 }],
     },
     recipeList: {
         gap: 8,
+        maxHeight: 200, // Roughly show 3-4 items
     },
-    recipeCard: {
+    recipeRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        backgroundColor: theme.colors.muted,
         padding: 12,
+        backgroundColor: '#fff',
         borderRadius: 16,
-        borderWidth: 2,
-        borderColor: 'transparent',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
     },
-    recipeSelected: {
-        backgroundColor: 'rgba(46, 94, 153, 0.05)',
+    recipeRowActive: {
         borderColor: theme.colors.primary,
-    },
-    recipeContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        flex: 1,
-    },
-    recipeEmoji: {
-        fontSize: 24,
+        backgroundColor: '#EFF6FF',
     },
     recipeName: {
         fontSize: 14,
         fontWeight: '600',
-        color: theme.colors.foreground,
+        color: '#0F172A',
     },
     recipeMeta: {
         fontSize: 12,
-        color: theme.colors.mutedForeground,
+        color: '#64748B',
     },
     footer: {
-        flexDirection: 'row',
         padding: 20,
+        paddingTop: 16,
         borderTopWidth: 1,
-        borderTopColor: theme.colors.border,
+        borderTopColor: '#E2E8F0',
+        flexDirection: 'row',
         gap: 12,
+        backgroundColor: '#fff',
     },
-    cancelButton: {
+    cancelBtn: {
         flex: 1,
-        backgroundColor: theme.colors.card,
+        paddingVertical: 12,
+        borderRadius: 24, // Pill
         borderWidth: 1,
-        borderColor: theme.colors.border,
-        paddingVertical: 14,
-        borderRadius: 14,
+        borderColor: '#CBD5E1',
         alignItems: 'center',
     },
     cancelText: {
         fontWeight: '600',
-        color: theme.colors.foreground,
+        color: '#334155',
     },
-    createButton: {
+    createBtn: {
         flex: 1,
-        backgroundColor: theme.colors.primary,
-        paddingVertical: 14,
-        borderRadius: 14,
+        paddingVertical: 12,
+        borderRadius: 24, // Pill
+        backgroundColor: '#2E5E99',
         alignItems: 'center',
     },
     createText: {

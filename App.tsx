@@ -11,28 +11,31 @@ import { SidebarProvider } from "./src/contexts/SidebarContext";
 import { ToastProvider } from "./src/components/ui/Toast";
 import { ErrorBoundary } from "./src/components/ErrorBoundary";
 import { AppNavigator } from "./src/navigation/AppNavigator";
+import { ThemeProvider } from "./src/contexts/ThemeContext";
 
 const App = () => {
   return (
     <SafeAreaProvider>
-      <FamilyProvider>
-        <MealPlanProvider>
-          <SidebarProvider>
-            <ToastProvider>
-              <StatusBar
-                barStyle="dark-content"
-                backgroundColor={theme.colors.background}
-                animated
-              />
-              <SafeAreaView style={styles.appWrapper} edges={["top", "bottom", "left", "right"]}>
-                <ErrorBoundary>
-                  <AppNavigator />
-                </ErrorBoundary>
-              </SafeAreaView>
-            </ToastProvider>
-          </SidebarProvider>
-        </MealPlanProvider>
-      </FamilyProvider>
+      <ThemeProvider>
+        <FamilyProvider>
+          <MealPlanProvider>
+            <SidebarProvider>
+              <ToastProvider>
+                <StatusBar
+                  barStyle="light-content"
+                  backgroundColor={theme.colors.background}
+                  animated
+                />
+                <SafeAreaView style={styles.appWrapper} edges={["top", "bottom", "left", "right"]}>
+                  <ErrorBoundary>
+                    <AppNavigator />
+                  </ErrorBoundary>
+                </SafeAreaView>
+              </ToastProvider>
+            </SidebarProvider>
+          </MealPlanProvider>
+        </FamilyProvider>
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 };

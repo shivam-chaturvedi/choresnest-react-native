@@ -557,15 +557,15 @@ const TutorialModal: React.FC<TutorialModalProps> = ({ visible, onClose }) => {
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
+        <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
           {/* Progress Bar */}
-          <View style={styles.modalProgressBg}>
-            <View style={[styles.modalProgressBar, { width: `${progress}%` }]} />
+          <View style={[styles.modalProgressBg, { backgroundColor: theme.colors.border }]}>
+            <View style={[styles.modalProgressBar, { width: `${progress}%`, backgroundColor: theme.colors.primary }]} />
           </View>
 
           {/* Header */}
           <View style={styles.modalHeader}>
-            <Text style={styles.modalStepText}>Step {currentStep + 1} of {tutorialSteps.length}</Text>
+            <Text style={[styles.modalStepText, { color: theme.colors.mutedForeground }]}>Step {currentStep + 1} of {tutorialSteps.length}</Text>
             <Pressable onPress={onClose} style={styles.closeButton}>
               <X size={20} color={theme.colors.mutedForeground} />
             </Pressable>
@@ -574,20 +574,20 @@ const TutorialModal: React.FC<TutorialModalProps> = ({ visible, onClose }) => {
           {/* Content */}
           <View style={styles.modalBody}>
             <View style={styles.modalIconContainer}>
-              <View style={styles.modalEmojiBg}>
+              <View style={[styles.modalEmojiBg, { backgroundColor: theme.colors.muted }]}>
                 <Text style={{ fontSize: 50 }}>{step.emoji}</Text>
               </View>
-              <View style={styles.modalIconBadge}>
-                <step.icon size={24} color={theme.colors.primaryForeground} />
+              <View style={[styles.modalIconBadge, { backgroundColor: theme.colors.primary }]}>
+                <step.icon size={24} color={'#fff'} />
               </View>
             </View>
 
-            <Text style={styles.modalTitle}>{step.title}</Text>
-            <Text style={styles.modalDescription}>{step.description}</Text>
+            <Text style={[styles.modalTitle, { color: theme.colors.foreground }]}>{step.title}</Text>
+            <Text style={[styles.modalDescription, { color: theme.colors.mutedForeground }]}>{step.description}</Text>
 
-            <View style={styles.highlightBadge}>
+            <View style={[styles.highlightBadge, { backgroundColor: theme.colors.success + '20' }]}>
               <Sparkles size={16} color={theme.colors.success} />
-              <Text style={styles.highlightText}>{step.highlight}</Text>
+              <Text style={[styles.highlightText, { color: theme.colors.success }]}>{step.highlight}</Text>
             </View>
           </View>
 
@@ -599,8 +599,8 @@ const TutorialModal: React.FC<TutorialModalProps> = ({ visible, onClose }) => {
                 onPress={() => setCurrentStep(index)}
                 style={[
                   styles.dot,
-                  index === currentStep && styles.dotActive,
-                  index < currentStep && styles.dotCompleted
+                  index === currentStep ? { backgroundColor: theme.colors.primary, width: 24 } : { backgroundColor: theme.colors.muted, width: 8 },
+                  index < currentStep && { backgroundColor: theme.colors.primary }
                 ]}
               />
             ))}
@@ -611,11 +611,15 @@ const TutorialModal: React.FC<TutorialModalProps> = ({ visible, onClose }) => {
             {!isFirst && (
               <Pressable style={styles.prevButton} onPress={handlePrev}>
                 <ChevronLeft size={20} color={theme.colors.foreground} />
-                <Text style={styles.prevButtonText}>Back</Text>
+                <Text style={[styles.prevButtonText, { color: theme.colors.foreground }]}>Back</Text>
               </Pressable>
             )}
             <Pressable
-              style={[styles.nextButton, isFirst && { flex: 1 }]}
+              style={[
+                styles.nextButton,
+                isFirst && { flex: 1 },
+                { backgroundColor: theme.colors.primary }
+              ]}
               onPress={handleNext}
             >
               <Text style={styles.nextButtonText}>{isLast ? "Get Started" : "Next"}</Text>
@@ -625,7 +629,7 @@ const TutorialModal: React.FC<TutorialModalProps> = ({ visible, onClose }) => {
 
           {!isLast && (
             <Pressable onPress={onClose} style={{ alignItems: 'center', marginTop: 12 }}>
-              <Text style={styles.skipLink}>Skip tutorial</Text>
+              <Text style={[styles.skipLink, { color: theme.colors.mutedForeground }]}>Skip tutorial</Text>
             </Pressable>
           )}
         </View>
@@ -677,46 +681,49 @@ export const HelpScreen: React.FC = () => {
   return (
     <>
       <AppLayout>
-        <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={[styles.container, { backgroundColor: theme.colors.background }]} showsVerticalScrollIndicator={false}>
           {/* Header */}
           <View style={styles.headerRow}>
             <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
               <ChevronLeft size={24} color={theme.colors.foreground} />
             </Pressable>
             <View>
-              <Text style={styles.title}>Help & Support</Text>
-              <Text style={styles.subtitle}>Learn how to use every feature</Text>
+              <Text style={[styles.title, { color: theme.colors.foreground }]}>Help & Support</Text>
+              <Text style={[styles.subtitle, { color: theme.colors.mutedForeground }]}>Learn how to use every feature</Text>
             </View>
           </View>
 
           {/* Hero */}
-          <View style={styles.heroCard}>
-            <View style={styles.heroIconBox}>
+          <View style={[styles.heroCard, { backgroundColor: theme.colors.primary, shadowColor: theme.colors.primary }]}>
+            <View style={[styles.heroIconBox, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
               <Book size={32} color={theme.colors.primaryForeground} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.heroTitle}>Complete User Guide</Text>
-              <Text style={styles.heroSubtitle}>Everything you need to manage your family</Text>
+              <Text style={[styles.heroTitle, { color: theme.colors.primaryForeground }]}>Complete User Guide</Text>
+              <Text style={[styles.heroSubtitle, { color: theme.colors.primaryForeground, opacity: 0.9 }]}>Everything you need to manage your family</Text>
             </View>
           </View>
 
           {/* Tutorial Button */}
-          <Pressable style={styles.tutorialBtn} onPress={() => setShowTutorial(true)}>
-            <View style={styles.playIconBox}>
+          <Pressable
+            style={[styles.tutorialBtn, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+            onPress={() => setShowTutorial(true)}
+          >
+            <View style={[styles.playIconBox, { backgroundColor: theme.colors.success + '20' }]}>
               <PlayCircle size={24} color={theme.colors.success} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.tutorialTitle}>Watch Tutorial Again</Text>
-              <Text style={styles.tutorialSub}>Step-by-step walkthrough of all features</Text>
+              <Text style={[styles.tutorialTitle, { color: theme.colors.foreground }]}>Watch Tutorial Again</Text>
+              <Text style={[styles.tutorialSub, { color: theme.colors.mutedForeground }]}>Step-by-step walkthrough of all features</Text>
             </View>
             <ChevronRight size={20} color={theme.colors.mutedForeground} />
           </Pressable>
 
           {/* Search */}
-          <View style={styles.searchContainer}>
+          <View style={[styles.searchContainer, { backgroundColor: theme.colors.muted }]}>
             <Search size={20} color={theme.colors.mutedForeground} style={styles.searchIcon} />
             <TextInput
-              style={styles.searchInput}
+              style={[styles.searchInput, { color: theme.colors.foreground }]}
               placeholder="Search features or questions..."
               placeholderTextColor={theme.colors.mutedForeground}
               value={searchQuery}
@@ -725,20 +732,32 @@ export const HelpScreen: React.FC = () => {
           </View>
 
           {/* Tabs */}
-          <View style={styles.tabContainer}>
+          <View style={[styles.tabContainer, { backgroundColor: theme.colors.muted }]}>
             <Pressable
-              style={[styles.tab, activeTab === 'features' && styles.activeTab]}
+              style={[
+                styles.tab,
+                activeTab === 'features' && [styles.activeTab, { backgroundColor: theme.colors.card }]
+              ]}
               onPress={() => setActiveTab('features')}
             >
-              <Text style={[styles.tabText, activeTab === 'features' && styles.activeTabText]}>
+              <Text style={[
+                styles.tabText,
+                activeTab === 'features' ? [styles.activeTabText, { color: theme.colors.primary }] : { color: theme.colors.mutedForeground }
+              ]}>
                 📚 Feature Guide
               </Text>
             </Pressable>
             <Pressable
-              style={[styles.tab, activeTab === 'faq' && styles.activeTab]}
+              style={[
+                styles.tab,
+                activeTab === 'faq' && [styles.activeTab, { backgroundColor: theme.colors.card }]
+              ]}
               onPress={() => setActiveTab('faq')}
             >
-              <Text style={[styles.tabText, activeTab === 'faq' && styles.activeTabText]}>
+              <Text style={[
+                styles.tabText,
+                activeTab === 'faq' ? [styles.activeTabText, { color: theme.colors.primary }] : { color: theme.colors.mutedForeground }
+              ]}>
                 ❓ FAQ
               </Text>
             </Pressable>
@@ -747,19 +766,19 @@ export const HelpScreen: React.FC = () => {
           {/* Content */}
           {activeTab === 'features' && (
             <View style={styles.contentSection}>
-              <Text style={styles.sectionHint}>Tap any feature to learn how to use it</Text>
+              <Text style={[styles.sectionHint, { color: theme.colors.mutedForeground }]}>Tap any feature to learn how to use it</Text>
               {filteredFeatures.map(item => (
-                <View key={item.id} style={styles.accordionCard}>
+                <View key={item.id} style={[styles.accordionCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
                   <Pressable
                     style={styles.accordionHeader}
                     onPress={() => setExpandedFeature(expandedFeature === item.id ? null : item.id)}
                   >
-                    <View style={styles.featureIconBox}>
+                    <View style={[styles.featureIconBox, { backgroundColor: theme.colors.muted }]}>
                       <item.icon size={24} color={theme.colors.primary} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.featureTitle}>{item.title}</Text>
-                      <Text numberOfLines={1} style={styles.featureDesc}>{item.description}</Text>
+                      <Text style={[styles.featureTitle, { color: theme.colors.foreground }]}>{item.title}</Text>
+                      <Text numberOfLines={1} style={[styles.featureDesc, { color: theme.colors.mutedForeground }]}>{item.description}</Text>
                     </View>
                     {expandedFeature === item.id ? (
                       <ChevronUp size={20} color={theme.colors.mutedForeground} />
@@ -770,18 +789,18 @@ export const HelpScreen: React.FC = () => {
 
                   {expandedFeature === item.id && (
                     <View style={styles.accordionBody}>
-                      <Text style={styles.fullDesc}>{item.description}</Text>
+                      <Text style={[styles.fullDesc, { color: theme.colors.mutedForeground }]}>{item.description}</Text>
 
                       {/* How to use */}
                       <View style={styles.subSection}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 }}>
-                          <View style={styles.miniIconBox}><Text>📋</Text></View>
-                          <Text style={styles.subTitle}>How to Use</Text>
+                          <View style={[styles.miniIconBox, { backgroundColor: theme.colors.muted }]}><Text>📋</Text></View>
+                          <Text style={[styles.subTitle, { color: theme.colors.foreground }]}>How to Use</Text>
                         </View>
                         {item.howToUse.map((step, idx) => (
                           <View key={idx} style={styles.stepRow}>
-                            <View style={styles.stepNum}><Text style={styles.stepNumText}>{idx + 1}</Text></View>
-                            <Text style={styles.stepText}>{step}</Text>
+                            <View style={[styles.stepNum, { backgroundColor: theme.colors.muted }]}><Text style={[styles.stepNumText, { color: theme.colors.primary }]}>{idx + 1}</Text></View>
+                            <Text style={[styles.stepText, { color: theme.colors.foreground }]}>{step}</Text>
                           </View>
                         ))}
                       </View>
@@ -789,19 +808,23 @@ export const HelpScreen: React.FC = () => {
                       {/* Tips */}
                       <View style={styles.subSection}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 }}>
-                          <View style={[styles.miniIconBox, { backgroundColor: '#dcfce7' }]}><Text>💡</Text></View>
-                          <Text style={styles.subTitle}>Pro Tips</Text>
+                          <View style={[styles.miniIconBox, { backgroundColor: theme.colors.success + '20' }]}><Text>💡</Text></View>
+                          <Text style={[styles.subTitle, { color: theme.colors.foreground }]}>Pro Tips</Text>
                         </View>
                         {item.tips.map((tip, idx) => (
                           <View key={idx} style={styles.stepRow}>
                             <Text style={{ color: theme.colors.success, marginRight: 8 }}>•</Text>
-                            <Text style={styles.stepText}>{tip}</Text>
+                            <Text style={[styles.stepText, { color: theme.colors.foreground }]}>{tip}</Text>
                           </View>
                         ))}
                       </View>
 
-                      <Pressable style={styles.goToBtn} onPress={() => handleNavigate(item.path)}>
-                        <Text style={styles.goToText}>Go to {item.title} →</Text>
+                      <Pressable
+                        style={[styles.actionBtn, { backgroundColor: theme.colors.primary }]}
+                        onPress={() => handleNavigate(item.path)}
+                      >
+                        <Text style={styles.actionBtnText}>Go to {item.title}</Text>
+                        <ChevronRight size={16} color="#fff" />
                       </Pressable>
                     </View>
                   )}
@@ -812,52 +835,28 @@ export const HelpScreen: React.FC = () => {
 
           {activeTab === 'faq' && (
             <View style={styles.contentSection}>
-              <Text style={styles.sectionHint}>Find answers to common questions</Text>
-              {filteredFaqs.map(cat => (
-                <View key={cat.category} style={styles.accordionCard}>
+              {filteredFaqs.map((category, i) => (
+                <View key={i} style={[styles.accordionCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
                   <Pressable
                     style={styles.accordionHeader}
-                    onPress={() => setExpandedFaqCategory(expandedFaqCategory === cat.category ? null : cat.category)}
+                    onPress={() => setExpandedFaqCategory(expandedFaqCategory === category.category ? null : category.category)}
                   >
-                    <Text style={styles.featureTitle}>{cat.category}</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <View style={styles.badge}>
-                        <Text style={styles.badgeText}>{cat.questions.length} questions</Text>
-                      </View>
-                      {expandedFaqCategory === cat.category ? (
-                        <ChevronUp size={20} color={theme.colors.mutedForeground} />
-                      ) : (
-                        <ChevronDown size={20} color={theme.colors.mutedForeground} />
-                      )}
-                    </View>
+                    <Text style={[styles.featureTitle, { color: theme.colors.foreground, flex: 1 }]}>{category.category}</Text>
+                    {expandedFaqCategory === category.category ? (
+                      <ChevronUp size={20} color={theme.colors.mutedForeground} />
+                    ) : (
+                      <ChevronDown size={20} color={theme.colors.mutedForeground} />
+                    )}
                   </Pressable>
 
-                  {expandedFaqCategory === cat.category && (
+                  {expandedFaqCategory === category.category && (
                     <View style={styles.accordionBody}>
-                      {cat.questions.map((q, qIdx) => {
-                        const qId = `${cat.category}-${qIdx}`;
-                        const isExpanded = expandedFaq === qId;
-                        return (
-                          <View key={qIdx} style={styles.faqItem}>
-                            <Pressable
-                              style={styles.faqHeader}
-                              onPress={() => setExpandedFaq(isExpanded ? null : qId)}
-                            >
-                              <Text style={styles.faqQuestion}>{q.q}</Text>
-                              {isExpanded ? (
-                                <ChevronUp size={16} color={theme.colors.mutedForeground} />
-                              ) : (
-                                <ChevronDown size={16} color={theme.colors.mutedForeground} />
-                              )}
-                            </Pressable>
-                            {isExpanded && (
-                              <View style={styles.faqAnswerBox}>
-                                <Text style={styles.faqAnswer}>{q.a}</Text>
-                              </View>
-                            )}
-                          </View>
-                        );
-                      })}
+                      {category.questions.map((q, idx) => (
+                        <View key={idx} style={styles.faqRow}>
+                          <Text style={[styles.faqQuestion, { color: theme.colors.foreground }]}>Q: {q.q}</Text>
+                          <Text style={[styles.faqAnswer, { color: theme.colors.mutedForeground }]}>{q.a}</Text>
+                        </View>
+                      ))}
                     </View>
                   )}
                 </View>
@@ -865,72 +864,10 @@ export const HelpScreen: React.FC = () => {
             </View>
           )}
 
-          {/* Quick Reference */}
-          <View style={styles.quickRefCard}>
-            <Text style={styles.cardTitle}>Quick Reference</Text>
-            <View style={styles.quickGrid}>
-              {[
-                { icon: Plus, label: "Add Items", text: "Tap + on any screen" },
-                { icon: GripVertical, label: "Drag & Drop", text: "Hold and drag to reorder" },
-                { icon: Repeat, label: "Recurring", text: "Toggle repeat for events" },
-                { icon: Bell, label: "Reminders", text: "Set alerts for dates" },
-              ].map((q, i) => (
-                <View key={i} style={styles.quickItem}>
-                  <View style={{ flexDirection: 'row', gap: 4, marginBottom: 4 }}>
-                    <q.icon size={16} color={theme.colors.primary} />
-                    <Text style={styles.quickLabel}>{q.label}</Text>
-                  </View>
-                  <Text style={styles.quickText}>{q.text}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          {/* App Stats */}
-          <View style={[styles.accordionCard, { padding: 16 }]}>
-            <Text style={styles.cardTitle}>App Features at a Glance</Text>
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={styles.statVal}>12+</Text>
-                <Text style={styles.statLabel}>Features</Text>
-              </View>
-              <View style={styles.vertLine} />
-              <View style={styles.statItem}>
-                <Text style={styles.statVal}>∞</Text>
-                <Text style={styles.statLabel}>Members</Text>
-              </View>
-              <View style={styles.vertLine} />
-              <View style={styles.statItem}>
-                <Text style={styles.statVal}>24/7</Text>
-                <Text style={styles.statLabel}>Sync</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Contact */}
-          <Text style={styles.sectionHint}>Still Need Help?</Text>
-          <View style={styles.contactRow}>
-            <Pressable style={styles.contactCard}>
-              <View style={styles.contactIconBox}>
-                <Mail size={24} color={theme.colors.primary} />
-              </View>
-              <Text style={styles.contactTitle}>Email Us</Text>
-              <Text style={styles.contactSub}>support@todohelpmate.app</Text>
-            </Pressable>
-            <Pressable style={styles.contactCard}>
-              <View style={[styles.contactIconBox, { backgroundColor: '#dcfce7' }]}>
-                <MessageCircle size={24} color={theme.colors.success} />
-              </View>
-              <Text style={styles.contactTitle}>Live Chat</Text>
-              <Text style={styles.contactSub}>9am - 6pm IST</Text>
-            </Pressable>
-          </View>
-
           <View style={{ height: 40 }} />
         </ScrollView>
       </AppLayout>
 
-      {/* Tutorial Modal Overlay */}
       <TutorialModal visible={showTutorial} onClose={() => setShowTutorial(false)} />
     </>
   );
@@ -939,522 +876,361 @@ export const HelpScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    paddingBottom: 40,
   },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 20,
     marginTop: 8,
+    gap: 12,
   },
   backButton: {
     padding: 8,
     borderRadius: 8,
-    marginRight: 12,
-    backgroundColor: theme.colors.card,
   },
   title: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: "700",
-    color: theme.colors.foreground,
   },
   subtitle: {
-    fontSize: 12,
-    color: theme.colors.mutedForeground,
+    fontSize: 14,
   },
   heroCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0f172a', // Dark blue
-    borderRadius: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 20,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 16,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   heroIconBox: {
-    width: 48,
-    height: 48,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 16,
   },
   heroTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#fff',
+    fontSize: 18,
+    fontWeight: "700",
   },
   heroSubtitle: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.7)',
+    fontSize: 13,
   },
   tutorialBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.card,
-    borderRadius: 16,
     padding: 12,
-    marginBottom: 16,
-    // Add shadow if needed
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 24,
   },
   playIconBox: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: '#dcfce7',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
   tutorialTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
-    color: theme.colors.foreground,
   },
   tutorialSub: {
-    fontSize: 11,
-    color: theme.colors.mutedForeground,
+    fontSize: 12,
   },
   searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.muted,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    height: 48,
     borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 44,
-    marginBottom: 16,
+    marginBottom: 24,
   },
   searchIcon: {
-    marginRight: 8,
+    marginRight: 12,
   },
   searchInput: {
     flex: 1,
-    color: theme.colors.foreground,
-    fontSize: 14,
+    height: 48,
+    fontSize: 15,
   },
   tabContainer: {
-    flexDirection: 'row',
-    backgroundColor: theme.colors.muted,
+    flexDirection: "row",
     padding: 4,
     borderRadius: 12,
-    marginBottom: 16,
+    marginBottom: 24,
   },
   tab: {
     flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
+    alignItems: "center",
+    paddingVertical: 10,
     borderRadius: 8,
   },
   activeTab: {
-    backgroundColor: theme.colors.card,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
     elevation: 2,
   },
   tabText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: theme.colors.mutedForeground,
+    fontWeight: "600",
+    fontSize: 14,
   },
   activeTabText: {
-    color: theme.colors.foreground,
+    fontWeight: "700",
   },
   contentSection: {
-    marginBottom: 24,
+    gap: 12,
   },
   sectionHint: {
-    fontSize: 12,
-    color: theme.colors.mutedForeground,
+    fontSize: 13,
+    textAlign: 'center',
     marginBottom: 8,
-    marginLeft: 4,
   },
   accordionCard: {
-    backgroundColor: theme.colors.card,
-    borderRadius: 12, // Squared look
-    marginBottom: 12, // Spacing between cards
-    overflow: 'hidden',
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    overflow: 'hidden',
   },
   accordionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between', // Push arrow to right
-    padding: 16, // More internal padding
+    padding: 16,
+    gap: 12,
   },
   featureIconBox: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     borderRadius: 10,
-    backgroundColor: '#dbeafe',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
   },
   featureTitle: {
-    fontSize: 15, // Slightly larger
+    fontSize: 16,
     fontWeight: '600',
-    color: theme.colors.foreground,
-    flex: 1, // Ensure title takes available space if needed, but in FAQ header flexible space is handled by spacing
   },
   featureDesc: {
-    fontSize: 12,
-    color: theme.colors.mutedForeground,
+    fontSize: 13,
   },
   accordionBody: {
-    padding: 20, // More padding for content
+    padding: 16,
     paddingTop: 0,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
   },
   fullDesc: {
-    fontSize: 13,
-    color: theme.colors.foreground,
-    marginTop: 12,
-    marginBottom: 16,
+    fontSize: 14,
     lineHeight: 20,
+    marginBottom: 20,
   },
   subSection: {
-    marginBottom: 16,
+    marginBottom: 20,
   },
   miniIconBox: {
     width: 24,
     height: 24,
     borderRadius: 6,
-    backgroundColor: '#dbeafe',
     alignItems: 'center',
     justifyContent: 'center',
   },
   subTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
-    color: theme.colors.foreground,
   },
   stepRow: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
     marginBottom: 8,
+    paddingLeft: 8,
   },
   stepNum: {
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: theme.colors.muted,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
+    marginRight: 10,
+    marginTop: 1,
   },
   stepNumText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
-    color: theme.colors.foreground,
   },
   stepText: {
     flex: 1,
-    fontSize: 12,
-    color: theme.colors.mutedForeground,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 20,
   },
-  goToBtn: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  goToText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  badge: {
-    backgroundColor: theme.colors.muted,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  badgeText: {
-    fontSize: 10,
-    color: theme.colors.mutedForeground,
-  },
-  faqItem: {
-    marginBottom: 8,
-    backgroundColor: theme.colors.muted,
-    borderRadius: 12,
-  },
-  faqHeader: {
+  actionBtn: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'center',
     padding: 12,
+    borderRadius: 12,
+    marginTop: 8,
+    gap: 8,
   },
-  faqQuestion: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: theme.colors.foreground,
-    flex: 1,
-    marginRight: 8,
-  },
-  faqAnswerBox: {
-    padding: 12,
-    paddingTop: 0,
-  },
-  faqAnswer: {
-    fontSize: 12,
-    color: theme.colors.mutedForeground,
-    backgroundColor: theme.colors.card,
-    padding: 8,
-    borderRadius: 8,
-    lineHeight: 18,
-  },
-  quickRefCard: {
-    backgroundColor: theme.colors.card,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-  },
-  cardTitle: {
+  actionBtnText: {
+    color: '#fff',
     fontSize: 14,
     fontWeight: '600',
-    color: theme.colors.foreground,
-    marginBottom: 12,
   },
-  quickGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
+  faqRow: {
+    marginBottom: 16,
   },
-  quickItem: {
-    width: '48%',
-    backgroundColor: theme.colors.muted,
-    padding: 12,
-    borderRadius: 12,
-  },
-  quickLabel: {
-    fontSize: 12,
+  faqQuestion: {
+    fontSize: 15,
     fontWeight: '600',
-    color: theme.colors.foreground,
+    marginBottom: 6,
   },
-  quickText: {
-    fontSize: 10,
-    color: theme.colors.mutedForeground,
+  faqAnswer: {
+    fontSize: 14,
+    lineHeight: 20,
   },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  statItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  statVal: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: theme.colors.primary,
-  },
-  statLabel: {
-    fontSize: 10,
-    color: theme.colors.mutedForeground,
-  },
-  vertLine: {
-    width: 1,
-    height: 30,
-    backgroundColor: theme.colors.border,
-  },
-  contactRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  contactCard: {
-    flex: 1,
-    backgroundColor: theme.colors.card,
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-  },
-  contactIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#dbeafe',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  contactTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: theme.colors.foreground,
-  },
-  contactSub: {
-    fontSize: 10,
-    color: theme.colors.mutedForeground,
-  },
-  // Modal Styles
+  // Tutorial Modal Styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
+    padding: 16,
   },
   modalContent: {
-    width: '100%',
-    maxWidth: 400,
-    backgroundColor: theme.colors.card,
     borderRadius: 24,
     overflow: 'hidden',
+    paddingBottom: 24,
   },
   modalProgressBg: {
     height: 4,
-    backgroundColor: theme.colors.muted,
     width: '100%',
   },
   modalProgressBar: {
-    height: 4,
-    backgroundColor: theme.colors.primary,
+    height: '100%',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    padding: 20,
+    paddingBottom: 10,
   },
   modalStepText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: theme.colors.mutedForeground,
+    fontSize: 13,
+    fontWeight: '600',
   },
   closeButton: {
     padding: 4,
   },
   modalBody: {
-    padding: 24,
     alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
   },
   modalIconContainer: {
-    position: 'relative',
+    width: 100,
+    height: 100,
     marginBottom: 24,
     alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
   },
   modalEmojiBg: {
-    width: 96,
-    height: 96,
-    backgroundColor: '#dbeafe',
-    borderRadius: 24,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
   modalIconBadge: {
     position: 'absolute',
-    bottom: -8,
-    right: -8,
-    width: 40,
-    height: 40,
-    backgroundColor: theme.colors.primary,
-    borderRadius: 10,
+    bottom: 10,
+    right: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+    borderWidth: 2,
+    borderColor: '#fff',
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
-    color: theme.colors.foreground,
-    marginBottom: 12,
     textAlign: 'center',
+    marginBottom: 12,
   },
   modalDescription: {
-    fontSize: 14,
-    color: theme.colors.mutedForeground,
+    fontSize: 15,
     textAlign: 'center',
     lineHeight: 22,
-    marginBottom: 20,
+    marginBottom: 24,
   },
   highlightBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#dcfce7',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
+    gap: 8,
   },
   highlightText: {
     fontSize: 13,
     fontWeight: '600',
-    color: theme.colors.success,
   },
   dotsRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 6,
-    marginBottom: 20,
+    marginVertical: 24,
   },
   dot: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: theme.colors.muted,
-    width: 6,
+    height: 8,
+    borderRadius: 4,
   },
   dotActive: {
     width: 24,
-    backgroundColor: theme.colors.primary,
   },
   dotCompleted: {
-    backgroundColor: 'rgba(59, 130, 246, 0.5)',
+    width: 8,
   },
   modalActions: {
     flexDirection: 'row',
     gap: 12,
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-    backgroundColor: theme.colors.muted, // slight tint
+    paddingHorizontal: 24,
   },
   prevButton: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.card,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 16,
   },
   prevButtonText: {
-    marginLeft: 4,
+    fontSize: 16,
     fontWeight: '600',
-    color: theme.colors.foreground,
+    marginLeft: 4,
   },
   nextButton: {
-    flex: 2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: theme.colors.primary,
-    gap: 4,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 16,
+    gap: 8,
+    flex: 2,
   },
   nextButtonText: {
-    color: '#fff',
+    fontSize: 16,
     fontWeight: '600',
-    marginRight: 4,
+    color: '#fff',
   },
   skipLink: {
-    fontSize: 12,
-    color: theme.colors.mutedForeground,
-    textDecorationLine: 'underline',
-    marginBottom: 16,
+    fontSize: 13,
+    marginTop: 8,
   },
 });

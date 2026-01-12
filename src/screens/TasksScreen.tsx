@@ -41,11 +41,11 @@ const initialTasks: Task[] = [
 const getPriorityStyle = (priority: Task["priority"]) => {
   switch (priority) {
     case "high":
-      return { label: "High", color: "#f57c7c", background: "rgba(245, 124, 124, 0.15)" };
+      return { label: "High", color: theme.colors.danger, background: theme.colors.danger + '25' };
     case "medium":
-      return { label: "Medium", color: "#f5a623", background: "rgba(245, 166, 35, 0.2)" };
+      return { label: "Medium", color: theme.colors.warning, background: theme.colors.warning + '30' };
     default:
-      return { label: "Low", color: "#8fa7d7", background: "rgba(143, 167, 215, 0.25)" };
+      return { label: "Low", color: theme.colors.info, background: theme.colors.info + '40' };
   }
 };
 
@@ -85,33 +85,34 @@ export const TasksScreen: React.FC = () => {
       >
         <ScrollView contentContainerStyle={styles.container}>
           <View style={styles.header}>
-            <Pressable onPress={openSidebar} style={styles.menuButton}>
+            <Pressable onPress={openSidebar} style={[styles.menuButton, { backgroundColor: theme.colors.card }]}>
               <AppIcon name="menu" size={20} color={theme.colors.foreground} />
             </Pressable>
-            <Text style={styles.title}>Tasks</Text>
+            <Text style={[styles.title, { color: theme.colors.foreground }]}>Tasks</Text>
             <View style={styles.headerActions}>
-              <Pressable style={styles.roundAction} onPress={() => setShowSearch(true)}>
+              <Pressable style={[styles.roundAction, { backgroundColor: theme.colors.card }]} onPress={() => setShowSearch(true)}>
                 <AppIcon source="🔍" size={18} color={theme.colors.foreground} />
               </Pressable>
-              <Pressable style={styles.roundAction}>
-                <AppIcon source="⚲" size={18} color={theme.colors.foreground} />
-              </Pressable>
-              <Pressable style={styles.plusAction} onPress={() => setShowAddTask(true)}>
+
+              <Pressable style={[styles.plusAction, { backgroundColor: theme.colors.primary }]} onPress={() => setShowAddTask(true)}>
                 <AppIcon name="plus" size={18} color={theme.colors.primaryForeground} />
               </Pressable>
             </View>
           </View>
 
-          <View style={styles.tabs}>
+          <View style={[styles.tabs, { backgroundColor: theme.colors.muted }]}>
             {tabs.map((tab) => {
               const isActive = tab === activeTab;
               return (
                 <Pressable
                   key={tab}
                   onPress={() => setActiveTab(tab)}
-                  style={[styles.tab, isActive && styles.tabActive]}
+                  style={[
+                    styles.tab,
+                    isActive && { backgroundColor: theme.colors.card, shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }
+                  ]}
                 >
-                  <Text style={[styles.tabText, isActive && styles.tabTextActive]}>{tab}</Text>
+                  <Text style={[styles.tabText, { color: isActive ? theme.colors.foreground : theme.colors.mutedForeground }]}>{tab}</Text>
                 </Pressable>
               );
             })}
@@ -121,13 +122,13 @@ export const TasksScreen: React.FC = () => {
             <ChoreRotationSystem />
           ) : (
             <>
-              <View style={styles.progressCard}>
+              <View style={[styles.progressCard, { backgroundColor: theme.colors.card, shadowColor: theme.colors.border }]}>
                 <View style={styles.progressHeader}>
-                  <Text style={styles.progressLabel}>Progress: {completedCount}/{totalCount}</Text>
-                  <Text style={styles.progressPercent}>{progress}%</Text>
+                  <Text style={[styles.progressLabel, { color: theme.colors.foreground }]}>Progress: {completedCount}/{totalCount}</Text>
+                  <Text style={[styles.progressPercent, { color: theme.colors.mutedForeground }]}>{progress}%</Text>
                 </View>
-                <View style={styles.progressBar}>
-                  <View style={[styles.progressFill, { width: `${progress}%` }]} />
+                <View style={[styles.progressBar, { backgroundColor: theme.colors.muted }]}>
+                  <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: theme.colors.primary }]} />
                 </View>
               </View>
 
@@ -137,10 +138,18 @@ export const TasksScreen: React.FC = () => {
                   return (
                     <View
                       key={task.id}
-                      style={[styles.taskCard, task.status === "done" && styles.taskDone]}
+                      style={[
+                        styles.taskCard,
+                        { backgroundColor: theme.colors.card, shadowColor: theme.colors.border },
+                        task.status === "done" && { opacity: 0.6 }
+                      ]}
                     >
                       <Pressable
-                        style={[styles.checkCircle, task.status === "done" && styles.checkCircleActive]}
+                        style={[
+                          styles.checkCircle,
+                          { borderColor: theme.colors.mutedForeground },
+                          task.status === "done" && { backgroundColor: theme.colors.success, borderColor: theme.colors.success }
+                        ]}
                         onPress={() => toggleTask(task.id)}
                       >
                         {task.status === "done" && <Text style={styles.checkMark}>✓</Text>}
@@ -148,7 +157,7 @@ export const TasksScreen: React.FC = () => {
                       <View style={styles.taskDetails}>
                         <View style={styles.taskTitleRow}>
                           <Text style={{ fontSize: 20, marginRight: 8 }}>{task.icon}</Text>
-                          <Text style={[styles.taskTitle, task.status === "done" && styles.taskTextDone]}>
+                          <Text style={[styles.taskTitle, { color: theme.colors.foreground }, task.status === "done" && { color: theme.colors.mutedForeground }]}>
                             {task.name}
                           </Text>
                         </View>
@@ -160,11 +169,11 @@ export const TasksScreen: React.FC = () => {
                           </View>
                           <View style={styles.metaItem}>
                             <AppIcon name="clock" size={14} color={theme.colors.mutedForeground} style={styles.metaIcon} />
-                            <Text style={styles.metaText}>{task.due}</Text>
+                            <Text style={[styles.metaText, { color: theme.colors.mutedForeground }]}>{task.due}</Text>
                           </View>
                           <View style={styles.metaItem}>
                             <AppIcon name="user" size={14} color={theme.colors.mutedForeground} style={styles.metaIcon} />
-                            <Text style={styles.metaText}>{task.assignee}</Text>
+                            <Text style={[styles.metaText, { color: theme.colors.mutedForeground }]}>{task.assignee}</Text>
                           </View>
                         </View>
                       </View>
@@ -173,9 +182,9 @@ export const TasksScreen: React.FC = () => {
                 })}
               </View>
 
-              <Pressable style={styles.addNewRow} onPress={() => setShowAddTask(true)}>
+              <Pressable style={[styles.addNewRow]} onPress={() => setShowAddTask(true)}>
                 <AppIcon name="plus" size={16} color={theme.colors.primary} style={styles.addNewIcon} />
-                <Text style={styles.addNewText}>Add new task</Text>
+                <Text style={[styles.addNewText, { color: theme.colors.primary }]}>Add new task</Text>
               </Pressable>
             </>
           )}
@@ -189,24 +198,22 @@ export const TasksScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: {
-    padding: theme.spacing.lg,
+    padding: 20,
     paddingBottom: 120,
-    backgroundColor: theme.colors.background,
+    // Background handled by AppLayout
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: theme.spacing.md,
+    marginBottom: 16,
   },
   menuButton: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: theme.colors.card,
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#0a1a3c",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -216,22 +223,19 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 26,
     fontWeight: "700",
-    color: theme.colors.foreground,
-    marginLeft: theme.spacing.md,
+    marginLeft: 16,
   },
   headerActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing.sm,
+    gap: 8,
   },
   roundAction: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: theme.colors.card,
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#0a1a3c",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 6,
@@ -241,10 +245,8 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 16,
-    backgroundColor: theme.colors.primary,
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#0a1a3c",
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.18,
     shadowRadius: 10,
@@ -252,94 +254,70 @@ const styles = StyleSheet.create({
   },
   tabs: {
     flexDirection: "row",
-    backgroundColor: theme.colors.muted,
     borderRadius: 16,
     padding: 4,
-    marginBottom: theme.spacing.md,
+    marginBottom: 16,
   },
   tab: {
     flex: 1,
     alignItems: "center",
-    paddingVertical: theme.spacing.sm,
+    paddingVertical: 8,
     borderRadius: 12,
   },
-  tabActive: {
-    backgroundColor: theme.colors.card,
-  },
   tabText: {
-    color: theme.colors.mutedForeground,
     fontWeight: "600",
   },
-  tabTextActive: {
-    color: theme.colors.foreground,
-  },
   progressCard: {
-    backgroundColor: theme.colors.card,
     borderRadius: 20,
-    padding: theme.spacing.md,
-    shadowColor: "#0a1a3c",
+    padding: 16,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 4,
-    marginBottom: theme.spacing.lg,
+    marginBottom: 24,
   },
   progressHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: theme.spacing.sm,
+    marginBottom: 8,
   },
   progressLabel: {
     fontWeight: "600",
-    color: theme.colors.foreground,
   },
   progressPercent: {
     fontWeight: "600",
-    color: theme.colors.mutedForeground,
   },
   progressBar: {
     height: 10,
-    backgroundColor: theme.colors.muted,
     borderRadius: 6,
     overflow: "hidden",
   },
   progressFill: {
     height: "100%",
-    backgroundColor: theme.colors.primary,
     borderRadius: 6,
   },
   taskList: {
-    marginBottom: theme.spacing.lg,
+    marginBottom: 24,
   },
   taskCard: {
     flexDirection: "row",
     alignItems: "flex-start",
-    backgroundColor: theme.colors.card,
     borderRadius: 22,
-    padding: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
-    shadowColor: "#0a1a3c",
+    padding: 16,
+    marginBottom: 8,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 10,
     elevation: 3,
-  },
-  taskDone: {
-    opacity: 0.6,
   },
   checkCircle: {
     width: 32,
     height: 32,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: theme.colors.mutedForeground,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: theme.spacing.md,
-  },
-  checkCircleActive: {
-    backgroundColor: "#8bc34a",
-    borderColor: "#8bc34a",
+    marginRight: 16,
   },
   checkMark: {
     color: "#fff",
@@ -353,18 +331,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 6,
   },
-  taskListIcon: {
-    marginRight: theme.spacing.sm,
-  },
   taskTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: theme.colors.foreground,
     marginBottom: 6,
-  },
-  taskTextDone: {
-    textDecorationLine: "line-through",
-    color: theme.colors.mutedForeground,
   },
   metaRow: {
     flexDirection: "row",
@@ -374,14 +344,14 @@ const styles = StyleSheet.create({
   metaItem: {
     flexDirection: "row",
     alignItems: "center",
-    marginLeft: theme.spacing.sm,
+    marginLeft: 8,
   },
   metaIcon: {
-    marginRight: theme.spacing.xs,
+    marginRight: 4,
   },
   priorityBadge: {
     borderRadius: 999,
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: 16,
     paddingVertical: 4,
   },
   priorityText: {
@@ -389,20 +359,18 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 12,
-    color: theme.colors.mutedForeground,
   },
   addNewRow: {
-    marginTop: theme.spacing.sm,
+    marginTop: 8,
     alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
   addNewIcon: {
-    marginRight: theme.spacing.xs,
+    marginRight: 4,
   },
   addNewText: {
-    color: theme.colors.primary,
     fontWeight: "700",
     fontSize: 18,
   },

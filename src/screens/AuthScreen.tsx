@@ -36,39 +36,39 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
   return (
     <ScrollView
-      style={styles.screen}
+      style={[styles.screen, { backgroundColor: theme.colors.background }]}
       contentContainerStyle={styles.screenContent}
       keyboardShouldPersistTaps="handled"
     >
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
         <View style={styles.logoWrapper}>
-          <View style={styles.logoSquare}>
+          <View style={[styles.logoSquare, { backgroundColor: theme.colors.card, shadowColor: theme.colors.shadow }]}>
             <View style={styles.logoContainer}>
               <AppIcon name="home" size={32} color={theme.colors.primary} />
-              <View style={styles.shieldBadge}>
+              <View style={[styles.shieldBadge, { backgroundColor: theme.colors.card }]}>
                 <AppIcon name="shield" size={16} color={theme.colors.secondary} />
               </View>
             </View>
           </View>
         </View>
-        <Text style={styles.title}>Family Chores</Text>
-        <Text style={styles.subtitle}>Organize Your Family Life</Text>
+        <Text style={[styles.title, { color: theme.colors.primaryForeground }]}>Family Chores</Text>
+        <Text style={[styles.subtitle, { color: theme.colors.primaryForeground + 'D9' }]}>Organize Your Family Life</Text>
       </View>
 
       <View style={styles.formWrapper}>
-        <View style={styles.card}>
-          <View style={styles.tabs}>
+        <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}>
+          <View style={[styles.tabs, { backgroundColor: theme.colors.muted }]}>
             <Pressable
               onPress={() => setIsLogin(true)}
               style={[
                 styles.tab,
-                isLogin ? styles.tabActive : styles.tabInactive,
+                isLogin ? [styles.tabActive, { backgroundColor: theme.colors.card, shadowColor: theme.colors.shadow }] : styles.tabInactive,
               ]}
             >
               <Text
                 style={[
                   styles.tabText,
-                  isLogin ? styles.tabTextActive : styles.tabTextInactive,
+                  isLogin ? { color: theme.colors.foreground } : { color: theme.colors.mutedForeground },
                 ]}
               >
                 Sign In
@@ -78,13 +78,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               onPress={() => setIsLogin(false)}
               style={[
                 styles.tab,
-                !isLogin ? styles.tabActive : styles.tabInactive,
+                !isLogin ? [styles.tabActive, { backgroundColor: theme.colors.card, shadowColor: theme.colors.shadow }] : styles.tabInactive,
               ]}
             >
               <Text
                 style={[
                   styles.tabText,
-                  !isLogin ? styles.tabTextActive : styles.tabTextInactive,
+                  !isLogin ? { color: theme.colors.foreground } : { color: theme.colors.mutedForeground },
                 ]}
               >
                 Sign Up
@@ -94,10 +94,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
           <View style={styles.fieldStack}>
             {!isLogin && (
-              <View style={styles.inputRow}>
+              <View style={[styles.inputRow, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
                 <AppIcon name="user" size={20} color={theme.colors.mutedForeground} style={styles.inputIcon} />
                 <TextInput
-                  style={styles.textInput}
+                  style={[styles.textInput, { color: theme.colors.foreground }]}
                   placeholder="Full Name"
                   placeholderTextColor={theme.colors.mutedForeground}
                   value={formData.name}
@@ -108,10 +108,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               </View>
             )}
 
-            <View style={styles.inputRow}>
+            <View style={[styles.inputRow, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
               <AppIcon name="mail" size={20} color={theme.colors.mutedForeground} style={styles.inputIcon} />
               <TextInput
-                style={styles.textInput}
+                style={[styles.textInput, { color: theme.colors.foreground }]}
                 placeholder="Email Address"
                 placeholderTextColor={theme.colors.mutedForeground}
                 keyboardType="email-address"
@@ -123,10 +123,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               />
             </View>
 
-            <View style={styles.inputRow}>
+            <View style={[styles.inputRow, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
               <AppIcon name="lock" size={20} color={theme.colors.mutedForeground} style={styles.inputIcon} />
               <TextInput
-                style={styles.textInput}
+                style={[styles.textInput, { color: theme.colors.foreground }]}
                 placeholder="Shared Password"
                 placeholderTextColor={theme.colors.mutedForeground}
                 secureTextEntry={!showPassword}
@@ -149,23 +149,23 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               style={styles.forgotButton}
               onPress={() => onForgotPassword?.()}
             >
-              <Text style={styles.forgotText}>Forgot Password?</Text>
+              <Text style={[styles.forgotText, { color: theme.colors.primary }]}>Forgot Password?</Text>
             </Pressable>
           )}
 
-          <Pressable style={styles.primaryButton} onPress={handleSubmit}>
-            <Text style={styles.primaryButtonText}>
+          <Pressable style={[styles.primaryButton, { backgroundColor: theme.colors.primary }]} onPress={handleSubmit}>
+            <Text style={[styles.primaryButtonText, { color: theme.colors.primaryForeground }]}>
               {isLogin ? "Sign In" : "Create Account"}
             </Text>
           </Pressable>
 
           <View style={styles.divider}>
-            <View style={styles.line} />
-            <Text style={styles.dividerText}>or</Text>
-            <View style={styles.line} />
+            <View style={[styles.line, { backgroundColor: theme.colors.border }]} />
+            <Text style={[styles.dividerText, { color: theme.colors.mutedForeground }]}>or</Text>
+            <View style={[styles.line, { backgroundColor: theme.colors.border }]} />
           </View>
 
-          <Pressable style={styles.googleButton}>
+          <Pressable style={[styles.googleButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}>
             <View style={styles.googleIconWrapper}>
               <Image
                 source={require('../assets/images/google.png')}
@@ -173,17 +173,17 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 resizeMode="contain"
               />
             </View>
-            <Text style={styles.googleButtonText}>Continue with Google</Text>
+            <Text style={[styles.googleButtonText, { color: theme.colors.foreground }]}>Continue with Google</Text>
           </Pressable>
         </View>
 
-        <View style={styles.infoCard}>
-          <View style={styles.infoIcon}>
+        <View style={[styles.infoCard, { backgroundColor: theme.colors.primary + '10', borderColor: theme.colors.primary + '20' }]}>
+          <View style={[styles.infoIcon, { backgroundColor: theme.colors.primary }]}>
             <AppIcon name="shield" size={20} color={theme.colors.primaryForeground} />
           </View>
           <View style={styles.infoTextContainer}>
-            <Text style={styles.infoTitle}>One Account, Multiple Profiles</Text>
-            <Text style={styles.infoSubtitle}>
+            <Text style={[styles.infoTitle, { color: theme.colors.foreground }]}>One Account, Multiple Profiles</Text>
+            <Text style={[styles.infoSubtitle, { color: theme.colors.mutedForeground }]}>
               Add family members after signing in. Each profile gets its own
               vault, calendar, and shared lists.
             </Text>
@@ -192,10 +192,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       </View>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>
+        <Text style={[styles.footerText, { color: theme.colors.mutedForeground }]}>
           By continuing, you agree to our{" "}
-          <Text style={styles.linkText}>Terms of Service</Text> and{" "}
-          <Text style={styles.linkText} onPress={() => onPrivacy?.()}>
+          <Text style={[styles.linkText, { color: theme.colors.primary }]}>Terms of Service</Text> and{" "}
+          <Text style={[styles.linkText, { color: theme.colors.primary }]} onPress={() => onPrivacy?.()}>
             Privacy Policy
           </Text>
         </Text>
@@ -207,14 +207,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#e6edf9",
   },
   screenContent: {
     flexGrow: 1,
     paddingBottom: 32,
   },
   header: {
-    backgroundColor: theme.colors.primary,
     paddingVertical: theme.spacing.xl,
     paddingHorizontal: theme.spacing.lg,
     borderBottomLeftRadius: 32,
@@ -229,10 +227,8 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 16,
-    backgroundColor: theme.colors.card,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 12,
@@ -247,32 +243,26 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: -6,
     bottom: -6,
-    backgroundColor: theme.colors.card,
     borderRadius: 4,
     padding: 1,
   },
   title: {
     fontSize: 28,
     fontWeight: "700",
-    color: theme.colors.primaryForeground,
   },
   subtitle: {
     marginTop: 4,
     marginBottom: theme.spacing.lg,
     fontSize: 14,
-    color: "rgba(255,255,255,0.85)",
   },
   formWrapper: {
     paddingHorizontal: theme.spacing.lg,
     marginTop: theme.spacing.md,
   },
   card: {
-    backgroundColor: theme.colors.card,
     borderRadius: 24,
     padding: theme.spacing.lg,
     borderWidth: 1,
-    borderColor: "#dfe9f5",
-    shadowColor: "#2a4e8c",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.15,
     shadowRadius: 18,
@@ -280,7 +270,6 @@ const styles = StyleSheet.create({
   },
   tabs: {
     flexDirection: "row",
-    backgroundColor: "#e3ebf9",
     borderRadius: 16,
     padding: 4,
     marginBottom: theme.spacing.md,
@@ -292,8 +281,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   tabActive: {
-    backgroundColor: theme.colors.card,
-    shadowColor: "#1f3a6f",
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.1,
     shadowRadius: 6,
@@ -304,12 +291,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontSize: 14,
   },
-  tabTextActive: {
-    color: theme.colors.foreground,
-  },
-  tabTextInactive: {
-    color: theme.colors.mutedForeground,
-  },
   fieldStack: {
     marginBottom: theme.spacing.sm,
   },
@@ -319,7 +300,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingHorizontal: theme.spacing.sm,
     marginBottom: theme.spacing.sm,
-    backgroundColor: "#edf3ff",
+    borderWidth: 1,
   },
   inputIcon: {
     marginRight: 10,
@@ -329,32 +310,24 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     paddingVertical: 12,
-    color: theme.colors.foreground,
   },
   eyeButton: {
     marginLeft: 6,
-  },
-  eyeText: {
-    fontSize: 18,
-    color: theme.colors.mutedForeground,
   },
   forgotButton: {
     alignSelf: "flex-end",
     marginBottom: theme.spacing.sm,
   },
   forgotText: {
-    color: theme.colors.primary,
     fontWeight: "600",
   },
   primaryButton: {
-    backgroundColor: theme.colors.primary,
     paddingVertical: theme.spacing.md,
     borderRadius: 16,
     alignItems: "center",
     marginTop: theme.spacing.sm,
   },
   primaryButtonText: {
-    color: theme.colors.primaryForeground,
     fontWeight: "600",
     fontSize: 16,
   },
@@ -366,23 +339,18 @@ const styles = StyleSheet.create({
   line: {
     flex: 1,
     height: 1,
-    backgroundColor: "#dfe9f5",
   },
   dividerText: {
     marginHorizontal: 8,
-    color: theme.colors.mutedForeground,
     fontSize: 12,
   },
   googleButton: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#CBD5E1", // Slate 300
     borderRadius: 16,
     paddingVertical: 16,
     justifyContent: "center",
-    backgroundColor: "#fff",
-    shadowColor: "#0a1a3c",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
@@ -398,45 +366,36 @@ const styles = StyleSheet.create({
   },
   googleButtonText: {
     fontWeight: "600",
-    color: "#1E293B", // Slate 800
     fontSize: 16,
   },
   infoCard: {
     flexDirection: "row",
     alignItems: "flex-start",
-    backgroundColor: "#EFF6FF", // Light Blue 50
     borderRadius: 16,
     padding: 16,
     marginTop: 24,
     borderWidth: 1,
-    borderColor: "#DBEAFE", // Blue 100
   },
   infoIcon: {
     width: 40,
     height: 40,
     borderRadius: 10,
-    backgroundColor: "#2563EB", // Blue 600
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
-  },
-  infoIconText: {
-    fontSize: 22,
-    color: "#fff",
   },
   infoTextContainer: {
     flex: 1,
   },
   infoTitle: {
     fontWeight: "700",
-    color: "#1E293B", // Slate 800
     marginBottom: 4,
     fontSize: 15,
   },
   infoSubtitle: {
     fontSize: 13,
-    color: "#475569", // Slate 600
     lineHeight: 20,
+    opacity: 0.8,
   },
   footer: {
     paddingHorizontal: theme.spacing.lg,
@@ -444,11 +403,9 @@ const styles = StyleSheet.create({
   },
   footerText: {
     textAlign: "center",
-    color: theme.colors.mutedForeground,
     fontSize: 12,
   },
   linkText: {
-    color: theme.colors.primary,
     fontWeight: "600",
   },
 });

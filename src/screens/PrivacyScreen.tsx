@@ -11,7 +11,6 @@ import { useNavigation } from "@react-navigation/native";
 import { AppLayout } from "../components/layout/AppLayout";
 import { theme } from "../theme";
 import { useSidebar } from "../contexts/SidebarContext";
-import { useToast } from "../components/ui/Toast";
 import {
     ChevronLeft,
     Shield,
@@ -23,132 +22,142 @@ import {
     ChevronRight
 } from "lucide-react-native";
 
+// --- Data ---
 const securitySettings = [
-    { id: 'bio', icon: Fingerprint, label: 'Biometric Lock', description: 'Use fingerprint or face to unlock', default: true },
-    { id: 'app', icon: Lock, label: 'App Lock', description: 'Require PIN when opening app', default: false },
-    { id: 'hide', icon: Eye, label: 'Hide Sensitive Data', description: 'Blur amounts and personal info', default: false },
+    { id: 'bio', icon: Fingerprint, label: 'Biometric Lock', description: 'Use fingerprint or face to unlock', enabled: true },
+    { id: 'app', icon: Lock, label: 'App Lock', description: 'Require PIN when opening app', enabled: false },
+    { id: 'hide', icon: Eye, label: 'Hide Sensitive Data', description: 'Blur amounts and personal info', enabled: false },
 ];
 
 export const PrivacyScreen: React.FC = () => {
     const navigation = useNavigation();
     const { openSidebar } = useSidebar();
-    const { showToast } = useToast();
-    const [settings, setSettings] = useState<Record<string, boolean>>({
-        bio: true,
-        app: false,
-        hide: false,
-    });
+
+    // State management for toggles
+    const [settingsState, setSettingsState] = useState(
+        securitySettings.reduce((acc, curr) => ({ ...acc, [curr.id]: curr.enabled }), {}) as Record<string, boolean>
+    );
 
     const toggleSetting = (id: string) => {
-        try {
-            setSettings(prev => {
-                const newState = { ...prev, [id]: !prev[id] };
-                // Simulate checking if update is allowed or API call
-                return newState;
-            });
-            // Optional: show toast only on specific actions or just silent success?
-            // showToast({ title: "Updated", description: "Security setting updated", type: "default" });
-        } catch (error) {
-            showToast({ title: "Error", description: "Failed to update setting", type: "warning" });
-        }
+        setSettingsState(prev => ({ ...prev, [id]: !prev[id] }));
     };
 
     return (
         <AppLayout>
-            <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+            <ScrollView contentContainerStyle={[styles.container, { backgroundColor: theme.colors.background }]} showsVerticalScrollIndicator={false}>
                 {/* Header */}
-                <View style={styles.headerRow}>
-                    <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
+                <View style={styles.header}>
+                    <Pressable onPress={() => navigation.goBack()} style={styles.iconButton}>
                         <ChevronLeft size={24} color={theme.colors.foreground} />
                     </Pressable>
-                    <Text style={styles.title}>Privacy & Security</Text>
+                    <Text style={[styles.headerTitle, { color: theme.colors.foreground }]}>Privacy & Security</Text>
                 </View>
 
                 {/* Security Status Card */}
-                <View style={styles.heroCard}>
-                    <View style={styles.heroIcon}>
-                        <Shield size={32} color={theme.colors.primaryForeground} />
+                {/* Matching ReactJS: gradient-primary text-primary-foreground */}
+                {/* In RN, we simulate gradient with primary color or LinearGradient if available. Using primary solid for now as per theme. */}
+                <View style={[styles.statusCard, { backgroundColor: theme.colors.primary }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+                        <View style={styles.statusIconBg}>
+                            <Shield size={28} color={theme.colors.primaryForeground} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={[styles.statusTitle, { color: theme.colors.primaryForeground }]}>Security Status</Text>
+                            <Text style={[styles.statusSubtitle, { color: theme.colors.primaryForeground }]}>Your data is protected</Text>
+                        </View>
+                        <Text style={{ fontSize: 24 }}>🔒</Text>
                     </View>
-                    <View style={{ flex: 1 }}>
-                        <Text style={styles.heroTitle}>Security Status</Text>
-                        <Text style={styles.heroSubtitle}>Your data is protected</Text>
-                    </View>
-                    <Lock size={24} color={theme.colors.primaryForeground} style={{ opacity: 0.8 }} />
                 </View>
 
                 {/* Security Settings */}
-                <Text style={styles.sectionTitle}>Security</Text>
-                <View style={styles.card}>
-                    {securitySettings.map((item, index) => (
-                        <View key={item.id}>
-                            <View style={styles.settingRow}>
-                                <View style={styles.iconBg}>
-                                    <item.icon size={20} color={theme.colors.mutedForeground} />
+                <View>
+                    <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>Security</Text>
+                    <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                        {securitySettings.map((item, index) => (
+                            <View key={item.id}>
+                                <View style={styles.settingRow}>
+                                    <View style={[styles.iconBox, { backgroundColor: theme.colors.muted }]}>
+                                        <item.icon size={20} color={theme.colors.mutedForeground} />
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={[styles.settingLabel, { color: theme.colors.foreground }]}>{item.label}</Text>
+                                        <Text style={[styles.settingDesc, { color: theme.colors.mutedForeground }]}>{item.description}</Text>
+                                    </View>
+                                    <Switch
+                                        value={settingsState[item.id]}
+                                        onValueChange={() => toggleSetting(item.id)}
+                                        trackColor={{ false: theme.colors.muted, true: theme.colors.primary }}
+                                    />
                                 </View>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={styles.settingLabel}>{item.label}</Text>
-                                    <Text style={styles.settingDesc}>{item.description}</Text>
-                                </View>
-                                <Switch
-                                    value={settings[item.id]}
-                                    onValueChange={() => toggleSetting(item.id)}
-                                    trackColor={{ false: theme.colors.muted, true: theme.colors.primary }}
-                                    thumbColor="#fff"
-                                />
+                                {index !== securitySettings.length - 1 && <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />}
                             </View>
-                            {index < securitySettings.length - 1 && <View style={styles.divider} />}
-                        </View>
-                    ))}
+                        ))}
+                    </View>
                 </View>
 
                 {/* Access */}
-                <Text style={styles.sectionTitle}>Access</Text>
-                <View style={styles.card}>
-                    <Pressable style={styles.settingRow}>
-                        <View style={styles.iconBg}>
-                            <Key size={20} color={theme.colors.mutedForeground} />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.settingLabel}>Change Password</Text>
-                            <Text style={styles.settingDesc}>Last changed 30 days ago</Text>
-                        </View>
-                        <ChevronRight size={20} color={theme.colors.mutedForeground} />
-                    </Pressable>
-                    <View style={styles.divider} />
-                    <Pressable style={styles.settingRow}>
-                        <View style={styles.iconBg}>
-                            <Lock size={20} color={theme.colors.mutedForeground} />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.settingLabel}>Set PIN Code</Text>
-                            <Text style={styles.settingDesc}>4-digit PIN for quick access</Text>
-                        </View>
-                        <ChevronRight size={20} color={theme.colors.mutedForeground} />
-                    </Pressable>
+                <View>
+                    <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>Access</Text>
+                    <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                        <Pressable style={styles.accessRow}>
+                            <View style={[styles.iconBox, { backgroundColor: theme.colors.muted }]}>
+                                <Key size={20} color={theme.colors.mutedForeground} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={[styles.settingLabel, { color: theme.colors.foreground }]}>Change Password</Text>
+                                <Text style={[styles.settingDesc, { color: theme.colors.mutedForeground }]}>Last changed 30 days ago</Text>
+                            </View>
+                            <ChevronRight size={20} color={theme.colors.mutedForeground} />
+                        </Pressable>
+                        <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+                        <Pressable style={styles.accessRow}>
+                            <View style={[styles.iconBox, { backgroundColor: theme.colors.muted }]}>
+                                <Lock size={20} color={theme.colors.mutedForeground} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={[styles.settingLabel, { color: theme.colors.foreground }]}>Set PIN Code</Text>
+                                <Text style={[styles.settingDesc, { color: theme.colors.mutedForeground }]}>4-digit PIN for quick access</Text>
+                            </View>
+                            <ChevronRight size={20} color={theme.colors.mutedForeground} />
+                        </Pressable>
+                    </View>
                 </View>
 
                 {/* Data Privacy */}
-                <Text style={styles.sectionTitle}>Data Privacy</Text>
-                <View style={[styles.card, { backgroundColor: '#f8fafc' }]}>
-                    <Text style={styles.privacyText}>
-                        Your data is encrypted and stored securely. We never share your personal information with third parties.
-                    </Text>
-                    <View style={styles.tagsRow}>
-                        <View style={[styles.tag, { backgroundColor: '#dcfce7' }]}>
-                            <Text style={{ fontSize: 11, color: '#16a34a', fontWeight: '600' }}>🔐 End-to-end encrypted</Text>
-                        </View>
-                        <View style={[styles.tag, { backgroundColor: '#dbeafe' }]}>
-                            <Text style={{ fontSize: 11, color: '#2563eb', fontWeight: '600' }}>☁️ Secure cloud backup</Text>
+                <View>
+                    <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>Data Privacy</Text>
+                    <View style={[styles.softCard, { backgroundColor: theme.colors.muted }]}>
+                        {/* ReactJS uses card-soft which is usually a light gray/muted background. 
+                            The user complained about "weird grey" tinting when we used opacity. 
+                            Here we use the muted color directly which is standard or card color.
+                            Let's use card color but maybe with no border to simulate 'soft' or just standard card.
+                            ReactJS code: "card-soft space-y-4"
+                        */}
+                        <Text style={[styles.privacyText, { color: theme.colors.mutedForeground }]}>
+                            Your data is encrypted and stored securely. We never share your personal information with third parties.
+                        </Text>
+                        <View style={styles.tagsRow}>
+                            {/* ReactJS: bg-success-light text-success */}
+                            {/* We don't have success-light in theme, usually it's success with opacity or a specific light shade.
+                                We will use a calculated light background if possible or just falls back to simple view.
+                            */}
+                            <View style={[styles.tag, { backgroundColor: '#dcfce7' }]}>
+                                <Text style={[styles.tagText, { color: '#166534' }]}>🔐 End-to-end encrypted</Text>
+                            </View>
+                            {/* ReactJS: bg-info-light text-info */}
+                            <View style={[styles.tag, { backgroundColor: '#e0f2fe' }]}>
+                                <Text style={[styles.tagText, { color: '#075985' }]}>☁️ Secure cloud backup</Text>
+                            </View>
                         </View>
                     </View>
                 </View>
 
                 {/* Danger Zone */}
-                <View style={styles.dangerCard}>
-                    <Text style={styles.dangerTitle}>Danger Zone</Text>
-                    <Pressable style={styles.deleteButton}>
+                <View style={[styles.dangerCard, { backgroundColor: theme.colors.card, borderColor: '#fee2e2' }]}>
+                    <Text style={[styles.dangerTitle, { color: '#ef4444' }]}>Danger Zone</Text>
+                    <Pressable style={[styles.deleteButton, { borderColor: '#fca5a5', backgroundColor: '#fff' }]}>
                         <Trash2 size={16} color="#ef4444" />
-                        <Text style={styles.deleteText}>Delete Account</Text>
+                        <Text style={[styles.deleteText, { color: "#ef4444" }]}>Delete Account</Text>
                     </Pressable>
                 </View>
 
@@ -161,107 +170,104 @@ export const PrivacyScreen: React.FC = () => {
 const styles = StyleSheet.create({
     container: {
         padding: 16,
+        paddingTop: 8,
     },
-    headerRow: {
-        flexDirection: "row",
-        alignItems: "center",
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
         marginBottom: 20,
-        marginTop: 8,
     },
-    backButton: {
+    iconButton: {
         padding: 8,
         borderRadius: 8,
-        marginRight: 12,
     },
-    title: {
+    headerTitle: {
         fontSize: 20,
-        fontWeight: "700",
-        color: theme.colors.foreground,
+        fontWeight: '700',
     },
-    heroCard: {
-        flexDirection: "row",
-        alignItems: "center",
-        backgroundColor: theme.colors.primary,
-        borderRadius: 20,
+    statusCard: {
+        borderRadius: 16,
         padding: 16,
         marginBottom: 24,
-        shadowColor: theme.colors.primary,
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
+        shadowOpacity: 0.1,
         shadowRadius: 8,
         elevation: 4,
     },
-    heroIcon: {
+    statusIconBg: {
         width: 56,
         height: 56,
+        backgroundColor: 'rgba(255,255,255,0.2)',
         borderRadius: 16,
-        backgroundColor: "rgba(255,255,255,0.2)",
-        justifyContent: "center",
-        alignItems: "center",
-        marginRight: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
-    heroTitle: {
+    statusTitle: {
         fontSize: 18,
-        fontWeight: "700",
-        color: theme.colors.primaryForeground,
+        fontWeight: '700',
+        marginBottom: 2,
     },
-    heroSubtitle: {
+    statusSubtitle: {
         fontSize: 14,
-        color: 'rgba(255,255,255,0.9)',
+        opacity: 0.9,
     },
     sectionTitle: {
         fontSize: 14,
-        fontWeight: "600",
-        color: theme.colors.foreground,
-        marginBottom: 12,
-        marginTop: 8,
+        fontWeight: '600',
+        marginBottom: 10,
+        marginTop: 4,
     },
     card: {
-        backgroundColor: theme.colors.card,
         borderRadius: 16,
-        padding: 12,
-        marginBottom: 24,
-        shadowColor: "#000",
+        padding: 12, // Reduced padding for list items
+        marginBottom: 20,
+        borderWidth: 1,
+        shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.05,
         shadowRadius: 8,
         elevation: 2,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
     },
     settingRow: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
-        paddingVertical: 12,
-        paddingHorizontal: 4,
+        padding: 12,
     },
-    iconBg: {
+    accessRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        padding: 12,
+    },
+    iconBox: {
         width: 40,
         height: 40,
         borderRadius: 12,
-        backgroundColor: theme.colors.muted,
-        alignItems: 'center',
         justifyContent: 'center',
+        alignItems: 'center',
     },
     settingLabel: {
         fontSize: 15,
         fontWeight: '500',
-        color: theme.colors.foreground,
         marginBottom: 2,
     },
     settingDesc: {
         fontSize: 12,
-        color: theme.colors.mutedForeground,
     },
     divider: {
         height: 1,
-        backgroundColor: theme.colors.border,
-        marginLeft: 52, // Indent past icon
+        marginLeft: 64, // Align with text
+    },
+    softCard: {
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 20,
     },
     privacyText: {
-        fontSize: 13,
-        color: theme.colors.mutedForeground,
+        fontSize: 14,
         lineHeight: 20,
         marginBottom: 12,
     },
@@ -273,19 +279,22 @@ const styles = StyleSheet.create({
     tag: {
         paddingHorizontal: 12,
         paddingVertical: 6,
-        borderRadius: 20,
+        borderRadius: 100,
+    },
+    tagText: {
+        fontSize: 12,
+        fontWeight: '600',
     },
     dangerCard: {
-        backgroundColor: theme.colors.card,
         borderRadius: 16,
         padding: 16,
+        marginBottom: 20,
         borderWidth: 1,
-        borderColor: 'rgba(239, 68, 68, 0.2)', // Red border
+        // ReactJS: border-danger/20
     },
     dangerTitle: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#ef4444',
         marginBottom: 12,
     },
     deleteButton: {
@@ -293,14 +302,12 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         padding: 12,
-        borderRadius: 12,
+        borderRadius: 8,
         borderWidth: 1,
-        borderColor: 'rgba(239, 68, 68, 0.3)',
-        backgroundColor: 'rgba(255,255,255,0.5)',
         gap: 8,
     },
     deleteText: {
-        color: '#ef4444',
-        fontWeight: '600',
+        fontWeight: '500',
+        fontSize: 14,
     },
 });

@@ -17,6 +17,8 @@ import { useFamily } from "../contexts/FamilyContext";
 import { AppIcon } from "../components/ui/AppIcon";
 import { recipes, collections, Recipe } from "../data/recipes";
 import { RecipeDetailModal } from "../components/modals/RecipeDetailModal";
+import { AddNewRecipeModal } from "../components/modals/AddNewRecipeModal";
+import { CreateCollectionModal } from "../components/modals/CreateCollectionModal";
 import { useToast } from "../components/ui/Toast";
 
 const preferences = [
@@ -42,6 +44,8 @@ export const RecipesScreen: React.FC = () => {
   // Recipe Modal State
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
   const [showRecipeDetail, setShowRecipeDetail] = useState(false);
+  const [showAddRecipeModal, setShowAddRecipeModal] = useState(false);
+  const [showCreateCollectionModal, setShowCreateCollectionModal] = useState(false);
 
   const filteredRecipes = useMemo(() => {
     const lowerQuery = query.toLowerCase();
@@ -69,14 +73,8 @@ export const RecipesScreen: React.FC = () => {
 
   const { showToast } = useToast();
 
-  // Handle Add to Grocery List (single item or all items)
-  // For the purpose of the modal prop, we can wrap the context function
   const handleAddToGroceryList = (recipe: Recipe) => {
     try {
-      // In a real app, you might iterate and add all ingredients
-      // or adding just the recipe as a meta-item.
-      // For now, let's just add the first ingredient to demonstrate/test.
-      // Or we loop:
       recipe.ingredients.forEach(ing => {
         addGroceryItem({
           name: ing.name,
@@ -96,14 +94,14 @@ export const RecipesScreen: React.FC = () => {
   const renderForYou = () => (
     <>
       {/* Preferences */}
-      <View style={styles.card}>
+      <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
         <View style={styles.sectionHeader}>
           <AppIcon name="sparkles" size={20} color={theme.colors.primary} style={{ marginRight: 8 }} />
-          <Text style={styles.sectionTitle}>Your Preferences</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>Your Preferences</Text>
         </View>
         <View style={styles.tagGroup}>
           {preferences.map((tag) => (
-            <Pressable key={tag} style={styles.prefTag}>
+            <Pressable key={tag} style={[styles.prefTag, { backgroundColor: theme.colors.muted }]}>
               <View style={styles.prefIcon}>
                 <AppIcon
                   name={
@@ -117,36 +115,36 @@ export const RecipesScreen: React.FC = () => {
                   color={theme.colors.mutedForeground}
                 />
               </View>
-              <Text style={styles.prefText}>{tag}</Text>
+              <Text style={[styles.prefText, { color: theme.colors.mutedForeground }]}>{tag}</Text>
             </Pressable>
           ))}
         </View>
         <View style={styles.groceryNoteRow}>
           <Text style={{ fontSize: 16, marginRight: 8 }}>📦</Text>
-          <Text style={styles.groceryNote}>4 ingredients available from your grocery list</Text>
+          <Text style={[styles.groceryNote, { color: theme.colors.mutedForeground }]}>4 ingredients available from your grocery list</Text>
         </View>
       </View>
 
       {/* Recommended For You */}
-      <View style={styles.card}>
+      <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
         <View style={styles.sectionHeader}>
           <AppIcon name="sparkles" size={20} color={theme.colors.primary} style={{ marginRight: 8 }} />
-          <Text style={styles.sectionTitle}>Recommended For You</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>Recommended For You</Text>
         </View>
 
         {recommended.map((recipe) => (
           <Pressable
             key={recipe.id}
-            style={styles.recommendRow}
+            style={[styles.recommendRow, { backgroundColor: theme.colors.muted }]}
             onPress={() => handleRecipePress(recipe)}
           >
             <View style={styles.recommendLeft}>
-              <View style={styles.emojiContainer}>
+              <View style={[styles.emojiContainer, { backgroundColor: theme.colors.card }]}>
                 <Text style={styles.recommendEmoji}>{recipe.image}</Text>
               </View>
               <View>
-                <Text style={styles.recommendTitle}>{recipe.name}</Text>
-                <Text style={styles.recommendMeta}>
+                <Text style={[styles.recommendTitle, { color: theme.colors.foreground }]}>{recipe.name}</Text>
+                <Text style={[styles.recommendMeta, { color: theme.colors.mutedForeground }]}>
                   {recipe.time}
                 </Text>
               </View>
@@ -164,38 +162,38 @@ export const RecipesScreen: React.FC = () => {
       </View>
 
       {/* Quick Meals */}
-      <View style={styles.card}>
+      <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
         <View style={styles.sectionHeader}>
           <AppIcon name="clock" size={20} color={theme.colors.primary} style={{ marginRight: 8 }} />
-          <Text style={styles.sectionTitle}>Quick Meals (Under 20 min)</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>Quick Meals (Under 20 min)</Text>
         </View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
           {quickMeals.map((recipe) => (
             <Pressable
               key={recipe.id}
-              style={styles.quickCard}
+              style={[styles.quickCard, { backgroundColor: theme.colors.muted }]}
               onPress={() => handleRecipePress(recipe)}
             >
               <Text style={styles.quickEmoji}>{recipe.image}</Text>
-              <Text style={styles.quickTitle} numberOfLines={2}>{recipe.name}</Text>
-              <Text style={styles.quickMeta}>{recipe.time}</Text>
+              <Text style={[styles.quickTitle, { color: theme.colors.foreground }]} numberOfLines={2}>{recipe.name}</Text>
+              <Text style={[styles.quickMeta, { color: theme.colors.mutedForeground }]}>{recipe.time}</Text>
             </Pressable>
           ))}
         </ScrollView>
       </View>
 
       {/* Meal Plan CTA */}
-      <View style={styles.planBanner}>
+      <View style={[styles.planBanner, { backgroundColor: theme.colors.card }]}>
         <View style={styles.planContent}>
-          <Text style={styles.planTitle}>Plan your week's meals</Text>
-          <Text style={styles.planMeta}>Auto-generate grocery lists from recipes</Text>
+          <Text style={[styles.planTitle, { color: theme.colors.foreground }]}>Plan your week's meals</Text>
+          <Text style={[styles.planMeta, { color: theme.colors.mutedForeground }]}>Auto-generate grocery lists from recipes</Text>
         </View>
         <Pressable
-          style={styles.planButton}
-          onPress={() => navigation.navigate("MealPlan" as any)} // Assuming MealPlan route exists
+          style={[styles.planButton, { backgroundColor: theme.colors.primary }]}
+          onPress={() => navigation.navigate("MealPlan" as any)}
         >
-          <Text style={styles.planButtonText}>Plan Now</Text>
+          <Text style={[styles.planButtonText, { color: theme.colors.primaryForeground }]}>Plan Now</Text>
         </Pressable>
       </View>
     </>
@@ -206,20 +204,19 @@ export const RecipesScreen: React.FC = () => {
       {filteredRecipes.map((recipe) => (
         <Pressable
           key={recipe.id}
-          style={styles.recipeCard}
+          style={[styles.recipeCard, { backgroundColor: theme.colors.card }]}
           onPress={() => handleRecipePress(recipe)}
         >
-          <View style={styles.recipeImage}>
+          <View style={[styles.recipeImage, { backgroundColor: theme.colors.muted }]}>
             <Text style={{ fontSize: 32 }}>{recipe.image}</Text>
           </View>
           <View style={styles.recipeInfo}>
             <View style={styles.recipeHeader}>
-              <Text style={styles.recipeName}>{recipe.name}</Text>
+              <Text style={[styles.recipeName, { color: theme.colors.foreground }]}>{recipe.name}</Text>
               <AppIcon
                 name="bookmark"
                 size={20}
                 color={recipe.saved ? theme.colors.primary : theme.colors.mutedForeground}
-                // fill={recipe.saved ? theme.colors.primary : "none"} // Lucide icons use fill prop differently in RN usually, keeping simple for now
                 style={recipe.saved ? { opacity: 1 } : { opacity: 0.5 }}
               />
             </View>
@@ -227,19 +224,19 @@ export const RecipesScreen: React.FC = () => {
             <View style={styles.recipeMetaRow}>
               <View style={styles.metaItem}>
                 <AppIcon name="clock" size={14} color={theme.colors.mutedForeground} />
-                <Text style={styles.metaText}>{recipe.time}</Text>
+                <Text style={[styles.metaText, { color: theme.colors.mutedForeground }]}>{recipe.time}</Text>
               </View>
               <View style={styles.metaItem}>
                 <AppIcon name="users" size={14} color={theme.colors.mutedForeground} />
-                <Text style={styles.metaText}>{recipe.servings}</Text>
+                <Text style={[styles.metaText, { color: theme.colors.mutedForeground }]}>{recipe.servings}</Text>
               </View>
-              <Text style={styles.metaText}>{recipe.ingredients.length} items</Text>
+              <Text style={[styles.metaText, { color: theme.colors.mutedForeground }]}>{recipe.ingredients.length} items</Text>
             </View>
 
             <View style={styles.tagsRow}>
               {recipe.tags.map((tag) => (
-                <View key={tag} style={styles.smallTag}>
-                  <Text style={styles.smallTagText}>{tag}</Text>
+                <View key={tag} style={[styles.smallTag, { backgroundColor: 'rgba(46, 94, 153, 0.1)' }]}>
+                  <Text style={[styles.smallTagText, { color: theme.colors.primary }]}>{tag}</Text>
                 </View>
               ))}
             </View>
@@ -248,7 +245,7 @@ export const RecipesScreen: React.FC = () => {
       ))}
       {filteredRecipes.length === 0 && (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>No recipes found</Text>
+          <Text style={[styles.emptyText, { color: theme.colors.mutedForeground }]}>No recipes found</Text>
         </View>
       )}
     </View>
@@ -277,9 +274,12 @@ export const RecipesScreen: React.FC = () => {
         ))}
       </View>
 
-      <Pressable style={styles.createCollectionButton}>
+      <Pressable
+        style={[styles.createCollectionButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.muted }]}
+        onPress={() => setShowCreateCollectionModal(true)}
+      >
         <AppIcon name="plus" size={20} color={theme.colors.mutedForeground} />
-        <Text style={styles.createCollectionText}>Create Collection</Text>
+        <Text style={[styles.createCollectionText, { color: theme.colors.mutedForeground }]}>Create Collection</Text>
       </Pressable>
     </>
   );
@@ -287,33 +287,36 @@ export const RecipesScreen: React.FC = () => {
   return (
     <>
       <AppLayout showNav={false}>
-        <ScrollView contentContainerStyle={styles.container}>
+        <ScrollView contentContainerStyle={[styles.container, { backgroundColor: theme.colors.background }]}>
           {/* Header */}
           <View style={styles.headerRow}>
-            <Pressable onPress={openSidebar} style={styles.menuButton}>
+            <Pressable onPress={openSidebar} style={[styles.menuButton, { backgroundColor: theme.colors.card }]}>
               <AppIcon name="menu" size={20} color={theme.colors.foreground} />
             </Pressable>
-            <Text style={styles.title}>Recipes</Text>
+            <Text style={[styles.title, { color: theme.colors.foreground }]}>Recipes</Text>
 
             <View style={styles.headerActions}>
               <Pressable
-                style={styles.pillButton}
+                style={[styles.pillButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
                 onPress={() => navigation.navigate("MealPlan" as any)}
               >
                 <AppIcon name="calendar" size={16} color={theme.colors.foreground} style={{ marginRight: 6 }} />
-                <Text style={styles.pillText}>Meal Plan</Text>
+                <Text style={[styles.pillText, { color: theme.colors.foreground }]}>Meal Plan</Text>
               </Pressable>
-              <Pressable style={styles.iconButton}>
+              <Pressable
+                style={[styles.iconButton, { backgroundColor: theme.colors.primary }]}
+                onPress={() => setShowAddRecipeModal(true)}
+              >
                 <AppIcon name="plus" size={20} color="#fff" />
               </Pressable>
             </View>
           </View>
 
           {/* Search */}
-          <View style={styles.searchContainer}>
+          <View style={[styles.searchContainer, { backgroundColor: theme.colors.muted }]}>
             <AppIcon name="search" size={20} color={theme.colors.mutedForeground} style={styles.searchIcon} />
             <TextInput
-              style={styles.searchInput}
+              style={[styles.searchInput, { color: theme.colors.foreground }]}
               placeholder="Search recipes..."
               placeholderTextColor={theme.colors.mutedForeground}
               value={query}
@@ -322,17 +325,17 @@ export const RecipesScreen: React.FC = () => {
           </View>
 
           {/* Tabs */}
-          <View style={styles.tabRow}>
+          <View style={[styles.tabRow, { backgroundColor: theme.colors.muted }]}>
             {tabs.map((tab) => {
               const active = tab === activeTab;
               return (
                 <Pressable
                   key={tab}
-                  style={[styles.tabPill, active && styles.tabActive]}
+                  style={[styles.tabPill, active && { backgroundColor: theme.colors.card, shadowColor: '#000' }]}
                   onPress={() => setActiveTab(tab)}
                 >
                   {tab === "For You" && <AppIcon name="sparkles" size={14} color={active ? theme.colors.foreground : theme.colors.mutedForeground} style={{ marginRight: 6 }} />}
-                  <Text style={[styles.tabText, active && styles.tabTextActive]}>{tab}</Text>
+                  <Text style={[styles.tabText, { color: active ? theme.colors.foreground : theme.colors.mutedForeground }]}>{tab}</Text>
                 </Pressable>
               );
             })}
@@ -354,6 +357,16 @@ export const RecipesScreen: React.FC = () => {
         recipe={selectedRecipe}
         onAddToGroceryList={handleAddToGroceryList}
       />
+
+      <AddNewRecipeModal
+        open={showAddRecipeModal}
+        onClose={() => setShowAddRecipeModal(false)}
+      />
+
+      <CreateCollectionModal
+        open={showCreateCollectionModal}
+        onClose={() => setShowCreateCollectionModal(false)}
+      />
     </>
   );
 };
@@ -362,7 +375,6 @@ const styles = StyleSheet.create({
   container: {
     padding: theme.spacing.lg,
     paddingBottom: 120,
-    backgroundColor: theme.colors.background,
   },
   headerRow: {
     flexDirection: "row",
@@ -373,7 +385,6 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 14,
-    backgroundColor: theme.colors.card,
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#0a1a3c",
@@ -386,7 +397,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 24,
     fontWeight: "700",
-    color: theme.colors.foreground,
     marginLeft: theme.spacing.md,
   },
   headerActions: {
@@ -397,26 +407,21 @@ const styles = StyleSheet.create({
   pillButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: theme.colors.card,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: theme.colors.border,
   },
   pillText: {
     fontSize: 14,
     fontWeight: "600",
-    color: theme.colors.foreground,
   },
   iconButton: {
     width: 42,
     height: 42,
     borderRadius: 14,
-    backgroundColor: theme.colors.primary,
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -425,7 +430,6 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.muted,
     borderRadius: 16,
     paddingHorizontal: 16,
     height: 48,
@@ -437,12 +441,10 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: theme.colors.foreground,
     height: '100%',
   },
   tabRow: {
     flexDirection: "row",
-    backgroundColor: theme.colors.muted,
     borderRadius: 18,
     padding: 4,
     marginBottom: theme.spacing.lg,
@@ -455,25 +457,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 14,
   },
-  tabActive: {
-    backgroundColor: theme.colors.card,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
   tabText: {
-    color: theme.colors.mutedForeground,
     fontWeight: "600",
     fontSize: 14,
   },
-  tabTextActive: {
-    color: theme.colors.foreground,
-  },
   card: {
-    backgroundColor: theme.colors.card,
-    borderRadius: 24, // Squared like boxes
+    borderRadius: 24,
     padding: theme.spacing.md,
     marginBottom: theme.spacing.md,
     shadowColor: "#0a1a3c",
@@ -481,6 +470,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 10,
     elevation: 3,
+    borderWidth: 1,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -490,7 +480,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: theme.colors.foreground,
   },
   tagGroup: {
     flexDirection: "row",
@@ -501,7 +490,6 @@ const styles = StyleSheet.create({
   prefTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.muted,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
@@ -512,7 +500,6 @@ const styles = StyleSheet.create({
   },
   prefText: {
     fontWeight: "600",
-    color: theme.colors.mutedForeground,
     fontSize: 13,
   },
   groceryNoteRow: {
@@ -520,14 +507,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   groceryNote: {
-    color: theme.colors.mutedForeground,
     fontSize: 14,
   },
   recommendRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: 'space-between',
-    backgroundColor: theme.colors.muted,
     borderRadius: 18,
     padding: 12,
     marginBottom: 8,
@@ -541,7 +526,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 10,
-    backgroundColor: theme.colors.card,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -552,10 +536,8 @@ const styles = StyleSheet.create({
   recommendTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: theme.colors.foreground,
   },
   recommendMeta: {
-    color: theme.colors.mutedForeground,
     fontSize: 12,
   },
   recommendRight: {
@@ -575,7 +557,6 @@ const styles = StyleSheet.create({
   },
   quickCard: {
     width: 140,
-    backgroundColor: theme.colors.muted,
     borderRadius: 20,
     padding: 16,
     marginRight: 0,
@@ -588,19 +569,16 @@ const styles = StyleSheet.create({
   quickTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: theme.colors.foreground,
     marginBottom: 4,
     height: 40,
   },
   quickMeta: {
     fontSize: 12,
-    color: theme.colors.mutedForeground,
   },
   planBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: theme.colors.card,
     padding: 20,
     borderRadius: 24,
     marginBottom: 24,
@@ -616,21 +594,17 @@ const styles = StyleSheet.create({
   planTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: theme.colors.foreground,
     marginBottom: 4,
   },
   planMeta: {
     fontSize: 13,
-    color: theme.colors.mutedForeground,
   },
   planButton: {
-    backgroundColor: theme.colors.primary,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 14,
   },
   planButtonText: {
-    color: theme.colors.primaryForeground,
     fontWeight: '700',
     fontSize: 14,
   },
@@ -640,7 +614,6 @@ const styles = StyleSheet.create({
   },
   recipeCard: {
     flexDirection: 'row',
-    backgroundColor: theme.colors.card,
     borderRadius: 20,
     padding: 16,
     shadowColor: "#0a1a3c",
@@ -653,7 +626,6 @@ const styles = StyleSheet.create({
   recipeImage: {
     width: 72,
     height: 72,
-    backgroundColor: theme.colors.muted,
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
@@ -671,7 +643,6 @@ const styles = StyleSheet.create({
   recipeName: {
     fontSize: 16,
     fontWeight: '700',
-    color: theme.colors.foreground,
     flex: 1,
     marginRight: 8,
   },
@@ -688,7 +659,6 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 12,
-    color: theme.colors.mutedForeground,
   },
   tagsRow: {
     flexDirection: 'row',
@@ -696,13 +666,11 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   smallTag: {
-    backgroundColor: 'rgba(46, 94, 153, 0.1)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
   },
   smallTagText: {
-    color: theme.colors.primary,
     fontSize: 11,
     fontWeight: '600',
   },
@@ -711,7 +679,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyText: {
-    color: theme.colors.mutedForeground,
     fontSize: 16,
   },
   // Collections
@@ -765,9 +732,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.colors.card,
     borderWidth: 2,
-    borderColor: theme.colors.muted,
     borderStyle: 'dashed',
     borderRadius: 24,
     padding: 24,
@@ -776,6 +741,5 @@ const styles = StyleSheet.create({
   createCollectionText: {
     fontSize: 16,
     fontWeight: '600',
-    color: theme.colors.mutedForeground,
   },
 });

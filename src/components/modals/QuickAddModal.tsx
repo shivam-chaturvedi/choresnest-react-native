@@ -89,32 +89,32 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
             id: "event",
             label: "Add Event",
             icon: "calendar",
-            color: "#3B82F6",
-            bg: "#EBF5FF",
+            color: theme.colors.info,
+            bg: theme.colors.infoLight,
             action: () => { onClose(); onAddEvent(); }
         },
         {
             id: "task",
             label: "Add Task",
             icon: "checkSquare",
-            color: "#22C55E",
-            bg: "#DCFCE7",
+            color: theme.colors.success,
+            bg: theme.colors.successLight,
             action: () => { onClose(); onAddTask(); }
         },
         {
             id: "note",
             label: "Add Note",
-            icon: "fileText",
-            color: "#F59E0B",
-            bg: "#FEF3C7",
+            icon: "edit",
+            color: theme.colors.warning,
+            bg: theme.colors.warningLight,
             action: handleAddNote
         },
         {
             id: "document",
             label: "Add Document",
             icon: "file",
-            color: "#06B6D4",
-            bg: "#CFFAFE",
+            color: theme.palette.blue[500],
+            bg: theme.palette.blue[50], // Using palette directly for Cyan/Blue distinction if needed, or just map to info
             action: handleAddDocument
         }
     ];

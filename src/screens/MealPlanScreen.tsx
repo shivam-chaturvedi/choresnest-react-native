@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,15 +12,38 @@ import { useNavigation } from '@react-navigation/native';
 import { AppLayout } from '../components/layout/AppLayout';
 import { theme } from '../theme';
 import { AppIcon } from '../components/ui/AppIcon';
+import { Recipe } from '../data/recipes';
 import { useToast } from '../components/ui/Toast';
 import { useMealPlan, MealType } from '../contexts/MealPlanContext';
 import { AddMealModal } from '../components/modals/AddMealModal';
-import { format, addDays, subDays, isToday, isTomorrow } from 'date-fns';
+import { RecipeDetailModal } from '../components/modals/RecipeDetailModal';
+import { WeeklyGroceryListModal } from '../components/modals/WeeklyGroceryListModal';
+import { format, addDays, subDays, isToday, isTomorrow, parse, subMinutes, isAfter, startOfDay } from 'date-fns';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
 const getDayName = (date: Date) => format(date, 'EEEE'); // Monday
 const getDayNumber = (date: Date) => format(date, 'd'); // 5
+
+// Helper to parse duration string "15 min" -> 15 (number)
+const parseDuration = (timeStr: string): number => {
+  const match = timeStr.match(/(\d+)\s*min/i);
+  return match ? parseInt(match[1], 10) : 30; // default 30
+};
+
+// Helper to get target meal times
+const getTargetTimeForMeal = (date: Date, type: MealType): Date => {
+  const dateStr = format(date, 'yyyy-MM-dd');
+  const d = new Date(dateStr);
+
+  switch (type) {
+    case 'breakfast': return new Date(d.setHours(8, 0, 0)); // 8:00 AM
+    case 'lunch': return new Date(d.setHours(13, 0, 0)); // 1:00 PM
+    case 'snack': return new Date(d.setHours(16, 0, 0)); // 4:00 PM
+    case 'dinner': return new Date(d.setHours(19, 30, 0)); // 7:30 PM
+    default: return new Date(d.setHours(12, 0, 0));
+  }
+};
 
 export const MealPlanScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -35,8 +58,11 @@ export const MealPlanScreen: React.FC = () => {
     generateGroceryList,
   } = useMealPlan();
 
-  const [activeTab, setActiveTab] = useState<'plan' | 'recipes' | 'prep'>('plan');
+  const [activeTab, setActiveTab] = useState<'plan' | 'prep'>('plan');
   const [addMealModal, setAddMealModal] = useState<{ open: boolean; date: string; mealType: MealType } | null>(null);
+  const [showGroceryModal, setShowGroceryModal] = useState(false);
+  const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
+  const [showRecipeDetail, setShowRecipeDetail] = useState(false);
 
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(currentWeekStart, i));
   const totalMeals = weekDays.reduce((acc, day) => {
@@ -84,18 +110,26 @@ export const MealPlanScreen: React.FC = () => {
     }
   };
 
+  const handleOpenRecipe = (recipeId: number) => {
+    const recipe = getRecipeById(recipeId);
+    if (recipe) {
+      setSelectedRecipe(recipe);
+      setShowRecipeDetail(true);
+    }
+  };
+
   const renderPlanTab = () => (
     <View style={styles.tabContent}>
       {/* Week Navigator */}
-      <View style={styles.weekNavigator}>
+      <View style={[styles.weekNavigator, { backgroundColor: theme.colors.muted }]}>
         <Pressable onPress={() => handleNavigateWeek('prev')} style={styles.navArrow}>
           <AppIcon name="chevronLeft" size={20} color={theme.colors.foreground} />
         </Pressable>
         <View style={{ alignItems: 'center' }}>
-          <Text style={styles.weekDateRange}>
+          <Text style={[styles.weekDateRange, { color: theme.colors.foreground }]}>
             {format(currentWeekStart, 'MMM d')} - {format(addDays(currentWeekStart, 6), 'MMM d')}
           </Text>
-          <Text style={styles.weekYear}>{format(currentWeekStart, 'yyyy')}</Text>
+          <Text style={[styles.weekYear, { color: theme.colors.mutedForeground }]}>{format(currentWeekStart, 'yyyy')}</Text>
         </View>
         <Pressable onPress={() => handleNavigateWeek('next')} style={styles.navArrow}>
           <AppIcon name="chevronRight" size={20} color={theme.colors.foreground} />
@@ -110,20 +144,30 @@ export const MealPlanScreen: React.FC = () => {
           const isTodayDate = isToday(day);
 
           return (
-            <View key={dateStr} style={[styles.dayCard, isTodayDate && styles.dayCardToday]}>
+            <View key={dateStr} style={[
+              styles.dayCard,
+              { backgroundColor: theme.colors.card },
+              isTodayDate && { borderWidth: 2, borderColor: theme.colors.primary }
+            ]}>
               {/* Day Header */}
-              <View style={styles.dayHeader}>
+              <View style={[styles.dayHeader, { borderColor: theme.colors.border }]}>
                 <View style={styles.dayDateGroup}>
-                  <View style={[styles.dateBadge, isTodayDate && styles.dateBadgeToday]}>
-                    <Text style={[styles.dateNumber, isTodayDate && { color: '#fff' }]}>{getDayNumber(day)}</Text>
+                  <View style={[
+                    styles.dateBadge,
+                    { backgroundColor: theme.colors.muted },
+                    isTodayDate && { backgroundColor: theme.colors.primary }
+                  ]}>
+                    <Text style={[
+                      styles.dateNumber,
+                      { color: theme.colors.foreground },
+                      isTodayDate && { color: '#fff' }
+                    ]}>{getDayNumber(day)}</Text>
                   </View>
                   <View>
-                    <Text style={styles.dayName}>{getDayName(day)}</Text>
-                    <Text style={styles.monthName}>{format(day, 'MMM yyyy')}</Text>
+                    <Text style={[styles.dayName, { color: theme.colors.foreground }]}>{getDayName(day)}</Text>
+                    <Text style={[styles.monthName, { color: theme.colors.mutedForeground }]}>{format(day, 'MMM yyyy')}</Text>
                   </View>
                 </View>
-                {/* {isTodayDate && <View style={styles.todayPill}><Text style={styles.todayText}>Today</Text></View>} */}
-                {/* Removing Today pill to match reference exact logic visually */}
               </View>
 
               {/* Meal Slots */}
@@ -133,20 +177,23 @@ export const MealPlanScreen: React.FC = () => {
                   const recipe = meal ? getRecipeById(meal.recipeId) : null;
 
                   const typeConfig = {
-                    breakfast: { label: 'Breakfast', color: '#FFF7ED', icon: 'coffee', iconColor: '#F97316' }, // orange-100
-                    lunch: { label: 'Lunch', color: '#FFFBEB', icon: 'sun', iconColor: '#F59E0B' }, // amber-100
-                    dinner: { label: 'Dinner', color: '#F5F3FF', icon: 'moon', iconColor: '#6366F1' }, // indigo-50
-                    snack: { label: 'Snack', color: '#FDF2F8', icon: 'cookie', iconColor: '#EC4899' }, // pink-50
+                    breakfast: { label: 'Breakfast', icon: 'coffee' },
+                    lunch: { label: 'Lunch', icon: 'sun' },
+                    dinner: { label: 'Dinner', icon: 'moon' },
+                    snack: { label: 'Snack', icon: 'cookie' },
                   };
                   const config = typeConfig[mealType];
 
                   return (
-                    <View key={mealType} style={[styles.mealSlot, { backgroundColor: config.color }]}>
+                    <View key={mealType} style={[
+                      styles.mealSlot,
+                      { backgroundColor: theme.colors.background, borderColor: theme.colors.border, borderWidth: 1 }
+                    ]}>
                       {/* Slot Header */}
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                          <AppIcon name={config.icon as any} size={14} color={config.iconColor} />
-                          <Text style={[styles.slotLabel, { color: config.iconColor }]}>{config.label}</Text>
+                          <AppIcon name={config.icon as any} size={14} color={theme.colors.primary} />
+                          <Text style={[styles.slotLabel, { color: theme.colors.primary }]}>{config.label}</Text>
                         </View>
                         {meal && (
                           <Pressable onPress={() => handleRemoveMeal(meal.id)} hitSlop={8}>
@@ -159,8 +206,8 @@ export const MealPlanScreen: React.FC = () => {
                         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
                           <Text style={{ fontSize: 20 }}>{recipe.image}</Text>
                           <View style={{ flex: 1 }}>
-                            <Text style={styles.slotRecipeName} numberOfLines={1}>{recipe.name}</Text>
-                            <Text style={styles.slotRecipeTime}>{recipe.time}</Text>
+                            <Text style={[styles.slotRecipeName, { color: theme.colors.foreground }]} numberOfLines={1}>{recipe.name}</Text>
+                            <Text style={[styles.slotRecipeTime, { color: theme.colors.mutedForeground }]}>{recipe.time}</Text>
                           </View>
                         </View>
                       ) : (
@@ -169,7 +216,7 @@ export const MealPlanScreen: React.FC = () => {
                           onPress={() => handleOpenAddMeal(dateStr, mealType)}
                         >
                           <AppIcon name="plus" size={16} color={theme.colors.mutedForeground} />
-                          <Text style={styles.addSlotText}>Add</Text>
+                          <Text style={[styles.addSlotText, { color: theme.colors.mutedForeground }]}>Add</Text>
                         </Pressable>
                       )}
                     </View>
@@ -183,139 +230,260 @@ export const MealPlanScreen: React.FC = () => {
     </View>
   );
 
-  const renderRecipesTab = () => (
-    <View style={styles.tabContent}>
-      <Text style={styles.helperText}>Drag any recipe to a meal slot on the Plan tab (Tap to add in mobile)</Text>
-      {/* Just showing list of recipes as 'Draggable Cards' visually */}
-      <View style={{ gap: 12 }}>
-        <View style={styles.recipeListCard}>
-          <Text style={{ fontSize: 28, marginRight: 16 }}>🍛</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.recipeListTitle}>Paneer Butter Masala</Text>
-            <Text style={styles.recipeListMeta}>30 min • 4 servings</Text>
-          </View>
-          <AppIcon name="gripVertical" size={20} color={theme.colors.mutedForeground} />
-        </View>
-        <View style={styles.recipeListCard}>
-          <Text style={{ fontSize: 28, marginRight: 16 }}>🍚</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.recipeListTitle}>Chicken Biryani</Text>
-            <Text style={styles.recipeListMeta}>45 min • 6 servings</Text>
-          </View>
-          <AppIcon name="gripVertical" size={20} color={theme.colors.mutedForeground} />
-        </View>
-        <View style={styles.recipeListCard}>
-          <Text style={{ fontSize: 28, marginRight: 16 }}>🍝</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.recipeListTitle}>Pasta Primavera</Text>
-            <Text style={styles.recipeListMeta}>20 min • 4 servings</Text>
-          </View>
-          <AppIcon name="gripVertical" size={20} color={theme.colors.mutedForeground} />
-        </View>
-        <View style={styles.recipeListCard}>
-          <Text style={{ fontSize: 28, marginRight: 16 }}>🥣</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.recipeListTitle}>Fruit Smoothie Bowl</Text>
-            <Text style={styles.recipeListMeta}>10 min • 2 servings</Text>
-          </View>
-          <AppIcon name="gripVertical" size={20} color={theme.colors.mutedForeground} />
-        </View>
-        <View style={styles.recipeListCard}>
-          <Text style={{ fontSize: 28, marginRight: 16 }}>🥗</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.recipeListTitle}>Grilled Chicken Salad</Text>
-            <Text style={styles.recipeListMeta}>25 min • 2 servings</Text>
-          </View>
-          <AppIcon name="gripVertical" size={20} color={theme.colors.mutedForeground} />
-        </View>
-      </View>
-    </View>
-  );
+  const getPrepItems = (date: Date) => {
+    const meals = getMealsForDay(format(date, 'yyyy-MM-dd'));
+    return meals.map(meal => {
+      const recipe = getRecipeById(meal.recipeId);
+      if (!recipe) return null;
 
-  const renderPrepTab = () => (
-    <View style={styles.tabContent}>
-      {/* Sample Meal Prep UI matching ReactJS */}
-      <View style={styles.prepCard}>
-        <View style={styles.prepHeader}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <AppIcon name="chefHat" size={22} color={theme.colors.primary} />
-            <Text style={styles.prepTitle}>Meal Prep Schedule</Text>
+      const readyTime = getTargetTimeForMeal(date, meal.mealType);
+      const totalMinutes = parseDuration(recipe.time);
+      const startTime = subMinutes(readyTime, totalMinutes); // Simplified: total time is prep + cook
+
+      return {
+        ...meal,
+        recipe,
+        readyTime,
+        startTime,
+        duration: totalMinutes,
+      };
+    }).filter(Boolean).sort((a, b) => (a?.startTime.getTime() || 0) - (b?.startTime.getTime() || 0));
+  };
+
+  const renderPrepRow = (item: any) => {
+    if (!item) return null;
+
+    // Difficulty logic mock
+    const difficulty = item.duration > 45 ? 'Complex' : item.duration > 30 ? 'Medium' : 'Easy';
+    const difficultyColor = difficulty === 'Complex' ? theme.colors.danger : difficulty === 'Medium' ? theme.colors.warning : theme.colors.success;
+
+    return (
+      <Pressable
+        key={item.id}
+        style={[styles.prepItemCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+        onPress={() => handleOpenRecipe(item.recipe.id)}
+      >
+        <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
+          <Text style={{ fontSize: 24, marginTop: 4 }}>{item.recipe.image}</Text>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              {/* Meal Icon */}
+              <AppIcon
+                name={item.mealType === 'breakfast' ? 'coffee' : item.mealType === 'lunch' ? 'sun' : item.mealType === 'dinner' ? 'moon' : 'cookie'}
+                size={14}
+                color={theme.colors.warning}
+              />
+              <View style={[styles.badge, { backgroundColor: difficultyColor }]}>
+                <AppIcon name="zap" size={10} color="#fff" style={{ marginRight: 2 }} />
+                <Text style={styles.badgeText}>{difficulty}</Text>
+              </View>
+            </View>
+
+            <Text style={[styles.prepItemTitle, { color: theme.colors.foreground }]}>{item.recipe.name}</Text>
+
+            <View style={styles.prepTimeRow}>
+              <View style={styles.timeBlock}>
+                <AppIcon name="clock" size={12} color={theme.colors.mutedForeground} style={{ marginRight: 4 }} />
+                <Text style={[styles.timeLabel, { color: theme.colors.mutedForeground }]}>Start: </Text>
+                <Text style={[styles.timeValue, { color: theme.colors.mutedForeground }]}>{format(item.startTime, 'h:mm a')}</Text>
+              </View>
+              <View style={styles.timeBlock}>
+                <AppIcon name="checkCircle" size={12} color={theme.colors.primary} style={{ marginRight: 4 }} />
+                <Text style={[styles.timeLabel, { color: theme.colors.primary }]}>Ready: </Text>
+                <Text style={[styles.timeValue, { color: theme.colors.primary }]}>{format(item.readyTime, 'h:mm a')}</Text>
+              </View>
+            </View>
+
+            <Text style={[styles.prepDuration, { color: theme.colors.mutedForeground }]}>
+              {Math.floor(item.duration * 0.6)} min prep + {Math.ceil(item.duration * 0.4)} min cooking
+            </Text>
           </View>
-          <Pressable style={styles.prepButton}>
-            <AppIcon name="bell" size={14} color={theme.colors.foreground} style={{ marginRight: 4 }} />
-            <Text style={styles.prepButtonText}>Set All Reminders</Text>
+
+          <Pressable style={[styles.notifyIcon, { backgroundColor: theme.colors.muted }]}>
+            <AppIcon name="bellOff" size={16} color={theme.colors.mutedForeground} />
           </Pressable>
         </View>
-        <View style={styles.prepToggleRow}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <AppIcon name="bell" size={16} color={theme.colors.primary} />
-            <Text style={styles.prepToggleText}>Auto-schedule reminders</Text>
-          </View>
-          {/* Switch mock */}
-          <View style={{ width: 40, height: 24, borderRadius: 12, backgroundColor: theme.colors.muted, alignItems: 'flex-start', padding: 2, justifyContent: 'center' }}>
-            <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 2 }} />
-          </View>
-        </View>
-      </View>
+      </Pressable>
+    );
+  };
 
-      <View style={styles.prepCard}>
-        <View style={styles.prepHeader}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <AppIcon name="clock" size={22} color={theme.colors.mutedForeground} />
-            <Text style={styles.prepTitle}>Upcoming Prep Tasks</Text>
+  const renderPrepTab = () => {
+    const today = new Date();
+    const tomorrow = addDays(today, 1);
+
+    // Get meals for Today and Tomorrow
+    const todaysPrep = getPrepItems(today);
+    const tomorrowsPrep = getPrepItems(tomorrow);
+
+    // Find upcoming (next 2 days after tomorrow)
+    const upcomingDays = [addDays(today, 2), addDays(today, 3)];
+    let upcomingPrep: any[] = [];
+    upcomingDays.forEach(day => {
+      const items = getPrepItems(day);
+      if (items) upcomingPrep = [...upcomingPrep, ...items.map(i => ({ ...i, showDate: true }))];
+    });
+
+    return (
+      <View style={styles.tabContent}>
+        {/* Header Widget */}
+        <View style={[styles.prepHeaderCard, { backgroundColor: theme.colors.card }]}>
+          <View style={styles.prepHeaderTop}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <AppIcon name="chefHat" size={20} color={theme.colors.primary} />
+              <View>
+                <Text style={[styles.prepHeaderTitle, { color: theme.colors.foreground }]}>Meal Prep Schedule</Text>
+              </View>
+            </View>
+            <Pressable style={[styles.setReminderBtn, { borderColor: theme.colors.border }]}>
+              <AppIcon name="bell" size={14} color={theme.colors.foreground} style={{ marginRight: 6 }} />
+              <Text style={[styles.setReminderText, { color: theme.colors.foreground }]}>Set All Reminders</Text>
+            </Pressable>
+          </View>
+          <View style={[styles.autoScheduleRow, { backgroundColor: theme.colors.muted }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <AppIcon name="bell" size={16} color={theme.colors.primary} />
+              <Text style={{ fontSize: 13, fontWeight: '500', color: theme.colors.foreground }}>Auto-schedule reminders</Text>
+            </View>
+            {/* Mock Toggle */}
+            <View style={{ width: 36, height: 20, borderRadius: 12, backgroundColor: theme.colors.border, alignItems: 'flex-start', padding: 2, justifyContent: 'center' }}>
+              <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: '#fff' }} />
+            </View>
+          </View>
+          <View style={[styles.enableNotifRow, { backgroundColor: theme.colors.warning + '15' }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+              <AppIcon name="alertCircle" size={16} color={theme.colors.warning} />
+              <Text style={{ fontSize: 12, color: theme.colors.warning, flex: 1 }}>Enable notifications to receive prep reminders</Text>
+            </View>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: theme.colors.foreground }}>Enable</Text>
           </View>
         </View>
-        <View style={{ padding: 32, alignItems: 'center' }}>
-          <AppIcon name="chefHat" size={48} color={theme.colors.mutedForeground} style={{ opacity: 0.2, marginBottom: 12 }} />
-          <Text style={{ color: theme.colors.mutedForeground, textAlign: 'center' }}>No upcoming meal prep tasks</Text>
-          <Text style={{ color: theme.colors.mutedForeground, fontSize: 12, marginTop: 4 }}>Add recipes to your meal plan to see prep times</Text>
+
+        {/* Today's Prep */}
+        <View>
+          <View style={styles.sectionHeader}>
+            <AppIcon name="calendar" size={18} color={theme.colors.success} style={{ marginRight: 8 }} />
+            <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>Today's Prep</Text>
+            <View style={[styles.countBadge, { backgroundColor: theme.colors.primary }]}>
+              <Text style={styles.countText}>{todaysPrep.length}</Text>
+            </View>
+          </View>
+
+          <View style={{ gap: 12 }}>
+            {todaysPrep.length > 0 ? todaysPrep.map(renderPrepRow) : (
+              <Text style={{ color: theme.colors.mutedForeground, padding: 16, fontStyle: 'italic' }}>No meals planned for today.</Text>
+            )}
+          </View>
         </View>
+
+        {/* Tomorrow's Prep */}
+        <View style={{ marginTop: 24 }}>
+          <View style={styles.sectionHeader}>
+            <AppIcon name="clock" size={18} color={theme.colors.primary} style={{ marginRight: 8 }} />
+            <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>Tomorrow's Prep</Text>
+            <View style={[styles.countBadge, { backgroundColor: theme.colors.info }]}>
+              <Text style={styles.countText}>{tomorrowsPrep.length}</Text>
+            </View>
+          </View>
+
+          <View style={{ gap: 12 }}>
+            {tomorrowsPrep.length > 0 ? tomorrowsPrep.map(renderPrepRow) : (
+              <Text style={{ color: theme.colors.mutedForeground, padding: 16, fontStyle: 'italic' }}>No meals planned for tomorrow.</Text>
+            )}
+          </View>
+        </View>
+
+        {/* Upcoming Prep */}
+        {upcomingPrep.length > 0 && (
+          <View style={{ marginTop: 24 }}>
+            <View style={styles.sectionHeader}>
+              <AppIcon name="calendar" size={18} color={theme.colors.mutedForeground} style={{ marginRight: 8 }} />
+              <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>Upcoming Prep Tasks</Text>
+            </View>
+
+            <View style={{ gap: 12 }}>
+              {upcomingPrep.map((item: any) => (
+                <Pressable
+                  key={item.id}
+                  style={[styles.prepItemCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+                  onPress={() => handleOpenRecipe(item.recipe.id)}
+                >
+                  <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+                    <Text style={{ fontSize: 24 }}>{item.recipe.image}</Text>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                        <View style={{ backgroundColor: theme.colors.success, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 8 }}>
+                          <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>Easy</Text>
+                        </View>
+                        <Text style={[styles.prepItemTitle, { fontSize: 15, color: theme.colors.foreground }]}>{item.recipe.name}</Text>
+                      </View>
+                      <Text style={{ fontSize: 12, color: theme.colors.mutedForeground, marginBottom: 4 }}>
+                        {format(item.startTime, 'EEEE, MMM d')}
+                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <AppIcon name="clock" size={12} color={theme.colors.mutedForeground} style={{ marginRight: 4 }} />
+                        <Text style={[styles.timeLabel, { color: theme.colors.mutedForeground, fontSize: 12 }]}>Start: {format(item.startTime, 'h:mm a')}</Text>
+                        <Text style={[styles.timeLabel, { color: theme.colors.primary, fontSize: 12, marginLeft: 8 }]}>Ready: {format(item.readyTime, 'h:mm a')}</Text>
+                      </View>
+                    </View>
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        )}
+
       </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <>
       <AppLayout showNav={false}>
-        <ScrollView contentContainerStyle={styles.container}>
+        <ScrollView contentContainerStyle={[styles.container, { backgroundColor: theme.colors.background }]}>
           {/* Header */}
           <View style={styles.headerRow}>
             <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-              <AppIcon name="arrowLeft" size={20} color={theme.colors.foreground} />
+              <AppIcon name="chevronLeft" size={20} color={theme.colors.foreground} />
             </Pressable>
             <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={styles.title}>Meal Plan</Text>
-              <Text style={styles.subtitle}>{totalMeals} meals planned this week</Text>
+              <Text style={[styles.title, { color: theme.colors.foreground }]}>Meal Plan</Text>
+              <Text style={[styles.subtitle, { color: theme.colors.mutedForeground }]}>{totalMeals} meals planned this week</Text>
             </View>
             <View style={{ flexDirection: 'row', gap: 8 }}>
-              <Pressable style={styles.actionButton} onPress={clearWeekPlan}>
+              <Pressable style={[styles.actionButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]} onPress={clearWeekPlan}>
                 <AppIcon name="trash" size={18} color={theme.colors.foreground} />
               </Pressable>
-              <Pressable style={styles.actionButton}>
+              <Pressable
+                style={[styles.actionButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+                onPress={() => setShowGroceryModal(true)}
+              >
                 <AppIcon name="shoppingCart" size={18} color={theme.colors.foreground} style={{ marginRight: 4 }} />
-                <Text style={styles.actionButtonText}>List</Text>
+                <Text style={[styles.actionButtonText, { color: theme.colors.foreground }]}>List</Text>
               </Pressable>
             </View>
           </View>
 
-          {/* Info Card */}
-          <View style={styles.infoCard}>
+          {/* Info Card - Themed */}
+          <View style={[styles.infoCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.primary, borderWidth: 1 }]}>
             <AppIcon name="sparkles" size={20} color={theme.colors.primary} style={{ marginTop: 2, marginRight: 12 }} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.infoTitle}>Drag & Drop Recipes</Text>
-              <Text style={styles.infoDesc}>Drag recipes from the list to any meal slot, or tap to add manually.</Text>
+              <Text style={[styles.infoTitle, { color: theme.colors.foreground }]}>Drag & Drop Recipes</Text>
+              <Text style={[styles.infoDesc, { color: theme.colors.mutedForeground }]}>Drag recipes from the list to any meal slot, or tap to add manually.</Text>
             </View>
           </View>
 
           {/* Tabs */}
-          <View style={styles.tabBar}>
-            {(['plan', 'recipes', 'prep'] as const).map((tab) => {
+          <View style={[styles.tabBar, { backgroundColor: theme.colors.muted }]}>
+            {(['plan', 'prep'] as const).map((tab) => {
               const isActive = activeTab === tab;
-              const icons = { plan: 'calendar', recipes: 'chefHat', prep: 'info' };
+              const icons = { plan: 'calendar', prep: 'info' };
               return (
                 <Pressable
                   key={tab}
-                  style={[styles.tabItem, isActive && styles.tabItemActive]}
+                  style={[
+                    styles.tabItem,
+                    isActive && { backgroundColor: theme.colors.card }
+                  ]}
                   onPress={() => setActiveTab(tab)}
                 >
                   <AppIcon
@@ -324,7 +492,10 @@ export const MealPlanScreen: React.FC = () => {
                     color={isActive ? theme.colors.foreground : theme.colors.mutedForeground}
                     style={{ marginRight: 8 }}
                   />
-                  <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
+                  <Text style={[
+                    styles.tabText,
+                    { color: isActive ? theme.colors.foreground : theme.colors.mutedForeground }
+                  ]}>
                     {tab.charAt(0).toUpperCase() + tab.slice(1)}
                   </Text>
                 </Pressable>
@@ -334,7 +505,6 @@ export const MealPlanScreen: React.FC = () => {
 
           {/* Tab Content */}
           {activeTab === 'plan' && renderPlanTab()}
-          {activeTab === 'recipes' && renderRecipesTab()}
           {activeTab === 'prep' && renderPrepTab()}
 
         </ScrollView>
@@ -345,6 +515,18 @@ export const MealPlanScreen: React.FC = () => {
         onClose={() => setAddMealModal(null)}
         onSelectRecipe={handleSelectRecipe}
       />
+
+      <WeeklyGroceryListModal
+        visible={showGroceryModal}
+        onClose={() => setShowGroceryModal(false)}
+        items={generateGroceryList()}
+      />
+
+      <RecipeDetailModal
+        recipe={selectedRecipe}
+        open={showRecipeDetail}
+        onOpenChange={setShowRecipeDetail}
+      />
     </>
   );
 };
@@ -353,7 +535,6 @@ const styles = StyleSheet.create({
   container: {
     padding: theme.spacing.lg,
     paddingBottom: 120,
-    backgroundColor: theme.colors.background,
   },
   headerRow: {
     flexDirection: 'row',
@@ -367,18 +548,14 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: '700',
-    color: theme.colors.foreground,
   },
   subtitle: {
     fontSize: 12,
-    color: theme.colors.mutedForeground,
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.card,
     borderWidth: 1,
-    borderColor: theme.colors.border,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
@@ -386,11 +563,9 @@ const styles = StyleSheet.create({
   actionButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: theme.colors.foreground,
   },
   infoCard: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(46, 94, 153, 0.05)', // primary/5
     padding: 16,
     borderRadius: 16,
     marginBottom: 20,
@@ -398,16 +573,13 @@ const styles = StyleSheet.create({
   infoTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: theme.colors.foreground,
     marginBottom: 2,
   },
   infoDesc: {
     fontSize: 12,
-    color: theme.colors.mutedForeground,
   },
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: theme.colors.muted,
     padding: 4,
     borderRadius: 16,
     marginBottom: 20,
@@ -420,21 +592,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 12,
   },
-  tabItemActive: {
-    backgroundColor: theme.colors.card,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
   tabText: {
     fontSize: 14,
     fontWeight: '600',
-    color: theme.colors.mutedForeground,
-  },
-  tabTextActive: {
-    color: theme.colors.foreground,
   },
   tabContent: {
     gap: 16,
@@ -443,7 +603,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: theme.colors.muted,
     padding: 12,
     borderRadius: 16,
     marginBottom: 4,
@@ -454,14 +613,11 @@ const styles = StyleSheet.create({
   weekDateRange: {
     fontSize: 16,
     fontWeight: '700',
-    color: theme.colors.foreground,
   },
   weekYear: {
     fontSize: 12,
-    color: theme.colors.mutedForeground,
   },
   dayCard: {
-    backgroundColor: theme.colors.card,
     borderRadius: 24,
     padding: 16,
     shadowColor: "#0a1a3c",
@@ -470,10 +626,6 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 3,
   },
-  dayCardToday: {
-    borderWidth: 2,
-    borderColor: theme.colors.primary,
-  },
   dayHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -481,7 +633,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
   },
   dayDateGroup: {
     flexDirection: 'row',
@@ -492,26 +643,19 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: theme.colors.muted,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  dateBadgeToday: {
-    backgroundColor: theme.colors.primary,
   },
   dateNumber: {
     fontSize: 16,
     fontWeight: '700',
-    color: theme.colors.foreground,
   },
   dayName: {
     fontSize: 16,
     fontWeight: '700',
-    color: theme.colors.foreground,
   },
   monthName: {
     fontSize: 12,
-    color: theme.colors.mutedForeground,
   },
   mealGrid: {
     flexDirection: 'row',
@@ -519,9 +663,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   mealSlot: {
-    width: (SCREEN_WIDTH - 32 - 32 - 12) / 2, // padding, gap logic approximation 
-    // Actually full width calculation: Window - 2*ScreenPadding(20) - 2*CardPadding(16) - Gap(12) / 2
-    // Let's use flex basis for simpler flow
+    width: (SCREEN_WIDTH - 32 - 32 - 12) / 2,
     flexBasis: '47%',
     borderRadius: 16,
     padding: 12,
@@ -541,95 +683,130 @@ const styles = StyleSheet.create({
   },
   addSlotText: {
     fontSize: 12,
-    color: theme.colors.mutedForeground,
     fontWeight: '500',
   },
   slotRecipeName: {
     fontSize: 13,
     fontWeight: '600',
-    color: theme.colors.foreground,
   },
   slotRecipeTime: {
     fontSize: 11,
-    color: theme.colors.mutedForeground,
-  },
-  // Recipes Tab Styles
-  helperText: {
-    fontSize: 13,
-    color: theme.colors.mutedForeground,
-    marginBottom: 12,
-    paddingHorizontal: 4,
-  },
-  recipeListCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.card,
-    padding: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  recipeListTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: theme.colors.foreground,
-  },
-  recipeListMeta: {
-    fontSize: 12,
-    color: theme.colors.mutedForeground,
   },
   // Prep Tab Styles
-  prepCard: {
-    backgroundColor: theme.colors.card,
+  prepHeaderCard: {
     borderRadius: 16,
+    marginBottom: 8,
     overflow: 'hidden',
-    marginBottom: 0,
-    borderWidth: 0,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
   },
-  prepHeader: {
+  prepHeaderTop: {
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  prepTitle: {
+  prepHeaderTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: theme.colors.foreground,
+    fontWeight: '700',
   },
-  prepButton: {
+  setReminderBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
   },
-  prepButtonText: {
+  setReminderText: {
     fontSize: 12,
-    fontWeight: '500',
-    color: theme.colors.foreground,
+    fontWeight: '600',
   },
-  prepToggleRow: {
+  autoScheduleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
-    backgroundColor: theme.colors.muted,
-    margin: 16,
-    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  prepToggleText: {
-    fontSize: 14,
+  enableNotifRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  countBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginLeft: 8,
+  },
+  countText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  prepItemCard: {
+    padding: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  prepItemTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  prepTimeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 6,
+  },
+  timeBlock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  timeLabel: {
+    fontSize: 13,
+  },
+  timeValue: {
+    fontSize: 13,
     fontWeight: '500',
-    color: theme.colors.foreground,
+  },
+  prepDuration: {
+    fontSize: 12,
+  },
+  notifyIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

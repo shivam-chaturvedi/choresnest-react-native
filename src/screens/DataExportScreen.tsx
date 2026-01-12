@@ -57,35 +57,37 @@ export const DataExportScreen: React.FC = () => {
           <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
             <ChevronLeft size={24} color={theme.colors.foreground} />
           </Pressable>
-          <Text style={styles.title}>Data Export</Text>
+          <Text style={[styles.title, { color: theme.colors.foreground }]}>Data Export</Text>
         </View>
 
         {/* Hero Card */}
-        <View style={styles.heroCard}>
-          <View style={styles.heroIcon}>
+        <View style={[styles.heroCard, { backgroundColor: theme.colors.primary, shadowColor: theme.colors.primary }]}>
+          <View style={[styles.heroIcon, { backgroundColor: "rgba(255,255,255,0.2)" }]}>
             <Download size={32} color={theme.colors.primaryForeground} />
           </View>
           <View>
-            <Text style={styles.heroTitle}>Backup Your Data</Text>
-            <Text style={styles.heroSubtitle}>Export all your family data securely</Text>
+            <Text style={[styles.heroTitle, { color: theme.colors.primaryForeground }]}>Backup Your Data</Text>
+            <Text style={[styles.heroSubtitle, { color: 'rgba(255,255,255,0.9)' }]}>Export all your family data securely</Text>
           </View>
         </View>
 
         {/* Export Format */}
-        <Text style={styles.sectionTitle}>Export Format</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>Export Format</Text>
         <View style={{ gap: 8 }}>
           {exportFormats.map((option) => (
             <Pressable
               key={option.id}
               style={[
                 styles.optionCard,
-                format === option.id && styles.optionActive
+                { backgroundColor: theme.colors.card, shadowColor: theme.colors.shadow },
+                format === option.id && { borderColor: theme.colors.primary, borderWidth: 2 }
               ]}
               onPress={() => setFormat(option.id)}
             >
               <View style={[
                 styles.optionIcon,
-                format === option.id && { backgroundColor: 'rgba(59, 130, 246, 0.1)' } // Light blue
+                { backgroundColor: theme.colors.muted },
+                format === option.id && { backgroundColor: theme.colors.primary + '1A' } // Light blue
               ]}>
                 <option.icon
                   size={24}
@@ -93,18 +95,18 @@ export const DataExportScreen: React.FC = () => {
                 />
               </View>
               <View style={styles.optionText}>
-                <Text style={styles.optionLabel}>{option.label}</Text>
-                <Text style={styles.optionSubtitle}>{option.description}</Text>
+                <Text style={[styles.optionLabel, { color: theme.colors.foreground }]}>{option.label}</Text>
+                <Text style={[styles.optionSubtitle, { color: theme.colors.mutedForeground }]}>{option.description}</Text>
               </View>
-              <Text style={styles.optionSize}>{option.size}</Text>
+              <Text style={[styles.optionSize, { color: theme.colors.mutedForeground }]}>{option.size}</Text>
               {format === option.id && <Check size={20} color={theme.colors.primary} />}
             </Pressable>
           ))}
         </View>
 
         {/* Select Data */}
-        <Text style={styles.sectionTitle}>Select Data</Text>
-        <View style={styles.dataCard}>
+        <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>Select Data</Text>
+        <View style={[styles.dataCard, { backgroundColor: theme.colors.card, shadowColor: theme.colors.shadow }]}>
           {dataOptions.map((option) => (
             <Pressable
               key={option.id}
@@ -113,45 +115,46 @@ export const DataExportScreen: React.FC = () => {
             >
               <View style={[
                 styles.checkbox,
-                selectedData.includes(option.id) && styles.checkboxActive
+                { borderColor: theme.colors.border },
+                selectedData.includes(option.id) && { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }
               ]}>
                 {selectedData.includes(option.id) && <Check size={14} color="#fff" />}
               </View>
               <View style={styles.dataText}>
-                <Text style={styles.dataLabel}>{option.label}</Text>
+                <Text style={[styles.dataLabel, { color: theme.colors.foreground }]}>{option.label}</Text>
               </View>
-              <Text style={styles.dataCount}>{option.items} items</Text>
+              <Text style={[styles.dataCount, { color: theme.colors.mutedForeground }]}>{option.items} items</Text>
             </Pressable>
           ))}
         </View>
 
         {/* Last Backup */}
-        <View style={styles.lastBackup}>
+        <View style={[styles.lastBackup, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
           <View>
-            <Text style={styles.lastBackupLabel}>Last Backup</Text>
-            <Text style={styles.lastBackupTime}>December 28, 2025 at 3:45 PM</Text>
+            <Text style={[styles.lastBackupLabel, { color: theme.colors.foreground }]}>Last Backup</Text>
+            <Text style={[styles.lastBackupTime, { color: theme.colors.mutedForeground }]}>December 28, 2025 at 3:45 PM</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Check size={14} color="#22c55e" />
-            <Text style={styles.backupStatus}>Up to date</Text>
+            <Check size={14} color={theme.colors.success} />
+            <Text style={[styles.backupStatus, { color: theme.colors.success }]}>Up to date</Text>
           </View>
         </View>
 
         {/* Export Button */}
         <Pressable
-          style={[styles.exportButton, isExporting && { opacity: 0.8 }]}
+          style={[styles.exportButton, { backgroundColor: theme.colors.primary, shadowColor: theme.colors.primary }, isExporting && { opacity: 0.8 }]}
           onPress={handleExport}
           disabled={isExporting}
         >
           {isExporting ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Loader2 size={24} color="#fff" style={{ transform: [{ rotate: '45deg' }] }} />
-              <Text style={styles.exportText}>Exporting...</Text>
+              <Text style={[styles.exportText, { color: theme.colors.primaryForeground }]}>Exporting...</Text>
             </View>
           ) : (
             <>
               <Download size={20} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={styles.exportText}>Export Data</Text>
+              <Text style={[styles.exportText, { color: theme.colors.primaryForeground }]}>Export Data</Text>
             </>
           )}
         </Pressable>
@@ -179,16 +182,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: "700",
-    color: theme.colors.foreground,
   },
   heroCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: theme.colors.primary,
     borderRadius: 20,
     padding: 16,
     marginBottom: 24,
-    shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -198,7 +198,6 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.2)",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 16,
@@ -206,41 +205,32 @@ const styles = StyleSheet.create({
   heroTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: theme.colors.primaryForeground,
   },
   heroSubtitle: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.9)',
   },
   sectionTitle: {
     fontSize: 14,
     fontWeight: "600",
-    color: theme.colors.foreground,
     marginBottom: 12,
     marginTop: 8,
   },
   optionCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: theme.colors.card,
     borderRadius: 16,
     padding: 12,
     borderWidth: 2,
     borderColor: "transparent",
-    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
   },
-  optionActive: {
-    borderColor: theme.colors.primary,
-  },
   optionIcon: {
     width: 48,
     height: 48,
     borderRadius: 12,
-    backgroundColor: theme.colors.muted,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
@@ -251,22 +241,17 @@ const styles = StyleSheet.create({
   optionLabel: {
     fontSize: 16,
     fontWeight: "600",
-    color: theme.colors.foreground,
   },
   optionSubtitle: {
-    color: theme.colors.mutedForeground,
     fontSize: 12,
   },
   optionSize: {
-    color: theme.colors.mutedForeground,
     fontSize: 12,
     marginRight: 12,
   },
   dataCard: {
-    backgroundColor: theme.colors.card,
     borderRadius: 16,
     padding: 12,
-    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
@@ -283,14 +268,9 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 8,
     borderWidth: 2,
-    borderColor: theme.colors.border,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
-  },
-  checkboxActive: {
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primary,
   },
   dataText: {
     flex: 1,
@@ -298,14 +278,11 @@ const styles = StyleSheet.create({
   dataLabel: {
     fontSize: 14,
     fontWeight: "500",
-    color: theme.colors.foreground,
   },
   dataCount: {
     fontSize: 12,
-    color: theme.colors.mutedForeground,
   },
   lastBackup: {
-    backgroundColor: theme.colors.card, // or card-soft color if different in theme
     borderRadius: 16,
     padding: 16,
     marginTop: 24,
@@ -314,37 +291,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderWidth: 1,
-    borderColor: theme.colors.border,
   },
   lastBackupLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: theme.colors.foreground,
   },
   lastBackupTime: {
     fontSize: 12,
-    color: theme.colors.mutedForeground,
   },
   backupStatus: {
     fontSize: 12,
-    color: "#22c55e",
     fontWeight: "600",
   },
   exportButton: {
-    backgroundColor: theme.colors.primary,
     borderRadius: 16,
     height: 56,
     flexDirection: 'row',
     alignItems: "center",
     justifyContent: 'center',
-    shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 4,
   },
   exportText: {
-    color: theme.colors.primaryForeground,
     fontWeight: "600",
     fontSize: 16,
   },

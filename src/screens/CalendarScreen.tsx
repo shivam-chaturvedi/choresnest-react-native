@@ -1,3 +1,4 @@
+// ... imports
 import React, { useState, useRef, useMemo } from "react";
 import {
   StyleSheet,
@@ -31,11 +32,12 @@ export const CalendarScreen: React.FC = () => {
   const { openSidebar } = useSidebar();
   const navigation = useNavigation();
 
-  const [activeView, setActiveView] = useState("Month");
+  const [activeView, setActiveView] = useState("Day");
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showAddEventModal, setShowAddEventModal] = useState(false);
   const [filterMember, setFilterMember] = useState<string | null>(null);
   const [showSearch, setShowSearch] = useState(false);
+  const [selectedTime, setSelectedTime] = useState<string | undefined>(undefined);
 
   const today = new Date();
 
@@ -67,11 +69,11 @@ export const CalendarScreen: React.FC = () => {
   const weekDays = useMemo(() => generateWeekDays(), [selectedDate]);
 
   const renderMonthView = () => (
-    <View style={styles.card}>
+    <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
       {/* Day Headers */}
       <View style={styles.gridHeader}>
         {daysOfWeek.map((day, i) => (
-          <Text key={i} style={[styles.gridHeaderLabel, i === 0 && styles.textDanger]}>
+          <Text key={i} style={[styles.gridHeaderLabel, { color: theme.colors.mutedForeground }, i === 0 && styles.textDanger]}>
             {day}
           </Text>
         ))}
@@ -92,15 +94,16 @@ export const CalendarScreen: React.FC = () => {
               style={[
                 styles.dayCell,
                 !isCurrentMonth && styles.dayCellFaded,
-                isSelected && styles.dayCellActive,
-                isToday && !isSelected && styles.dayCellToday
+                isSelected && { backgroundColor: theme.colors.primary, shadowColor: theme.colors.primary },
+                isToday && !isSelected && { backgroundColor: "rgba(59, 130, 246, 0.1)", borderWidth: 1, borderColor: theme.colors.primary }
               ]}
             >
               <Text style={[
                 styles.dayText,
-                !isCurrentMonth && styles.dayTextFaded,
-                isSelected && styles.dayTextActive,
-                isToday && !isSelected && styles.dayTextToday
+                { color: theme.colors.foreground },
+                !isCurrentMonth && { color: theme.colors.mutedForeground },
+                isSelected && { color: "#fff", fontWeight: "700" },
+                isToday && !isSelected && { color: theme.colors.primary, fontWeight: "700" }
               ]}>
                 {format(day, "d")}
               </Text>
@@ -145,12 +148,13 @@ export const CalendarScreen: React.FC = () => {
                 onPress={() => setSelectedDate(day)}
                 style={[
                   styles.weekHeaderCell,
-                  isSelected && styles.weekHeaderCellActive,
-                  isToday && !isSelected && styles.weekHeaderCellToday
+                  { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+                  isSelected && { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+                  isToday && !isSelected && { backgroundColor: "rgba(59, 130, 246, 0.1)" }
                 ]}
               >
-                <Text style={[styles.weekDayLabel, isSelected && styles.textWhite]}>{format(day, "EEE")}</Text>
-                <Text style={[styles.weekDateLabel, isSelected && styles.textWhite]}>{format(day, "d")}</Text>
+                <Text style={[styles.weekDayLabel, { color: theme.colors.mutedForeground }, isSelected && styles.textWhite]}>{format(day, "EEE")}</Text>
+                <Text style={[styles.weekDateLabel, { color: theme.colors.foreground }, isSelected && styles.textWhite]}>{format(day, "d")}</Text>
               </Pressable>
             );
           })}
@@ -158,18 +162,18 @@ export const CalendarScreen: React.FC = () => {
       )}
 
       {/* Timeline */}
-      <View style={styles.card}>
+      <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
         {activeView === "Day" && (
           <View style={styles.dayHeader}>
-            <Text style={styles.dayHeaderNumber}>{format(selectedDate, "d")}</Text>
+            <Text style={[styles.dayHeaderNumber, { color: theme.colors.foreground }]}>{format(selectedDate, "d")}</Text>
             <View>
-              <Text style={styles.dayHeaderMonth}>{format(selectedDate, "MMMM yyyy")}</Text>
-              <Text style={styles.dayHeaderWeekday}>{format(selectedDate, "EEEE")}</Text>
+              <Text style={[styles.dayHeaderMonth, { color: theme.colors.foreground }]}>{format(selectedDate, "MMMM yyyy")}</Text>
+              <Text style={[styles.dayHeaderWeekday, { color: theme.colors.primary }]}>{format(selectedDate, "EEEE")}</Text>
             </View>
           </View>
         )}
 
-        <ScrollView style={{ maxHeight: 400 }}>
+        <ScrollView style={{ height: 300 }} nestedScrollEnabled={true}>
           {Array.from({ length: 24 }).map((_, hour) => {
             const hourEvents = activeView === "Day"
               ? currentEvents.filter(e => {
@@ -188,23 +192,31 @@ export const CalendarScreen: React.FC = () => {
             });
 
             return (
-              <View key={hour} style={styles.timelineRow}>
-                <Text style={styles.timeLabel}>
+              <Pressable
+                key={hour}
+                style={styles.timelineRow}
+                onPress={() => {
+                  const timeString = hour === 0 ? "12:00 AM" : hour < 12 ? `${hour}:00 AM` : hour === 12 ? "12:00 PM" : `${hour - 12}:00 PM`;
+                  setSelectedTime(timeString);
+                  setShowAddEventModal(true);
+                }}
+              >
+                <Text style={[styles.timeLabel, { color: theme.colors.mutedForeground }]}>
                   {hour === 0 ? "12 AM" : hour < 12 ? `${hour} AM` : hour === 12 ? "12 PM" : `${hour - 12} PM`}
                 </Text>
-                <View style={styles.timelineContent}>
+                <View style={[styles.timelineContent, { borderLeftColor: theme.colors.border }]}>
                   {activeView === "Day" && eventsInHour.map((event, idx) => {
                     const member = members.find(m => m.id === event.memberId);
                     const bgColor = member?.color === "member-blue" ? "#dbeafe" :
                       member?.color === "member-green" ? "#dcfce7" : "#ffedd5";
                     return (
                       <View key={event.id} style={[styles.eventBlock, { backgroundColor: bgColor }]}>
-                        <Text style={styles.eventBlockTitle}>{event.title}</Text>
+                        <Text style={[styles.eventBlockTitle, { color: theme.colors.foreground }]}>{event.title}</Text>
                       </View>
                     );
                   })}
                 </View>
-              </View>
+              </Pressable>
             );
           })}
         </ScrollView>
@@ -214,9 +226,9 @@ export const CalendarScreen: React.FC = () => {
 
   return (
     <AppLayout showNav={false} showAddButton={true} onAddPress={() => setShowAddEventModal(true)}>
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         {/* Header Section */}
-        <View style={styles.header}>
+        <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
           <View style={styles.headerTop}>
             <View style={styles.headerLeft}>
               <Pressable onPress={openSidebar} style={styles.iconButton}>
@@ -239,8 +251,7 @@ export const CalendarScreen: React.FC = () => {
                 style={styles.addBtn}
                 onPress={() => setShowAddEventModal(true)}
               >
-                <AppIcon name="plus" size={16} color={theme.colors.primary} />
-                <Text style={styles.addBtnText}>Add Event</Text>
+                <AppIcon name="plus" size={20} color={theme.colors.primary} />
               </Pressable>
             </View>
           </View>
@@ -258,7 +269,7 @@ export const CalendarScreen: React.FC = () => {
               >
                 <Text style={[
                   styles.segmentText,
-                  activeView === view && styles.segmentTextActive
+                  activeView === view ? { color: theme.colors.primary } : { color: "rgba(255,255,255,0.8)" }
                 ]}>{view}</Text>
               </Pressable>
             ))}
@@ -272,13 +283,15 @@ export const CalendarScreen: React.FC = () => {
               onPress={() => setFilterMember(null)}
               style={[
                 styles.filterChip,
-                filterMember === null && styles.filterChipActive
+                { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+                filterMember === null && { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }
               ]}
             >
               <AppIcon name="users" size={14} color={filterMember === null ? "#fff" : theme.colors.foreground} />
               <Text style={[
                 styles.filterText,
-                filterMember === null && styles.filterTextActive
+                { color: theme.colors.foreground },
+                filterMember === null && styles.textWhite
               ]}>All</Text>
             </Pressable>
             {members.map(member => (
@@ -287,13 +300,15 @@ export const CalendarScreen: React.FC = () => {
                 onPress={() => setFilterMember(member.id)}
                 style={[
                   styles.filterChip,
-                  filterMember === member.id && styles.filterChipActive
+                  { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+                  filterMember === member.id && { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }
                 ]}
               >
                 <Text style={styles.filterEmoji}>{member.symbol}</Text>
                 <Text style={[
                   styles.filterText,
-                  filterMember === member.id && styles.filterTextActive
+                  { color: theme.colors.foreground },
+                  filterMember === member.id && styles.textWhite
                 ]}>{member.name}</Text>
               </Pressable>
             ))}
@@ -301,13 +316,13 @@ export const CalendarScreen: React.FC = () => {
 
           {/* Date Navigation */}
           <View style={styles.dateNav}>
-            <Pressable onPress={() => navigateDate(-1)} style={styles.navArrow}>
+            <Pressable onPress={() => navigateDate(-1)} style={[styles.navArrow, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
               <AppIcon name="chevronLeft" size={20} color={theme.colors.foreground} />
             </Pressable>
             <Pressable onPress={() => setSelectedDate(new Date())} style={styles.todayBtn}>
-              <Text style={styles.todayText}>Today</Text>
+              <Text style={[styles.todayText, { color: theme.colors.primary }]}>Today</Text>
             </Pressable>
-            <Pressable onPress={() => navigateDate(1)} style={styles.navArrow}>
+            <Pressable onPress={() => navigateDate(1)} style={[styles.navArrow, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
               <AppIcon name="chevronRight" size={20} color={theme.colors.foreground} />
             </Pressable>
           </View>
@@ -317,14 +332,14 @@ export const CalendarScreen: React.FC = () => {
 
           {/* Upcoming Events (Simplified Logic) */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📋 Upcoming Events</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>📋 Upcoming Events</Text>
             {currentEvents.slice(0, 3).map(event => (
-              <View key={event.id} style={styles.upcomingItem}>
+              <View key={event.id} style={[styles.upcomingItem, { backgroundColor: theme.colors.card }]}>
                 <View style={styles.upcomingLeft}>
                   <Text style={{ fontSize: 24 }}>{event.icon}</Text>
                   <View>
-                    <Text style={styles.upcomingTitle}>{event.title}</Text>
-                    <Text style={styles.upcomingMeta}>{format(new Date(event.date), "MMM d")} · {event.time}</Text>
+                    <Text style={[styles.upcomingTitle, { color: theme.colors.foreground }]}>{event.title}</Text>
+                    <Text style={[styles.upcomingMeta, { color: theme.colors.mutedForeground }]}>{format(new Date(event.date), "MMM d")} · {event.time}</Text>
                   </View>
                 </View>
               </View>
@@ -334,12 +349,14 @@ export const CalendarScreen: React.FC = () => {
           <View style={{ height: 100 }} />
         </ScrollView>
 
-
-
         <AddEventModal
           open={showAddEventModal}
-          onOpenChange={setShowAddEventModal}
+          onOpenChange={(open) => {
+            setShowAddEventModal(open);
+            if (!open) setSelectedTime(undefined);
+          }}
           initialDate={format(selectedDate, "yyyy-MM-dd")}
+          initialTime={selectedTime}
         />
         <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} />
       </View>
@@ -353,12 +370,12 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
   header: {
-    backgroundColor: theme.colors.primary, // Approximating gradient
+    // backgroundColor handled inline
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingBottom: 20,
     paddingHorizontal: 16,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
@@ -384,7 +401,7 @@ const styles = StyleSheet.create({
   iconButton: {
     width: 40,
     height: 40,
-    borderRadius: 12,
+    borderRadius: 4,
     backgroundColor: "rgba(255,255,255,0.2)",
     alignItems: "center",
     justifyContent: "center",
@@ -403,13 +420,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#fff",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    gap: 4,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 4,
+    gap: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   addBtnText: {
-    color: theme.colors.primary,
     fontWeight: "600",
     fontSize: 14,
   },
@@ -417,24 +438,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     backgroundColor: "rgba(255,255,255,0.2)",
     padding: 4,
-    borderRadius: 12,
+    borderRadius: 4,
   },
   segmentBtn: {
     flex: 1,
     paddingVertical: 8,
     alignItems: "center",
-    borderRadius: 10,
+    borderRadius: 2,
   },
   segmentBtnActive: {
     backgroundColor: "#fff",
   },
   segmentText: {
-    color: "rgba(255,255,255,0.8)",
     fontWeight: "600",
     fontSize: 14,
-  },
-  segmentTextActive: {
-    color: theme.colors.primary,
   },
   scrollContent: {
     padding: 16,
@@ -448,24 +465,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 8,
     paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: theme.colors.card,
+    borderRadius: 4,
     marginRight: 8,
     borderWidth: 1,
-    borderColor: theme.colors.border,
     gap: 6,
-  },
-  filterChipActive: {
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primary,
   },
   filterText: {
     fontSize: 14,
     fontWeight: "500",
-    color: theme.colors.foreground,
-  },
-  filterTextActive: {
-    color: "#fff",
   },
   filterEmoji: {
     fontSize: 14,
@@ -478,24 +485,20 @@ const styles = StyleSheet.create({
   },
   navArrow: {
     padding: 8,
-    borderRadius: 12,
-    backgroundColor: theme.colors.card,
+    borderRadius: 4,
     borderWidth: 1,
-    borderColor: theme.colors.border,
   },
   todayBtn: {
     backgroundColor: "rgba(59, 130, 246, 0.1)",
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 12,
+    borderRadius: 4,
   },
   todayText: {
-    color: theme.colors.primary,
     fontWeight: "600",
   },
   card: {
-    backgroundColor: theme.colors.card,
-    borderRadius: 20,
+    borderRadius: 4,
     padding: 12,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -513,7 +516,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 12,
     fontWeight: "600",
-    color: theme.colors.mutedForeground,
   },
   textDanger: {
     color: "#ef4444",
@@ -528,39 +530,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "flex-start",
     paddingTop: 8,
-    borderRadius: 12,
+    borderRadius: 4,
   },
   dayCellFaded: {
     opacity: 0.3,
   },
-  dayCellActive: {
-    backgroundColor: theme.colors.primary,
-    shadowColor: theme.colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-  },
-  dayCellToday: {
-    backgroundColor: "rgba(59, 130, 246, 0.1)",
-    borderWidth: 1,
-    borderColor: theme.colors.primary,
-  },
   dayText: {
     fontSize: 14,
     fontWeight: "500",
-    color: theme.colors.foreground,
     marginBottom: 4,
-  },
-  dayTextFaded: {
-    color: theme.colors.mutedForeground,
-  },
-  dayTextActive: {
-    color: "#fff",
-    fontWeight: "700",
-  },
-  dayTextToday: {
-    color: theme.colors.primary,
-    fontWeight: "700",
   },
   eventDotRx: {
     flexDirection: "row",
@@ -581,27 +559,16 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     paddingVertical: 12,
-    borderRadius: 16,
-    backgroundColor: theme.colors.card,
+    borderRadius: 4,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  weekHeaderCellActive: {
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primary,
-  },
-  weekHeaderCellToday: {
-    backgroundColor: "rgba(59, 130, 246, 0.1)",
   },
   weekDayLabel: {
     fontSize: 12,
-    color: theme.colors.mutedForeground,
     marginBottom: 4,
   },
   weekDateLabel: {
     fontSize: 18,
     fontWeight: "700",
-    color: theme.colors.foreground,
   },
   textWhite: {
     color: "#fff",
@@ -616,16 +583,13 @@ const styles = StyleSheet.create({
   dayHeaderNumber: {
     fontSize: 40,
     fontWeight: "700",
-    color: theme.colors.foreground,
   },
   dayHeaderMonth: {
     fontSize: 16,
     fontWeight: "600",
-    color: theme.colors.foreground,
   },
   dayHeaderWeekday: {
     fontSize: 14,
-    color: theme.colors.primary,
   },
   timelineRow: {
     flexDirection: "row",
@@ -636,25 +600,22 @@ const styles = StyleSheet.create({
     textAlign: "right",
     paddingRight: 12,
     fontSize: 12,
-    color: theme.colors.mutedForeground,
     paddingTop: 8,
   },
   timelineContent: {
     flex: 1,
     borderLeftWidth: 1,
-    borderLeftColor: theme.colors.border,
     paddingLeft: 8,
     paddingBottom: 8,
   },
   eventBlock: {
     padding: 8,
-    borderRadius: 8,
+    borderRadius: 4,
     marginBottom: 4,
   },
   eventBlockTitle: {
     fontSize: 12,
     fontWeight: "600",
-    color: theme.colors.foreground,
   },
   section: {
     marginTop: 8,
@@ -662,15 +623,13 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: theme.colors.foreground,
     marginBottom: 12,
   },
   upcomingItem: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: theme.colors.card,
     padding: 12,
-    borderRadius: 16,
+    borderRadius: 4,
     marginBottom: 8,
   },
   upcomingLeft: {
@@ -681,11 +640,8 @@ const styles = StyleSheet.create({
   upcomingTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: theme.colors.foreground,
   },
   upcomingMeta: {
     fontSize: 12,
-    color: theme.colors.mutedForeground,
   },
-
 });

@@ -6,12 +6,16 @@ import {
   ScrollView,
   Pressable,
   Switch,
-  TextInput,
+  Modal,
+  Platform,
+  Alert
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { AppLayout } from "../components/layout/AppLayout";
 import { theme } from "../theme";
 import { useSidebar } from "../contexts/SidebarContext";
+import { Button } from "../components/ui/Button";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   Calendar,
   CheckSquare,
@@ -24,261 +28,292 @@ import {
   ChevronLeft,
   BellOff,
   Clock,
-  ArrowLeft,
-  Check,
+  ChevronDown,
+  X
 } from "lucide-react-native";
 
-const notificationTypes = [
-  { id: 'events', label: "Calendar Events", description: "Get notified about upcoming events", icon: Calendar },
-  { id: 'tasks', label: "Task Reminders", description: "Due dates and assignments", icon: CheckSquare },
-  { id: 'grocery', label: "Shopping List Updates", description: "When items are added or checked", icon: ShoppingCart },
-  { id: 'vault', label: "Document Alerts", description: "Warranty and expiry reminders", icon: Bell },
-  { id: 'mealprep', label: "Meal Prep Reminders", description: "Time to start cooking", icon: ChefHat },
+// --- Data & Helpers ---
+
+const notificationSettings = [
+  { id: 'events', icon: Calendar, label: 'Calendar Events', description: 'Get notified about upcoming events', enabled: true },
+  { id: 'tasks', icon: CheckSquare, label: 'Task Reminders', description: 'Due dates and assignments', enabled: true },
+  { id: 'grocery', icon: ShoppingCart, label: 'Shopping List Updates', description: 'When items are added or checked', enabled: false },
+  { id: 'vault', icon: Bell, label: 'Document Alerts', description: 'Warranty and expiry reminders', enabled: true },
+  { id: 'mealprep', icon: ChefHat, label: 'Meal Prep Reminders', description: 'Time to start cooking', enabled: true },
 ];
+
+const eventReminderOptions = [
+  { label: '5 min before', value: 5 },
+  { label: '15 min before', value: 15 },
+  { label: '30 min before', value: 30 },
+  { label: '1 hour before', value: 60 },
+  { label: '1 day before', value: 1440 },
+];
+
+const mealPrepOptions = [
+  { label: '30 min before', value: 30 },
+  { label: '1 hour before', value: 60 },
+  { label: '1.5 hours before', value: 90 },
+  { label: '2 hours before', value: 120 },
+];
+
+// --- Components ---
+
+interface TimeSelectorProps {
+  label: string;
+  value: number;
+  options: { label: string; value: number }[];
+  onSelect: (val: number) => void;
+  visible: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+}
+
+const TimeSelector: React.FC<TimeSelectorProps> = ({
+  label,
+  value,
+  options,
+  onSelect,
+  visible,
+  onOpen,
+  onClose
+}) => {
+  const selectedOption = options.find(o => o.value === value) || options[0];
+
+  return (
+    <>
+      <Pressable style={styles.selectorButton} onPress={onOpen}>
+        <Text style={[styles.selectorButtonText, { color: theme.colors.foreground }]}>{selectedOption.label}</Text>
+        <ChevronDown size={16} color={theme.colors.mutedForeground} />
+      </Pressable>
+
+      <Modal
+        visible={visible}
+        transparent
+        animationType="fade"
+        onRequestClose={onClose}
+      >
+        <Pressable style={styles.modalOverlay} onPress={onClose}>
+          <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.colors.foreground }]}>{label}</Text>
+              <Pressable onPress={onClose}>
+                <X size={20} color={theme.colors.mutedForeground} />
+              </Pressable>
+            </View>
+            <ScrollView style={{ maxHeight: 300 }}>
+              {options.map((option) => (
+                <Pressable
+                  key={option.value}
+                  style={[
+                    styles.modalOption,
+                    value === option.value && { backgroundColor: theme.colors.muted }
+                  ]}
+                  onPress={() => {
+                    onSelect(option.value);
+                    onClose();
+                  }}
+                >
+                  <Text style={[
+                    styles.modalOptionText,
+                    { color: value === option.value ? theme.colors.primary : theme.colors.foreground }
+                  ]}>
+                    {option.label}
+                  </Text>
+                  {value === option.value && <Text style={{ color: theme.colors.primary }}>✓</Text>}
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        </Pressable>
+      </Modal>
+    </>
+  );
+};
 
 export const NotificationsScreen: React.FC = () => {
   const navigation = useNavigation();
   const { openSidebar } = useSidebar();
 
-  // Dropdown options
-  const calendarOptions = ["5 min before", "15 min before", "30 min before", "1 hour before", "1 day before"];
-  const mealPrepOptions = ["30 min before", "1 hour before", "1.5 hours before", "2 hours before"];
-
-  // State
-  const [enableNotifications, setEnableNotifications] = useState(true);
-
-  // Reminder Toggles
-  const [calendarEnabled, setCalendarEnabled] = useState(true);
-  const [mealPrepEnabled, setMealPrepEnabled] = useState(true);
-
-  // Custom Dropdown State
-  const [calendarDropdownOpen, setCalendarDropdownOpen] = useState(false);
-  const [mealDropdownOpen, setMealDropdownOpen] = useState(false);
-  const [selectedCalendarTime, setSelectedCalendarTime] = useState("30 min before");
-  const [selectedMealTime, setSelectedMealTime] = useState("1 hour before");
-
-  // Notification Types State
-  const [typesState, setTypesState] = useState<Record<string, boolean>>(
-    notificationTypes.reduce((acc, curr) => ({ ...acc, [curr.id]: true }), {})
-  );
-
-  // Quiet Hours
+  const [settings, setSettings] = useState(notificationSettings);
   const [quietHoursEnabled, setQuietHoursEnabled] = useState(true);
-  const [quietStart, setQuietStart] = useState("22:00");
-  const [quietEnd, setQuietEnd] = useState("07:00");
+  const [quietStart, setQuietStart] = useState('22:00');
+  const [quietEnd, setQuietEnd] = useState('07:00');
 
-  // Delivery Methods
+  // Specific Reminders State
+  const [eventReminders, setEventReminders] = useState(true);
+  const [mealPrepReminders, setMealPrepReminders] = useState(true);
+  const [eventReminderTime, setEventReminderTime] = useState(30);
+  const [mealPrepTime, setMealPrepTime] = useState(60);
+
+  // Delivery Methods State
   const [pushEnabled, setPushEnabled] = useState(true);
   const [emailEnabled, setEmailEnabled] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
-  const toggleType = (id: string) => {
-    setTypesState(prev => ({ ...prev, [id]: !prev[id] }));
+  // Modal Visibility State
+  const [showEventPicker, setShowEventPicker] = useState(false);
+  const [showMealPicker, setShowMealPicker] = useState(false);
+
+  // Time Picker States
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showEndPicker, setShowEndPicker] = useState(false);
+
+  const toggleSetting = (id: string) => {
+    setSettings(prev => prev.map(s => s.id === id ? { ...s, enabled: !s.enabled } : s));
   };
 
-  const DropdownMenu = ({
-    options,
-    selected,
-    onSelect,
-    onClose
-  }: {
-    options: string[],
-    selected: string,
-    onSelect: (val: string) => void,
-    onClose: () => void
-  }) => (
-    <Pressable style={styles.dropdownOverlay} onPress={onClose}>
-      <View style={styles.dropdownContainer}>
-        {options.map((option, index) => (
-          <Pressable
-            key={option}
-            style={[
-              styles.dropdownItem,
-              selected === option && styles.dropdownItemSelected,
-              index === options.length - 1 && { borderBottomWidth: 0 }
-            ]}
-            onPress={() => {
-              onSelect(option);
-              onClose();
-            }}
-          >
-            {selected === option && (
-              <Check size={16} color="#fff" style={{ marginRight: 8 }} />
-            )}
-            <Text style={[
-              styles.dropdownText,
-              selected === option && styles.dropdownTextSelected,
-              selected !== option && { marginLeft: 24 } // indent if no check
-            ]}>
-              {option}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-    </Pressable>
-  );
+  // Helper to parse HH:mm string to Date
+  const parseTime = (timeStr: string) => {
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    const date = new Date();
+    date.setHours(hours);
+    date.setMinutes(minutes);
+    return date;
+  };
+
+  const handleStartTimeChange = (event: any, selectedDate?: Date) => {
+    if (Platform.OS === 'android') setShowStartPicker(false);
+
+    if (selectedDate) {
+      const hours = selectedDate.getHours().toString().padStart(2, '0');
+      const minutes = selectedDate.getMinutes().toString().padStart(2, '0');
+      setQuietStart(`${hours}:${minutes}`);
+    }
+  };
+
+  const handleEndTimeChange = (event: any, selectedDate?: Date) => {
+    if (Platform.OS === 'android') setShowEndPicker(false);
+
+    if (selectedDate) {
+      const hours = selectedDate.getHours().toString().padStart(2, '0');
+      const minutes = selectedDate.getMinutes().toString().padStart(2, '0');
+      setQuietEnd(`${hours}:${minutes}`);
+    }
+  };
 
   return (
     <AppLayout>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.container, { backgroundColor: theme.colors.background }]} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
           <Pressable onPress={() => navigation.goBack()} style={styles.iconButton}>
             <ChevronLeft size={24} color={theme.colors.foreground} />
           </Pressable>
-          <Text style={styles.headerTitle}>Notifications</Text>
+          <Text style={[styles.headerTitle, { color: theme.colors.foreground }]}>Notifications</Text>
         </View>
 
-        {/* Enable Notifications Main Card */}
-        <View style={styles.card}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
-              <View style={styles.mainIconBg}>
-                <Bell size={24} color={theme.colors.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Enable Notifications</Text>
-                <Text style={styles.cardSubtitle}>Get reminders for events and meals</Text>
-              </View>
-            </View>
-            <Pressable
-              onPress={() => setEnableNotifications(!enableNotifications)}
-              style={[styles.enableBtn, enableNotifications && styles.enableBtnActive]}
-            >
-              <Text style={[styles.enableBtnText, enableNotifications && { color: '#fff' }]}>
-                {enableNotifications ? 'Enabled' : 'Enable'}
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-
-        {/* Specific Reminders */}
-        <View style={[styles.card, { zIndex: 10 }]}>
-          {/* Calendar */}
-          <View style={{ marginBottom: 20, zIndex: calendarDropdownOpen ? 20 : 1 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <Calendar size={20} color={theme.colors.foreground} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.itemTitle}>Calendar Event Reminders</Text>
-                <Text style={styles.itemSubtitle}>Get notified before events</Text>
+        {/* Push Notification Settings (Main Toggles) */}
+        <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          {/* Event Reminders */}
+          <View style={styles.settingSection}>
+            <View style={styles.settingHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <Calendar size={20} color={theme.colors.primary} />
+                <View>
+                  <Text style={[styles.labelTitle, { color: theme.colors.foreground }]}>Calendar Event Reminders</Text>
+                  <Text style={[styles.labelDesc, { color: theme.colors.mutedForeground }]}>Get notified before events</Text>
+                </View>
               </View>
               <Switch
-                value={calendarEnabled}
-                onValueChange={setCalendarEnabled}
+                value={eventReminders}
+                onValueChange={setEventReminders}
                 trackColor={{ false: theme.colors.muted, true: theme.colors.primary }}
               />
             </View>
-            <View style={styles.settingsRow}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Clock size={16} color={theme.colors.mutedForeground} />
-                <Text style={styles.label}>Remind me</Text>
+            {eventReminders && (
+              <View style={styles.subSetting}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Clock size={16} color={theme.colors.mutedForeground} />
+                  <Text style={[styles.subLabel, { color: theme.colors.mutedForeground }]}>Remind me</Text>
+                </View>
+                <TimeSelector
+                  label="Event Reminder Time"
+                  value={eventReminderTime}
+                  options={eventReminderOptions}
+                  onSelect={setEventReminderTime}
+                  visible={showEventPicker}
+                  onOpen={() => setShowEventPicker(true)}
+                  onClose={() => setShowEventPicker(false)}
+                />
               </View>
-              <View>
-                <Pressable
-                  style={styles.selectBox}
-                  onPress={() => {
-                    setMealDropdownOpen(false);
-                    setCalendarDropdownOpen(!calendarDropdownOpen);
-                  }}
-                >
-                  <Text style={styles.selectText}>{selectedCalendarTime}</Text>
-                  <ChevronLeft size={16} color={theme.colors.mutedForeground} style={{ transform: [{ rotate: '-90deg' }] }} />
-                </Pressable>
-                {calendarDropdownOpen && (
-                  <View style={styles.dropdownWrapper}>
-                    <DropdownMenu
-                      options={calendarOptions}
-                      selected={selectedCalendarTime}
-                      onSelect={setSelectedCalendarTime}
-                      onClose={() => setCalendarDropdownOpen(false)}
-                    />
-                  </View>
-                )}
-              </View>
-            </View>
+            )}
           </View>
 
-          <View style={[styles.divider, { zIndex: -1 }]} />
+          <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
 
-          {/* Meal Prep */}
-          <View style={{ marginTop: 20, zIndex: mealDropdownOpen ? 20 : 1 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <ChefHat size={20} color={theme.colors.foreground} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.itemTitle}>Meal Prep Reminders</Text>
-                <Text style={styles.itemSubtitle}>Start cooking on time</Text>
+          {/* Meal Prep Reminders */}
+          <View style={styles.settingSection}>
+            <View style={styles.settingHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <ChefHat size={20} color={theme.colors.primary} />
+                <View>
+                  <Text style={[styles.labelTitle, { color: theme.colors.foreground }]}>Meal Prep Reminders</Text>
+                  <Text style={[styles.labelDesc, { color: theme.colors.mutedForeground }]}>Start cooking on time</Text>
+                </View>
               </View>
               <Switch
-                value={mealPrepEnabled}
-                onValueChange={setMealPrepEnabled}
+                value={mealPrepReminders}
+                onValueChange={setMealPrepReminders}
                 trackColor={{ false: theme.colors.muted, true: theme.colors.primary }}
               />
             </View>
-            <View style={styles.settingsRow}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Clock size={16} color={theme.colors.mutedForeground} />
-                <Text style={styles.label}>Start prep</Text>
+            {mealPrepReminders && (
+              <View style={styles.subSetting}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Clock size={16} color={theme.colors.mutedForeground} />
+                  <Text style={[styles.subLabel, { color: theme.colors.mutedForeground }]}>Start prep</Text>
+                </View>
+                <TimeSelector
+                  label="Meal Prep Time"
+                  value={mealPrepTime}
+                  options={mealPrepOptions}
+                  onSelect={setMealPrepTime}
+                  visible={showMealPicker}
+                  onOpen={() => setShowMealPicker(true)}
+                  onClose={() => setShowMealPicker(false)}
+                />
               </View>
-              <View>
-                <Pressable
-                  style={styles.selectBox}
-                  onPress={() => {
-                    setCalendarDropdownOpen(false);
-                    setMealDropdownOpen(!mealDropdownOpen);
-                  }}
-                >
-                  <Text style={styles.selectText}>{selectedMealTime}</Text>
-                  <ChevronLeft size={16} color={theme.colors.mutedForeground} style={{ transform: [{ rotate: '-90deg' }] }} />
-                </Pressable>
-                {mealDropdownOpen && (
-                  <View style={styles.dropdownWrapper}>
-                    <DropdownMenu
-                      options={mealPrepOptions}
-                      selected={selectedMealTime}
-                      onSelect={setSelectedMealTime}
-                      onClose={() => setMealDropdownOpen(false)}
-                    />
-                  </View>
-                )}
-              </View>
-            </View>
+            )}
           </View>
         </View>
 
         {/* Notification Types */}
-        <Text style={styles.sectionHeader}>Notification Types</Text>
-        <View style={[styles.card, { paddingVertical: 8 }]}>
-          {notificationTypes.map((item, index) => (
-            <View key={item.id}>
-              <View style={styles.typeRow}>
-                <View style={styles.typeIconBg}>
-                  <item.icon size={20} color={theme.colors.mutedForeground} />
+        <View>
+          <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>Notification Types</Text>
+          <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            {settings.map((setting, index) => (
+              <View key={setting.id}>
+                <View style={styles.typeRow}>
+                  <View style={[styles.iconBox, { backgroundColor: theme.colors.muted }]}>
+                    <setting.icon size={20} color={theme.colors.mutedForeground} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.labelTitle, { color: theme.colors.foreground }]}>{setting.label}</Text>
+                    <Text style={[styles.labelDesc, { color: theme.colors.mutedForeground }]}>{setting.description}</Text>
+                  </View>
+                  <Switch
+                    value={setting.enabled}
+                    onValueChange={() => toggleSetting(setting.id)}
+                    trackColor={{ false: theme.colors.muted, true: theme.colors.primary }}
+                  />
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.itemTitle}>{item.label}</Text>
-                  <Text style={styles.itemSubtitle}>{item.description}</Text>
-                </View>
-                <Switch
-                  value={typesState[item.id]}
-                  onValueChange={() => toggleType(item.id)}
-                  trackColor={{ false: theme.colors.muted, true: theme.colors.primary }}
-                />
+                {index !== settings.length - 1 && <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />}
               </View>
-              {index < notificationTypes.length - 1 && <View style={styles.divider} />}
-            </View>
-          ))}
+            ))}
+          </View>
         </View>
 
         {/* Quiet Hours */}
-        <View style={[styles.card, { marginTop: 16 }]}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
+          <View style={styles.settingHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <View style={[styles.mainIconBg, { backgroundColor: theme.colors.muted }]}>
-                <BellOff size={24} color={theme.colors.foreground} />
+              <View style={[styles.largeIconBox, { backgroundColor: theme.colors.secondary }]}>
+                <BellOff size={24} color={theme.colors.secondaryForeground} />
               </View>
               <View>
-                <Text style={styles.cardTitle}>Quiet Hours</Text>
-                <Text style={styles.cardSubtitle}>Pause notifications during set times</Text>
+                <Text style={[styles.labelTitle, { color: theme.colors.foreground }]}>Quiet Hours</Text>
+                <Text style={[styles.labelDesc, { color: theme.colors.mutedForeground }]}>Pause notifications during set times</Text>
               </View>
             </View>
             <Switch
@@ -289,62 +324,94 @@ export const NotificationsScreen: React.FC = () => {
           </View>
 
           {quietHoursEnabled && (
-            <View style={styles.timeInputContainer}>
+            <View style={[styles.quietHoursContainer, { backgroundColor: theme.colors.muted }]}>
               <Clock size={20} color={theme.colors.mutedForeground} />
-              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-                <TextInput
-                  style={styles.timeInput}
-                  value={quietStart}
-                  onChangeText={setQuietStart}
-                />
-                <Text style={styles.label}>to</Text>
-                <TextInput
-                  style={styles.timeInput}
-                  value={quietEnd}
-                  onChangeText={setQuietEnd}
-                />
+              <View style={styles.timeInputs}>
+                <Pressable onPress={() => setShowStartPicker(true)} style={[styles.timeInputBox, { backgroundColor: theme.colors.card }]}>
+                  <Text style={[styles.timeText, { color: theme.colors.foreground }]}>{quietStart}</Text>
+                </Pressable>
+                <Text style={[styles.toText, { color: theme.colors.mutedForeground }]}>to</Text>
+                <Pressable onPress={() => setShowEndPicker(true)} style={[styles.timeInputBox, { backgroundColor: theme.colors.card }]}>
+                  <Text style={[styles.timeText, { color: theme.colors.foreground }]}>{quietEnd}</Text>
+                </Pressable>
               </View>
             </View>
+          )}
+
+          {/* DateTimePickers */}
+          {showStartPicker && (
+            <>
+              <DateTimePicker
+                value={parseTime(quietStart)}
+                mode="time"
+                is24Hour={true}
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={handleStartTimeChange}
+              />
+              {Platform.OS === 'ios' && (
+                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 }}>
+                  <Button size="sm" variant="ghost" onPress={() => setShowStartPicker(false)}>Done</Button>
+                </View>
+              )}
+            </>
+          )}
+          {showEndPicker && (
+            <>
+              <DateTimePicker
+                value={parseTime(quietEnd)}
+                mode="time"
+                is24Hour={true}
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={handleEndTimeChange}
+              />
+              {Platform.OS === 'ios' && (
+                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 }}>
+                  <Button size="sm" variant="ghost" onPress={() => setShowEndPicker(false)}>Done</Button>
+                </View>
+              )}
+            </>
           )}
         </View>
 
         {/* Delivery Methods */}
-        <Text style={styles.sectionHeader}>Delivery Methods</Text>
-        <View style={styles.card}>
-          <View style={styles.deliveryRow}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <Smartphone size={20} color={theme.colors.mutedForeground} />
-              <Text style={styles.itemTitle}>Push Notifications</Text>
+        <View>
+          <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>Delivery Methods</Text>
+          <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <View style={styles.deliveryRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <Smartphone size={20} color={theme.colors.mutedForeground} />
+                <Text style={[styles.labelTitle, { color: theme.colors.foreground, fontSize: 14 }]}>Push Notifications</Text>
+              </View>
+              <Switch
+                value={pushEnabled}
+                onValueChange={setPushEnabled}
+                trackColor={{ false: theme.colors.muted, true: theme.colors.primary }}
+              />
             </View>
-            <Switch
-              value={pushEnabled}
-              onValueChange={setPushEnabled}
-              trackColor={{ false: theme.colors.muted, true: theme.colors.primary }}
-            />
-          </View>
-          <View style={styles.divider} />
-          <View style={styles.deliveryRow}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <Mail size={20} color={theme.colors.mutedForeground} />
-              <Text style={styles.itemTitle}>Email Notifications</Text>
+            <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+            <View style={styles.deliveryRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <Mail size={20} color={theme.colors.mutedForeground} />
+                <Text style={[styles.labelTitle, { color: theme.colors.foreground, fontSize: 14 }]}>Email Notifications</Text>
+              </View>
+              <Switch
+                value={emailEnabled}
+                onValueChange={setEmailEnabled}
+                trackColor={{ false: theme.colors.muted, true: theme.colors.primary }}
+              />
             </View>
-            <Switch
-              value={emailEnabled}
-              onValueChange={setEmailEnabled}
-              trackColor={{ false: theme.colors.muted, true: theme.colors.primary }}
-            />
-          </View>
-          <View style={styles.divider} />
-          <View style={styles.deliveryRow}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <Volume2 size={20} color={theme.colors.mutedForeground} />
-              <Text style={styles.itemTitle}>Sound</Text>
+            <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+            <View style={styles.deliveryRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <Volume2 size={20} color={theme.colors.mutedForeground} />
+                <Text style={[styles.labelTitle, { color: theme.colors.foreground, fontSize: 14 }]}>Sound</Text>
+              </View>
+              <Switch
+                value={soundEnabled}
+                onValueChange={setSoundEnabled}
+                trackColor={{ false: theme.colors.muted, true: theme.colors.primary }}
+              />
             </View>
-            <Switch
-              value={soundEnabled}
-              onValueChange={setSoundEnabled}
-              trackColor={{ false: theme.colors.muted, true: theme.colors.primary }}
-            />
           </View>
         </View>
 
@@ -357,116 +424,81 @@ export const NotificationsScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
+    paddingTop: 8,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     marginBottom: 20,
-    marginTop: 8,
   },
   iconButton: {
     padding: 8,
-    borderRadius: 0,
-    backgroundColor: 'transparent',
+    borderRadius: 8,
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: theme.colors.foreground,
   },
   card: {
-    backgroundColor: theme.colors.card,
-    borderRadius: 0,
+    borderRadius: 16,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
     borderWidth: 1,
-    borderColor: theme.colors.border,
   },
-  mainIconBg: {
-    width: 48,
-    height: 48,
-    borderRadius: 0,
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+  settingSection: {
+    paddingVertical: 4,
+  },
+  settingHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    justifyContent: 'center',
+    marginBottom: 8,
   },
-  cardTitle: {
-    fontSize: 16,
+  labelTitle: {
+    fontSize: 15,
     fontWeight: '600',
-    color: theme.colors.foreground,
     marginBottom: 2,
   },
-  cardSubtitle: {
-    fontSize: 13,
-    color: theme.colors.mutedForeground,
-  },
-  enableBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 0,
-    backgroundColor: theme.colors.muted,
-  },
-  enableBtnActive: {
-    backgroundColor: '#1e3a8a', // Dark blue
-  },
-  enableBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.colors.foreground,
-  },
-  itemTitle: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: theme.colors.foreground,
-  },
-  itemSubtitle: {
+  labelDesc: {
     fontSize: 12,
-    color: theme.colors.mutedForeground,
   },
-  settingsRow: {
+  subSetting: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    paddingLeft: 32, // Indent to align with text above
+    alignItems: 'center',
+    paddingLeft: 32,
+    marginTop: 4,
   },
-  label: {
+  subLabel: {
     fontSize: 13,
-    color: theme.colors.mutedForeground,
-    fontWeight: '500',
   },
-  selectBox: {
+  selectorButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.muted,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 0,
     gap: 8,
-    minWidth: 120,
-    justifyContent: 'space-between',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: theme.colors.muted,
   },
-  selectText: {
+  selectorButtonText: {
     fontSize: 13,
-    color: theme.colors.foreground,
     fontWeight: '500',
   },
   divider: {
     height: 1,
-    backgroundColor: theme.colors.border,
     marginVertical: 12,
   },
-  sectionHeader: {
+  sectionTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: theme.colors.foreground,
-    marginBottom: 12,
-    marginTop: 8,
+    marginBottom: 10,
   },
   typeRow: {
     flexDirection: 'row',
@@ -474,84 +506,92 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 8,
   },
-  typeIconBg: {
+  iconBox: {
     width: 40,
     height: 40,
-    borderRadius: 0,
-    backgroundColor: theme.colors.muted,
-    alignItems: 'center',
+    borderRadius: 12,
     justifyContent: 'center',
+    alignItems: 'center',
   },
-  timeInputContainer: {
+  largeIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  quietHoursContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.muted,
-    padding: 12,
-    borderRadius: 0,
     gap: 12,
+    padding: 12,
+    borderRadius: 12,
+    marginTop: 8,
   },
-  timeInput: {
-    backgroundColor: theme.colors.card, // White/Dark
+  timeInputs: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  timeInputBox: {
+    paddingVertical: 6,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 0,
+    borderRadius: 8,
     minWidth: 80,
-    textAlign: 'center',
+    alignItems: 'center',
+  },
+  timeText: {
     fontSize: 14,
     fontWeight: '600',
-    color: theme.colors.foreground,
+  },
+  toText: {
+    fontSize: 13,
   },
   deliveryRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingVertical: 4,
   },
-  dropdownWrapper: {
-    position: 'absolute',
-    top: '100%',
-    right: 0,
-    marginTop: 4,
-    backgroundColor: theme.colors.card,
-    borderRadius: 0,
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    width: '100%',
+    borderRadius: 16,
+    padding: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 8,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    zIndex: 100,
-    minWidth: 160,
   },
-  dropdownOverlay: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    right: 0,
-    zIndex: 10,
-  },
-  dropdownContainer: {
-    // This is handled by dropdownWrapper now, simplified logic
-  },
-  dropdownItem: {
+  modalHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    marginBottom: 16,
   },
-  dropdownItemSelected: {
-    backgroundColor: '#1e3a8a', // Dark blue selected state
-  },
-  dropdownText: {
-    fontSize: 13,
-    color: theme.colors.foreground,
-  },
-  dropdownTextSelected: {
-    color: '#fff',
+  modalTitle: {
+    fontSize: 16,
     fontWeight: '600',
+  },
+  modalOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    marginBottom: 4,
+  },
+  modalOptionText: {
+    fontSize: 15,
   },
 });

@@ -10,7 +10,7 @@ import {
   Platform,
 } from "react-native";
 import { theme } from "../../theme";
-import { AppIcon } from "../ui/AppIcon";
+import { AppIcon, CustomDateTimePicker } from "../ui";
 
 interface AddTaskModalProps {
   open: boolean;
@@ -22,7 +22,7 @@ interface TaskData {
   name: string;
   icon: string;
   priority: string;
-  dueDate: string;
+  dueDate: Date;
   person: string;
 }
 
@@ -39,7 +39,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
     name: "",
     icon: "📝",
     priority: "medium",
-    dueDate: new Date().toISOString().split("T")[0],
+    dueDate: new Date(),
     person: "You",
   });
 
@@ -50,7 +50,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
         name: "",
         icon: "📝",
         priority: "medium",
-        dueDate: new Date().toISOString().split("T")[0],
+        dueDate: new Date(),
         person: "You",
       });
       onClose();
@@ -119,19 +119,13 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
               })}
             </View>
 
-            {/* Due Date - Simple Text Input for now */}
-            <Text style={styles.label}>Due Date (YYYY-MM-DD)</Text>
-            <View style={styles.dateInputContainer}>
-              <AppIcon name="clock" size={16} color={theme.colors.mutedForeground} style={{ marginRight: 8 }} />
-              <TextInput
-                value={formData.dueDate}
-                onChangeText={(text) => setFormData({ ...formData, dueDate: text })}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={theme.colors.mutedForeground}
-                style={styles.dateInput}
-                keyboardType="numeric"
-              />
-            </View>
+            {/* Due Date */}
+            <CustomDateTimePicker
+              mode="date"
+              value={formData.dueDate}
+              onChange={(date) => setFormData({ ...formData, dueDate: date })}
+              label="Due Date"
+            />
 
             {/* Assign Person */}
             <Text style={styles.label}>Assign To</Text>

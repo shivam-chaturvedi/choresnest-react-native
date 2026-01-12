@@ -131,7 +131,7 @@ export const NoteDetailScreen: React.FC = () => {
             <View key={block.id} style={styles.blockWrapper}>
                 {block.type === 'h1' && (
                     <TextInput
-                        style={[styles.blockInput, styles.h1]}
+                        style={[styles.blockInput, styles.h1, { color: theme.colors.foreground }]}
                         value={block.content}
                         onChangeText={(t) => updateBlock(block.id, t)}
                         placeholder="Heading 1"
@@ -141,7 +141,7 @@ export const NoteDetailScreen: React.FC = () => {
                 )}
                 {block.type === 'h2' && (
                     <TextInput
-                        style={[styles.blockInput, styles.h2]}
+                        style={[styles.blockInput, styles.h2, { color: theme.colors.foreground }]}
                         value={block.content}
                         onChangeText={(t) => updateBlock(block.id, t)}
                         placeholder="Heading 2"
@@ -151,7 +151,7 @@ export const NoteDetailScreen: React.FC = () => {
                 )}
                 {block.type === 'h3' && (
                     <TextInput
-                        style={[styles.blockInput, styles.h3]}
+                        style={[styles.blockInput, styles.h3, { color: theme.colors.foreground }]}
                         value={block.content}
                         onChangeText={(t) => updateBlock(block.id, t)}
                         placeholder="Heading 3"
@@ -161,9 +161,9 @@ export const NoteDetailScreen: React.FC = () => {
                 )}
                 {block.type === 'bullet' && (
                     <View style={styles.listBlock}>
-                        <Text style={styles.bulletPoint}>•</Text>
+                        <Text style={[styles.bulletPoint, { color: theme.colors.foreground }]}>•</Text>
                         <TextInput
-                            style={styles.blockInput}
+                            style={[styles.blockInput, { color: theme.colors.foreground }]}
                             value={block.content}
                             onChangeText={(t) => updateBlock(block.id, t)}
                             placeholder="List item"
@@ -174,11 +174,22 @@ export const NoteDetailScreen: React.FC = () => {
                 )}
                 {block.type === 'todo' && (
                     <View style={styles.listBlock}>
-                        <Pressable onPress={() => toggleTodo(block.id)} style={[styles.checkbox, block.checked && styles.checkboxChecked]}>
+                        <Pressable
+                            onPress={() => toggleTodo(block.id)}
+                            style={[
+                                styles.checkbox,
+                                { borderColor: theme.colors.mutedForeground },
+                                block.checked && { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }
+                            ]}
+                        >
                             {block.checked && <CheckSquare size={14} color="#fff" />}
                         </Pressable>
                         <TextInput
-                            style={[styles.blockInput, block.checked && styles.todoCheckedText]}
+                            style={[
+                                styles.blockInput,
+                                { color: theme.colors.foreground },
+                                block.checked && { textDecorationLine: 'line-through', color: theme.colors.mutedForeground }
+                            ]}
                             value={block.content}
                             onChangeText={(t) => updateBlock(block.id, t)}
                             placeholder="To-do"
@@ -189,9 +200,9 @@ export const NoteDetailScreen: React.FC = () => {
                 )}
                 {block.type === 'quote' && (
                     <View style={styles.quoteBlock}>
-                        <View style={styles.quoteBar} />
+                        <View style={[styles.quoteBar, { backgroundColor: theme.colors.muted }]} />
                         <TextInput
-                            style={[styles.blockInput, { fontStyle: 'italic' }]}
+                            style={[styles.blockInput, { fontStyle: 'italic', color: theme.colors.foreground }]}
                             value={block.content}
                             onChangeText={(t) => updateBlock(block.id, t)}
                             placeholder="Quote"
@@ -200,10 +211,10 @@ export const NoteDetailScreen: React.FC = () => {
                         />
                     </View>
                 )}
-                {block.type === 'divider' && <View style={styles.dividerBlock} />}
+                {block.type === 'divider' && <View style={[styles.dividerBlock, { backgroundColor: theme.colors.border }]} />}
                 {(block.type === 'text' || block.type === 'code' || block.type === 'number') && (
                     <TextInput
-                        style={styles.blockInput}
+                        style={[styles.blockInput, { color: theme.colors.foreground }]}
                         value={block.content}
                         onChangeText={(t) => updateBlock(block.id, t)}
                         placeholder="Type something..."
@@ -227,7 +238,7 @@ export const NoteDetailScreen: React.FC = () => {
     ];
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
             {/* Header */}
             <View style={styles.header}>
                 <Pressable onPress={() => navigation.goBack()} style={styles.iconBtn}>
@@ -236,7 +247,7 @@ export const NoteDetailScreen: React.FC = () => {
                 <View style={{ flex: 1 }} />
                 <View style={{ flexDirection: 'row', gap: 4 }}>
                     <Pressable onPress={() => setIsStarred(!isStarred)} style={styles.iconBtn}>
-                        <Star size={22} color={isStarred ? "#EAB308" : theme.colors.mutedForeground} fill={isStarred ? "#EAB308" : "transparent"} />
+                        <Star size={22} color={isStarred ? theme.colors.warning : theme.colors.mutedForeground} fill={isStarred ? theme.colors.warning : "transparent"} />
                     </Pressable>
                     <Pressable onPress={() => setShowMoreMenu(true)} style={styles.iconBtn}>
                         <MoreHorizontal size={22} color={theme.colors.foreground} />
@@ -247,7 +258,7 @@ export const NoteDetailScreen: React.FC = () => {
             <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
                 {/* Title Area */}
                 <TextInput
-                    style={styles.titleInput}
+                    style={[styles.titleInput, { color: theme.colors.foreground }]}
                     placeholder="Untitled"
                     placeholderTextColor={theme.colors.mutedForeground}
                     value={title}
@@ -255,7 +266,7 @@ export const NoteDetailScreen: React.FC = () => {
                     multiline
                 />
 
-                <Text style={styles.timestamp}>{lastEdited}</Text>
+                <Text style={[styles.timestamp, { color: theme.colors.mutedForeground }]}>{lastEdited}</Text>
 
                 <View style={{ height: 24 }} />
 
@@ -267,7 +278,7 @@ export const NoteDetailScreen: React.FC = () => {
                 {/* Add Block Button */}
                 <Pressable style={styles.addBlockBtn} onPress={() => setShowAddMenu(true)}>
                     <Plus size={20} color={theme.colors.mutedForeground} />
-                    <Text style={styles.addBlockText}>Add a block</Text>
+                    <Text style={[styles.addBlockText, { color: theme.colors.mutedForeground }]}>Add a block</Text>
                 </Pressable>
             </ScrollView>
 
@@ -276,7 +287,7 @@ export const NoteDetailScreen: React.FC = () => {
                 <TouchableWithoutFeedback onPress={() => setShowAddMenu(false)}>
                     <View style={styles.modalOverlay}>
                         <TouchableWithoutFeedback>
-                            <View style={styles.menuCard}>
+                            <View style={[styles.menuCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}>
                                 <ScrollView style={{ maxHeight: 300 }}>
                                     {addMenuOptions.map((opt, idx) => (
                                         <Pressable
@@ -285,7 +296,7 @@ export const NoteDetailScreen: React.FC = () => {
                                             onPress={() => addBlock(opt.type as any)}
                                         >
                                             <opt.icon size={18} color={theme.colors.foreground} style={{ marginRight: 12 }} />
-                                            <Text style={styles.menuText}>{opt.label}</Text>
+                                            <Text style={[styles.menuText, { color: theme.colors.foreground }]}>{opt.label}</Text>
                                         </Pressable>
                                     ))}
                                 </ScrollView>
@@ -300,14 +311,14 @@ export const NoteDetailScreen: React.FC = () => {
                 <TouchableWithoutFeedback onPress={() => setShowMoreMenu(false)}>
                     <View style={[styles.modalOverlay, { alignItems: 'flex-end', paddingBottom: 0, justifyContent: 'flex-start', paddingTop: 60, paddingRight: 16 }]}>
                         <TouchableWithoutFeedback>
-                            <View style={styles.moreMenuCard}>
+                            <View style={[styles.moreMenuCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}>
                                 <Pressable style={styles.moreMenuItem} onPress={() => setShowMoreMenu(false)}>
                                     <Edit3 size={16} color={theme.colors.foreground} style={{ marginRight: 10 }} />
-                                    <Text style={styles.menuText}>Rename</Text>
+                                    <Text style={[styles.menuText, { color: theme.colors.foreground }]}>Rename</Text>
                                 </Pressable>
                                 <Pressable style={styles.moreMenuItem} onPress={handleDeleteNote}>
-                                    <Trash size={16} color="#EF4444" style={{ marginRight: 10 }} />
-                                    <Text style={[styles.menuText, { color: "#EF4444" }]}>Delete</Text>
+                                    <Trash size={16} color={theme.colors.danger} style={{ marginRight: 10 }} />
+                                    <Text style={[styles.menuText, { color: theme.colors.danger }]}>Delete</Text>
                                 </Pressable>
                             </View>
                         </TouchableWithoutFeedback>
@@ -321,7 +332,6 @@ export const NoteDetailScreen: React.FC = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: "#F4F7FB", // Light blueish gray from screenshot
         paddingTop: Platform.OS === 'android' ? 40 : 0,
     },
     header: {
@@ -341,13 +351,11 @@ const styles = StyleSheet.create({
     titleInput: {
         fontSize: 32,
         fontWeight: "700",
-        color: "#0F172A",
         marginBottom: 8,
         marginTop: 12,
     },
     timestamp: {
         fontSize: 13,
-        color: "#64748B",
         marginBottom: 24,
     },
     blocksContainer: {
@@ -358,7 +366,6 @@ const styles = StyleSheet.create({
     },
     blockInput: {
         fontSize: 16,
-        color: "#334155",
         padding: 0,
         textAlignVertical: 'top',
         lineHeight: 24,
@@ -368,21 +375,18 @@ const styles = StyleSheet.create({
         fontWeight: "700",
         marginBottom: 8,
         marginTop: 12,
-        color: "#1E293B",
     },
     h2: {
         fontSize: 20,
         fontWeight: "700",
         marginBottom: 6,
         marginTop: 10,
-        color: "#1E293B",
     },
     h3: {
         fontSize: 18,
         fontWeight: "600",
         marginBottom: 4,
         marginTop: 8,
-        color: "#1E293B",
     },
     listBlock: {
         flexDirection: 'row',
@@ -391,27 +395,17 @@ const styles = StyleSheet.create({
     bulletPoint: {
         fontSize: 16,
         marginRight: 8,
-        color: "#334155",
         marginTop: 2,
     },
     checkbox: {
         width: 18,
         height: 18,
         borderWidth: 1.5,
-        borderColor: "#94A3B8",
         borderRadius: 4,
         marginRight: 10,
         marginTop: 4,
         alignItems: 'center',
         justifyContent: 'center',
-    },
-    checkboxChecked: {
-        backgroundColor: theme.colors.primary,
-        borderColor: theme.colors.primary,
-    },
-    todoCheckedText: {
-        textDecorationLine: 'line-through',
-        color: "#94A3B8",
     },
     quoteBlock: {
         flexDirection: 'row',
@@ -419,13 +413,11 @@ const styles = StyleSheet.create({
     },
     quoteBar: {
         width: 3,
-        backgroundColor: "#CBD5E1",
         marginRight: 12,
         borderRadius: 2,
     },
     dividerBlock: {
         height: 1,
-        backgroundColor: "#E2E8F0",
         marginVertical: 12,
     },
     addBlockBtn: {
@@ -436,7 +428,6 @@ const styles = StyleSheet.create({
     },
     addBlockText: {
         fontSize: 15,
-        color: "#64748B",
         marginLeft: 8,
     },
     // Menus
@@ -448,16 +439,13 @@ const styles = StyleSheet.create({
     },
     menuCard: {
         width: 200,
-        backgroundColor: "#fff",
         borderRadius: 8,
         paddingVertical: 4,
-        shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.1,
         shadowRadius: 12,
         elevation: 8,
         borderWidth: 1,
-        borderColor: "#E2E8F0",
     },
     menuItem: {
         flexDirection: 'row',
@@ -467,20 +455,16 @@ const styles = StyleSheet.create({
     },
     menuText: {
         fontSize: 15,
-        color: "#334155",
     },
     moreMenuCard: {
         width: 150,
-        backgroundColor: "#fff",
         borderRadius: 8,
         paddingVertical: 4,
-        shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.1,
         shadowRadius: 10,
         elevation: 5,
         borderWidth: 1,
-        borderColor: "#E2E8F0",
     },
     moreMenuItem: {
         flexDirection: 'row',

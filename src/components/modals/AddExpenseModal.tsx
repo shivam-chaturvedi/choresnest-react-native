@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ScrollView, Platform, Alert } from 'react-native';
 import { theme } from '../../theme';
-import { Calendar, DollarSign, Tag, FileText, AlertTriangle, X } from 'lucide-react-native';
+import { Calendar as CalendarIcon, DollarSign, Tag, FileText, AlertTriangle, X } from 'lucide-react-native';
 import { Button } from '../ui/Button';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 export interface ExpenseData {
     name: string;
@@ -45,6 +46,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [notes, setNotes] = useState('');
     const [type, setType] = useState<'expense' | 'income'>('expense');
+    const [showDatePicker, setShowDatePicker] = useState(false);
 
     const selectedCategory = categories.find(c => c.id === category);
     const currentCategorySpending = currentSpending[category] || 0;
@@ -72,6 +74,16 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
         setDate(new Date().toISOString().split('T')[0]);
         setNotes('');
         onClose();
+    };
+
+    const handleDateChange = (event: any, selectedDate?: Date) => {
+        if (Platform.OS === 'android') {
+            setShowDatePicker(false);
+        }
+
+        if (selectedDate) {
+            setDate(selectedDate.toISOString().split('T')[0]);
+        }
     };
 
     return (
@@ -195,7 +207,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                         {type === 'expense' && willExceedBudget && (
                             <View style={styles.alertContainer}>
                                 <View style={styles.alertHeader}>
-                                    <AlertTriangle size={20} color={theme.colors.destructive} />
+                                    <AlertTriangle size={20} color={theme.colors.danger} />
                                     <View style={styles.alertTexts}>
                                         <Text style={styles.alertTitle}>Budget Alert!</Text>
                                         <Text style={styles.alertDescription}>
@@ -220,15 +232,37 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                         {/* Date Input */}
                         <View style={styles.inputGroup}>
                             <View style={styles.labelContainer}>
-                                <Calendar size={16} color={theme.colors.mutedForeground} />
+                                <CalendarIcon size={16} color={theme.colors.mutedForeground} />
                                 <Text style={styles.label}>Date</Text>
                             </View>
-                            <TextInput
-                                style={styles.input}
-                                value={date}
-                                onChangeText={setDate}
-                                placeholder="YYYY-MM-DD"
-                            />
+                            <TouchableOpacity
+                                style={[styles.input, { justifyContent: 'center' }]}
+                                onPress={() => setShowDatePicker(true)}
+                            >
+                                <Text style={{ color: theme.colors.foreground, fontSize: 16 }}>
+                                    {date || "Select Date"}
+                                </Text>
+                            </TouchableOpacity>
+                            {showDatePicker && (
+                                <DateTimePicker
+                                    value={new Date(date)}
+                                    mode="date"
+                                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                    onChange={handleDateChange}
+                                />
+                            )}
+                            {/* iOS Done button helper if needed for inline/spinner, but standard spinner needs wrapping.
+                                For simplicity and reliability in this update, sticking to conditional render.
+                                If on iOS it stays open, we'd need a button to close.
+                                Let's add a quick "Done" button if on iOS and showDatePicker is true.
+                            */}
+                            {Platform.OS === 'ios' && showDatePicker && (
+                                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 }}>
+                                    <Button size="sm" variant="ghost" onPress={() => setShowDatePicker(false)}>
+                                        Done
+                                    </Button>
+                                </View>
+                            )}
                         </View>
 
                         {/* Notes Input */}
@@ -321,8 +355,8 @@ const styles = StyleSheet.create({
         borderRadius: 10,
     },
     activeExpense: {
-        backgroundColor: theme.colors.destructive,
-        shadowColor: theme.colors.destructive,
+        backgroundColor: theme.colors.danger,
+        shadowColor: theme.colors.danger,
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.2,
         shadowRadius: 4,
@@ -440,12 +474,12 @@ const styles = StyleSheet.create({
     alertTitle: {
         fontSize: 14,
         fontWeight: '700',
-        color: theme.colors.destructive,
+        color: theme.colors.danger,
         marginBottom: 2,
     },
     alertDescription: {
         fontSize: 12,
-        color: theme.colors.destructive,
+        color: theme.colors.danger,
         opacity: 0.8,
     },
     budgetProgressBg: {
@@ -457,12 +491,12 @@ const styles = StyleSheet.create({
     },
     budgetProgressFill: {
         height: '100%',
-        backgroundColor: theme.colors.destructive,
+        backgroundColor: theme.colors.danger,
         borderRadius: 4,
     },
     budgetPercentText: {
         fontSize: 11,
-        color: theme.colors.destructive,
+        color: theme.colors.danger,
         opacity: 0.7,
     },
     submitButton: {

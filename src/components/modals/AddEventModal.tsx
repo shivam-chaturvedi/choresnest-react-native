@@ -11,8 +11,8 @@ import {
   Platform,
 } from "react-native";
 import { theme } from "../../theme";
-import { AppIcon, AppIconName } from "../ui/AppIcon";
 import { useFamily } from "../../contexts/FamilyContext";
+import { AppIcon, AppIconName, CustomDateTimePicker } from "../ui";
 
 interface AddEventModalProps {
   open: boolean;
@@ -65,10 +65,10 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [date, setDate] = useState("");
-  const [time, setTime] = useState("09:00");
-  const [endDate, setEndDate] = useState("");
-  const [endTime, setEndTime] = useState("");
+  const [startDate, setStartDate] = useState(new Date());
+  const [startTime, setStartTime] = useState(new Date());
+  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [endTime, setEndTime] = useState<Date | null>(null);
   const [selectedIcon, setSelectedIcon] = useState("📅");
   const [allDay, setAllDay] = useState(false);
   const [location, setLocation] = useState("");
@@ -76,7 +76,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   const [color, setColor] = useState("member-blue");
 
   const [repeatType, setRepeatType] = useState("never");
-  const [repeatEndDate, setRepeatEndDate] = useState("");
+  const [repeatEndDate, setRepeatEndDate] = useState<Date | null>(null);
   const [showRepeatOptions, setShowRepeatOptions] = useState(false);
 
   const [reminder, setReminder] = useState(true);
@@ -90,17 +90,39 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       // Reset form
       setName("");
       setDescription("");
-      setDate(initialDate || new Date().toISOString().split("T")[0]);
-      setTime(initialTime || "09:00");
-      setEndDate("");
-      setEndTime("");
+
+      // Parse initialDate if provided
+      const initDate = initialDate ? new Date(initialDate) : new Date();
+      setStartDate(initDate);
+
+      // Parse initialTime if provided (format: "HH:MM AM/PM")
+      const initTime = new Date();
+      if (initialTime) {
+        const timeParts = initialTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
+        if (timeParts) {
+          let hours = parseInt(timeParts[1]);
+          const minutes = parseInt(timeParts[2]);
+          const period = timeParts[3].toUpperCase();
+
+          if (period === "PM" && hours !== 12) hours += 12;
+          if (period === "AM" && hours === 12) hours = 0;
+
+          initTime.setHours(hours, minutes, 0, 0);
+        }
+      } else {
+        initTime.setHours(9, 0, 0, 0);
+      }
+      setStartTime(initTime);
+
+      setEndDate(null);
+      setEndTime(null);
       setSelectedIcon("📅");
       setAllDay(false);
       setLocation("");
       setMemberId(members[0]?.id || "1");
       setColor("member-blue");
       setRepeatType("never");
-      setRepeatEndDate("");
+      setRepeatEndDate(null);
       setReminder(true);
       setReminderTime("15");
       setNotes("");
@@ -112,10 +134,19 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   const handleSave = () => {
     if (!name.trim()) return;
 
+    // Format date as YYYY-MM-DD
+    const formattedDate = startDate.toISOString().split("T")[0];
+
+    // Format time as HH:MM AM/PM
+    const formattedTime = allDay ? "All Day" : startTime.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
     addEvent({
       title: name.trim(),
-      date,
-      time: allDay ? "All Day" : time,
+      date: formattedDate,
+      time: formattedTime,
       icon: selectedIcon,
       memberId,
       location,
@@ -218,22 +249,20 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
               <Text style={styles.sectionLabel}>Schedule</Text>
               <View style={styles.row}>
                 <View style={styles.halfField}>
-                  <Text style={styles.inputLabel}>Start Date</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={date}
-                    onChangeText={setDate} // In a real app, use a date picker
-                    placeholder="YYYY-MM-DD"
+                  <CustomDateTimePicker
+                    mode="date"
+                    value={startDate}
+                    onChange={setStartDate}
+                    label="Start Date"
                   />
                 </View>
                 {!allDay && (
                   <View style={styles.halfField}>
-                    <Text style={styles.inputLabel}>Start Time</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={time}
-                      onChangeText={setTime} // In a real app, use a time picker
-                      placeholder="HH:MM"
+                    <CustomDateTimePicker
+                      mode="time"
+                      value={startTime}
+                      onChange={setStartTime}
+                      label="Start Time"
                     />
                   </View>
                 )}
@@ -241,22 +270,20 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
               <View style={styles.row}>
                 <View style={styles.halfField}>
-                  <Text style={styles.inputLabel}>End Date (Optional)</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={endDate}
-                    onChangeText={setEndDate}
-                    placeholder="YYYY-MM-DD"
+                  <CustomDateTimePicker
+                    mode="date"
+                    value={endDate || new Date()}
+                    onChange={setEndDate}
+                    label="End Date (Optional)"
                   />
                 </View>
                 {!allDay && (
                   <View style={styles.halfField}>
-                    <Text style={styles.inputLabel}>End Time</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={endTime}
-                      onChangeText={setEndTime}
-                      placeholder="HH:MM"
+                    <CustomDateTimePicker
+                      mode="time"
+                      value={endTime || new Date()}
+                      onChange={setEndTime}
+                      label="End Time"
                     />
                   </View>
                 )}
@@ -309,11 +336,11 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                   </View>
                   {repeatType !== 'never' && (
                     <View style={{ marginTop: 12 }}>
-                      <Text style={styles.inputLabel}>End repeat (Optional)</Text>
-                      <TextInput
-                        style={styles.input}
-                        value={repeatEndDate}
-                        onChangeText={setRepeatEndDate}
+                      <CustomDateTimePicker
+                        mode="date"
+                        value={repeatEndDate || new Date()}
+                        onChange={setRepeatEndDate}
+                        label="End repeat (Optional)"
                         placeholder="Never"
                       />
                     </View>
