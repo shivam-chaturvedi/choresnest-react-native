@@ -392,7 +392,7 @@ export const HomeScreen: React.FC = () => {
           <View style={styles.statsGrid}>
             <Pressable
               style={[styles.statCard, { marginRight: 12, backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.foreground, borderRadius: radius.card }]}
-              onPress={() => navigation.navigate("MainTabs" as never, { screen: "lists" } as never)}
+              onPress={() => (navigation as any).navigate("MainTabs", { screen: "lists" })}
             >
               <View style={[styles.statIconCircle, { backgroundColor: colors.info + '25' }]}>
                 <AppIcon name="shoppingCart" size={20} color={colors.info} />

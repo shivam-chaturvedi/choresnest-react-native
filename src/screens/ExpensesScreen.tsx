@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Dimensions } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { AppLayout } from '../components/layout/AppLayout';
 import { theme } from '../theme';
 import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
@@ -89,6 +90,7 @@ const aiInsights = [
 ];
 
 export const ExpensesScreen: React.FC = () => {
+  const navigation = useNavigation();
   const colors = useThemeColors();
   const radius = useThemeRadius();
   const [activeTab, setActiveTab] = useState('Overview');
