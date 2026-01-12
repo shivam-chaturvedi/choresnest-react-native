@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { theme } from "../theme";
+import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import {
     ChevronLeft,
     Star,
@@ -38,6 +39,8 @@ export const NoteDetailScreen: React.FC = () => {
     const navigation = useNavigation();
     const route = useRoute<any>();
     const { addNote, updateNote, deleteNote, getNote } = useNotes();
+    const colors = useThemeColors();
+    const radius = useThemeRadius();
 
     // Params
     const initialNoteParam = route.params?.note;
@@ -131,43 +134,43 @@ export const NoteDetailScreen: React.FC = () => {
             <View key={block.id} style={styles.blockWrapper}>
                 {block.type === 'h1' && (
                     <TextInput
-                        style={[styles.blockInput, styles.h1, { color: theme.colors.foreground }]}
+                        style={[styles.blockInput, styles.h1, { color: colors.foreground }]}
                         value={block.content}
                         onChangeText={(t) => updateBlock(block.id, t)}
                         placeholder="Heading 1"
-                        placeholderTextColor={theme.colors.mutedForeground}
+                        placeholderTextColor={colors.mutedForeground}
                         multiline
                     />
                 )}
                 {block.type === 'h2' && (
                     <TextInput
-                        style={[styles.blockInput, styles.h2, { color: theme.colors.foreground }]}
+                        style={[styles.blockInput, styles.h2, { color: colors.foreground }]}
                         value={block.content}
                         onChangeText={(t) => updateBlock(block.id, t)}
                         placeholder="Heading 2"
-                        placeholderTextColor={theme.colors.mutedForeground}
+                        placeholderTextColor={colors.mutedForeground}
                         multiline
                     />
                 )}
                 {block.type === 'h3' && (
                     <TextInput
-                        style={[styles.blockInput, styles.h3, { color: theme.colors.foreground }]}
+                        style={[styles.blockInput, styles.h3, { color: colors.foreground }]}
                         value={block.content}
                         onChangeText={(t) => updateBlock(block.id, t)}
                         placeholder="Heading 3"
-                        placeholderTextColor={theme.colors.mutedForeground}
+                        placeholderTextColor={colors.mutedForeground}
                         multiline
                     />
                 )}
                 {block.type === 'bullet' && (
                     <View style={styles.listBlock}>
-                        <Text style={[styles.bulletPoint, { color: theme.colors.foreground }]}>•</Text>
+                        <Text style={[styles.bulletPoint, { color: colors.foreground }]}>•</Text>
                         <TextInput
-                            style={[styles.blockInput, { color: theme.colors.foreground }]}
+                            style={[styles.blockInput, { color: colors.foreground }]}
                             value={block.content}
                             onChangeText={(t) => updateBlock(block.id, t)}
                             placeholder="List item"
-                            placeholderTextColor={theme.colors.mutedForeground}
+                            placeholderTextColor={colors.mutedForeground}
                             multiline
                         />
                     </View>
@@ -178,8 +181,8 @@ export const NoteDetailScreen: React.FC = () => {
                             onPress={() => toggleTodo(block.id)}
                             style={[
                                 styles.checkbox,
-                                { borderColor: theme.colors.mutedForeground },
-                                block.checked && { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }
+                                { borderColor: colors.mutedForeground, borderRadius: radius.xs },
+                                block.checked && { backgroundColor: colors.primary, borderColor: colors.primary }
                             ]}
                         >
                             {block.checked && <CheckSquare size={14} color="#fff" />}
@@ -187,38 +190,38 @@ export const NoteDetailScreen: React.FC = () => {
                         <TextInput
                             style={[
                                 styles.blockInput,
-                                { color: theme.colors.foreground },
-                                block.checked && { textDecorationLine: 'line-through', color: theme.colors.mutedForeground }
+                                { color: colors.foreground },
+                                block.checked && { textDecorationLine: 'line-through', color: colors.mutedForeground }
                             ]}
                             value={block.content}
                             onChangeText={(t) => updateBlock(block.id, t)}
                             placeholder="To-do"
-                            placeholderTextColor={theme.colors.mutedForeground}
+                            placeholderTextColor={colors.mutedForeground}
                             multiline
                         />
                     </View>
                 )}
                 {block.type === 'quote' && (
                     <View style={styles.quoteBlock}>
-                        <View style={[styles.quoteBar, { backgroundColor: theme.colors.muted }]} />
+                        <View style={[styles.quoteBar, { backgroundColor: colors.muted, borderRadius: radius.xs }]} />
                         <TextInput
-                            style={[styles.blockInput, { fontStyle: 'italic', color: theme.colors.foreground }]}
+                            style={[styles.blockInput, { fontStyle: 'italic', color: colors.foreground }]}
                             value={block.content}
                             onChangeText={(t) => updateBlock(block.id, t)}
                             placeholder="Quote"
-                            placeholderTextColor={theme.colors.mutedForeground}
+                            placeholderTextColor={colors.mutedForeground}
                             multiline
                         />
                     </View>
                 )}
-                {block.type === 'divider' && <View style={[styles.dividerBlock, { backgroundColor: theme.colors.border }]} />}
+                {block.type === 'divider' && <View style={[styles.dividerBlock, { backgroundColor: colors.border }]} />}
                 {(block.type === 'text' || block.type === 'code' || block.type === 'number') && (
                     <TextInput
-                        style={[styles.blockInput, { color: theme.colors.foreground }]}
+                        style={[styles.blockInput, { color: colors.foreground }]}
                         value={block.content}
                         onChangeText={(t) => updateBlock(block.id, t)}
                         placeholder="Type something..."
-                        placeholderTextColor={theme.colors.mutedForeground}
+                        placeholderTextColor={colors.mutedForeground}
                         multiline
                     />
                 )}
@@ -238,19 +241,19 @@ export const NoteDetailScreen: React.FC = () => {
     ];
 
     return (
-        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
             {/* Header */}
             <View style={styles.header}>
-                <Pressable onPress={() => navigation.goBack()} style={styles.iconBtn}>
-                    <ChevronLeft size={24} color={theme.colors.foreground} />
+                <Pressable onPress={() => navigation.goBack()} style={[styles.iconBtn, { borderRadius: radius.sm }]}>
+                    <ChevronLeft size={24} color={colors.foreground} />
                 </Pressable>
                 <View style={{ flex: 1 }} />
                 <View style={{ flexDirection: 'row', gap: 4 }}>
-                    <Pressable onPress={() => setIsStarred(!isStarred)} style={styles.iconBtn}>
-                        <Star size={22} color={isStarred ? theme.colors.warning : theme.colors.mutedForeground} fill={isStarred ? theme.colors.warning : "transparent"} />
+                    <Pressable onPress={() => setIsStarred(!isStarred)} style={[styles.iconBtn, { borderRadius: radius.sm }]}>
+                        <Star size={22} color={isStarred ? colors.warning : colors.mutedForeground} fill={isStarred ? colors.warning : "transparent"} />
                     </Pressable>
-                    <Pressable onPress={() => setShowMoreMenu(true)} style={styles.iconBtn}>
-                        <MoreHorizontal size={22} color={theme.colors.foreground} />
+                    <Pressable onPress={() => setShowMoreMenu(true)} style={[styles.iconBtn, { borderRadius: radius.sm }]}>
+                        <MoreHorizontal size={22} color={colors.foreground} />
                     </Pressable>
                 </View>
             </View>
@@ -258,15 +261,15 @@ export const NoteDetailScreen: React.FC = () => {
             <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
                 {/* Title Area */}
                 <TextInput
-                    style={[styles.titleInput, { color: theme.colors.foreground }]}
+                    style={[styles.titleInput, { color: colors.foreground }]}
                     placeholder="Untitled"
-                    placeholderTextColor={theme.colors.mutedForeground}
+                    placeholderTextColor={colors.mutedForeground}
                     value={title}
                     onChangeText={setTitle}
                     multiline
                 />
 
-                <Text style={[styles.timestamp, { color: theme.colors.mutedForeground }]}>{lastEdited}</Text>
+                <Text style={[styles.timestamp, { color: colors.mutedForeground }]}>{lastEdited}</Text>
 
                 <View style={{ height: 24 }} />
 
@@ -277,8 +280,8 @@ export const NoteDetailScreen: React.FC = () => {
 
                 {/* Add Block Button */}
                 <Pressable style={styles.addBlockBtn} onPress={() => setShowAddMenu(true)}>
-                    <Plus size={20} color={theme.colors.mutedForeground} />
-                    <Text style={[styles.addBlockText, { color: theme.colors.mutedForeground }]}>Add a block</Text>
+                    <Plus size={20} color={colors.mutedForeground} />
+                    <Text style={[styles.addBlockText, { color: colors.mutedForeground }]}>Add a block</Text>
                 </Pressable>
             </ScrollView>
 
@@ -287,7 +290,7 @@ export const NoteDetailScreen: React.FC = () => {
                 <TouchableWithoutFeedback onPress={() => setShowAddMenu(false)}>
                     <View style={styles.modalOverlay}>
                         <TouchableWithoutFeedback>
-                            <View style={[styles.menuCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}>
+                            <View style={[styles.menuCard, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.shadow, borderRadius: radius.sm }]}>
                                 <ScrollView style={{ maxHeight: 300 }}>
                                     {addMenuOptions.map((opt, idx) => (
                                         <Pressable
@@ -295,8 +298,8 @@ export const NoteDetailScreen: React.FC = () => {
                                             style={styles.menuItem}
                                             onPress={() => addBlock(opt.type as any)}
                                         >
-                                            <opt.icon size={18} color={theme.colors.foreground} style={{ marginRight: 12 }} />
-                                            <Text style={[styles.menuText, { color: theme.colors.foreground }]}>{opt.label}</Text>
+                                            <opt.icon size={18} color={colors.foreground} style={{ marginRight: 12 }} />
+                                            <Text style={[styles.menuText, { color: colors.foreground }]}>{opt.label}</Text>
                                         </Pressable>
                                     ))}
                                 </ScrollView>
@@ -311,14 +314,14 @@ export const NoteDetailScreen: React.FC = () => {
                 <TouchableWithoutFeedback onPress={() => setShowMoreMenu(false)}>
                     <View style={[styles.modalOverlay, { alignItems: 'flex-end', paddingBottom: 0, justifyContent: 'flex-start', paddingTop: 60, paddingRight: 16 }]}>
                         <TouchableWithoutFeedback>
-                            <View style={[styles.moreMenuCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}>
+                            <View style={[styles.moreMenuCard, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.shadow, borderRadius: radius.sm }]}>
                                 <Pressable style={styles.moreMenuItem} onPress={() => setShowMoreMenu(false)}>
-                                    <Edit3 size={16} color={theme.colors.foreground} style={{ marginRight: 10 }} />
-                                    <Text style={[styles.menuText, { color: theme.colors.foreground }]}>Rename</Text>
+                                    <Edit3 size={16} color={colors.foreground} style={{ marginRight: 10 }} />
+                                    <Text style={[styles.menuText, { color: colors.foreground }]}>Rename</Text>
                                 </Pressable>
                                 <Pressable style={styles.moreMenuItem} onPress={handleDeleteNote}>
-                                    <Trash size={16} color={theme.colors.danger} style={{ marginRight: 10 }} />
-                                    <Text style={[styles.menuText, { color: theme.colors.danger }]}>Delete</Text>
+                                    <Trash size={16} color={colors.danger} style={{ marginRight: 10 }} />
+                                    <Text style={[styles.menuText, { color: colors.danger }]}>Delete</Text>
                                 </Pressable>
                             </View>
                         </TouchableWithoutFeedback>
@@ -342,7 +345,6 @@ const styles = StyleSheet.create({
     },
     iconBtn: {
         padding: 8,
-        borderRadius: 8,
     },
     content: {
         flex: 1,
@@ -401,7 +403,6 @@ const styles = StyleSheet.create({
         width: 18,
         height: 18,
         borderWidth: 1.5,
-        borderRadius: 4,
         marginRight: 10,
         marginTop: 4,
         alignItems: 'center',
@@ -414,7 +415,6 @@ const styles = StyleSheet.create({
     quoteBar: {
         width: 3,
         marginRight: 12,
-        borderRadius: 2,
     },
     dividerBlock: {
         height: 1,
@@ -439,7 +439,6 @@ const styles = StyleSheet.create({
     },
     menuCard: {
         width: 200,
-        borderRadius: 8,
         paddingVertical: 4,
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.1,
@@ -458,7 +457,6 @@ const styles = StyleSheet.create({
     },
     moreMenuCard: {
         width: 150,
-        borderRadius: 8,
         paddingVertical: 4,
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.1,

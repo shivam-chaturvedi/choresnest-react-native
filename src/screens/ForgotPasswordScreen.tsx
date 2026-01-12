@@ -8,53 +8,62 @@ import {
   ScrollView,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { StackNavigationProp } from "@react-navigation/stack";
-import { theme } from "../theme";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 
-type NavProp = StackNavigationProp<Record<string, object | undefined>>;
+type NavProp = NativeStackNavigationProp<Record<string, object | undefined>>;
 
 import { AppIcon } from "../components/ui/AppIcon";
 
 export const ForgotPasswordScreen: React.FC = () => {
   const navigation = useNavigation<NavProp>();
   const [email, setEmail] = useState("");
+  const colors = useThemeColors();
+  const radius = useThemeRadius();
 
   return (
     <ScrollView
-      style={[styles.screen, { backgroundColor: theme.colors.background }]}
+      style={[styles.screen, { backgroundColor: colors.background }]}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
     >
-      <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
+      <View style={[
+        styles.header,
+        {
+          backgroundColor: colors.primary,
+          borderBottomLeftRadius: radius.card,
+          borderBottomRightRadius: radius.card
+        }
+      ]}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backRow}>
-          <AppIcon name="arrowLeft" size={20} color={theme.colors.primaryForeground} />
-          <Text style={[styles.backText, { color: theme.colors.primaryForeground }]}>Back to Sign In</Text>
+          <AppIcon name="arrowLeft" size={20} color={colors.primaryForeground} />
+          <Text style={[styles.backText, { color: colors.primaryForeground }]}>Back to Sign In</Text>
         </Pressable>
         <View style={styles.logoWrapper}>
-          <View style={[styles.logoCircle, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <View style={[styles.logoCircle, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
             <Text style={styles.logoIcon}>🏠</Text>
             <Text style={styles.logoBadge}>🔐</Text>
           </View>
         </View>
-        <Text style={[styles.title, { color: theme.colors.primaryForeground }]}>Reset Password</Text>
-        <Text style={[styles.subtitle, { color: theme.colors.primaryForeground + 'D9' }]}>We'll send you a reset link</Text>
+        <Text style={[styles.title, { color: colors.primaryForeground }]}>Reset Password</Text>
+        <Text style={[styles.subtitle, { color: colors.primaryForeground + 'D9' }]}>We'll send you a reset link</Text>
       </View>
 
-      <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}>
-        <View style={[styles.iconCircle, { backgroundColor: theme.colors.primary + '10' }]}>
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.shadow, borderRadius: radius.card }]}>
+        <View style={[styles.iconCircle, { backgroundColor: colors.primary + '10', borderRadius: radius.card }]}>
           <Text style={styles.icon}>✉️</Text>
         </View>
-        <Text style={[styles.heading, { color: theme.colors.foreground }]}>Forgot your password?</Text>
-        <Text style={[styles.description, { color: theme.colors.mutedForeground }]}>
+        <Text style={[styles.heading, { color: colors.foreground }]}>Forgot your password?</Text>
+        <Text style={[styles.description, { color: colors.mutedForeground }]}>
           Don't worry! Enter your email and we will send you a link to reset your password.
         </Text>
 
-        <View style={[styles.inputRow, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+        <View style={[styles.inputRow, { backgroundColor: colors.background, borderColor: colors.border, borderRadius: radius.md }]}>
           <Text style={styles.inputIcon}>✉️</Text>
           <TextInput
-            style={[styles.textInput, { color: theme.colors.foreground }]}
+            style={[styles.textInput, { color: colors.foreground }]}
             placeholder="Enter your email address"
-            placeholderTextColor={theme.colors.mutedForeground}
+            placeholderTextColor={colors.mutedForeground}
             keyboardType="email-address"
             autoCapitalize="none"
             value={email}
@@ -62,18 +71,18 @@ export const ForgotPasswordScreen: React.FC = () => {
           />
         </View>
 
-        <Pressable style={[styles.primaryButton, { backgroundColor: theme.colors.primary, shadowColor: theme.colors.primary }]}>
-          <Text style={[styles.primaryButtonText, { color: theme.colors.primaryForeground }]}>Send Reset Link</Text>
+        <Pressable style={[styles.primaryButton, { backgroundColor: colors.primary, shadowColor: colors.primary, borderRadius: radius.lg }]}>
+          <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>Send Reset Link</Text>
         </Pressable>
       </View>
 
-      <View style={[styles.infoCard, { backgroundColor: theme.colors.primary + '10', borderColor: theme.colors.primary + '20' }]}>
-        <View style={[styles.infoIcon, { backgroundColor: theme.colors.primary }]}>
-          <Text style={[styles.infoIconText, { color: theme.colors.primaryForeground }]}>🛡️</Text>
+      <View style={[styles.infoCard, { backgroundColor: colors.primary + '10', borderColor: colors.primary + '20', borderRadius: radius.lg }]}>
+        <View style={[styles.infoIcon, { backgroundColor: colors.primary, borderRadius: radius.md }]}>
+          <Text style={[styles.infoIconText, { color: colors.primaryForeground }]}>🛡️</Text>
         </View>
         <View style={styles.infoTextContainer}>
-          <Text style={[styles.infoTitle, { color: theme.colors.foreground }]}>Secure Reset Process</Text>
-          <Text style={[styles.infoSubtitle, { color: theme.colors.mutedForeground }]}>
+          <Text style={[styles.infoTitle, { color: colors.foreground }]}>Secure Reset Process</Text>
+          <Text style={[styles.infoSubtitle, { color: colors.mutedForeground }]}>
             The reset link expires in 24 hours. If you don't see the email, check your spam
             folder or request another link.
           </Text>
@@ -89,19 +98,17 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
-    paddingBottom: theme.spacing.lg,
+    paddingBottom: 24,
   },
   header: {
-    paddingVertical: theme.spacing.xl,
-    paddingHorizontal: theme.spacing.lg,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
+    paddingVertical: 32,
+    paddingHorizontal: 24,
     alignItems: "center",
   },
   backRow: {
     position: "absolute",
-    left: theme.spacing.lg,
-    top: theme.spacing.xl,
+    left: 24,
+    top: 32,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -112,13 +119,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   logoWrapper: {
-    marginBottom: theme.spacing.sm,
-    marginTop: theme.spacing.md,
+    marginBottom: 16,
+    marginTop: 24,
   },
   logoCircle: {
     width: 72,
     height: 72,
-    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -141,10 +147,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   card: {
-    marginHorizontal: theme.spacing.lg,
-    marginTop: -40,
-    borderRadius: 24,
-    padding: theme.spacing.lg,
+    marginHorizontal: 24,
+    marginTop: 20,
+    padding: 24,
     borderWidth: 1,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.2,
@@ -155,10 +160,9 @@ const styles = StyleSheet.create({
   iconCircle: {
     width: 64,
     height: 64,
-    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: theme.spacing.md,
+    marginBottom: 16,
   },
   icon: {
     fontSize: 28,
@@ -166,20 +170,19 @@ const styles = StyleSheet.create({
   heading: {
     fontSize: 22,
     fontWeight: "700",
-    marginBottom: theme.spacing.sm,
+    marginBottom: 8,
   },
   description: {
     fontSize: 14,
     textAlign: "center",
-    marginBottom: theme.spacing.lg,
+    marginBottom: 24,
     lineHeight: 20,
   },
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 14,
-    paddingHorizontal: theme.spacing.sm,
-    marginBottom: theme.spacing.md,
+    paddingHorizontal: 12,
+    marginBottom: 16,
     width: "100%",
     borderWidth: 1,
   },
@@ -194,8 +197,7 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     width: "100%",
-    borderRadius: 16,
-    paddingVertical: theme.spacing.md,
+    paddingVertical: 14,
     alignItems: "center",
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.15,
@@ -209,19 +211,17 @@ const styles = StyleSheet.create({
   infoCard: {
     flexDirection: "row",
     alignItems: "flex-start",
-    borderRadius: 16,
-    marginHorizontal: theme.spacing.lg,
-    marginTop: theme.spacing.md,
-    padding: theme.spacing.md,
+    marginHorizontal: 24,
+    marginTop: 16,
+    padding: 16,
     borderWidth: 1,
   },
   infoIcon: {
     width: 44,
     height: 44,
-    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: theme.spacing.md,
+    marginRight: 16,
   },
   infoIconText: {
     fontSize: 22,

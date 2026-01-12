@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -6,12 +6,9 @@ import {
   ScrollView,
   Pressable,
   TextInput,
-  Modal,
-  Dimensions,
-  Animated,
 } from "react-native";
 import { AppLayout } from "../components/layout/AppLayout";
-import { theme } from "../theme";
+import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import { useSidebar } from "../contexts/SidebarContext";
 import { useNavigation } from "@react-navigation/native";
 import { useToast } from "../components/ui/Toast";
@@ -30,19 +27,12 @@ import {
   Users,
   Bell,
   Book,
-  MessageCircle,
-  Mail,
   PlayCircle,
-  Plus,
-  GripVertical,
-  Repeat,
-  Sparkles,
-  Check,
-  X,
   ChevronRight,
   Shield,
   Download,
 } from "lucide-react-native";
+import { GettingStartedTutorial } from "../components/tutorial/GettingStartedTutorial";
 
 // --- Data ---
 const featureGuides = [
@@ -276,7 +266,7 @@ const featureGuides = [
     ]
   },
   {
-    id: 'export',
+    id: 'dataexport',
     icon: Download,
     title: 'Data Export',
     path: 'DataExport',
@@ -292,6 +282,26 @@ const featureGuides = [
       'Export regularly for safety',
       'Keep backups in secure location',
       'Verify exported data integrity'
+    ]
+  },
+  {
+    id: 'themes',
+    icon: ({ size, color }: { size: number, color: string }) => <View style={{ width: size, height: size, backgroundColor: color, borderRadius: size / 2 }} />, // Simple circle icon
+    title: 'Themes & Layouts',
+    path: 'Theme',
+    description: 'Customize the look and feel of your app with colors and shapes.',
+    howToUse: [
+      'Go to Settings → Theme',
+      'Choose between "Rounded" or "Squared" UI shapes',
+      'Select a Color Palette (Sapphire, Amber, Obsidian)',
+      'Toggle Light or Dark mode',
+      'Your selection applies instantly across the app'
+    ],
+    tips: [
+      'Use "Squared" mode for a more professional look',
+      'Try "Amber" palette for a warm, cozy feel',
+      'Dark mode is great for battery life',
+      'Experiment with different combinations!'
     ]
   }
 ];
@@ -421,7 +431,11 @@ const faqItems = [
     questions: [
       {
         q: "How do I change the app theme?",
-        a: "Go to Settings → Theme to switch between Light and Dark modes, or set it to follow your device's system setting.",
+        a: "Go to Settings → Theme. You can change Color Palette (Sapphire, Amber, etc.), Shapes (Rounded/Squared), and Mode (Light/Dark).",
+      },
+      {
+        q: "What is the difference between Rounded and Squared?",
+        a: "rounded mode gives the app soft, curved corners for a friendly look. Squared mode uses sharp corners for a crisp, modern, or professional aesthetic. This affects buttons, cards, and inputs globally.",
       },
       {
         q: "How do I change my password?",
@@ -435,230 +449,17 @@ const faqItems = [
   },
 ];
 
-const tutorialSteps = [
-  {
-    id: 'welcome',
-    icon: Sparkles,
-    title: 'Welcome to Todo Helpmate!',
-    description: 'Your all-in-one family organizer. Let us show you around in just 30 seconds.',
-    highlight: 'Manage your entire family life from one app',
-    emoji: '👋'
-  },
-  {
-    id: 'home',
-    icon: Home,
-    title: 'Home Dashboard',
-    description: 'Your central hub shows today\'s events, tasks, meals, and alerts. Quick actions let you add anything with one tap.',
-    highlight: 'Tap the + buttons for quick actions',
-    emoji: '🏠'
-  },
-  {
-    id: 'calendar',
-    icon: Calendar,
-    title: 'Family Calendar',
-    description: 'All family events in one place. Color-coded by member so everyone knows who\'s doing what and when.',
-    highlight: 'Events sync across all family devices',
-    emoji: '📅'
-  },
-  {
-    id: 'tasks',
-    icon: CheckSquare,
-    title: 'Tasks & Chores',
-    description: 'Assign tasks to family members, set priorities, and track completion. Perfect for household chores!',
-    highlight: 'Use recurring tasks for weekly chores',
-    emoji: '✅'
-  },
-  {
-    id: 'lists',
-    icon: ShoppingCart,
-    title: 'Shopping Lists',
-    description: 'Create shared shopping lists. Anyone can add items, and they sync in real-time as you shop.',
-    highlight: 'Drag to reorder, swipe to delete',
-    emoji: '🛒'
-  },
-  {
-    id: 'meals',
-    icon: Utensils,
-    title: 'Meal Planning',
-    description: 'Plan weekly meals by dragging recipes to calendar slots. Auto-generate grocery lists from your plan!',
-    highlight: 'Save time with auto grocery lists',
-    emoji: '🍽️'
-  },
-  {
-    id: 'vault',
-    icon: FolderLock,
-    title: 'Document Vault',
-    description: 'Store important documents securely. Get reminders before IDs, insurance, and warranties expire.',
-    highlight: 'Never miss a renewal again',
-    emoji: '🔐'
-  },
-  {
-    id: 'expenses',
-    icon: DollarSign,
-    title: 'Expense Tracking',
-    description: 'Track family spending with beautiful charts. Set budgets and get alerts when you\'re close to limits.',
-    highlight: 'Visualize spending patterns',
-    emoji: '💰'
-  },
-  {
-    id: 'family',
-    icon: Users,
-    title: 'Family Members',
-    description: 'Add all family members with unique colors. Assign tasks and events to specific people.',
-    highlight: 'Each member gets their own color',
-    emoji: '👨‍👩‍👧‍👦'
-  },
-  {
-    id: 'search',
-    icon: Search,
-    title: 'Global Search',
-    description: 'Find anything instantly! Search across all events, tasks, recipes, and documents from the search bar.',
-    highlight: 'Access search from any screen',
-    emoji: '🔍'
-  },
-  {
-    id: 'complete',
-    icon: Check,
-    title: 'You\'re All Set!',
-    description: 'You now know the basics. Explore each feature to discover more. We\'re here to help in Settings → Help.',
-    highlight: 'Start organizing your family life!',
-    emoji: '🎉'
-  }
-];
 
-// --- Tutorial Modal Component ---
-interface TutorialModalProps {
-  visible: boolean;
-  onClose: () => void;
-}
-
-const TutorialModal: React.FC<TutorialModalProps> = ({ visible, onClose }) => {
-  const [currentStep, setCurrentStep] = useState(0);
-  const step = tutorialSteps[currentStep];
-  const isFirst = currentStep === 0;
-  const isLast = currentStep === tutorialSteps.length - 1;
-  const progress = ((currentStep + 1) / tutorialSteps.length) * 100;
-
-  useEffect(() => {
-    if (visible) setCurrentStep(0);
-  }, [visible]);
-
-  const handleNext = () => {
-    if (isLast) onClose();
-    else setCurrentStep(prev => prev + 1);
-  };
-
-  const handlePrev = () => {
-    if (!isFirst) setCurrentStep(prev => prev - 1);
-  };
-
-  if (!visible) return null;
-
-  return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
-        <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
-          {/* Progress Bar */}
-          <View style={[styles.modalProgressBg, { backgroundColor: theme.colors.border }]}>
-            <View style={[styles.modalProgressBar, { width: `${progress}%`, backgroundColor: theme.colors.primary }]} />
-          </View>
-
-          {/* Header */}
-          <View style={styles.modalHeader}>
-            <Text style={[styles.modalStepText, { color: theme.colors.mutedForeground }]}>Step {currentStep + 1} of {tutorialSteps.length}</Text>
-            <Pressable onPress={onClose} style={styles.closeButton}>
-              <X size={20} color={theme.colors.mutedForeground} />
-            </Pressable>
-          </View>
-
-          {/* Content */}
-          <View style={styles.modalBody}>
-            <View style={styles.modalIconContainer}>
-              <View style={[styles.modalEmojiBg, { backgroundColor: theme.colors.muted }]}>
-                <Text style={{ fontSize: 50 }}>{step.emoji}</Text>
-              </View>
-              <View style={[styles.modalIconBadge, { backgroundColor: theme.colors.primary }]}>
-                <step.icon size={24} color={'#fff'} />
-              </View>
-            </View>
-
-            <Text style={[styles.modalTitle, { color: theme.colors.foreground }]}>{step.title}</Text>
-            <Text style={[styles.modalDescription, { color: theme.colors.mutedForeground }]}>{step.description}</Text>
-
-            <View style={[styles.highlightBadge, { backgroundColor: theme.colors.success + '20' }]}>
-              <Sparkles size={16} color={theme.colors.success} />
-              <Text style={[styles.highlightText, { color: theme.colors.success }]}>{step.highlight}</Text>
-            </View>
-          </View>
-
-          {/* Dots */}
-          <View style={styles.dotsRow}>
-            {tutorialSteps.map((_, index) => (
-              <Pressable
-                key={index}
-                onPress={() => setCurrentStep(index)}
-                style={[
-                  styles.dot,
-                  index === currentStep ? { backgroundColor: theme.colors.primary, width: 24 } : { backgroundColor: theme.colors.muted, width: 8 },
-                  index < currentStep && { backgroundColor: theme.colors.primary }
-                ]}
-              />
-            ))}
-          </View>
-
-          {/* Actions */}
-          <View style={styles.modalActions}>
-            {!isFirst && (
-              <Pressable style={styles.prevButton} onPress={handlePrev}>
-                <ChevronLeft size={20} color={theme.colors.foreground} />
-                <Text style={[styles.prevButtonText, { color: theme.colors.foreground }]}>Back</Text>
-              </Pressable>
-            )}
-            <Pressable
-              style={[
-                styles.nextButton,
-                isFirst && { flex: 1 },
-                { backgroundColor: theme.colors.primary }
-              ]}
-              onPress={handleNext}
-            >
-              <Text style={styles.nextButtonText}>{isLast ? "Get Started" : "Next"}</Text>
-              {isLast ? <Check size={18} color="#fff" /> : <ChevronRight size={18} color="#fff" />}
-            </Pressable>
-          </View>
-
-          {!isLast && (
-            <Pressable onPress={onClose} style={{ alignItems: 'center', marginTop: 12 }}>
-              <Text style={[styles.skipLink, { color: theme.colors.mutedForeground }]}>Skip tutorial</Text>
-            </Pressable>
-          )}
-        </View>
-      </View>
-    </Modal>
-  );
-};
-
-// --- Main Help Screen ---
 export const HelpScreen: React.FC = () => {
   const { openSidebar } = useSidebar();
   const navigation = useNavigation<any>();
   const { showToast } = useToast();
+  const colors = useThemeColors();
+  const radius = useThemeRadius();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"features" | "faq">("features");
 
-  const handleNavigate = (path: string) => {
-    try {
-      navigation.navigate(path);
-    } catch (error) {
-      console.error(error);
-      showToast({ title: "Navigation Error", description: "Could not open screen", type: "warning" });
-    }
-  };
-
   const [expandedFeature, setExpandedFeature] = useState<string | null>(null);
-  const [expandedFaqCategory, setExpandedFaqCategory] = useState<string | null>(null);
-  const [expandedFaq, setExpandedFaq] = useState<string | null>(null);
-
   const [showTutorial, setShowTutorial] = useState(false);
 
   const filteredFeatures = useMemo(() =>
@@ -681,68 +482,69 @@ export const HelpScreen: React.FC = () => {
   return (
     <>
       <AppLayout>
-        <ScrollView contentContainerStyle={[styles.container, { backgroundColor: theme.colors.background }]} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
           {/* Header */}
           <View style={styles.headerRow}>
-            <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-              <ChevronLeft size={24} color={theme.colors.foreground} />
+            <Pressable onPress={() => navigation.goBack()} style={[styles.backButton, { borderRadius: radius.sm }]}>
+              <ChevronLeft size={24} color={colors.foreground} />
             </Pressable>
             <View>
-              <Text style={[styles.title, { color: theme.colors.foreground }]}>Help & Support</Text>
-              <Text style={[styles.subtitle, { color: theme.colors.mutedForeground }]}>Learn how to use every feature</Text>
+              <Text style={[styles.title, { color: colors.foreground }]}>Help & Support</Text>
+              <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Learn how to use every feature</Text>
             </View>
           </View>
 
           {/* Hero */}
-          <View style={[styles.heroCard, { backgroundColor: theme.colors.primary, shadowColor: theme.colors.primary }]}>
-            <View style={[styles.heroIconBox, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-              <Book size={32} color={theme.colors.primaryForeground} />
+          <View style={[styles.heroCard, { backgroundColor: colors.primary, shadowColor: colors.primary, borderRadius: radius.lg }]}>
+            <View style={[styles.heroIconBox, { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: radius.full }]}>
+              <Book size={32} color={colors.primaryForeground} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.heroTitle, { color: theme.colors.primaryForeground }]}>Complete User Guide</Text>
-              <Text style={[styles.heroSubtitle, { color: theme.colors.primaryForeground, opacity: 0.9 }]}>Everything you need to manage your family</Text>
+              <Text style={[styles.heroTitle, { color: colors.primaryForeground }]}>Complete User Guide</Text>
+              <Text style={[styles.heroSubtitle, { color: colors.primaryForeground, opacity: 0.9 }]}>Everything you need to manage your family</Text>
             </View>
           </View>
 
           {/* Tutorial Button */}
           <Pressable
-            style={[styles.tutorialBtn, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+            style={[styles.tutorialBtn, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}
             onPress={() => setShowTutorial(true)}
           >
-            <View style={[styles.playIconBox, { backgroundColor: theme.colors.success + '20' }]}>
-              <PlayCircle size={24} color={theme.colors.success} />
+            <View style={[styles.playIconBox, { backgroundColor: colors.success + '20', borderRadius: radius.full }]}>
+              <PlayCircle size={24} color={colors.success} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.tutorialTitle, { color: theme.colors.foreground }]}>Watch Tutorial Again</Text>
-              <Text style={[styles.tutorialSub, { color: theme.colors.mutedForeground }]}>Step-by-step walkthrough of all features</Text>
+              <Text style={[styles.tutorialTitle, { color: colors.foreground }]}>Watch Tutorial Again</Text>
+              <Text style={[styles.tutorialSub, { color: colors.mutedForeground }]}>Step-by-step walkthrough of all features</Text>
             </View>
-            <ChevronRight size={20} color={theme.colors.mutedForeground} />
+            <ChevronRight size={20} color={colors.mutedForeground} />
           </Pressable>
 
           {/* Search */}
-          <View style={[styles.searchContainer, { backgroundColor: theme.colors.muted }]}>
-            <Search size={20} color={theme.colors.mutedForeground} style={styles.searchIcon} />
+          <View style={[styles.searchContainer, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
+            <Search size={20} color={colors.mutedForeground} style={styles.searchIcon} />
             <TextInput
-              style={[styles.searchInput, { color: theme.colors.foreground }]}
+              style={[styles.searchInput, { color: colors.foreground }]}
               placeholder="Search features or questions..."
-              placeholderTextColor={theme.colors.mutedForeground}
+              placeholderTextColor={colors.mutedForeground}
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
           </View>
 
           {/* Tabs */}
-          <View style={[styles.tabContainer, { backgroundColor: theme.colors.muted }]}>
+          <View style={[styles.tabContainer, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
             <Pressable
               style={[
                 styles.tab,
-                activeTab === 'features' && [styles.activeTab, { backgroundColor: theme.colors.card }]
+                { borderRadius: radius.sm },
+                activeTab === 'features' && [styles.activeTab, { backgroundColor: colors.card }]
               ]}
               onPress={() => setActiveTab('features')}
             >
               <Text style={[
                 styles.tabText,
-                activeTab === 'features' ? [styles.activeTabText, { color: theme.colors.primary }] : { color: theme.colors.mutedForeground }
+                activeTab === 'features' ? [styles.activeTabText, { color: colors.primary }] : { color: colors.mutedForeground }
               ]}>
                 📚 Feature Guide
               </Text>
@@ -750,13 +552,14 @@ export const HelpScreen: React.FC = () => {
             <Pressable
               style={[
                 styles.tab,
-                activeTab === 'faq' && [styles.activeTab, { backgroundColor: theme.colors.card }]
+                { borderRadius: radius.sm },
+                activeTab === 'faq' && [styles.activeTab, { backgroundColor: colors.card }]
               ]}
               onPress={() => setActiveTab('faq')}
             >
               <Text style={[
                 styles.tabText,
-                activeTab === 'faq' ? [styles.activeTabText, { color: theme.colors.primary }] : { color: theme.colors.mutedForeground }
+                activeTab === 'faq' ? [styles.activeTabText, { color: colors.primary }] : { color: colors.mutedForeground }
               ]}>
                 ❓ FAQ
               </Text>
@@ -766,41 +569,41 @@ export const HelpScreen: React.FC = () => {
           {/* Content */}
           {activeTab === 'features' && (
             <View style={styles.contentSection}>
-              <Text style={[styles.sectionHint, { color: theme.colors.mutedForeground }]}>Tap any feature to learn how to use it</Text>
+              <Text style={[styles.sectionHint, { color: colors.mutedForeground }]}>Tap any feature to learn how to use it</Text>
               {filteredFeatures.map(item => (
-                <View key={item.id} style={[styles.accordionCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                <View key={item.id} style={[styles.accordionCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
                   <Pressable
                     style={styles.accordionHeader}
                     onPress={() => setExpandedFeature(expandedFeature === item.id ? null : item.id)}
                   >
-                    <View style={[styles.featureIconBox, { backgroundColor: theme.colors.muted }]}>
-                      <item.icon size={24} color={theme.colors.primary} />
+                    <View style={[styles.featureIconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
+                      <item.icon size={24} color={colors.primary} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.featureTitle, { color: theme.colors.foreground }]}>{item.title}</Text>
-                      <Text numberOfLines={1} style={[styles.featureDesc, { color: theme.colors.mutedForeground }]}>{item.description}</Text>
+                      <Text style={[styles.featureTitle, { color: colors.foreground }]}>{item.title}</Text>
+                      <Text numberOfLines={1} style={[styles.featureDesc, { color: colors.mutedForeground }]}>{item.description}</Text>
                     </View>
                     {expandedFeature === item.id ? (
-                      <ChevronUp size={20} color={theme.colors.mutedForeground} />
+                      <ChevronUp size={20} color={colors.mutedForeground} />
                     ) : (
-                      <ChevronDown size={20} color={theme.colors.mutedForeground} />
+                      <ChevronDown size={20} color={colors.mutedForeground} />
                     )}
                   </Pressable>
 
                   {expandedFeature === item.id && (
                     <View style={styles.accordionBody}>
-                      <Text style={[styles.fullDesc, { color: theme.colors.mutedForeground }]}>{item.description}</Text>
+                      <Text style={[styles.fullDesc, { color: colors.mutedForeground }]}>{item.description}</Text>
 
                       {/* How to use */}
                       <View style={styles.subSection}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 }}>
-                          <View style={[styles.miniIconBox, { backgroundColor: theme.colors.muted }]}><Text>📋</Text></View>
-                          <Text style={[styles.subTitle, { color: theme.colors.foreground }]}>How to Use</Text>
+                          <View style={[styles.miniIconBox, { backgroundColor: colors.muted, borderRadius: radius.xs }]}><Text>📋</Text></View>
+                          <Text style={[styles.subTitle, { color: colors.foreground }]}>How to Use</Text>
                         </View>
                         {item.howToUse.map((step, idx) => (
                           <View key={idx} style={styles.stepRow}>
-                            <View style={[styles.stepNum, { backgroundColor: theme.colors.muted }]}><Text style={[styles.stepNumText, { color: theme.colors.primary }]}>{idx + 1}</Text></View>
-                            <Text style={[styles.stepText, { color: theme.colors.foreground }]}>{step}</Text>
+                            <View style={[styles.stepDot, { backgroundColor: colors.primary, borderRadius: radius.full }]} />
+                            <Text style={[styles.stepText, { color: colors.mutedForeground }]}>{step}</Text>
                           </View>
                         ))}
                       </View>
@@ -808,24 +611,15 @@ export const HelpScreen: React.FC = () => {
                       {/* Tips */}
                       <View style={styles.subSection}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 }}>
-                          <View style={[styles.miniIconBox, { backgroundColor: theme.colors.success + '20' }]}><Text>💡</Text></View>
-                          <Text style={[styles.subTitle, { color: theme.colors.foreground }]}>Pro Tips</Text>
+                          <View style={[styles.miniIconBox, { backgroundColor: colors.success + '20', borderRadius: radius.xs }]}><Text>💡</Text></View>
+                          <Text style={[styles.subTitle, { color: colors.foreground }]}>Pro Tips</Text>
                         </View>
                         {item.tips.map((tip, idx) => (
-                          <View key={idx} style={styles.stepRow}>
-                            <Text style={{ color: theme.colors.success, marginRight: 8 }}>•</Text>
-                            <Text style={[styles.stepText, { color: theme.colors.foreground }]}>{tip}</Text>
+                          <View key={idx} style={[styles.tipBox, { backgroundColor: colors.muted, borderRadius: radius.sm }]}>
+                            <Text style={[styles.tipText, { color: colors.mutedForeground }]}>{tip}</Text>
                           </View>
                         ))}
                       </View>
-
-                      <Pressable
-                        style={[styles.actionBtn, { backgroundColor: theme.colors.primary }]}
-                        onPress={() => handleNavigate(item.path)}
-                      >
-                        <Text style={styles.actionBtnText}>Go to {item.title}</Text>
-                        <ChevronRight size={16} color="#fff" />
-                      </Pressable>
                     </View>
                   )}
                 </View>
@@ -835,167 +629,149 @@ export const HelpScreen: React.FC = () => {
 
           {activeTab === 'faq' && (
             <View style={styles.contentSection}>
-              {filteredFaqs.map((category, i) => (
-                <View key={i} style={[styles.accordionCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-                  <Pressable
-                    style={styles.accordionHeader}
-                    onPress={() => setExpandedFaqCategory(expandedFaqCategory === category.category ? null : category.category)}
-                  >
-                    <Text style={[styles.featureTitle, { color: theme.colors.foreground, flex: 1 }]}>{category.category}</Text>
-                    {expandedFaqCategory === category.category ? (
-                      <ChevronUp size={20} color={theme.colors.mutedForeground} />
-                    ) : (
-                      <ChevronDown size={20} color={theme.colors.mutedForeground} />
-                    )}
-                  </Pressable>
-
-                  {expandedFaqCategory === category.category && (
-                    <View style={styles.accordionBody}>
-                      {category.questions.map((q, idx) => (
-                        <View key={idx} style={styles.faqRow}>
-                          <Text style={[styles.faqQuestion, { color: theme.colors.foreground }]}>Q: {q.q}</Text>
-                          <Text style={[styles.faqAnswer, { color: theme.colors.mutedForeground }]}>{q.a}</Text>
-                        </View>
-                      ))}
+              {filteredFaqs.map((cat, idx) => (
+                <View key={idx} style={styles.faqCategory}>
+                  <Text style={[styles.faqCatTitle, { color: colors.primary }]}>{cat.category}</Text>
+                  {cat.questions.map((q, qImg) => (
+                    <View key={qImg} style={[styles.faqCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+                      <Text style={[styles.question, { color: colors.foreground }]}>{q.q}</Text>
+                      <Text style={[styles.answer, { color: colors.mutedForeground }]}>{q.a}</Text>
                     </View>
-                  )}
+                  ))}
                 </View>
               ))}
             </View>
           )}
 
-          <View style={{ height: 40 }} />
         </ScrollView>
       </AppLayout>
 
-      <TutorialModal visible={showTutorial} onClose={() => setShowTutorial(false)} />
+      <GettingStartedTutorial
+        open={showTutorial}
+        onClose={() => setShowTutorial(false)}
+      />
     </>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    padding: 16,
+    padding: 20,
+    paddingBottom: 40,
   },
   headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 20,
-    marginTop: 8,
-    gap: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+    gap: 16,
   },
   backButton: {
     padding: 8,
-    borderRadius: 8,
   },
   title: {
-    fontSize: 24,
-    fontWeight: "700",
+    fontSize: 28,
+    fontWeight: '700',
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 16,
   },
   heroCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 16,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    padding: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+    gap: 20,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
   },
   heroIconBox: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 16,
+    width: 64,
+    height: 64,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   heroTitle: {
-    fontSize: 18,
-    fontWeight: "700",
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 4,
   },
   heroSubtitle: {
-    fontSize: 13,
+    fontSize: 14,
+    lineHeight: 20,
   },
   tutorialBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 16,
+    padding: 16,
     borderWidth: 1,
     marginBottom: 24,
+    gap: 16,
   },
   playIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: 'center',
+    width: 48,
+    height: 48,
     justifyContent: 'center',
-    marginRight: 12,
+    alignItems: 'center',
   },
   tutorialTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
+    marginBottom: 2,
   },
   tutorialSub: {
-    fontSize: 12,
+    fontSize: 13,
   },
   searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 16,
-    height: 48,
-    borderRadius: 12,
+    height: 50,
     marginBottom: 24,
   },
   searchIcon: {
-    marginRight: 12,
+    marginRight: 10,
   },
   searchInput: {
     flex: 1,
-    height: 48,
-    fontSize: 15,
+    fontSize: 16,
+    height: '100%',
   },
   tabContainer: {
-    flexDirection: "row",
+    flexDirection: 'row',
     padding: 4,
-    borderRadius: 12,
     marginBottom: 24,
   },
   tab: {
     flex: 1,
-    alignItems: "center",
     paddingVertical: 10,
-    borderRadius: 8,
+    alignItems: 'center',
   },
   activeTab: {
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
   },
   tabText: {
-    fontWeight: "600",
+    fontWeight: '600',
     fontSize: 14,
   },
   activeTabText: {
-    fontWeight: "700",
+    fontWeight: '700',
   },
   contentSection: {
-    gap: 12,
+    gap: 16,
   },
   sectionHint: {
-    fontSize: 13,
     textAlign: 'center',
+    fontSize: 13,
     marginBottom: 8,
+    fontStyle: 'italic',
   },
   accordionCard: {
-    borderRadius: 16,
     borderWidth: 1,
     overflow: 'hidden',
   },
@@ -1003,18 +779,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
-    gap: 12,
+    gap: 16,
   },
   featureIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    alignItems: 'center',
+    width: 48,
+    height: 48,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   featureTitle: {
     fontSize: 16,
     fontWeight: '600',
+    marginBottom: 2,
   },
   featureDesc: {
     fontSize: 13,
@@ -1024,213 +800,67 @@ const styles = StyleSheet.create({
     paddingTop: 0,
   },
   fullDesc: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 15,
+    lineHeight: 22,
     marginBottom: 20,
   },
   subSection: {
     marginBottom: 20,
   },
-  miniIconBox: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   subTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
+  },
+  miniIconBox: {
+    width: 28,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   stepRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-    paddingLeft: 8,
+    marginBottom: 10,
   },
-  stepNum: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-    marginTop: 1,
-  },
-  stepNumText: {
-    fontSize: 11,
-    fontWeight: '700',
+  stepDot: {
+    width: 6,
+    height: 6,
+    marginTop: 8,
+    marginRight: 12,
   },
   stepText: {
-    flex: 1,
     fontSize: 14,
-    lineHeight: 20,
-  },
-  actionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
-    borderRadius: 12,
-    marginTop: 8,
-    gap: 8,
-  },
-  actionBtnText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  faqRow: {
-    marginBottom: 16,
-  },
-  faqQuestion: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 6,
-  },
-  faqAnswer: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  // Tutorial Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    padding: 16,
-  },
-  modalContent: {
-    borderRadius: 24,
-    overflow: 'hidden',
-    paddingBottom: 24,
-  },
-  modalProgressBg: {
-    height: 4,
-    width: '100%',
-  },
-  modalProgressBar: {
-    height: '100%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    paddingBottom: 10,
-  },
-  modalStepText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  closeButton: {
-    padding: 4,
-  },
-  modalBody: {
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-  },
-  modalIconContainer: {
-    width: 100,
-    height: 100,
-    marginBottom: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  modalEmojiBg: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalIconBadge: {
-    position: 'absolute',
-    bottom: 10,
-    right: 10,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  modalDescription: {
-    fontSize: 15,
-    textAlign: 'center',
     lineHeight: 22,
+    flex: 1,
+  },
+  tipBox: {
+    padding: 12,
+    marginBottom: 8,
+  },
+  tipText: {
+    fontSize: 13,
+    fontStyle: 'italic',
+  },
+  faqCategory: {
     marginBottom: 24,
   },
-  highlightBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    gap: 8,
-  },
-  highlightText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  dotsRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 6,
-    marginVertical: 24,
-  },
-  dot: {
-    height: 8,
-    borderRadius: 4,
-  },
-  dotActive: {
-    width: 24,
-  },
-  dotCompleted: {
-    width: 8,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 24,
-  },
-  prevButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 16,
-  },
-  prevButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
+  faqCatTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 16,
     marginLeft: 4,
   },
-  nextButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 16,
-    gap: 8,
-    flex: 2,
+  faqCard: {
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
   },
-  nextButtonText: {
+  question: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#fff',
+    marginBottom: 8,
   },
-  skipLink: {
-    fontSize: 13,
-    marginTop: 8,
+  answer: {
+    fontSize: 14,
+    lineHeight: 22,
   },
 });

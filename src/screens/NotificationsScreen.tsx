@@ -13,6 +13,7 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import { AppLayout } from "../components/layout/AppLayout";
 import { theme } from "../theme";
+import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import { useSidebar } from "../contexts/SidebarContext";
 import { Button } from "../components/ui/Button";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -78,13 +79,15 @@ const TimeSelector: React.FC<TimeSelectorProps> = ({
   onOpen,
   onClose
 }) => {
+  const colors = useThemeColors();
+  const radius = useThemeRadius();
   const selectedOption = options.find(o => o.value === value) || options[0];
 
   return (
     <>
-      <Pressable style={styles.selectorButton} onPress={onOpen}>
-        <Text style={[styles.selectorButtonText, { color: theme.colors.foreground }]}>{selectedOption.label}</Text>
-        <ChevronDown size={16} color={theme.colors.mutedForeground} />
+      <Pressable style={[styles.selectorButton, { backgroundColor: colors.muted, borderRadius: radius.sm }]} onPress={onOpen}>
+        <Text style={[styles.selectorButtonText, { color: colors.foreground }]}>{selectedOption.label}</Text>
+        <ChevronDown size={16} color={colors.mutedForeground} />
       </Pressable>
 
       <Modal
@@ -94,11 +97,11 @@ const TimeSelector: React.FC<TimeSelectorProps> = ({
         onRequestClose={onClose}
       >
         <Pressable style={styles.modalOverlay} onPress={onClose}>
-          <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
+          <View style={[styles.modalContent, { backgroundColor: colors.card, borderRadius: radius.card }]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.colors.foreground }]}>{label}</Text>
+              <Text style={[styles.modalTitle, { color: colors.foreground }]}>{label}</Text>
               <Pressable onPress={onClose}>
-                <X size={20} color={theme.colors.mutedForeground} />
+                <X size={20} color={colors.mutedForeground} />
               </Pressable>
             </View>
             <ScrollView style={{ maxHeight: 300 }}>
@@ -107,7 +110,8 @@ const TimeSelector: React.FC<TimeSelectorProps> = ({
                   key={option.value}
                   style={[
                     styles.modalOption,
-                    value === option.value && { backgroundColor: theme.colors.muted }
+                    { borderRadius: radius.sm },
+                    value === option.value && { backgroundColor: colors.muted }
                   ]}
                   onPress={() => {
                     onSelect(option.value);
@@ -116,11 +120,11 @@ const TimeSelector: React.FC<TimeSelectorProps> = ({
                 >
                   <Text style={[
                     styles.modalOptionText,
-                    { color: value === option.value ? theme.colors.primary : theme.colors.foreground }
+                    { color: value === option.value ? colors.primary : colors.foreground }
                   ]}>
                     {option.label}
                   </Text>
-                  {value === option.value && <Text style={{ color: theme.colors.primary }}>✓</Text>}
+                  {value === option.value && <Text style={{ color: colors.primary }}>✓</Text>}
                 </Pressable>
               ))}
             </ScrollView>
@@ -134,6 +138,8 @@ const TimeSelector: React.FC<TimeSelectorProps> = ({
 export const NotificationsScreen: React.FC = () => {
   const navigation = useNavigation();
   const { openSidebar } = useSidebar();
+  const colors = useThemeColors();
+  const radius = useThemeRadius();
 
   const [settings, setSettings] = useState(notificationSettings);
   const [quietHoursEnabled, setQuietHoursEnabled] = useState(true);
@@ -194,38 +200,38 @@ export const NotificationsScreen: React.FC = () => {
 
   return (
     <AppLayout>
-      <ScrollView contentContainerStyle={[styles.container, { backgroundColor: theme.colors.background }]} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <Pressable onPress={() => navigation.goBack()} style={styles.iconButton}>
-            <ChevronLeft size={24} color={theme.colors.foreground} />
+          <Pressable onPress={() => navigation.goBack()} style={[styles.iconButton, { borderRadius: radius.sm }]}>
+            <ChevronLeft size={24} color={colors.foreground} />
           </Pressable>
-          <Text style={[styles.headerTitle, { color: theme.colors.foreground }]}>Notifications</Text>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Notifications</Text>
         </View>
 
         {/* Push Notification Settings (Main Toggles) */}
-        <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
           {/* Event Reminders */}
           <View style={styles.settingSection}>
             <View style={styles.settingHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <Calendar size={20} color={theme.colors.primary} />
+                <Calendar size={20} color={colors.primary} />
                 <View>
-                  <Text style={[styles.labelTitle, { color: theme.colors.foreground }]}>Calendar Event Reminders</Text>
-                  <Text style={[styles.labelDesc, { color: theme.colors.mutedForeground }]}>Get notified before events</Text>
+                  <Text style={[styles.labelTitle, { color: colors.foreground }]}>Calendar Event Reminders</Text>
+                  <Text style={[styles.labelDesc, { color: colors.mutedForeground }]}>Get notified before events</Text>
                 </View>
               </View>
               <Switch
                 value={eventReminders}
                 onValueChange={setEventReminders}
-                trackColor={{ false: theme.colors.muted, true: theme.colors.primary }}
+                trackColor={{ false: colors.muted, true: colors.primary }}
               />
             </View>
             {eventReminders && (
               <View style={styles.subSetting}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Clock size={16} color={theme.colors.mutedForeground} />
-                  <Text style={[styles.subLabel, { color: theme.colors.mutedForeground }]}>Remind me</Text>
+                  <Clock size={16} color={colors.mutedForeground} />
+                  <Text style={[styles.subLabel, { color: colors.mutedForeground }]}>Remind me</Text>
                 </View>
                 <TimeSelector
                   label="Event Reminder Time"
@@ -240,29 +246,29 @@ export const NotificationsScreen: React.FC = () => {
             )}
           </View>
 
-          <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
           {/* Meal Prep Reminders */}
           <View style={styles.settingSection}>
             <View style={styles.settingHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <ChefHat size={20} color={theme.colors.primary} />
+                <ChefHat size={20} color={colors.primary} />
                 <View>
-                  <Text style={[styles.labelTitle, { color: theme.colors.foreground }]}>Meal Prep Reminders</Text>
-                  <Text style={[styles.labelDesc, { color: theme.colors.mutedForeground }]}>Start cooking on time</Text>
+                  <Text style={[styles.labelTitle, { color: colors.foreground }]}>Meal Prep Reminders</Text>
+                  <Text style={[styles.labelDesc, { color: colors.mutedForeground }]}>Start cooking on time</Text>
                 </View>
               </View>
               <Switch
                 value={mealPrepReminders}
                 onValueChange={setMealPrepReminders}
-                trackColor={{ false: theme.colors.muted, true: theme.colors.primary }}
+                trackColor={{ false: colors.muted, true: colors.primary }}
               />
             </View>
             {mealPrepReminders && (
               <View style={styles.subSetting}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Clock size={16} color={theme.colors.mutedForeground} />
-                  <Text style={[styles.subLabel, { color: theme.colors.mutedForeground }]}>Start prep</Text>
+                  <Clock size={16} color={colors.mutedForeground} />
+                  <Text style={[styles.subLabel, { color: colors.mutedForeground }]}>Start prep</Text>
                 </View>
                 <TimeSelector
                   label="Meal Prep Time"
@@ -280,59 +286,59 @@ export const NotificationsScreen: React.FC = () => {
 
         {/* Notification Types */}
         <View>
-          <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>Notification Types</Text>
-          <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Notification Types</Text>
+          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
             {settings.map((setting, index) => (
               <View key={setting.id}>
                 <View style={styles.typeRow}>
-                  <View style={[styles.iconBox, { backgroundColor: theme.colors.muted }]}>
-                    <setting.icon size={20} color={theme.colors.mutedForeground} />
+                  <View style={[styles.iconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
+                    <setting.icon size={20} color={colors.mutedForeground} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.labelTitle, { color: theme.colors.foreground }]}>{setting.label}</Text>
-                    <Text style={[styles.labelDesc, { color: theme.colors.mutedForeground }]}>{setting.description}</Text>
+                    <Text style={[styles.labelTitle, { color: colors.foreground }]}>{setting.label}</Text>
+                    <Text style={[styles.labelDesc, { color: colors.mutedForeground }]}>{setting.description}</Text>
                   </View>
                   <Switch
                     value={setting.enabled}
                     onValueChange={() => toggleSetting(setting.id)}
-                    trackColor={{ false: theme.colors.muted, true: theme.colors.primary }}
+                    trackColor={{ false: colors.muted, true: colors.primary }}
                   />
                 </View>
-                {index !== settings.length - 1 && <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />}
+                {index !== settings.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
               </View>
             ))}
           </View>
         </View>
 
         {/* Quiet Hours */}
-        <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
+        <View style={[styles.card, { backgroundColor: colors.card, borderRadius: radius.card }]}>
           <View style={styles.settingHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <View style={[styles.largeIconBox, { backgroundColor: theme.colors.secondary }]}>
-                <BellOff size={24} color={theme.colors.secondaryForeground} />
+              <View style={[styles.largeIconBox, { backgroundColor: colors.secondary, borderRadius: radius.md }]}>
+                <BellOff size={24} color={colors.secondaryForeground} />
               </View>
               <View>
-                <Text style={[styles.labelTitle, { color: theme.colors.foreground }]}>Quiet Hours</Text>
-                <Text style={[styles.labelDesc, { color: theme.colors.mutedForeground }]}>Pause notifications during set times</Text>
+                <Text style={[styles.labelTitle, { color: colors.foreground }]}>Quiet Hours</Text>
+                <Text style={[styles.labelDesc, { color: colors.mutedForeground }]}>Pause notifications during set times</Text>
               </View>
             </View>
             <Switch
               value={quietHoursEnabled}
               onValueChange={setQuietHoursEnabled}
-              trackColor={{ false: theme.colors.muted, true: theme.colors.primary }}
+              trackColor={{ false: colors.muted, true: colors.primary }}
             />
           </View>
 
           {quietHoursEnabled && (
-            <View style={[styles.quietHoursContainer, { backgroundColor: theme.colors.muted }]}>
-              <Clock size={20} color={theme.colors.mutedForeground} />
+            <View style={[styles.quietHoursContainer, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
+              <Clock size={20} color={colors.mutedForeground} />
               <View style={styles.timeInputs}>
-                <Pressable onPress={() => setShowStartPicker(true)} style={[styles.timeInputBox, { backgroundColor: theme.colors.card }]}>
-                  <Text style={[styles.timeText, { color: theme.colors.foreground }]}>{quietStart}</Text>
+                <Pressable onPress={() => setShowStartPicker(true)} style={[styles.timeInputBox, { backgroundColor: colors.card, borderRadius: radius.xs }]}>
+                  <Text style={[styles.timeText, { color: colors.foreground }]}>{quietStart}</Text>
                 </Pressable>
-                <Text style={[styles.toText, { color: theme.colors.mutedForeground }]}>to</Text>
-                <Pressable onPress={() => setShowEndPicker(true)} style={[styles.timeInputBox, { backgroundColor: theme.colors.card }]}>
-                  <Text style={[styles.timeText, { color: theme.colors.foreground }]}>{quietEnd}</Text>
+                <Text style={[styles.toText, { color: colors.mutedForeground }]}>to</Text>
+                <Pressable onPress={() => setShowEndPicker(true)} style={[styles.timeInputBox, { backgroundColor: colors.card, borderRadius: radius.xs }]}>
+                  <Text style={[styles.timeText, { color: colors.foreground }]}>{quietEnd}</Text>
                 </Pressable>
               </View>
             </View>
@@ -375,41 +381,41 @@ export const NotificationsScreen: React.FC = () => {
 
         {/* Delivery Methods */}
         <View>
-          <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>Delivery Methods</Text>
-          <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Delivery Methods</Text>
+          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
             <View style={styles.deliveryRow}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <Smartphone size={20} color={theme.colors.mutedForeground} />
-                <Text style={[styles.labelTitle, { color: theme.colors.foreground, fontSize: 14 }]}>Push Notifications</Text>
+                <Smartphone size={20} color={colors.mutedForeground} />
+                <Text style={[styles.labelTitle, { color: colors.foreground, fontSize: 14 }]}>Push Notifications</Text>
               </View>
               <Switch
                 value={pushEnabled}
                 onValueChange={setPushEnabled}
-                trackColor={{ false: theme.colors.muted, true: theme.colors.primary }}
+                trackColor={{ false: colors.muted, true: colors.primary }}
               />
             </View>
-            <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <View style={styles.deliveryRow}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <Mail size={20} color={theme.colors.mutedForeground} />
-                <Text style={[styles.labelTitle, { color: theme.colors.foreground, fontSize: 14 }]}>Email Notifications</Text>
+                <Mail size={20} color={colors.mutedForeground} />
+                <Text style={[styles.labelTitle, { color: colors.foreground, fontSize: 14 }]}>Email Notifications</Text>
               </View>
               <Switch
                 value={emailEnabled}
                 onValueChange={setEmailEnabled}
-                trackColor={{ false: theme.colors.muted, true: theme.colors.primary }}
+                trackColor={{ false: colors.muted, true: colors.primary }}
               />
             </View>
-            <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <View style={styles.deliveryRow}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <Volume2 size={20} color={theme.colors.mutedForeground} />
-                <Text style={[styles.labelTitle, { color: theme.colors.foreground, fontSize: 14 }]}>Sound</Text>
+                <Volume2 size={20} color={colors.mutedForeground} />
+                <Text style={[styles.labelTitle, { color: colors.foreground, fontSize: 14 }]}>Sound</Text>
               </View>
               <Switch
                 value={soundEnabled}
                 onValueChange={setSoundEnabled}
-                trackColor={{ false: theme.colors.muted, true: theme.colors.primary }}
+                trackColor={{ false: colors.muted, true: colors.primary }}
               />
             </View>
           </View>
@@ -434,14 +440,12 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     padding: 8,
-    borderRadius: 8,
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: '700',
   },
   card: {
-    borderRadius: 16,
     padding: 16,
     marginBottom: 20,
     shadowColor: '#000',
@@ -484,8 +488,6 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 6,
     paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: theme.colors.muted,
   },
   selectorButtonText: {
     fontSize: 13,
@@ -509,14 +511,12 @@ const styles = StyleSheet.create({
   iconBox: {
     width: 40,
     height: 40,
-    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
   },
   largeIconBox: {
     width: 48,
     height: 48,
-    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -525,7 +525,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     padding: 12,
-    borderRadius: 12,
     marginTop: 8,
   },
   timeInputs: {
@@ -537,7 +536,6 @@ const styles = StyleSheet.create({
   timeInputBox: {
     paddingVertical: 6,
     paddingHorizontal: 12,
-    borderRadius: 8,
     minWidth: 80,
     alignItems: 'center',
   },
@@ -564,7 +562,6 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     width: '100%',
-    borderRadius: 16,
     padding: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -588,7 +585,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 8,
-    borderRadius: 8,
     marginBottom: 4,
   },
   modalOptionText: {

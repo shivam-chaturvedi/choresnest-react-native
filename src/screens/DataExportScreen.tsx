@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { AppLayout } from "../components/layout/AppLayout";
-import { theme } from "../theme";
+import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import { useSidebar } from "../contexts/SidebarContext";
 import {
   ChevronLeft,
@@ -31,6 +31,8 @@ const dataOptions = [
 
 export const DataExportScreen: React.FC = () => {
   const navigation = useNavigation();
+  const colors = useThemeColors();
+  const radius = useThemeRadius();
   const [format, setFormat] = useState("json");
   const { openSidebar } = useSidebar();
   const [selectedData, setSelectedData] = useState(
@@ -54,59 +56,59 @@ export const DataExportScreen: React.FC = () => {
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.headerRow}>
-          <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-            <ChevronLeft size={24} color={theme.colors.foreground} />
+          <Pressable onPress={() => navigation.goBack()} style={[styles.backButton, { borderRadius: radius.sm }]}>
+            <ChevronLeft size={24} color={colors.foreground} />
           </Pressable>
-          <Text style={[styles.title, { color: theme.colors.foreground }]}>Data Export</Text>
+          <Text style={[styles.title, { color: colors.foreground }]}>Data Export</Text>
         </View>
 
         {/* Hero Card */}
-        <View style={[styles.heroCard, { backgroundColor: theme.colors.primary, shadowColor: theme.colors.primary }]}>
-          <View style={[styles.heroIcon, { backgroundColor: "rgba(255,255,255,0.2)" }]}>
-            <Download size={32} color={theme.colors.primaryForeground} />
+        <View style={[styles.heroCard, { backgroundColor: colors.primary, shadowColor: colors.primary, borderRadius: radius.card }]}>
+          <View style={[styles.heroIcon, { backgroundColor: "rgba(255,255,255,0.2)", borderRadius: radius.card }]}>
+            <Download size={32} color={colors.primaryForeground} />
           </View>
           <View>
-            <Text style={[styles.heroTitle, { color: theme.colors.primaryForeground }]}>Backup Your Data</Text>
+            <Text style={[styles.heroTitle, { color: colors.primaryForeground }]}>Backup Your Data</Text>
             <Text style={[styles.heroSubtitle, { color: 'rgba(255,255,255,0.9)' }]}>Export all your family data securely</Text>
           </View>
         </View>
 
         {/* Export Format */}
-        <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>Export Format</Text>
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Export Format</Text>
         <View style={{ gap: 8 }}>
           {exportFormats.map((option) => (
             <Pressable
               key={option.id}
               style={[
                 styles.optionCard,
-                { backgroundColor: theme.colors.card, shadowColor: theme.colors.shadow },
-                format === option.id && { borderColor: theme.colors.primary, borderWidth: 2 }
+                { backgroundColor: colors.card, shadowColor: colors.shadow, borderRadius: radius.card },
+                format === option.id && { borderColor: colors.primary, borderWidth: 2 }
               ]}
               onPress={() => setFormat(option.id)}
             >
               <View style={[
                 styles.optionIcon,
-                { backgroundColor: theme.colors.muted },
-                format === option.id && { backgroundColor: theme.colors.primary + '1A' } // Light blue
+                { backgroundColor: colors.muted, borderRadius: radius.md },
+                format === option.id && { backgroundColor: colors.primary + '1A' } // Light blue
               ]}>
                 <option.icon
                   size={24}
-                  color={format === option.id ? theme.colors.primary : theme.colors.mutedForeground}
+                  color={format === option.id ? colors.primary : colors.mutedForeground}
                 />
               </View>
               <View style={styles.optionText}>
-                <Text style={[styles.optionLabel, { color: theme.colors.foreground }]}>{option.label}</Text>
-                <Text style={[styles.optionSubtitle, { color: theme.colors.mutedForeground }]}>{option.description}</Text>
+                <Text style={[styles.optionLabel, { color: colors.foreground }]}>{option.label}</Text>
+                <Text style={[styles.optionSubtitle, { color: colors.mutedForeground }]}>{option.description}</Text>
               </View>
-              <Text style={[styles.optionSize, { color: theme.colors.mutedForeground }]}>{option.size}</Text>
-              {format === option.id && <Check size={20} color={theme.colors.primary} />}
+              <Text style={[styles.optionSize, { color: colors.mutedForeground }]}>{option.size}</Text>
+              {format === option.id && <Check size={20} color={colors.primary} />}
             </Pressable>
           ))}
         </View>
 
         {/* Select Data */}
-        <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>Select Data</Text>
-        <View style={[styles.dataCard, { backgroundColor: theme.colors.card, shadowColor: theme.colors.shadow }]}>
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Select Data</Text>
+        <View style={[styles.dataCard, { backgroundColor: colors.card, shadowColor: colors.shadow, borderRadius: radius.card }]}>
           {dataOptions.map((option) => (
             <Pressable
               key={option.id}
@@ -115,46 +117,46 @@ export const DataExportScreen: React.FC = () => {
             >
               <View style={[
                 styles.checkbox,
-                { borderColor: theme.colors.border },
-                selectedData.includes(option.id) && { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }
+                { borderColor: colors.border, borderRadius: radius.sm },
+                selectedData.includes(option.id) && { backgroundColor: colors.primary, borderColor: colors.primary }
               ]}>
                 {selectedData.includes(option.id) && <Check size={14} color="#fff" />}
               </View>
               <View style={styles.dataText}>
-                <Text style={[styles.dataLabel, { color: theme.colors.foreground }]}>{option.label}</Text>
+                <Text style={[styles.dataLabel, { color: colors.foreground }]}>{option.label}</Text>
               </View>
-              <Text style={[styles.dataCount, { color: theme.colors.mutedForeground }]}>{option.items} items</Text>
+              <Text style={[styles.dataCount, { color: colors.mutedForeground }]}>{option.items} items</Text>
             </Pressable>
           ))}
         </View>
 
         {/* Last Backup */}
-        <View style={[styles.lastBackup, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+        <View style={[styles.lastBackup, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
           <View>
-            <Text style={[styles.lastBackupLabel, { color: theme.colors.foreground }]}>Last Backup</Text>
-            <Text style={[styles.lastBackupTime, { color: theme.colors.mutedForeground }]}>December 28, 2025 at 3:45 PM</Text>
+            <Text style={[styles.lastBackupLabel, { color: colors.foreground }]}>Last Backup</Text>
+            <Text style={[styles.lastBackupTime, { color: colors.mutedForeground }]}>December 28, 2025 at 3:45 PM</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Check size={14} color={theme.colors.success} />
-            <Text style={[styles.backupStatus, { color: theme.colors.success }]}>Up to date</Text>
+            <Check size={14} color={colors.success} />
+            <Text style={[styles.backupStatus, { color: colors.success }]}>Up to date</Text>
           </View>
         </View>
 
         {/* Export Button */}
         <Pressable
-          style={[styles.exportButton, { backgroundColor: theme.colors.primary, shadowColor: theme.colors.primary }, isExporting && { opacity: 0.8 }]}
+          style={[styles.exportButton, { backgroundColor: colors.primary, shadowColor: colors.primary, borderRadius: radius.card }, isExporting && { opacity: 0.8 }]}
           onPress={handleExport}
           disabled={isExporting}
         >
           {isExporting ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Loader2 size={24} color="#fff" style={{ transform: [{ rotate: '45deg' }] }} />
-              <Text style={[styles.exportText, { color: theme.colors.primaryForeground }]}>Exporting...</Text>
+              <Text style={[styles.exportText, { color: colors.primaryForeground }]}>Exporting...</Text>
             </View>
           ) : (
             <>
               <Download size={20} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={[styles.exportText, { color: theme.colors.primaryForeground }]}>Export Data</Text>
+              <Text style={[styles.exportText, { color: colors.primaryForeground }]}>Export Data</Text>
             </>
           )}
         </Pressable>
@@ -176,7 +178,6 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: 8,
-    borderRadius: 8,
     marginRight: 12,
   },
   title: {
@@ -186,7 +187,6 @@ const styles = StyleSheet.create({
   heroCard: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 20,
     padding: 16,
     marginBottom: 24,
     shadowOffset: { width: 0, height: 4 },
@@ -197,7 +197,6 @@ const styles = StyleSheet.create({
   heroIcon: {
     width: 56,
     height: 56,
-    borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 16,
@@ -218,7 +217,6 @@ const styles = StyleSheet.create({
   optionCard: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 16,
     padding: 12,
     borderWidth: 2,
     borderColor: "transparent",
@@ -230,7 +228,6 @@ const styles = StyleSheet.create({
   optionIcon: {
     width: 48,
     height: 48,
-    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
@@ -250,7 +247,6 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   dataCard: {
-    borderRadius: 16,
     padding: 12,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -266,7 +262,6 @@ const styles = StyleSheet.create({
   checkbox: {
     width: 24,
     height: 24,
-    borderRadius: 8,
     borderWidth: 2,
     justifyContent: "center",
     alignItems: "center",
@@ -283,7 +278,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   lastBackup: {
-    borderRadius: 16,
     padding: 16,
     marginTop: 24,
     marginBottom: 24,
@@ -304,7 +298,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   exportButton: {
-    borderRadius: 16,
     height: 56,
     flexDirection: 'row',
     alignItems: "center",

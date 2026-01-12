@@ -13,7 +13,7 @@ import { AppLayout } from "../components/layout/AppLayout";
 import { useFamily, GroceryItem } from "../contexts/FamilyContext";
 import { useMealPlan } from "../contexts/MealPlanContext";
 import { theme } from "../theme";
-import { useThemeColors } from "../contexts/ThemeContext";
+import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { GlobalSearch } from "../components/search/GlobalSearch";
 import { useSidebar } from "../contexts/SidebarContext";
 import { AppIcon } from "../components/ui/AppIcon";
@@ -33,6 +33,7 @@ const categorizeItem = (name: string): string => {
 
 export const ListsScreen: React.FC = () => {
   const colors = useThemeColors();
+  const radius = useThemeRadius();
   const { groceryList, addGroceryItem, toggleGroceryItem, activeMember, members } = useFamily();
   const { generateGroceryList } = useMealPlan();
 
@@ -141,36 +142,36 @@ export const ListsScreen: React.FC = () => {
       >
         <ScrollView contentContainerStyle={styles.container}>
           <View style={styles.headerRow}>
-            <Pressable onPress={openSidebar} style={[styles.menuButton, { backgroundColor: colors.card }]}>
+            <Pressable onPress={openSidebar} style={[styles.menuButton, { backgroundColor: colors.card, borderRadius: radius.md }]}>
               <AppIcon name="menu" size={20} color={colors.foreground} />
             </Pressable>
             <View style={{ flex: 1, marginLeft: 16 }}>
               <Text style={[styles.title, { color: colors.foreground }]}>Grocery List</Text>
             </View>
             <View style={styles.headerActions}>
-              <Pressable style={[styles.roundButton, { backgroundColor: colors.card }]} onPress={() => setShowSearch(true)}>
+              <Pressable style={[styles.roundButton, { backgroundColor: colors.card, borderRadius: radius.md }]} onPress={() => setShowSearch(true)}>
                 <AppIcon source="🔍" size={18} color={colors.foreground} />
               </Pressable>
 
-              <Pressable style={[styles.roundButton, { backgroundColor: colors.card }]} onPress={handleOpenImport}>
+              <Pressable style={[styles.roundButton, { backgroundColor: colors.card, borderRadius: radius.md }]} onPress={handleOpenImport}>
                 <AppIcon source="📅" size={18} color={colors.foreground} />
               </Pressable>
             </View>
           </View>
 
-          <View style={[styles.progressCard, { backgroundColor: colors.card, shadowColor: colors.border }]}>
-            <View style={[styles.progressIcon, { backgroundColor: colors.success + '20' }]}>
+          <View style={[styles.progressCard, { backgroundColor: colors.card, shadowColor: colors.border, borderRadius: radius.card }]}>
+            <View style={[styles.progressIcon, { backgroundColor: colors.success + '20', borderRadius: radius.lg }]}>
               <AppIcon name="shoppingCart" size={28} color={colors.success} />
             </View>
             <View style={styles.progressContent}>
               <Text style={[styles.progressTitle, { color: colors.foreground }]}>{doneItems.length}/{filteredItems.length} items</Text>
-              <View style={[styles.progressBar, { backgroundColor: colors.muted }]}>
-                <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: colors.success }]} />
+              <View style={[styles.progressBar, { backgroundColor: colors.muted, borderRadius: radius.sm }]}>
+                <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: colors.success, borderRadius: radius.sm }]} />
               </View>
             </View>
           </View>
 
-          <View style={[styles.tabRow, { backgroundColor: colors.muted }]}>
+          <View style={[styles.tabRow, { backgroundColor: colors.muted, borderRadius: radius.lg }]}>
             {tabs.map((tab) => {
               const active = tab === activeTab;
               return (
@@ -178,6 +179,7 @@ export const ListsScreen: React.FC = () => {
                   key={tab}
                   style={[
                     styles.tabPill,
+                    { borderRadius: radius.md },
                     active && { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }
                   ]}
                   onPress={() => setActiveTab(tab)}
@@ -193,10 +195,10 @@ export const ListsScreen: React.FC = () => {
             })}
           </View>
 
-          <View style={[styles.addRow, { backgroundColor: colors.card }]}>
+          <View style={[styles.addRow, { backgroundColor: colors.card, borderRadius: radius.card }]}>
             <TextInput
               ref={inputRef}
-              style={[styles.addInput, { backgroundColor: colors.muted, color: colors.foreground }]}
+              style={[styles.addInput, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.md }]}
               placeholder="Add item..."
               placeholderTextColor={colors.mutedForeground}
               value={newItemName}
@@ -204,15 +206,15 @@ export const ListsScreen: React.FC = () => {
               onSubmitEditing={handleAddItem}
             />
             <View style={styles.qtyControl}>
-              <Pressable style={[styles.qtyButton, { backgroundColor: colors.muted }]} onPress={() => handleAddQuantity(-1)}>
+              <Pressable style={[styles.qtyButton, { backgroundColor: colors.muted, borderRadius: radius.sm }]} onPress={() => handleAddQuantity(-1)}>
                 <AppIcon name="minus" size={16} color={colors.foreground} />
               </Pressable>
               <Text style={[styles.qtyValue, { color: colors.foreground }]}>{quantity}</Text>
-              <Pressable style={[styles.qtyButton, { backgroundColor: colors.muted }]} onPress={() => handleAddQuantity(1)}>
+              <Pressable style={[styles.qtyButton, { backgroundColor: colors.muted, borderRadius: radius.sm }]} onPress={() => handleAddQuantity(1)}>
                 <AppIcon name="plus" size={16} color={colors.foreground} />
               </Pressable>
             </View>
-            <Pressable style={[styles.addButton, { backgroundColor: colors.primary }]} onPress={handleAddItem}>
+            <Pressable style={[styles.addButton, { backgroundColor: colors.primary, borderRadius: radius.lg }]} onPress={handleAddItem}>
               <Text style={[styles.addText, { color: colors.primaryForeground }]}>Add</Text>
             </Pressable>
           </View>
@@ -220,19 +222,19 @@ export const ListsScreen: React.FC = () => {
           {activeTab === "By Category" ? (
             <>
               {groupedByCategory(todoItems).map((group) => (
-                <View key={group.category} style={[styles.categoryCard, { backgroundColor: colors.card, shadowColor: colors.border }]}>
+                <View key={group.category} style={[styles.categoryCard, { backgroundColor: colors.card, shadowColor: colors.border, borderRadius: radius.card }]}>
                   <View style={styles.categoryHeader}>
                     <Text style={[styles.categoryTitle, { color: colors.foreground }]}>{group.category}</Text>
                     <Text style={[styles.categoryCount, { color: colors.mutedForeground }]}>{group.items.length}</Text>
                   </View>
                   {group.items.map((item) => (
-                    <View key={item.id} style={[styles.todoRow, { backgroundColor: colors.muted }]}>
+                    <View key={item.id} style={[styles.todoRow, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
                       <View style={styles.todoLeft}>
                         <Pressable
                           onPress={() => toggleGroceryItem(item.id)}
                           style={[
                             styles.checkbox,
-                            { borderColor: "#000" },
+                            { borderColor: "#000", borderRadius: radius.xs },
                             item.completed && { backgroundColor: colors.success, borderColor: colors.success }
                           ]}
                         >
@@ -241,7 +243,7 @@ export const ListsScreen: React.FC = () => {
                         <Text style={[styles.todoText, { color: colors.foreground }, item.completed && styles.completedText]}>{item.name}</Text>
                       </View>
                       <Text style={[styles.quantityText, { color: colors.mutedForeground }]}>{item.quantity} {item.unit}</Text>
-                      <View style={[styles.ownerBadge, { backgroundColor: colors.background }]}>
+                      <View style={[styles.ownerBadge, { backgroundColor: colors.background, borderRadius: radius.sm }]}>
                         <Text style={{ fontSize: 14 }}>{getMemberIcon(item.addedBy)}</Text>
                       </View>
                     </View>
@@ -251,19 +253,19 @@ export const ListsScreen: React.FC = () => {
             </>
           ) : (
             <>
-              <View style={[styles.listWrapper, { backgroundColor: colors.card, shadowColor: colors.border }]}>
+              <View style={[styles.listWrapper, { backgroundColor: colors.card, shadowColor: colors.border, borderRadius: radius.card }]}>
                 <Text style={[styles.sectionTitle, { color: colors.foreground }]}>To Buy ({todoItems.length})</Text>
                 {todoItems.length === 0 && (
                   <Text style={[styles.todoText, { textAlign: 'center', opacity: 0.5, padding: 20, color: colors.foreground }]}>All items purchased!</Text>
                 )}
                 {todoItems.map((item) => (
-                  <View key={item.id} style={[styles.todoRow, { backgroundColor: colors.muted }]}>
+                  <View key={item.id} style={[styles.todoRow, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
                     <View style={styles.todoLeft}>
                       <Pressable
                         onPress={() => toggleGroceryItem(item.id)}
                         style={[
                           styles.checkbox,
-                          { borderColor: "#000" },
+                          { borderColor: "#000", borderRadius: radius.xs },
                           item.completed && { backgroundColor: colors.success, borderColor: colors.success }
                         ]}
                       >
@@ -272,7 +274,7 @@ export const ListsScreen: React.FC = () => {
                       <Text style={[styles.todoText, { color: colors.foreground }]}>{item.name}</Text>
                     </View>
                     <Text style={[styles.quantityText, { color: colors.mutedForeground }]}>{item.quantity} {item.unit}</Text>
-                    <View style={[styles.ownerBadge, { backgroundColor: colors.background }]}>
+                    <View style={[styles.ownerBadge, { backgroundColor: colors.background, borderRadius: radius.sm }]}>
                       <Text style={{ fontSize: 14 }}>{getMemberIcon(item.addedBy)}</Text>
                     </View>
                   </View>
@@ -280,14 +282,14 @@ export const ListsScreen: React.FC = () => {
               </View>
 
               {doneItems.length > 0 && (
-                <View style={[styles.listWrapper, { backgroundColor: colors.card, shadowColor: colors.border }]}>
+                <View style={[styles.listWrapper, { backgroundColor: colors.card, shadowColor: colors.border, borderRadius: radius.card }]}>
                   <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Completed ({doneItems.length})</Text>
                   {doneItems.map((item) => (
-                    <View key={item.id} style={[styles.todoRow, { backgroundColor: colors.success + '10' }]}>
+                    <View key={item.id} style={[styles.todoRow, { backgroundColor: colors.success + '10', borderRadius: radius.md }]}>
                       <View style={styles.todoLeft}>
                         <Pressable
                           onPress={() => toggleGroceryItem(item.id)}
-                          style={[styles.checkbox, { backgroundColor: colors.success, borderColor: colors.success }]}
+                          style={[styles.checkbox, { backgroundColor: colors.success, borderColor: colors.success, borderRadius: radius.xs }]}
                         >
                           <AppIcon name="check" size={14} color="#fff" />
                         </Pressable>
@@ -296,7 +298,7 @@ export const ListsScreen: React.FC = () => {
                         </Text>
                       </View>
                       <Text style={[styles.quantityText, { color: colors.mutedForeground }]}>{item.quantity} {item.unit}</Text>
-                      <View style={[styles.ownerBadge, { backgroundColor: colors.background }]}>
+                      <View style={[styles.ownerBadge, { backgroundColor: colors.background, borderRadius: radius.sm }]}>
                         <Text style={{ fontSize: 14 }}>{getMemberIcon(item.addedBy)}</Text>
                       </View>
                     </View>
@@ -313,7 +315,7 @@ export const ListsScreen: React.FC = () => {
                 const count = groceryList.filter(i => i.addedBy === member.id).length;
                 if (count === 0) return null;
                 return (
-                  <View key={member.id} style={[styles.memberBadge, { backgroundColor: colors.card, shadowColor: colors.border }]}>
+                  <View key={member.id} style={[styles.memberBadge, { backgroundColor: colors.card, shadowColor: colors.border, borderRadius: radius.md }]}>
                     <Text>{member.symbol}</Text>
                     <Text style={[styles.memberText, { color: colors.foreground }]}>{member.name}</Text>
                     <Text style={[styles.memberCount, { color: colors.mutedForeground }]}>({count})</Text>
@@ -328,7 +330,7 @@ export const ListsScreen: React.FC = () => {
       {/* Import Modal */}
       <Modal visible={showImportModal} transparent animationType="slide" onRequestClose={() => setShowImportModal(false)}>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContainer, { backgroundColor: colors.card, shadowColor: colors.foreground }]}>
+          <View style={[styles.modalContainer, { backgroundColor: colors.card, shadowColor: colors.foreground, borderRadius: radius.card }]}>
             <View style={styles.modalHeader}>
               <AppIcon name="calendar" size={24} color={colors.primary} />
               <Text style={[styles.modalTitle, { color: colors.foreground }]}>Import from Meal Plan</Text>
@@ -346,20 +348,20 @@ export const ListsScreen: React.FC = () => {
               ) : (
                 <View style={{ gap: 8 }}>
                   {mealPlanItems.map((item, index) => (
-                    <View key={`${item.name}-${index}`} style={[styles.importItemRow, { backgroundColor: colors.muted }]}>
+                    <View key={`${item.name}-${index}`} style={[styles.importItemRow, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.importItemName, { color: colors.foreground }]}>{item.name}</Text>
                         <Text style={[styles.importItemMeta, { color: colors.mutedForeground }]}>{item.quantity} {item.unit} • from {item.fromRecipes.length} recipe(s)</Text>
                       </View>
                       <Pressable
-                        style={[styles.importItemAdd, { backgroundColor: colors.card, borderColor: colors.border }]}
+                        style={[styles.importItemAdd, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.sm }]}
                         onPress={() => handleImportItem(item)}
                       >
                         <AppIcon name="plus" size={16} color={colors.foreground} />
                       </Pressable>
                     </View>
                   ))}
-                  <Pressable style={[styles.importAllButton, { backgroundColor: colors.primary }]} onPress={handleImportAll}>
+                  <Pressable style={[styles.importAllButton, { backgroundColor: colors.primary, borderRadius: radius.lg }]} onPress={handleImportAll}>
                     <AppIcon name="download" size={16} color="#fff" style={{ marginRight: 8 }} />
                     <Text style={styles.importAllText}>Import All ({mealPlanItems.length} items)</Text>
                   </Pressable>
@@ -390,7 +392,6 @@ const styles = StyleSheet.create({
   menuButton: {
     width: 40,
     height: 40,
-    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
     shadowOffset: { width: 0, height: 4 },
@@ -409,7 +410,6 @@ const styles = StyleSheet.create({
   roundButton: {
     width: 40,
     height: 40,
-    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
     shadowOffset: { width: 0, height: 2 },
@@ -421,7 +421,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     padding: 16,
-    borderRadius: 24,
     marginBottom: 16,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.1,
@@ -431,7 +430,6 @@ const styles = StyleSheet.create({
   progressIcon: {
     width: 56,
     height: 56,
-    borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 16,
@@ -446,16 +444,13 @@ const styles = StyleSheet.create({
   },
   progressBar: {
     height: 10,
-    borderRadius: 10,
     overflow: "hidden",
   },
   progressFill: {
     height: "100%",
-    borderRadius: 10,
   },
   tabRow: {
     flexDirection: "row",
-    borderRadius: 18,
     padding: 4,
     marginBottom: 24,
   },
@@ -463,7 +458,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     paddingVertical: 8,
-    borderRadius: 14,
   },
   tabText: {
     fontWeight: "600",
@@ -471,14 +465,12 @@ const styles = StyleSheet.create({
   addRow: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 20,
     padding: 8,
     marginBottom: 24,
   },
   addInput: {
     flex: 1,
     height: 46,
-    borderRadius: 14,
     paddingHorizontal: 16,
     fontSize: 16,
   },
@@ -490,7 +482,6 @@ const styles = StyleSheet.create({
   qtyButton: {
     width: 40,
     height: 40,
-    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -503,13 +494,11 @@ const styles = StyleSheet.create({
   addButton: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 16,
   },
   addText: {
     fontWeight: "700",
   },
   categoryCard: {
-    borderRadius: 24,
     padding: 16,
     marginBottom: 16,
     shadowOffset: { width: 0, height: 4 },
@@ -535,7 +524,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     padding: 8,
-    borderRadius: 14,
     marginBottom: 8,
   },
   todoLeft: {
@@ -546,7 +534,6 @@ const styles = StyleSheet.create({
   checkbox: {
     width: 24,
     height: 24,
-    borderRadius: 8,
     borderWidth: 2.5,
     marginRight: 8,
     alignItems: "center",
@@ -566,12 +553,10 @@ const styles = StyleSheet.create({
   ownerBadge: {
     width: 32,
     height: 32,
-    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
   },
   listWrapper: {
-    borderRadius: 24,
     padding: 16,
     marginBottom: 16,
     shadowOffset: { width: 0, height: 4 },
@@ -600,7 +585,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 4,
-    borderRadius: 12,
     gap: 4,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
@@ -620,7 +604,6 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   modalContainer: {
-    borderRadius: 24,
     maxHeight: "80%",
     padding: 20,
     shadowOffset: { width: 0, height: 10 },
@@ -649,7 +632,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
-    borderRadius: 16,
     marginBottom: 8,
   },
   importItemName: {
@@ -662,7 +644,6 @@ const styles = StyleSheet.create({
   importItemAdd: {
     width: 32,
     height: 32,
-    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -672,7 +653,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 16,
-    borderRadius: 16,
     marginTop: 16,
   },
   importAllText: {

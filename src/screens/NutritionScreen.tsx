@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { AppLayout } from '../components/layout/AppLayout';
 import { theme } from '../theme';
+import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import { Camera, AlertTriangle, TrendingUp, Check, ChevronRight, Heart, Droplet, Flame, Apple } from 'lucide-react-native';
 
 const mealTimeline = [
@@ -58,27 +59,30 @@ const healthTips = [
 ];
 
 export const NutritionScreen: React.FC = () => {
+  const colors = useThemeColors();
+  const radius = useThemeRadius();
+
   // Helper to get color values
   const getColor = (colorName: string) => {
-    const colors: any = theme.colors;
-    return colors[colorName] || theme.colors.primary;
+    const colorMap: any = colors;
+    return colorMap[colorName] || colors.primary;
   };
 
   return (
     <AppLayout showNav={false}>
-      <ScrollView contentContainerStyle={[styles.container, { backgroundColor: theme.colors.background }]} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={[styles.title, { color: theme.colors.foreground }]}>Nutrition</Text>
-          <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-            <Camera size={24} color={theme.colors.primary} />
+          <Text style={[styles.title, { color: colors.foreground }]}>Nutrition</Text>
+          <TouchableOpacity style={[styles.iconButton, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.lg }]}>
+            <Camera size={24} color={colors.primary} />
           </TouchableOpacity>
         </View>
 
         {/* Scan Card */}
-        <TouchableOpacity style={[styles.card, styles.scanCard, { backgroundColor: theme.colors.primary }]}>
+        <TouchableOpacity style={[styles.card, styles.scanCard, { backgroundColor: colors.primary, borderRadius: radius.card }]}>
           <View style={styles.scanContent}>
-            <View style={[styles.scanIconContainer, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+            <View style={[styles.scanIconContainer, { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: radius.lg }]}>
               <Camera size={32} color="#fff" />
             </View>
             <View style={styles.scanTextContainer}>
@@ -90,13 +94,13 @@ export const NutritionScreen: React.FC = () => {
         </TouchableOpacity>
 
         {/* Daily Stats */}
-        <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
           <View style={styles.cardHeader}>
             <View style={styles.cardTitleContainer}>
-              <Heart size={20} color={theme.colors.danger} fill={theme.colors.danger} />
-              <Text style={[styles.cardTitle, { color: theme.colors.foreground }]}>Today's Balance</Text>
+              <Heart size={20} color={colors.danger} fill={colors.danger} />
+              <Text style={[styles.cardTitle, { color: colors.foreground }]}>Today's Balance</Text>
             </View>
-            <Text style={[styles.dateText, { color: theme.colors.mutedForeground }]}>Jan 15, 2026</Text>
+            <Text style={[styles.dateText, { color: colors.mutedForeground }]}>Jan 15, 2026</Text>
           </View>
 
           <View style={styles.statsGrid}>
@@ -104,19 +108,20 @@ export const NutritionScreen: React.FC = () => {
               <View key={stat.label} style={styles.statItem}>
                 <View style={styles.statHeader}>
                   <stat.icon size={16} color={getColor(stat.color)} />
-                  <Text style={[styles.statLabel, { color: theme.colors.mutedForeground }]}>{stat.label}</Text>
+                  <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>{stat.label}</Text>
                 </View>
                 <View style={styles.statValueContainer}>
-                  <Text style={[styles.statValue, { color: theme.colors.foreground }]}>{stat.value}</Text>
-                  <Text style={[styles.statTarget, { color: theme.colors.mutedForeground }]}>/ {stat.target}</Text>
+                  <Text style={[styles.statValue, { color: colors.foreground }]}>{stat.value}</Text>
+                  <Text style={[styles.statTarget, { color: colors.mutedForeground }]}>/ {stat.target}</Text>
                 </View>
-                <View style={[styles.progressBarBg, { backgroundColor: theme.colors.muted }]}>
+                <View style={[styles.progressBarBg, { backgroundColor: colors.muted, borderRadius: radius.xs }]}>
                   <View
                     style={[
                       styles.progressBarFill,
                       {
                         width: `${stat.progress}%`,
-                        backgroundColor: getColor(stat.color)
+                        backgroundColor: getColor(stat.color),
+                        borderRadius: radius.xs
                       }
                     ]}
                   />
@@ -135,23 +140,24 @@ export const NutritionScreen: React.FC = () => {
                 styles.warningCard,
                 {
                   backgroundColor: warning.type === 'warning' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(34, 197, 94, 0.1)',
+                  borderRadius: radius.md
                 }
               ]}
             >
               <Text style={styles.warningIcon}>{warning.icon}</Text>
-              <Text style={[styles.warningText, { color: theme.colors.foreground }]}>{warning.text}</Text>
+              <Text style={[styles.warningText, { color: colors.foreground }]}>{warning.text}</Text>
               {warning.type === 'warning' ? (
-                <AlertTriangle size={20} color={theme.colors.warning} />
+                <AlertTriangle size={20} color={colors.warning} />
               ) : (
-                <Check size={20} color={theme.colors.success} />
+                <Check size={20} color={colors.success} />
               )}
             </View>
           ))}
         </View>
 
         {/* Meal Timeline */}
-        <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-          <Text style={[styles.cardTitle, { marginBottom: 16, color: theme.colors.foreground }]}>Meal Timeline</Text>
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+          <Text style={[styles.cardTitle, { marginBottom: 16, color: colors.foreground }]}>Meal Timeline</Text>
 
           <View style={styles.timelineContainer}>
             {mealTimeline.map((meal, i) => (
@@ -163,7 +169,8 @@ export const NutritionScreen: React.FC = () => {
                     {
                       backgroundColor: meal.status === 'done'
                         ? meal.quality === 'excellent' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(59, 130, 246, 0.1)'
-                        : theme.colors.muted
+                        : colors.muted,
+                      borderRadius: radius.full
                     }
                   ]}>
                     <Text style={{ fontSize: 20 }}>{meal.emoji}</Text>
@@ -171,7 +178,7 @@ export const NutritionScreen: React.FC = () => {
                   {i < mealTimeline.length - 1 && (
                     <View style={[
                       styles.timelineLine,
-                      { backgroundColor: meal.status === 'done' ? theme.colors.border : theme.colors.muted }
+                      { backgroundColor: meal.status === 'done' ? colors.border : colors.muted }
                     ]} />
                   )}
                 </View>
@@ -182,18 +189,18 @@ export const NutritionScreen: React.FC = () => {
                   meal.status === 'pending' && { opacity: 0.6 }
                 ]}>
                   <View style={styles.timelineHeader}>
-                    <Text style={[styles.timelineTime, { color: theme.colors.foreground }]}>{meal.time}</Text>
+                    <Text style={[styles.timelineTime, { color: colors.foreground }]}>{meal.time}</Text>
                     {meal.status === 'done' && (
-                      <Text style={[styles.timelineCalories, { color: theme.colors.primary }]}>{meal.calories} cal</Text>
+                      <Text style={[styles.timelineCalories, { color: colors.primary }]}>{meal.calories} cal</Text>
                     )}
                   </View>
 
                   {meal.items.length > 0 ? (
-                    <Text style={[styles.timelineItems, { color: theme.colors.mutedForeground }]}>
+                    <Text style={[styles.timelineItems, { color: colors.mutedForeground }]}>
                       {meal.items.join(' • ')}
                     </Text>
                   ) : meal.suggestion ? (
-                    <Text style={[styles.timelineSuggestion, { color: theme.colors.primary }]}>
+                    <Text style={[styles.timelineSuggestion, { color: colors.primary }]}>
                       💡 {meal.suggestion}
                     </Text>
                   ) : null}
@@ -204,13 +211,13 @@ export const NutritionScreen: React.FC = () => {
         </View>
 
         {/* Health Tips */}
-        <View style={[styles.card, styles.tipsCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-          <Text style={[styles.cardTitle, { color: theme.colors.foreground, marginBottom: 12 }]}>💡 Today's Tips</Text>
+        <View style={[styles.card, styles.tipsCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+          <Text style={[styles.cardTitle, { color: colors.foreground, marginBottom: 12 }]}>💡 Today's Tips</Text>
           <View style={styles.tipsList}>
             {healthTips.map((tip, i) => (
               <View key={i} style={styles.tipItem}>
-                <Text style={[styles.tipBullet, { color: theme.colors.primary }]}>•</Text>
-                <Text style={[styles.tipText, { color: theme.colors.mutedForeground }]}>{tip}</Text>
+                <Text style={[styles.tipBullet, { color: colors.primary }]}>•</Text>
+                <Text style={[styles.tipText, { color: colors.mutedForeground }]}>{tip}</Text>
               </View>
             ))}
           </View>
@@ -218,11 +225,11 @@ export const NutritionScreen: React.FC = () => {
 
         {/* Diet Profiles */}
         <View style={styles.profileContainer}>
-          <Text style={[styles.cardTitle, { marginBottom: 12, color: theme.colors.foreground }]}>Personalized for</Text>
+          <Text style={[styles.cardTitle, { marginBottom: 12, color: colors.foreground }]}>Personalized for</Text>
           <View style={styles.tagsContainer}>
             {['👨 Shivam', '🏋️ Gym Diet', '🩺 Low Sugar'].map((profile, i) => (
-              <View key={i} style={[styles.profileTag, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-                <Text style={[styles.profileTagText, { color: theme.colors.foreground }]}>{profile}</Text>
+              <View key={i} style={[styles.profileTag, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.full }]}>
+                <Text style={[styles.profileTagText, { color: colors.foreground }]}>{profile}</Text>
               </View>
             ))}
           </View>
@@ -250,11 +257,9 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     padding: 8,
-    borderRadius: 20,
     borderWidth: 1,
   },
   card: {
-    borderRadius: 16,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
@@ -274,7 +279,6 @@ const styles = StyleSheet.create({
   scanIconContainer: {
     width: 64,
     height: 64,
-    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
@@ -343,12 +347,10 @@ const styles = StyleSheet.create({
   },
   progressBarBg: {
     height: 8,
-    borderRadius: 4,
     overflow: 'hidden',
   },
   progressBarFill: {
     height: '100%',
-    borderRadius: 4,
   },
   warningsContainer: {
     marginBottom: 16,
@@ -357,7 +359,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
-    borderRadius: 12,
     marginBottom: 8,
   },
   warningIcon: {
@@ -385,7 +386,6 @@ const styles = StyleSheet.create({
   timelineDot: {
     width: 40,
     height: 40,
-    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1,
@@ -453,7 +453,6 @@ const styles = StyleSheet.create({
   profileTag: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 20,
     borderWidth: 1,
   },
   profileTagText: {

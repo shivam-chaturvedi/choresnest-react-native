@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { AppLayout } from "../components/layout/AppLayout";
-import { theme } from "../theme";
+import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import { useSidebar } from "../contexts/SidebarContext";
 import {
     ChevronLeft,
@@ -32,6 +32,8 @@ const securitySettings = [
 export const PrivacyScreen: React.FC = () => {
     const navigation = useNavigation();
     const { openSidebar } = useSidebar();
+    const colors = useThemeColors();
+    const radius = useThemeRadius();
 
     // State management for toggles
     const [settingsState, setSettingsState] = useState(
@@ -44,26 +46,25 @@ export const PrivacyScreen: React.FC = () => {
 
     return (
         <AppLayout>
-            <ScrollView contentContainerStyle={[styles.container, { backgroundColor: theme.colors.background }]} showsVerticalScrollIndicator={false}>
+            <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
                 {/* Header */}
                 <View style={styles.header}>
-                    <Pressable onPress={() => navigation.goBack()} style={styles.iconButton}>
-                        <ChevronLeft size={24} color={theme.colors.foreground} />
+                    <Pressable onPress={() => navigation.goBack()} style={[styles.iconButton, { borderRadius: radius.sm }]}>
+                        <ChevronLeft size={24} color={colors.foreground} />
                     </Pressable>
-                    <Text style={[styles.headerTitle, { color: theme.colors.foreground }]}>Privacy & Security</Text>
+                    <Text style={[styles.headerTitle, { color: colors.foreground }]}>Privacy & Security</Text>
                 </View>
 
                 {/* Security Status Card */}
-                {/* Matching ReactJS: gradient-primary text-primary-foreground */}
-                {/* In RN, we simulate gradient with primary color or LinearGradient if available. Using primary solid for now as per theme. */}
-                <View style={[styles.statusCard, { backgroundColor: theme.colors.primary }]}>
+                {/* Simulated gradient or primary color */}
+                <View style={[styles.statusCard, { backgroundColor: colors.primary, borderRadius: radius.card }]}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-                        <View style={styles.statusIconBg}>
-                            <Shield size={28} color={theme.colors.primaryForeground} />
+                        <View style={[styles.statusIconBg, { borderRadius: radius.card }]}>
+                            <Shield size={28} color={colors.primaryForeground} />
                         </View>
                         <View style={{ flex: 1 }}>
-                            <Text style={[styles.statusTitle, { color: theme.colors.primaryForeground }]}>Security Status</Text>
-                            <Text style={[styles.statusSubtitle, { color: theme.colors.primaryForeground }]}>Your data is protected</Text>
+                            <Text style={[styles.statusTitle, { color: colors.primaryForeground }]}>Security Status</Text>
+                            <Text style={[styles.statusSubtitle, { color: colors.primaryForeground }]}>Your data is protected</Text>
                         </View>
                         <Text style={{ fontSize: 24 }}>🔒</Text>
                     </View>
@@ -71,25 +72,25 @@ export const PrivacyScreen: React.FC = () => {
 
                 {/* Security Settings */}
                 <View>
-                    <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>Security</Text>
-                    <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                    <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Security</Text>
+                    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
                         {securitySettings.map((item, index) => (
                             <View key={item.id}>
                                 <View style={styles.settingRow}>
-                                    <View style={[styles.iconBox, { backgroundColor: theme.colors.muted }]}>
-                                        <item.icon size={20} color={theme.colors.mutedForeground} />
+                                    <View style={[styles.iconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
+                                        <item.icon size={20} color={colors.mutedForeground} />
                                     </View>
                                     <View style={{ flex: 1 }}>
-                                        <Text style={[styles.settingLabel, { color: theme.colors.foreground }]}>{item.label}</Text>
-                                        <Text style={[styles.settingDesc, { color: theme.colors.mutedForeground }]}>{item.description}</Text>
+                                        <Text style={[styles.settingLabel, { color: colors.foreground }]}>{item.label}</Text>
+                                        <Text style={[styles.settingDesc, { color: colors.mutedForeground }]}>{item.description}</Text>
                                     </View>
                                     <Switch
                                         value={settingsState[item.id]}
                                         onValueChange={() => toggleSetting(item.id)}
-                                        trackColor={{ false: theme.colors.muted, true: theme.colors.primary }}
+                                        trackColor={{ false: colors.muted, true: colors.primary }}
                                     />
                                 </View>
-                                {index !== securitySettings.length - 1 && <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />}
+                                {index !== securitySettings.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
                             </View>
                         ))}
                     </View>
@@ -97,55 +98,44 @@ export const PrivacyScreen: React.FC = () => {
 
                 {/* Access */}
                 <View>
-                    <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>Access</Text>
-                    <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                    <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Access</Text>
+                    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
                         <Pressable style={styles.accessRow}>
-                            <View style={[styles.iconBox, { backgroundColor: theme.colors.muted }]}>
-                                <Key size={20} color={theme.colors.mutedForeground} />
+                            <View style={[styles.iconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
+                                <Key size={20} color={colors.mutedForeground} />
                             </View>
                             <View style={{ flex: 1 }}>
-                                <Text style={[styles.settingLabel, { color: theme.colors.foreground }]}>Change Password</Text>
-                                <Text style={[styles.settingDesc, { color: theme.colors.mutedForeground }]}>Last changed 30 days ago</Text>
+                                <Text style={[styles.settingLabel, { color: colors.foreground }]}>Change Password</Text>
+                                <Text style={[styles.settingDesc, { color: colors.mutedForeground }]}>Last changed 30 days ago</Text>
                             </View>
-                            <ChevronRight size={20} color={theme.colors.mutedForeground} />
+                            <ChevronRight size={20} color={colors.mutedForeground} />
                         </Pressable>
-                        <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+                        <View style={[styles.divider, { backgroundColor: colors.border }]} />
                         <Pressable style={styles.accessRow}>
-                            <View style={[styles.iconBox, { backgroundColor: theme.colors.muted }]}>
-                                <Lock size={20} color={theme.colors.mutedForeground} />
+                            <View style={[styles.iconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
+                                <Lock size={20} color={colors.mutedForeground} />
                             </View>
                             <View style={{ flex: 1 }}>
-                                <Text style={[styles.settingLabel, { color: theme.colors.foreground }]}>Set PIN Code</Text>
-                                <Text style={[styles.settingDesc, { color: theme.colors.mutedForeground }]}>4-digit PIN for quick access</Text>
+                                <Text style={[styles.settingLabel, { color: colors.foreground }]}>Set PIN Code</Text>
+                                <Text style={[styles.settingDesc, { color: colors.mutedForeground }]}>4-digit PIN for quick access</Text>
                             </View>
-                            <ChevronRight size={20} color={theme.colors.mutedForeground} />
+                            <ChevronRight size={20} color={colors.mutedForeground} />
                         </Pressable>
                     </View>
                 </View>
 
                 {/* Data Privacy */}
                 <View>
-                    <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>Data Privacy</Text>
-                    <View style={[styles.softCard, { backgroundColor: theme.colors.muted }]}>
-                        {/* ReactJS uses card-soft which is usually a light gray/muted background. 
-                            The user complained about "weird grey" tinting when we used opacity. 
-                            Here we use the muted color directly which is standard or card color.
-                            Let's use card color but maybe with no border to simulate 'soft' or just standard card.
-                            ReactJS code: "card-soft space-y-4"
-                        */}
-                        <Text style={[styles.privacyText, { color: theme.colors.mutedForeground }]}>
+                    <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Data Privacy</Text>
+                    <View style={[styles.softCard, { backgroundColor: colors.muted, borderRadius: radius.card }]}>
+                        <Text style={[styles.privacyText, { color: colors.mutedForeground }]}>
                             Your data is encrypted and stored securely. We never share your personal information with third parties.
                         </Text>
                         <View style={styles.tagsRow}>
-                            {/* ReactJS: bg-success-light text-success */}
-                            {/* We don't have success-light in theme, usually it's success with opacity or a specific light shade.
-                                We will use a calculated light background if possible or just falls back to simple view.
-                            */}
-                            <View style={[styles.tag, { backgroundColor: '#dcfce7' }]}>
+                            <View style={[styles.tag, { backgroundColor: '#dcfce7', borderRadius: radius.full }]}>
                                 <Text style={[styles.tagText, { color: '#166534' }]}>🔐 End-to-end encrypted</Text>
                             </View>
-                            {/* ReactJS: bg-info-light text-info */}
-                            <View style={[styles.tag, { backgroundColor: '#e0f2fe' }]}>
+                            <View style={[styles.tag, { backgroundColor: '#e0f2fe', borderRadius: radius.full }]}>
                                 <Text style={[styles.tagText, { color: '#075985' }]}>☁️ Secure cloud backup</Text>
                             </View>
                         </View>
@@ -153,9 +143,9 @@ export const PrivacyScreen: React.FC = () => {
                 </View>
 
                 {/* Danger Zone */}
-                <View style={[styles.dangerCard, { backgroundColor: theme.colors.card, borderColor: '#fee2e2' }]}>
+                <View style={[styles.dangerCard, { backgroundColor: colors.card, borderColor: '#fee2e2', borderRadius: radius.card }]}>
                     <Text style={[styles.dangerTitle, { color: '#ef4444' }]}>Danger Zone</Text>
-                    <Pressable style={[styles.deleteButton, { borderColor: '#fca5a5', backgroundColor: '#fff' }]}>
+                    <Pressable style={[styles.deleteButton, { borderColor: '#fca5a5', backgroundColor: '#fff', borderRadius: radius.sm }]}>
                         <Trash2 size={16} color="#ef4444" />
                         <Text style={[styles.deleteText, { color: "#ef4444" }]}>Delete Account</Text>
                     </Pressable>
@@ -180,14 +170,12 @@ const styles = StyleSheet.create({
     },
     iconButton: {
         padding: 8,
-        borderRadius: 8,
     },
     headerTitle: {
         fontSize: 20,
         fontWeight: '700',
     },
     statusCard: {
-        borderRadius: 16,
         padding: 16,
         marginBottom: 24,
         shadowColor: "#000",
@@ -200,7 +188,6 @@ const styles = StyleSheet.create({
         width: 56,
         height: 56,
         backgroundColor: 'rgba(255,255,255,0.2)',
-        borderRadius: 16,
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -220,8 +207,7 @@ const styles = StyleSheet.create({
         marginTop: 4,
     },
     card: {
-        borderRadius: 16,
-        padding: 12, // Reduced padding for list items
+        padding: 12,
         marginBottom: 20,
         borderWidth: 1,
         shadowColor: '#000',
@@ -245,7 +231,6 @@ const styles = StyleSheet.create({
     iconBox: {
         width: 40,
         height: 40,
-        borderRadius: 12,
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -262,7 +247,6 @@ const styles = StyleSheet.create({
         marginLeft: 64, // Align with text
     },
     softCard: {
-        borderRadius: 16,
         padding: 16,
         marginBottom: 20,
     },
@@ -279,18 +263,15 @@ const styles = StyleSheet.create({
     tag: {
         paddingHorizontal: 12,
         paddingVertical: 6,
-        borderRadius: 100,
     },
     tagText: {
         fontSize: 12,
         fontWeight: '600',
     },
     dangerCard: {
-        borderRadius: 16,
         padding: 16,
         marginBottom: 20,
         borderWidth: 1,
-        // ReactJS: border-danger/20
     },
     dangerTitle: {
         fontSize: 14,
@@ -302,7 +283,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         padding: 12,
-        borderRadius: 8,
         borderWidth: 1,
         gap: 8,
     },

@@ -9,26 +9,63 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import { AppLayout } from "../components/layout/AppLayout";
 import { theme } from "../theme";
-import { useTheme } from "../contexts/ThemeContext";
+import { useTheme, useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { Check } from "lucide-react-native";
 import { AppIcon } from "../components/ui/AppIcon";
 
 export const ThemeScreen: React.FC = () => {
   const navigation = useNavigation();
-  const { currentPalette, setPalette } = useTheme();
+  const { currentPalette, setPalette, shapeMode, setShapeMode } = useTheme();
+  const colors = useThemeColors();
+  const radius = useThemeRadius();
+
+  const shapes: { mode: 'rounded' | 'squared', label: string }[] = [
+    { mode: 'rounded', label: 'Rounded' },
+    { mode: 'squared', label: 'Squared' },
+  ];
 
   return (
     <AppLayout showNav={false}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.headerRow}>
-          <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-            <AppIcon name="chevronLeft" size={24} color="#000" />
+          <Pressable onPress={() => navigation.goBack()} style={[styles.backButton, { borderRadius: radius.sm }]}>
+            <AppIcon name="chevronLeft" size={24} color={colors.foreground} />
           </Pressable>
-          <Text style={styles.title}>Theme Gallery</Text>
+          <Text style={[styles.title, { color: colors.foreground }]}>Theme Gallery</Text>
         </View>
 
-        <Text style={styles.sectionTitle}>Color Palette</Text>
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>UI Shape</Text>
+        <View style={styles.shapeList}>
+          {shapes.map((shape) => (
+            <Pressable
+              key={shape.mode}
+              style={[
+                styles.shapeCard,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: shapeMode === shape.mode ? colors.success : colors.border,
+                  borderRadius: radius.card
+                },
+                shapeMode === shape.mode && { borderWidth: 2 }
+              ]}
+              onPress={() => setShapeMode(shape.mode)}
+            >
+              {/* Visual Preview of Shape */}
+              <View style={[styles.shapePreview, {
+                backgroundColor: colors.primary + '20',
+                borderRadius: shape.mode === 'rounded' ? 12 : 2
+              }]}
+              />
+              <View style={styles.shapeInfo}>
+                <Text style={[styles.shapeLabel, { color: colors.foreground }]}>{shape.label}</Text>
+                {shapeMode === shape.mode && <Check size={18} color={colors.success} />}
+              </View>
+            </Pressable>
+          ))}
+        </View>
+
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Color Palette</Text>
 
         <View style={styles.themeList}>
           {(Object.keys(theme.palettes) as Array<keyof typeof theme.palettes>).map((key) => {
@@ -40,7 +77,13 @@ export const ThemeScreen: React.FC = () => {
                 key={key}
                 style={[
                   styles.themeCard,
-                  isActive && styles.activeCard
+                  {
+                    backgroundColor: colors.card,
+                    borderRadius: radius.card,
+                    borderColor: isActive ? colors.success : 'transparent',
+                    borderWidth: 2,
+                    shadowColor: colors.shadow
+                  }
                 ]}
                 onPress={() => {
                   setPalette(key);
@@ -62,8 +105,8 @@ export const ThemeScreen: React.FC = () => {
                 {/* Info */}
                 <View style={styles.cardContent}>
                   <View style={styles.cardHeader}>
-                    <Text style={styles.themeName}>{palette.name}</Text>
-                    {isActive && <Check size={20} color={theme.colors.success} />}
+                    <Text style={[styles.themeName, { color: colors.foreground }]}>{palette.name}</Text>
+                    {isActive && <Check size={20} color={colors.success} />}
                   </View>
 
                   {/* Hex Codes */}
@@ -88,7 +131,6 @@ const styles = StyleSheet.create({
   container: {
     padding: 16,
     paddingBottom: 100,
-    backgroundColor: "#FFFFFF",
     minHeight: "100%",
   },
   headerRow: {
@@ -99,39 +141,29 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: 8,
-    borderRadius: 0,
     marginRight: 12,
   },
   title: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#000000",
   },
   sectionTitle: {
     fontSize: 14,
     fontWeight: "600",
     marginBottom: 12,
-    marginTop: 8,
-    color: "#000000",
+    marginTop: 16,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   themeList: {
     gap: 20,
   },
   themeCard: {
-    borderRadius: 16,
     overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: 'transparent',
-    backgroundColor: "#FFFFFF",
-    shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 4,
-  },
-  activeCard: {
-    borderColor: "#22C55E", // Success green
-    borderWidth: 2,
   },
   palettePreview: {
     flexDirection: 'row',
@@ -143,7 +175,6 @@ const styles = StyleSheet.create({
   },
   cardContent: {
     padding: 16,
-    backgroundColor: "#FFFFFF",
   },
   cardHeader: {
     flexDirection: 'row',
@@ -154,7 +185,6 @@ const styles = StyleSheet.create({
   themeName: {
     fontSize: 18,
     fontWeight: '700',
-    color: "#000000",
   },
   hexRow: {
     flexDirection: 'row',
@@ -164,6 +194,32 @@ const styles = StyleSheet.create({
   hexText: {
     fontSize: 12,
     fontFamily: 'Courier',
-    color: "#64748B", // Slate 500
+    color: "#64748B",
   },
+  shapeList: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 24,
+  },
+  shapeCard: {
+    flex: 1,
+    padding: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  shapePreview: {
+    width: 48,
+    height: 48,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+  },
+  shapeInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  shapeLabel: {
+    fontWeight: '600',
+  }
 });

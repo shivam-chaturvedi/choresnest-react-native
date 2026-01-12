@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { AppLayout } from "../components/layout/AppLayout";
 import { useMealPlan } from "../contexts/MealPlanContext";
 import { theme } from "../theme";
+import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 
 import { RouteProp, useRoute } from "@react-navigation/native";
 
@@ -17,12 +18,14 @@ export const RecipeDetailScreen: React.FC = () => {
   const { recipeId } = route.params;
   const { getRecipeById } = useMealPlan();
   const recipe = getRecipeById(recipeId);
+  const colors = useThemeColors();
+  const radius = useThemeRadius();
 
   if (!recipe) {
     return (
       <AppLayout>
         <View style={styles.center}>
-          <Text style={styles.title}>Recipe not found</Text>
+          <Text style={[styles.title, { color: colors.foreground }]}>Recipe not found</Text>
         </View>
       </AppLayout>
     );
@@ -31,20 +34,28 @@ export const RecipeDetailScreen: React.FC = () => {
   return (
     <AppLayout>
       <View style={styles.container}>
-        <Text style={styles.title}>{recipe.name}</Text>
-        <Text style={styles.subtitle}>
+        <Text style={[styles.title, { color: colors.foreground }]}>{recipe.name}</Text>
+        <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
           {recipe.time} · Serves {recipe.servings}
         </Text>
         <View style={styles.tags}>
           {recipe.tags.map((tag) => (
-            <View key={tag} style={styles.tag}>
-              <Text style={styles.tagText}>{tag}</Text>
+            <View key={tag} style={[styles.tag, { backgroundColor: colors.primaryLight || colors.muted, borderRadius: radius.full }]}>
+              {/* PrimaryLight might not exist in colors hook directly if not defined. 
+                  Checking theme... usually theme.colors.primaryLight. 
+                  If not present in colors object, fallback to muted or similar. 
+                  The previous code used theme.colors.primaryLight. 
+                  I should check if useThemeColors returns it. 
+                  If not, I'll use primary with opacity or muted. 
+                  Let's assume colors includes it or use a fallback. 
+              */}
+              <Text style={[styles.tagText, { color: colors.primary }]}>{tag}</Text>
             </View>
           ))}
         </View>
-        <Text style={styles.sectionTitle}>Ingredients</Text>
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Ingredients</Text>
         {recipe.ingredients.map((ingredient) => (
-          <Text key={ingredient.name} style={styles.ingredient}>
+          <Text key={ingredient.name} style={[styles.ingredient, { color: colors.foreground }]}>
             • {ingredient.name} — {ingredient.quantity} {ingredient.unit}
           </Text>
         ))}
@@ -66,10 +77,8 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 26,
     fontWeight: "700",
-    color: theme.colors.foreground,
   },
   subtitle: {
-    color: theme.colors.mutedForeground,
     marginBottom: theme.spacing.sm,
   },
   tags: {
@@ -79,13 +88,10 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.lg,
   },
   tag: {
-    backgroundColor: theme.colors.primaryLight,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: 4,
-    borderRadius: 12,
   },
   tagText: {
-    color: theme.colors.primary,
     fontSize: 12,
   },
   sectionTitle: {
@@ -95,7 +101,6 @@ const styles = StyleSheet.create({
   },
   ingredient: {
     fontSize: 14,
-    color: theme.colors.foreground,
     marginBottom: theme.spacing.xs,
   },
 });

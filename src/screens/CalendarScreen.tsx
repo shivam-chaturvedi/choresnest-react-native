@@ -14,6 +14,7 @@ import { AddEventModal } from "../components/modals/AddEventModal";
 import { GlobalSearch } from "../components/search/GlobalSearch";
 import { useFamily } from "../contexts/FamilyContext";
 import { theme } from "../theme";
+import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { AppIcon } from "../components/ui/AppIcon";
 import { useSidebar } from "../contexts/SidebarContext";
 import { format, addMonths, subMonths, addDays, startOfWeek, endOfWeek, isSameMonth, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval } from "date-fns";
@@ -31,6 +32,8 @@ export const CalendarScreen: React.FC = () => {
   const { members, events } = useFamily();
   const { openSidebar } = useSidebar();
   const navigation = useNavigation();
+  const colors = useThemeColors();
+  const radius = useThemeRadius();
 
   const [activeView, setActiveView] = useState("Day");
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -41,6 +44,7 @@ export const CalendarScreen: React.FC = () => {
 
   const today = new Date();
 
+  // ... (logic remains same)
   const currentEvents = useMemo(() =>
     filteredEvents(events, filterMember),
     [events, filterMember]
@@ -69,11 +73,11 @@ export const CalendarScreen: React.FC = () => {
   const weekDays = useMemo(() => generateWeekDays(), [selectedDate]);
 
   const renderMonthView = () => (
-    <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
+    <View style={[styles.card, { backgroundColor: colors.card, borderRadius: radius.card }]}>
       {/* Day Headers */}
       <View style={styles.gridHeader}>
         {daysOfWeek.map((day, i) => (
-          <Text key={i} style={[styles.gridHeaderLabel, { color: theme.colors.mutedForeground }, i === 0 && styles.textDanger]}>
+          <Text key={i} style={[styles.gridHeaderLabel, { color: colors.mutedForeground }, i === 0 && styles.textDanger]}>
             {day}
           </Text>
         ))}
@@ -93,17 +97,18 @@ export const CalendarScreen: React.FC = () => {
               onPress={() => setSelectedDate(day)}
               style={[
                 styles.dayCell,
+                { borderRadius: radius.sm },
                 !isCurrentMonth && styles.dayCellFaded,
-                isSelected && { backgroundColor: theme.colors.primary, shadowColor: theme.colors.primary },
-                isToday && !isSelected && { backgroundColor: "rgba(59, 130, 246, 0.1)", borderWidth: 1, borderColor: theme.colors.primary }
+                isSelected && { backgroundColor: colors.primary, shadowColor: colors.primary },
+                isToday && !isSelected && { backgroundColor: colors.primary + '15', borderWidth: 1, borderColor: colors.primary }
               ]}
             >
               <Text style={[
                 styles.dayText,
-                { color: theme.colors.foreground },
-                !isCurrentMonth && { color: theme.colors.mutedForeground },
+                { color: colors.foreground },
+                !isCurrentMonth && { color: colors.mutedForeground },
                 isSelected && { color: "#fff", fontWeight: "700" },
-                isToday && !isSelected && { color: theme.colors.primary, fontWeight: "700" }
+                isToday && !isSelected && { color: colors.primary, fontWeight: "700" }
               ]}>
                 {format(day, "d")}
               </Text>
@@ -121,6 +126,7 @@ export const CalendarScreen: React.FC = () => {
                       key={idx}
                       style={[
                         styles.eventDot,
+                        { borderRadius: radius.full },
                         { backgroundColor: isSelected ? "#fff" : dotColor }
                       ]}
                     />
@@ -148,13 +154,13 @@ export const CalendarScreen: React.FC = () => {
                 onPress={() => setSelectedDate(day)}
                 style={[
                   styles.weekHeaderCell,
-                  { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
-                  isSelected && { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
-                  isToday && !isSelected && { backgroundColor: "rgba(59, 130, 246, 0.1)" }
+                  { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.md },
+                  isSelected && { backgroundColor: colors.primary, borderColor: colors.primary },
+                  isToday && !isSelected && { backgroundColor: colors.primary + '15' }
                 ]}
               >
-                <Text style={[styles.weekDayLabel, { color: theme.colors.mutedForeground }, isSelected && styles.textWhite]}>{format(day, "EEE")}</Text>
-                <Text style={[styles.weekDateLabel, { color: theme.colors.foreground }, isSelected && styles.textWhite]}>{format(day, "d")}</Text>
+                <Text style={[styles.weekDayLabel, { color: colors.mutedForeground }, isSelected && styles.textWhite]}>{format(day, "EEE")}</Text>
+                <Text style={[styles.weekDateLabel, { color: colors.foreground }, isSelected && styles.textWhite]}>{format(day, "d")}</Text>
               </Pressable>
             );
           })}
@@ -162,13 +168,13 @@ export const CalendarScreen: React.FC = () => {
       )}
 
       {/* Timeline */}
-      <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
+      <View style={[styles.card, { backgroundColor: colors.card, borderRadius: radius.card }]}>
         {activeView === "Day" && (
           <View style={styles.dayHeader}>
-            <Text style={[styles.dayHeaderNumber, { color: theme.colors.foreground }]}>{format(selectedDate, "d")}</Text>
+            <Text style={[styles.dayHeaderNumber, { color: colors.foreground }]}>{format(selectedDate, "d")}</Text>
             <View>
-              <Text style={[styles.dayHeaderMonth, { color: theme.colors.foreground }]}>{format(selectedDate, "MMMM yyyy")}</Text>
-              <Text style={[styles.dayHeaderWeekday, { color: theme.colors.primary }]}>{format(selectedDate, "EEEE")}</Text>
+              <Text style={[styles.dayHeaderMonth, { color: colors.foreground }]}>{format(selectedDate, "MMMM yyyy")}</Text>
+              <Text style={[styles.dayHeaderWeekday, { color: colors.primary }]}>{format(selectedDate, "EEEE")}</Text>
             </View>
           </View>
         )}
@@ -201,17 +207,17 @@ export const CalendarScreen: React.FC = () => {
                   setShowAddEventModal(true);
                 }}
               >
-                <Text style={[styles.timeLabel, { color: theme.colors.mutedForeground }]}>
+                <Text style={[styles.timeLabel, { color: colors.mutedForeground }]}>
                   {hour === 0 ? "12 AM" : hour < 12 ? `${hour} AM` : hour === 12 ? "12 PM" : `${hour - 12} PM`}
                 </Text>
-                <View style={[styles.timelineContent, { borderLeftColor: theme.colors.border }]}>
+                <View style={[styles.timelineContent, { borderLeftColor: colors.border }]}>
                   {activeView === "Day" && eventsInHour.map((event, idx) => {
                     const member = members.find(m => m.id === event.memberId);
                     const bgColor = member?.color === "member-blue" ? "#dbeafe" :
                       member?.color === "member-green" ? "#dcfce7" : "#ffedd5";
                     return (
-                      <View key={event.id} style={[styles.eventBlock, { backgroundColor: bgColor }]}>
-                        <Text style={[styles.eventBlockTitle, { color: theme.colors.foreground }]}>{event.title}</Text>
+                      <View key={event.id} style={[styles.eventBlock, { backgroundColor: bgColor, borderRadius: radius.xs }]}>
+                        <Text style={[styles.eventBlockTitle, { color: "#1e293b" }]}>{event.title}</Text>
                       </View>
                     );
                   })}
@@ -226,12 +232,12 @@ export const CalendarScreen: React.FC = () => {
 
   return (
     <AppLayout showNav={false} showAddButton={true} onAddPress={() => setShowAddEventModal(true)}>
-      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
         {/* Header Section */}
-        <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
+        <View style={[styles.header, { backgroundColor: colors.primary }]}>
           <View style={styles.headerTop}>
             <View style={styles.headerLeft}>
-              <Pressable onPress={openSidebar} style={styles.iconButton}>
+              <Pressable onPress={openSidebar} style={[styles.iconButton, { borderRadius: radius.sm }]}>
                 <AppIcon name="menu" size={20} color="#fff" />
               </Pressable>
               <View style={styles.monthSelector}>
@@ -241,35 +247,36 @@ export const CalendarScreen: React.FC = () => {
             </View>
 
             <View style={styles.headerRight}>
-              <Pressable onPress={() => setShowSearch(true)} style={styles.iconButton}>
+              <Pressable onPress={() => setShowSearch(true)} style={[styles.iconButton, { borderRadius: radius.sm }]}>
                 <AppIcon name="search" size={20} color="#fff" />
               </Pressable>
-              <Pressable style={styles.iconButton}>
+              <Pressable style={[styles.iconButton, { borderRadius: radius.sm }]}>
                 <AppIcon name="bell" size={20} color="#fff" />
               </Pressable>
               <Pressable
-                style={styles.addBtn}
+                style={[styles.addBtn, { backgroundColor: "#fff", borderRadius: radius.sm }]}
                 onPress={() => setShowAddEventModal(true)}
               >
-                <AppIcon name="plus" size={20} color={theme.colors.primary} />
+                <AppIcon name="plus" size={20} color={colors.primary} />
               </Pressable>
             </View>
           </View>
 
           {/* View Segmented Control */}
-          <View style={styles.segmentContainer}>
+          <View style={[styles.segmentContainer, { borderRadius: radius.md }]}>
             {views.map(view => (
               <Pressable
                 key={view}
                 onPress={() => setActiveView(view)}
                 style={[
                   styles.segmentBtn,
-                  activeView === view && styles.segmentBtnActive
+                  { borderRadius: radius.sm },
+                  activeView === view && [styles.segmentBtnActive, { backgroundColor: "#fff" }]
                 ]}
               >
                 <Text style={[
                   styles.segmentText,
-                  activeView === view ? { color: theme.colors.primary } : { color: "rgba(255,255,255,0.8)" }
+                  activeView === view ? { color: colors.primary } : { color: "rgba(255,255,255,0.8)" }
                 ]}>{view}</Text>
               </Pressable>
             ))}
@@ -283,14 +290,14 @@ export const CalendarScreen: React.FC = () => {
               onPress={() => setFilterMember(null)}
               style={[
                 styles.filterChip,
-                { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
-                filterMember === null && { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }
+                { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.full },
+                filterMember === null && { backgroundColor: colors.primary, borderColor: colors.primary }
               ]}
             >
-              <AppIcon name="users" size={14} color={filterMember === null ? "#fff" : theme.colors.foreground} />
+              <AppIcon name="users" size={14} color={filterMember === null ? "#fff" : colors.foreground} />
               <Text style={[
                 styles.filterText,
-                { color: theme.colors.foreground },
+                { color: colors.foreground },
                 filterMember === null && styles.textWhite
               ]}>All</Text>
             </Pressable>
@@ -300,14 +307,14 @@ export const CalendarScreen: React.FC = () => {
                 onPress={() => setFilterMember(member.id)}
                 style={[
                   styles.filterChip,
-                  { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
-                  filterMember === member.id && { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }
+                  { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.full },
+                  filterMember === member.id && { backgroundColor: colors.primary, borderColor: colors.primary }
                 ]}
               >
                 <Text style={styles.filterEmoji}>{member.symbol}</Text>
                 <Text style={[
                   styles.filterText,
-                  { color: theme.colors.foreground },
+                  { color: colors.foreground },
                   filterMember === member.id && styles.textWhite
                 ]}>{member.name}</Text>
               </Pressable>
@@ -316,14 +323,14 @@ export const CalendarScreen: React.FC = () => {
 
           {/* Date Navigation */}
           <View style={styles.dateNav}>
-            <Pressable onPress={() => navigateDate(-1)} style={[styles.navArrow, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-              <AppIcon name="chevronLeft" size={20} color={theme.colors.foreground} />
+            <Pressable onPress={() => navigateDate(-1)} style={[styles.navArrow, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.sm }]}>
+              <AppIcon name="chevronLeft" size={20} color={colors.foreground} />
             </Pressable>
-            <Pressable onPress={() => setSelectedDate(new Date())} style={styles.todayBtn}>
-              <Text style={[styles.todayText, { color: theme.colors.primary }]}>Today</Text>
+            <Pressable onPress={() => setSelectedDate(new Date())} style={[styles.todayBtn, { backgroundColor: colors.primary + '15', borderRadius: radius.sm }]}>
+              <Text style={[styles.todayText, { color: colors.primary }]}>Today</Text>
             </Pressable>
-            <Pressable onPress={() => navigateDate(1)} style={[styles.navArrow, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-              <AppIcon name="chevronRight" size={20} color={theme.colors.foreground} />
+            <Pressable onPress={() => navigateDate(1)} style={[styles.navArrow, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.sm }]}>
+              <AppIcon name="chevronRight" size={20} color={colors.foreground} />
             </Pressable>
           </View>
 
@@ -332,14 +339,14 @@ export const CalendarScreen: React.FC = () => {
 
           {/* Upcoming Events (Simplified Logic) */}
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>📋 Upcoming Events</Text>
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>📋 Upcoming Events</Text>
             {currentEvents.slice(0, 3).map(event => (
-              <View key={event.id} style={[styles.upcomingItem, { backgroundColor: theme.colors.card }]}>
+              <View key={event.id} style={[styles.upcomingItem, { backgroundColor: colors.card, borderRadius: radius.card }]}>
                 <View style={styles.upcomingLeft}>
                   <Text style={{ fontSize: 24 }}>{event.icon}</Text>
                   <View>
-                    <Text style={[styles.upcomingTitle, { color: theme.colors.foreground }]}>{event.title}</Text>
-                    <Text style={[styles.upcomingMeta, { color: theme.colors.mutedForeground }]}>{format(new Date(event.date), "MMM d")} · {event.time}</Text>
+                    <Text style={[styles.upcomingTitle, { color: colors.foreground }]}>{event.title}</Text>
+                    <Text style={[styles.upcomingMeta, { color: colors.mutedForeground }]}>{format(new Date(event.date), "MMM d")} · {event.time}</Text>
                   </View>
                 </View>
               </View>
@@ -367,10 +374,8 @@ export const CalendarScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   header: {
-    // backgroundColor handled inline
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingBottom: 20,
     paddingHorizontal: 16,
@@ -401,7 +406,6 @@ const styles = StyleSheet.create({
   iconButton: {
     width: 40,
     height: 40,
-    borderRadius: 4,
     backgroundColor: "rgba(255,255,255,0.2)",
     alignItems: "center",
     justifyContent: "center",
@@ -419,10 +423,8 @@ const styles = StyleSheet.create({
   addBtn: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 4,
     gap: 6,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -438,16 +440,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     backgroundColor: "rgba(255,255,255,0.2)",
     padding: 4,
-    borderRadius: 4,
   },
   segmentBtn: {
     flex: 1,
     paddingVertical: 8,
     alignItems: "center",
-    borderRadius: 2,
   },
   segmentBtnActive: {
-    backgroundColor: "#fff",
+    // handled inline
   },
   segmentText: {
     fontWeight: "600",
@@ -465,7 +465,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 8,
     paddingHorizontal: 16,
-    borderRadius: 4,
     marginRight: 8,
     borderWidth: 1,
     gap: 6,
@@ -485,20 +484,16 @@ const styles = StyleSheet.create({
   },
   navArrow: {
     padding: 8,
-    borderRadius: 4,
     borderWidth: 1,
   },
   todayBtn: {
-    backgroundColor: "rgba(59, 130, 246, 0.1)",
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 4,
   },
   todayText: {
     fontWeight: "600",
   },
   card: {
-    borderRadius: 4,
     padding: 12,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -530,7 +525,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "flex-start",
     paddingTop: 8,
-    borderRadius: 4,
   },
   dayCellFaded: {
     opacity: 0.3,
@@ -548,7 +542,6 @@ const styles = StyleSheet.create({
   eventDot: {
     width: 4,
     height: 4,
-    borderRadius: 2,
   },
   weekHeaderRow: {
     flexDirection: "row",
@@ -559,7 +552,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     paddingVertical: 12,
-    borderRadius: 4,
     borderWidth: 1,
   },
   weekDayLabel: {
@@ -610,7 +602,6 @@ const styles = StyleSheet.create({
   },
   eventBlock: {
     padding: 8,
-    borderRadius: 4,
     marginBottom: 4,
   },
   eventBlockTitle: {
@@ -629,7 +620,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     padding: 12,
-    borderRadius: 4,
     marginBottom: 8,
   },
   upcomingLeft: {

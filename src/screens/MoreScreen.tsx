@@ -10,7 +10,7 @@ import {
 import { useNavigation, NavigationProp } from "@react-navigation/native";
 import { AppLayout } from "../components/layout/AppLayout";
 import { theme } from "../theme";
-import { useThemeColors } from "../contexts/ThemeContext";
+import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { useSidebar } from "../contexts/SidebarContext";
 import { AppIcon, AppIconName } from "../components/ui/AppIcon";
 
@@ -31,6 +31,7 @@ interface MenuSection {
 
 export const MoreScreen: React.FC = () => {
   const colors = useThemeColors();
+  const radius = useThemeRadius(); // Reactively updated radius
   const navigation = useNavigation<NavigationProp<Record<string, undefined>>>();
   const { openSidebar } = useSidebar();
 
@@ -156,26 +157,26 @@ export const MoreScreen: React.FC = () => {
       <AppLayout showNav={false}>
         <ScrollView contentContainerStyle={styles.container}>
           <View style={styles.header}>
-            <Pressable onPress={openSidebar} style={[styles.menuButton, { backgroundColor: colors.card, shadowColor: colors.foreground }]}>
+            <Pressable onPress={openSidebar} style={[styles.menuButton, { backgroundColor: colors.card, shadowColor: colors.foreground, borderRadius: radius.md }]}>
               <AppIcon name="menu" size={20} color={colors.foreground} />
             </Pressable>
             <Text style={[styles.title, { color: colors.foreground }]}>Settings</Text>
           </View>
 
           {/* Profile Card */}
-          <View style={[styles.profileCard, { backgroundColor: colors.card, shadowColor: colors.foreground }]}>
+          <View style={[styles.profileCard, { backgroundColor: colors.card, shadowColor: colors.foreground, borderRadius: radius.card }]}>
             <View style={styles.avatarContainer}>
-              <View style={[styles.avatar, { backgroundColor: colors.primary + '20' }]}>
+              <View style={[styles.avatar, { backgroundColor: colors.primary + '20', borderRadius: radius.lg }]}>
                 <Text style={{ fontSize: 32 }}>👨</Text>
               </View>
-              <View style={[styles.cameraBadge, { backgroundColor: colors.card, borderColor: colors.background, shadowColor: colors.foreground }]}>
+              <View style={[styles.cameraBadge, { backgroundColor: colors.card, borderColor: colors.background, shadowColor: colors.foreground, borderRadius: radius.sm }]}>
                 <AppIcon name="camera" size={12} color={colors.mutedForeground} />
               </View>
             </View>
             <View style={styles.profileInfo}>
               <Text style={[styles.profileName, { color: colors.foreground }]}>Shivam Kumar</Text>
               <Text style={[styles.profileEmail, { color: colors.mutedForeground }]}>shivam@email.com</Text>
-              <View style={[styles.roleBadge, { backgroundColor: colors.primary + '20' }]}>
+              <View style={[styles.roleBadge, { backgroundColor: colors.primary + '20', borderRadius: radius.sm }]}>
                 <Text style={[styles.roleText, { color: colors.primary }]}>Family Admin</Text>
               </View>
             </View>
@@ -184,17 +185,18 @@ export const MoreScreen: React.FC = () => {
           {sections.map((section) => (
             <View key={section.title} style={styles.sectionContainer}>
               <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>{section.title}</Text>
-              <View style={[styles.sectionCard, { backgroundColor: colors.card, shadowColor: colors.foreground }]}>
+              <View style={[styles.sectionCard, { backgroundColor: colors.card, shadowColor: colors.foreground, borderRadius: radius.card }]}>
                 {section.items.map((item, index) => (
                   <Pressable
                     key={item.label}
                     style={[
                       styles.itemRow,
+                      { borderRadius: radius.md },
                       index !== section.items.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }
                     ]}
                     onPress={() => navigation.navigate(item.route)}
                   >
-                    <View style={[styles.itemIcon, { backgroundColor: item.color }]}>
+                    <View style={[styles.itemIcon, { backgroundColor: item.color, borderRadius: radius.md }]}>
                       <AppIcon name={item.icon} size={20} color={item.iconColor} />
                     </View>
                     <View style={styles.itemTextContainer}>
@@ -215,7 +217,7 @@ export const MoreScreen: React.FC = () => {
             </View>
           ))}
 
-          <Pressable style={[styles.logoutButton, { backgroundColor: colors.card, shadowColor: colors.foreground, borderColor: colors.border }]} onPress={handleLogout}>
+          <Pressable style={[styles.logoutButton, { backgroundColor: colors.card, shadowColor: colors.foreground, borderColor: colors.border, borderRadius: radius.card }]} onPress={handleLogout}>
             <AppIcon name="logOut" size={20} color={colors.danger} />
             <Text style={[styles.logoutText, { color: colors.danger }]}>Sign Out</Text>
           </Pressable>
@@ -241,7 +243,6 @@ const styles = StyleSheet.create({
   menuButton: {
     width: 40,
     height: 40,
-    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
     shadowOffset: { width: 0, height: 2 },
@@ -257,7 +258,6 @@ const styles = StyleSheet.create({
   profileCard: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 16,
     padding: 16,
     marginBottom: 24,
     shadowOffset: { width: 0, height: 4 },
@@ -272,7 +272,6 @@ const styles = StyleSheet.create({
   avatar: {
     width: 64,
     height: 64,
-    borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -282,7 +281,6 @@ const styles = StyleSheet.create({
     right: -4,
     width: 24,
     height: 24,
-    borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 2,
@@ -305,7 +303,6 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     paddingHorizontal: 10,
     paddingVertical: 2,
-    borderRadius: 8,
   },
   roleText: {
     fontSize: 12,
@@ -323,7 +320,6 @@ const styles = StyleSheet.create({
     paddingLeft: 4,
   },
   sectionCard: {
-    borderRadius: 16,
     padding: 8,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
@@ -334,12 +330,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     padding: 12,
-    borderRadius: 12,
   },
   itemIcon: {
     width: 40,
     height: 40,
-    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 16,
@@ -369,7 +363,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 16,
-    borderRadius: 16,
     gap: 8,
     marginBottom: 16,
     borderWidth: 1,

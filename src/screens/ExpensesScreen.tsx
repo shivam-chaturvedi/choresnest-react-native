@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Dimensions } from 'react-native';
 import { AppLayout } from '../components/layout/AppLayout';
 import { theme } from '../theme';
+import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import {
   Plus,
   Wallet,
@@ -88,6 +89,8 @@ const aiInsights = [
 ];
 
 export const ExpensesScreen: React.FC = () => {
+  const colors = useThemeColors();
+  const radius = useThemeRadius();
   const [activeTab, setActiveTab] = useState('Overview');
   const [transactions, setTransactions] = useState(initialTransactions);
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
@@ -178,7 +181,7 @@ export const ExpensesScreen: React.FC = () => {
             <Path
               key={i}
               d={`M0,${height * t} L${width},${height * t}`}
-              stroke={theme.colors.border}
+              stroke={colors.border}
               strokeDasharray="4,4"
             />
           ))}
@@ -196,7 +199,7 @@ export const ExpensesScreen: React.FC = () => {
               x={getX(i)}
               y={height + 20}
               fontSize="10"
-              fill={theme.colors.mutedForeground}
+              fill={colors.mutedForeground}
               textAnchor="middle"
             >
               {d.month}
@@ -206,12 +209,12 @@ export const ExpensesScreen: React.FC = () => {
 
         <View style={styles.legendContainer}>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#10b981' }]} />
-            <Text style={[styles.legendText, { color: theme.colors.mutedForeground }]}>Income</Text>
+            <View style={[styles.legendDot, { backgroundColor: '#10b981', borderRadius: radius.xs }]} />
+            <Text style={[styles.legendText, { color: colors.mutedForeground }]}>Income</Text>
           </View>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#ef4444' }]} />
-            <Text style={[styles.legendText, { color: theme.colors.mutedForeground }]}>Expenses</Text>
+            <View style={[styles.legendDot, { backgroundColor: '#ef4444', borderRadius: radius.xs }]} />
+            <Text style={[styles.legendText, { color: colors.mutedForeground }]}>Expenses</Text>
           </View>
         </View>
       </View>
@@ -220,10 +223,11 @@ export const ExpensesScreen: React.FC = () => {
 
   const DonutChart = () => {
     const size = 180;
-    const radius = size / 2;
+    // const radius = size / 2; // Conflict with radius from hook. Rename to chartRadius
+    const chartRadius = size / 2;
     const strokeWidth = 35;
     const center = size / 2;
-    const innerRadius = radius - strokeWidth;
+    const innerRadius = chartRadius - strokeWidth;
 
     let startAngle = 0;
     const total = categories.reduce((sum, cat) => sum + cat.numAmount, 0);
@@ -239,17 +243,17 @@ export const ExpensesScreen: React.FC = () => {
               // Standard SVG Arc calculation
               const x1 = center + innerRadius * Math.cos(Math.PI * startAngle / 180);
               const y1 = center + innerRadius * Math.sin(Math.PI * startAngle / 180);
-              const x2 = center + radius * Math.cos(Math.PI * startAngle / 180);
-              const y2 = center + radius * Math.sin(Math.PI * startAngle / 180);
-              const x3 = center + radius * Math.cos(Math.PI * (startAngle + angle) / 180);
-              const y3 = center + radius * Math.sin(Math.PI * (startAngle + angle) / 180);
+              const x2 = center + chartRadius * Math.cos(Math.PI * startAngle / 180);
+              const y2 = center + chartRadius * Math.sin(Math.PI * startAngle / 180);
+              const x3 = center + chartRadius * Math.cos(Math.PI * (startAngle + angle) / 180);
+              const y3 = center + chartRadius * Math.sin(Math.PI * (startAngle + angle) / 180);
               const x4 = center + innerRadius * Math.cos(Math.PI * (startAngle + angle) / 180);
               const y4 = center + innerRadius * Math.sin(Math.PI * (startAngle + angle) / 180);
 
               const d = `
                                 M ${x1} ${y1}
                                 L ${x2} ${y2}
-                                A ${radius} ${radius} 0 ${angle > 180 ? 1 : 0} 1 ${x3} ${y3}
+                                A ${chartRadius} ${chartRadius} 0 ${angle > 180 ? 1 : 0} 1 ${x3} ${y3}
                                 L ${x4} ${y4}
                                 A ${innerRadius} ${innerRadius} 0 ${angle > 180 ? 1 : 0} 0 ${x1} ${y1}
                                 Z
@@ -262,7 +266,7 @@ export const ExpensesScreen: React.FC = () => {
                   key={cat.id}
                   d={d}
                   fill={cat.color}
-                  stroke={theme.colors.card}
+                  stroke={colors.card}
                   strokeWidth={2}
                 />
               );
@@ -283,7 +287,7 @@ export const ExpensesScreen: React.FC = () => {
         {categories.map((cat, i) => (
           <View key={cat.id} style={styles.barChartRow}>
             <View style={{ width: 80 }}>
-              <Text style={[styles.barLabel, { color: theme.colors.foreground }]} numberOfLines={1}>{cat.name}</Text>
+              <Text style={[styles.barLabel, { color: colors.foreground }]} numberOfLines={1}>{cat.name}</Text>
             </View>
             <View style={styles.barTrack}>
               <View
@@ -291,12 +295,13 @@ export const ExpensesScreen: React.FC = () => {
                   styles.barFill,
                   {
                     width: `${(cat.numAmount / maxVal) * 100}%`,
-                    backgroundColor: cat.color
+                    backgroundColor: cat.color,
+                    borderRadius: radius.xs
                   }
                 ]}
               />
             </View>
-            <Text style={[styles.barValue, { color: theme.colors.mutedForeground }]}>{cat.amount}</Text>
+            <Text style={[styles.barValue, { color: colors.mutedForeground }]}>{cat.amount}</Text>
           </View>
         ))}
       </View>
@@ -305,36 +310,37 @@ export const ExpensesScreen: React.FC = () => {
 
   return (
     <AppLayout showNav={false}>
-      <ScrollView contentContainerStyle={[styles.container, { backgroundColor: theme.colors.background }]} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.iconButton, { backgroundColor: theme.colors.card }]}>
-            <AppIcon name="chevronLeft" size={24} color={theme.colors.foreground} />
+          <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.iconButton, { backgroundColor: colors.card, borderRadius: radius.md }]}>
+            <AppIcon name="chevronLeft" size={24} color={colors.foreground} />
           </TouchableOpacity>
           <View style={{ flex: 1, paddingHorizontal: 12 }}>
-            <Text style={[styles.title, { color: theme.colors.foreground }]}>Family Finances</Text>
-            <Text style={[styles.subtitle, { color: theme.colors.mutedForeground }]}>Track income, expenses & budgets</Text>
+            <Text style={[styles.title, { color: colors.foreground }]}>Family Finances</Text>
+            <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Track income, expenses & budgets</Text>
           </View>
-          <TouchableOpacity onPress={() => setExpenseModalOpen(true)} style={[styles.addButton, { backgroundColor: theme.colors.primary }]}>
+          <TouchableOpacity onPress={() => setExpenseModalOpen(true)} style={[styles.addButton, { backgroundColor: colors.primary, borderRadius: radius.card }]}>
             <Plus size={16} color="#fff" />
             <Text style={styles.addButtonText}>Add</Text>
           </TouchableOpacity>
         </View>
 
         {/* Tabs */}
-        <View style={[styles.tabContainer, { backgroundColor: theme.colors.muted }]}>
+        <View style={[styles.tabContainer, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
           {tabs.map((tab) => (
             <TouchableOpacity
               key={tab}
               onPress={() => setActiveTab(tab)}
               style={[
                 styles.tabButton,
-                activeTab === tab && { backgroundColor: theme.colors.card }
+                { borderRadius: radius.sm },
+                activeTab === tab && { backgroundColor: colors.card }
               ]}
             >
               <Text style={[
                 styles.tabText,
-                { color: activeTab === tab ? theme.colors.foreground : theme.colors.mutedForeground }
+                { color: activeTab === tab ? colors.foreground : colors.mutedForeground }
               ]}>
                 {tab}
               </Text>
@@ -343,7 +349,7 @@ export const ExpensesScreen: React.FC = () => {
         </View>
 
         {/* Balance Card - Dynamic Theme Primary */}
-        <View style={[styles.card, { backgroundColor: theme.colors.primary, borderWidth: 0 }]}>
+        <View style={[styles.card, { backgroundColor: theme.colors.primary, borderWidth: 0, borderRadius: radius.card }]}>
           <View style={styles.cardHeader}>
             <Text style={styles.balanceLabel}>Current Balance</Text>
             <Wallet size={24} color="rgba(255,255,255,0.6)" />
@@ -351,14 +357,14 @@ export const ExpensesScreen: React.FC = () => {
           <Text style={styles.balanceAmount}>₹{balance.toLocaleString()}</Text>
 
           <View style={styles.statsRow}>
-            <View style={[styles.statBox, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
+            <View style={[styles.statBox, { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: radius.md }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
                 <ArrowDownLeft size={14} color="#6ee7b7" />
                 <Text style={styles.statLabel}> Income</Text>
               </View>
               <Text style={styles.statValue}>₹{totalIncome.toLocaleString()}</Text>
             </View>
-            <View style={[styles.statBox, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
+            <View style={[styles.statBox, { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: radius.md }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
                 <ArrowUpRight size={14} color="#fca5a5" />
                 <Text style={styles.statLabel}> Expenses</Text>
@@ -371,54 +377,54 @@ export const ExpensesScreen: React.FC = () => {
         {activeTab === 'Overview' && (
           <View>
             {/* Savings Goal */}
-            <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
               <View style={styles.savingsContent}>
-                <View style={[styles.savingsIcon, { backgroundColor: theme.colors.background }]}>
-                  <PiggyBank size={24} color={theme.colors.success} />
+                <View style={[styles.savingsIcon, { backgroundColor: colors.background, borderRadius: radius.card }]}>
+                  <PiggyBank size={24} color={colors.success} />
                 </View>
                 <View style={{ flex: 1, paddingHorizontal: 12 }}>
-                  <Text style={[styles.cardTitle, { color: theme.colors.foreground }]}>Monthly Savings</Text>
-                  <Text style={[styles.cardSubtitle, { color: theme.colors.mutedForeground }]}>{savingsPercent.toFixed(1)}% of income</Text>
+                  <Text style={[styles.cardTitle, { color: colors.foreground }]}>Monthly Savings</Text>
+                  <Text style={[styles.cardSubtitle, { color: colors.mutedForeground }]}>{savingsPercent.toFixed(1)}% of income</Text>
                 </View>
-                <Text style={[styles.amountText, { color: theme.colors.success }]}>
+                <Text style={[styles.amountText, { color: colors.success }]}>
                   ₹{savings.toLocaleString()}
                 </Text>
               </View>
-              <View style={[styles.progressBarBg, { backgroundColor: theme.colors.muted }]}>
-                <View style={[styles.progressBarFill, { width: `${Math.min(savingsPercent * 2, 100)}%`, backgroundColor: theme.colors.success }]} />
+              <View style={[styles.progressBarBg, { backgroundColor: colors.muted, borderRadius: radius.xs }]}>
+                <View style={[styles.progressBarFill, { width: `${Math.min(savingsPercent * 2, 100)}%`, backgroundColor: colors.success, borderRadius: radius.xs }]} />
               </View>
             </View>
 
             {/* Monthly Trend Chart */}
-            <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
               <View style={styles.chartHeader}>
-                <BarChart3 size={20} color={theme.colors.primary} />
-                <Text style={[styles.chartTitle, { color: theme.colors.foreground }]}>6-Month Trend</Text>
+                <BarChart3 size={20} color={colors.primary} />
+                <Text style={[styles.chartTitle, { color: colors.foreground }]}>6-Month Trend</Text>
               </View>
               <AreaChart />
             </View>
 
             {/* Recent Transactions */}
             <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>Recent Transactions</Text>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Recent Transactions</Text>
               <TouchableOpacity>
-                <Text style={[styles.seeAllText, { color: theme.colors.primary }]}>See all</Text>
+                <Text style={[styles.seeAllText, { color: colors.primary }]}>See all</Text>
               </TouchableOpacity>
             </View>
 
             <View>
               {transactions.slice(0, 5).map((tx) => (
-                <View key={tx.id} style={[styles.transactionCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-                  <View style={[styles.transactionIconBg, { backgroundColor: theme.colors.muted }]}>
+                <View key={tx.id} style={[styles.transactionCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+                  <View style={[styles.transactionIconBg, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
                     <Text style={{ fontSize: 20 }}>{tx.icon}</Text>
                   </View>
                   <View style={{ flex: 1, paddingHorizontal: 12 }}>
-                    <Text style={[styles.txName, { color: theme.colors.foreground }]}>{tx.name}</Text>
-                    <Text style={[styles.txDate, { color: theme.colors.mutedForeground }]}>{tx.date}</Text>
+                    <Text style={[styles.txName, { color: colors.foreground }]}>{tx.name}</Text>
+                    <Text style={[styles.txDate, { color: colors.mutedForeground }]}>{tx.date}</Text>
                   </View>
                   <Text style={[
                     styles.txAmount,
-                    tx.type === 'income' ? { color: theme.colors.success } : { color: theme.colors.danger }
+                    tx.type === 'income' ? { color: colors.success } : { color: colors.danger }
                   ]}>
                     {tx.type === 'income' ? '+' : '-'}₹{tx.amount.toLocaleString()}
                   </Text>
@@ -431,19 +437,19 @@ export const ExpensesScreen: React.FC = () => {
         {activeTab === 'Breakdown' && (
           <View>
             {/* Pie Chart */}
-            <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
               <View style={styles.chartHeader}>
-                <PieChartIcon size={20} color={theme.colors.primary} />
-                <Text style={[styles.chartTitle, { color: theme.colors.foreground }]}>Spending Breakdown</Text>
+                <PieChartIcon size={20} color={colors.primary} />
+                <Text style={[styles.chartTitle, { color: colors.foreground }]}>Spending Breakdown</Text>
               </View>
               <DonutChart />
             </View>
 
             {/* Budget vs Actual */}
-            <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
               <View style={styles.chartHeader}>
-                <Target size={20} color={theme.colors.primary} />
-                <Text style={[styles.chartTitle, { color: theme.colors.foreground }]}>Budget vs Actual</Text>
+                <Target size={20} color={colors.primary} />
+                <Text style={[styles.chartTitle, { color: colors.foreground }]}>Budget vs Actual</Text>
               </View>
 
               <View style={{ gap: 16 }}>
@@ -456,28 +462,29 @@ export const ExpensesScreen: React.FC = () => {
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                           <Text style={{ marginRight: 8, fontSize: 16 }}>{cat.icon}</Text>
-                          <Text style={[styles.catName, { color: theme.colors.foreground }]}>{cat.name}</Text>
+                          <Text style={[styles.catName, { color: colors.foreground }]}>{cat.name}</Text>
                         </View>
                         <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                          <Text style={[styles.catAmount, isOverBudget && { color: theme.colors.danger }, { color: theme.colors.foreground }]}>
+                          <Text style={[styles.catAmount, isOverBudget && { color: colors.danger }, { color: colors.foreground }]}>
                             {cat.amount}
                           </Text>
-                          {cat.budget > 0 && <Text style={[styles.catBudget, { color: theme.colors.mutedForeground }]}> / ₹{cat.budget.toLocaleString()}</Text>}
+                          {cat.budget > 0 && <Text style={[styles.catBudget, { color: colors.mutedForeground }]}> / ₹{cat.budget.toLocaleString()}</Text>}
                         </View>
                       </View>
-                      <View style={[styles.progressBarBg, { backgroundColor: theme.colors.muted }]}>
+                      <View style={[styles.progressBarBg, { backgroundColor: colors.muted, borderRadius: radius.xs }]}>
                         <View
                           style={[
                             styles.progressBarFill,
                             {
                               width: `${Math.min(percentUsed, 100)}%`,
-                              backgroundColor: isOverBudget ? theme.colors.danger : theme.colors.primary
+                              backgroundColor: isOverBudget ? colors.danger : colors.primary,
+                              borderRadius: radius.xs
                             }
                           ]}
                         />
                       </View>
                       {isOverBudget && (
-                        <Text style={[styles.overBudgetText, { color: theme.colors.danger }]}>
+                        <Text style={[styles.overBudgetText, { color: colors.danger }]}>
                           ⚠️ Over budget by ₹{(cat.numAmount - cat.budget).toLocaleString()}
                         </Text>
                       )}
@@ -492,10 +499,10 @@ export const ExpensesScreen: React.FC = () => {
         {activeTab === 'Insights' && (
           <View>
             {/* AI Insights */}
-            <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
               <View style={styles.chartHeader}>
                 <Lightbulb size={20} color="#f59e0b" />
-                <Text style={[styles.chartTitle, { color: theme.colors.foreground }]}>AI Insights</Text>
+                <Text style={[styles.chartTitle, { color: colors.foreground }]}>AI Insights</Text>
               </View>
               <View style={{ gap: 8 }}>
                 {aiInsights.map((insight, i) => (
@@ -503,30 +510,31 @@ export const ExpensesScreen: React.FC = () => {
                     key={i}
                     style={[
                       styles.insightCard,
+                      { borderRadius: radius.md },
                       insight.type === 'warning' ? { backgroundColor: 'rgba(245, 158, 11, 0.1)' } : // Warning tint
                         insight.type === 'success' ? { backgroundColor: 'rgba(34, 197, 94, 0.1)' } : // Success tint
-                          { backgroundColor: theme.colors.muted }
+                          { backgroundColor: colors.muted }
                     ]}
                   >
                     <Text style={{ fontSize: 20 }}>{insight.icon}</Text>
-                    <Text style={[styles.insightText, { color: theme.colors.foreground }]}>{insight.text}</Text>
+                    <Text style={[styles.insightText, { color: colors.foreground }]}>{insight.text}</Text>
                   </View>
                 ))}
               </View>
             </View>
 
             {/* Spending Bar Chart */}
-            <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
               <View style={styles.chartHeader}>
-                <BarChart3 size={20} color={theme.colors.primary} />
-                <Text style={[styles.chartTitle, { color: theme.colors.foreground }]}>Category Spending</Text>
+                <BarChart3 size={20} color={colors.primary} />
+                <Text style={[styles.chartTitle, { color: colors.foreground }]}>Category Spending</Text>
               </View>
               <HorizontalBarChart />
             </View>
 
             {/* Tips Card */}
-            <View style={[styles.card, styles.tipsCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-              <Text style={[styles.tipsTitle, { color: theme.colors.foreground }]}>💡 Money Saving Tips</Text>
+            <View style={[styles.card, styles.tipsCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+              <Text style={[styles.tipsTitle, { color: colors.foreground }]}>💡 Money Saving Tips</Text>
               <View style={{ gap: 10 }}>
                 {[
                   'Set up automatic transfers to savings on payday',
@@ -535,8 +543,8 @@ export const ExpensesScreen: React.FC = () => {
                   'Plan meals weekly to reduce food waste and dining out'
                 ].map((tip, i) => (
                   <View key={i} style={{ flexDirection: 'row', gap: 8 }}>
-                    <Text style={{ color: theme.colors.success }}>✓</Text>
-                    <Text style={[styles.tipText, { color: theme.colors.mutedForeground }]}>{tip}</Text>
+                    <Text style={{ color: colors.success }}>✓</Text>
+                    <Text style={[styles.tipText, { color: colors.mutedForeground }]}>{tip}</Text>
                   </View>
                 ))}
               </View>
@@ -550,7 +558,7 @@ export const ExpensesScreen: React.FC = () => {
 
       {/* Floating Action Button */}
       <TouchableOpacity
-        style={[styles.fab, { backgroundColor: theme.colors.primary }]}
+        style={[styles.fab, { backgroundColor: colors.primary, borderRadius: radius.full }]}
         onPress={() => setExpenseModalOpen(true)}
       >
         <Plus size={32} color="#fff" />
@@ -580,7 +588,6 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     padding: 8,
-    borderRadius: 12,
   },
   title: {
     fontSize: 20,
@@ -594,7 +601,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 20,
     gap: 4,
   },
   addButtonText: {
@@ -605,21 +611,18 @@ const styles = StyleSheet.create({
   tabContainer: {
     flexDirection: 'row',
     padding: 4,
-    borderRadius: 12,
     marginBottom: 16,
   },
   tabButton: {
     flex: 1,
     paddingVertical: 10,
     alignItems: 'center',
-    borderRadius: 8,
   },
   tabText: {
     fontSize: 14,
     fontWeight: '600',
   },
   card: {
-    borderRadius: 16,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
@@ -651,7 +654,6 @@ const styles = StyleSheet.create({
   },
   statBox: {
     flex: 1,
-    borderRadius: 12,
     padding: 12,
   },
   statLabel: {
@@ -671,7 +673,6 @@ const styles = StyleSheet.create({
   savingsIcon: {
     width: 48,
     height: 48,
-    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -688,12 +689,10 @@ const styles = StyleSheet.create({
   },
   progressBarBg: {
     height: 8,
-    borderRadius: 4,
     overflow: 'hidden',
   },
   progressBarFill: {
     height: '100%',
-    borderRadius: 4,
   },
   chartHeader: {
     flexDirection: 'row',
@@ -719,7 +718,6 @@ const styles = StyleSheet.create({
   legendDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
   },
   legendText: {
     fontSize: 12,
@@ -743,13 +741,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 12,
     marginBottom: 12,
-    borderRadius: 16,
     borderWidth: 1,
   },
   transactionIconBg: {
     width: 48,
     height: 48,
-    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -786,7 +782,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
-    borderRadius: 12,
     gap: 12,
     marginBottom: 8,
   },
@@ -804,27 +799,28 @@ const styles = StyleSheet.create({
   },
   tipText: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 14,
+    lineHeight: 20,
   },
   barChartRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
-    gap: 8,
+    height: 24,
   },
   barLabel: {
     fontSize: 12,
-    fontWeight: '500',
   },
   barTrack: {
     flex: 1,
     height: 8,
     backgroundColor: 'rgba(0,0,0,0.05)',
     borderRadius: 4,
+    marginHorizontal: 8,
+    overflow: 'hidden',
   },
   barFill: {
     height: '100%',
-    borderRadius: 4,
   },
   barValue: {
     fontSize: 12,
@@ -833,17 +829,16 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: 'absolute',
-    bottom: 20,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    bottom: 24,
+    right: 24,
+    width: 64,
+    height: 64,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
-    elevation: 5,
+    elevation: 4,
   },
 });

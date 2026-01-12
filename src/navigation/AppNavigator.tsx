@@ -61,7 +61,9 @@ const AppNavigatorInner = () => {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Splash">
           {({ navigation }) => (
-            <SplashScreen onContinue={() => navigation.replace("Onboarding")} />
+            <SplashScreen
+              onContinue={(destination) => navigation.replace(destination)}
+            />
           )}
         </Stack.Screen>
         <Stack.Screen name="Onboarding">

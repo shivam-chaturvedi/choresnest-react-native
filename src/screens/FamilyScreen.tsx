@@ -9,6 +9,7 @@ import {
 import { AppLayout } from "../components/layout/AppLayout";
 import { useFamily } from "../contexts/FamilyContext";
 import { theme } from "../theme";
+import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import { useSidebar } from "../contexts/SidebarContext";
 import {
   Users,
@@ -29,68 +30,70 @@ const roles = [
 export const FamilyScreen: React.FC = () => {
   const { familyName, members } = useFamily();
   const { openSidebar } = useSidebar();
+  const colors = useThemeColors();
+  const radius = useThemeRadius();
 
   // Helper to get color values
   const getColor = (colorName: string) => {
-    const colors: any = theme.colors;
-    return colors[colorName] || theme.colors.primary;
+    const colorMap: any = colors;
+    return colorMap[colorName] || colors.primary;
   };
 
   return (
     <AppLayout showNav={false}>
-      <ScrollView contentContainerStyle={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}>
         {/* Header */}
         <View style={styles.header}>
-          <Pressable onPress={openSidebar} style={[styles.iconButton, { backgroundColor: theme.colors.card }]}>
-            <Menu size={24} color={theme.colors.foreground} />
+          <Pressable onPress={openSidebar} style={[styles.iconButton, { backgroundColor: colors.card, borderRadius: radius.md }]}>
+            <Menu size={24} color={colors.foreground} />
           </Pressable>
           <View style={{ flex: 1, paddingHorizontal: 12 }}>
-            <Text style={[styles.title, { color: theme.colors.foreground }]}>Family Members</Text>
-            <Text style={[styles.subtitle, { color: theme.colors.mutedForeground }]}>{familyName}</Text>
+            <Text style={[styles.title, { color: colors.foreground }]}>Family Members</Text>
+            <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{familyName}</Text>
           </View>
-          <Pressable style={[styles.iconButton, { backgroundColor: 'transparent', borderWidth: 1, borderColor: theme.colors.border }]}>
-            <UserPlus size={20} color={theme.colors.foreground} />
+          <Pressable style={[styles.iconButton, { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border, borderRadius: radius.md }]}>
+            <UserPlus size={20} color={colors.foreground} />
           </Pressable>
         </View>
 
         {/* Family Card */}
-        <View style={[styles.familyCard, { backgroundColor: theme.colors.primary, shadowColor: theme.colors.primary }]}>
-          <View style={[styles.iconContainer, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-            <Users size={32} color={theme.colors.primaryForeground} />
+        <View style={[styles.familyCard, { backgroundColor: colors.primary, shadowColor: colors.primary, borderRadius: radius.card }]}>
+          <View style={[styles.iconContainer, { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: radius.lg }]}>
+            <Users size={32} color={colors.primaryForeground} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.cardTitle, { color: theme.colors.primaryForeground }]}>{familyName}</Text>
-            <Text style={[styles.cardSubtitle, { color: theme.colors.primaryForeground, opacity: 0.8 }]}>{members.length} members</Text>
+            <Text style={[styles.cardTitle, { color: colors.primaryForeground }]}>{familyName}</Text>
+            <Text style={[styles.cardSubtitle, { color: colors.primaryForeground, opacity: 0.8 }]}>{members.length} members</Text>
           </View>
-          <Pressable style={[styles.cardEditButton, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
-            <Edit size={20} color={theme.colors.primaryForeground} />
+          <Pressable style={[styles.cardEditButton, { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: radius.sm }]}>
+            <Edit size={20} color={colors.primaryForeground} />
           </Pressable>
         </View>
 
         {/* Members List */}
-        <Text style={[styles.sectionHeader, { color: theme.colors.foreground }]}>Members</Text>
+        <Text style={[styles.sectionHeader, { color: colors.foreground }]}>Members</Text>
         <View style={{ gap: 8 }}>
           {members.map((member) => (
-            <View key={member.id} style={[styles.memberCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-              <View style={[styles.avatar, { backgroundColor: member.color || theme.colors.muted }]}>
+            <View key={member.id} style={[styles.memberCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+              <View style={[styles.avatar, { backgroundColor: member.color || colors.muted, borderRadius: radius.card }]}>
                 <Text style={{ fontSize: 24 }}>{member.symbol}</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.memberName, { color: theme.colors.foreground }]}>{member.name}</Text>
+                <Text style={[styles.memberName, { color: colors.foreground }]}>{member.name}</Text>
                 <View style={styles.statusContainer}>
-                  <View style={[styles.roleBadge, { backgroundColor: theme.colors.muted }]}>
-                    <Text style={[styles.roleText, { color: theme.colors.primary }]}>Member</Text>
+                  <View style={[styles.roleBadge, { backgroundColor: colors.muted, borderRadius: radius.xs }]}>
+                    <Text style={[styles.roleText, { color: colors.primary }]}>Member</Text>
                   </View>
                   {member.isActive && (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                      <View style={[styles.onlineDot, { backgroundColor: theme.colors.success }]} />
-                      <Text style={[styles.onlineText, { color: theme.colors.success }]}>Online</Text>
+                      <View style={[styles.onlineDot, { backgroundColor: colors.success, borderRadius: radius.xs }]} />
+                      <Text style={[styles.onlineText, { color: colors.success }]}>Online</Text>
                     </View>
                   )}
                 </View>
               </View>
               <Pressable style={styles.editIconButton}>
-                <Edit size={16} color={theme.colors.mutedForeground} />
+                <Edit size={16} color={colors.mutedForeground} />
               </Pressable>
             </View>
           ))}
@@ -98,16 +101,16 @@ export const FamilyScreen: React.FC = () => {
 
         {/* Roles Info */}
         <View style={styles.rolesSection}>
-          <Text style={[styles.sectionHeader, { color: theme.colors.foreground }]}>Available Roles</Text>
-          <View style={[styles.rolesCard, { backgroundColor: theme.colors.card }]}>
+          <Text style={[styles.sectionHeader, { color: colors.foreground }]}>Available Roles</Text>
+          <View style={[styles.rolesCard, { backgroundColor: colors.card, borderRadius: radius.card }]}>
             {roles.map((role) => (
               <View key={role.label} style={styles.roleRow}>
-                <View style={[styles.roleIconBg, { backgroundColor: theme.colors.muted }]}>
+                <View style={[styles.roleIconBg, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
                   <role.icon size={20} color={getColor(role.color)} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.roleName, { color: theme.colors.foreground }]}>{role.label}</Text>
-                  <Text style={[styles.roleDesc, { color: theme.colors.mutedForeground }]}>{role.description}</Text>
+                  <Text style={[styles.roleName, { color: colors.foreground }]}>{role.label}</Text>
+                  <Text style={[styles.roleDesc, { color: colors.mutedForeground }]}>{role.description}</Text>
                 </View>
               </View>
             ))}
@@ -115,7 +118,7 @@ export const FamilyScreen: React.FC = () => {
         </View>
 
         {/* Add Button */}
-        <Pressable style={[styles.addButton, { backgroundColor: theme.colors.primary }]}>
+        <Pressable style={[styles.addButton, { backgroundColor: colors.primary, borderRadius: radius.md }]}>
           <UserPlus size={20} color="#fff" />
           <Text style={styles.addButtonText}>Add Family Member</Text>
         </Pressable>
@@ -137,7 +140,6 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     padding: 8,
-    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -151,7 +153,6 @@ const styles = StyleSheet.create({
   familyCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 20,
     padding: 16,
     marginBottom: 24,
     shadowOffset: { width: 0, height: 4 },
@@ -162,7 +163,6 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 56,
     height: 56,
-    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
@@ -176,7 +176,6 @@ const styles = StyleSheet.create({
   },
   cardEditButton: {
     padding: 8,
-    borderRadius: 10,
   },
   sectionHeader: {
     fontSize: 14,
@@ -188,7 +187,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
-    borderRadius: 16,
     borderWidth: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -199,7 +197,6 @@ const styles = StyleSheet.create({
   avatar: {
     width: 56,
     height: 56,
-    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
@@ -217,7 +214,6 @@ const styles = StyleSheet.create({
   roleBadge: {
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 6,
   },
   roleText: {
     fontSize: 11,
@@ -226,7 +222,6 @@ const styles = StyleSheet.create({
   onlineDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
   },
   onlineText: {
     fontSize: 11,
@@ -239,7 +234,6 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   rolesCard: {
-    borderRadius: 16,
     padding: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -255,7 +249,6 @@ const styles = StyleSheet.create({
   roleIconBg: {
     width: 40,
     height: 40,
-    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -271,7 +264,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
     paddingVertical: 16,
     marginTop: 24,
     gap: 8,

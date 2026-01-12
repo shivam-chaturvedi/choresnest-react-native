@@ -76,6 +76,7 @@ const createThemeColors = (paletteKey: PaletteKey, mode: 'light' | 'dark') => {
     dangerLight: "#7F1D1D",
     dangerDark: "#FECACA",
     googleBlue: "#4285F4",
+    shadow: isDark ? "#000000" : "#000000",
   };
 };
 
@@ -152,5 +153,42 @@ export const theme = {
       shadowRadius: 12,
       elevation: 4,
     }
+  },
+  // Radius will be updated dynamically
+  radius: {
+    xs: 6,
+    sm: 10,
+    md: 16,
+    lg: 20,
+    xl: 24,
+    xxl: 32,
+    card: 16,
+    button: 16,
+    full: 9999,
+  }
+};
+
+export const radii = {
+  rounded: {
+    xs: 6,
+    sm: 10,
+    md: 16,
+    lg: 20,
+    xl: 24,
+    xxl: 32,
+    card: 16,
+    button: 16,
+    full: 9999,
+  },
+  squared: {
+    xs: 2,
+    sm: 2,
+    md: 4,
+    lg: 4,
+    xl: 6,
+    xxl: 8,
+    card: 4,
+    button: 4,
+    full: 12, // Slightly rounded for squared mode FABs
   }
 };

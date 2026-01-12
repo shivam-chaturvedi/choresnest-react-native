@@ -28,10 +28,7 @@ import { GlobalSearch } from "../components/search/GlobalSearch";
 import { useSidebar } from "../contexts/SidebarContext";
 import { AppIcon, AppIconName } from "../components/ui/AppIcon";
 
-const STORAGE_TUTORIAL_KEY = "@familychore:hasSeenTutorial";
-const palette = theme.palette;
-const CARD_RADIUS = 16;
-const SMALL_RADIUS = 12;
+const STORAGE_TUTORIAL_KEY = "@familychore:firstSignUp";
 
 const MEAL_TYPES: { key: MealType; label: string; icon: string }[] = [
   { key: "breakfast", label: "Breakfast", icon: "🥞" },
@@ -43,6 +40,7 @@ const MEAL_TYPES: { key: MealType; label: string; icon: string }[] = [
 
 export const HomeScreen: React.FC = () => {
   const colors = useThemeColors();
+  const radius = theme.radius; // Dynamic radius
   const { members, activeMember, events, groceryList, setActiveMember } = useFamily();
   const { getMealsForDay, getRecipeById } = useMealPlan();
   const navigation = useNavigation();
@@ -61,16 +59,25 @@ export const HomeScreen: React.FC = () => {
   // Dashboard Toggle
   const [showDashboard, setShowDashboard] = useState(false);
 
+  // Tutorial logic
+  // Key: '@familychore:firstSignUp'
+  // Values: 
+  //   null -> First time app open (Show Tutorial)
+  //   'false' -> Already seen (Don't show)
+  //   'true' -> (Legacy/Unused but treated as unset if we wanted, but we will treating null as unset)
+
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_TUTORIAL_KEY).then((value) => {
-      if (!value) {
+      // Show if value is NULL. meaning it has never been set.
+      if (value === null) {
         setShowTutorial(true);
       }
     });
   }, []);
 
   const handleTutorialClose = async () => {
-    await AsyncStorage.setItem(STORAGE_TUTORIAL_KEY, "true");
+    // When closed, we mark it as seen ('false').
+    await AsyncStorage.setItem(STORAGE_TUTORIAL_KEY, "false");
     setShowTutorial(false);
   };
 
@@ -81,6 +88,8 @@ export const HomeScreen: React.FC = () => {
     tone: string;
     textColor: string;
     icon: AppIconName;
+    time: string;
+    read: boolean;
   }[] = [
       {
         id: "1",
@@ -89,14 +98,18 @@ export const HomeScreen: React.FC = () => {
         tone: colors.warning + '20',
         textColor: colors.warning,
         icon: "shoppingCart",
+        time: "5 hours ago",
+        read: false,
       },
       {
         id: "2",
         title: "LPG Refill Due",
-        detail: "Book cylinder before Jan 15",
+        detail: "Refill before Jan 15",
         tone: colors.warning + '20',
         textColor: colors.warning,
         icon: "bell",
+        time: "2 hours ago",
+        read: false,
       },
       {
         id: "3",
@@ -105,7 +118,39 @@ export const HomeScreen: React.FC = () => {
         tone: colors.info + '20',
         textColor: colors.info,
         icon: "alert",
+        time: "Yesterday",
+        read: true,
       },
+      {
+        id: "4",
+        title: "School Event Tomorrow",
+        detail: "Parent-teacher meeting at 10:00 AM",
+        tone: colors.primary + '20',
+        textColor: colors.primary,
+        icon: "calendar",
+        time: "3 hours ago",
+        read: false,
+      },
+      {
+        id: "5",
+        title: "Health Alert",
+        detail: "High sugar intake detected",
+        tone: colors.danger + '20',
+        textColor: colors.danger,
+        icon: "heart",
+        time: "2 days ago",
+        read: true,
+      },
+      {
+        id: "6",
+        title: "Task Completed",
+        detail: "Ananya completed 'Clean Room' task",
+        tone: colors.success + '20',
+        textColor: colors.success,
+        icon: "checkSquare",
+        time: "Yesterday",
+        read: true,
+      }
     ];
 
   const quickActions: { label: string; iconName: AppIconName; action: () => void; color: string; bg: string }[] = [
@@ -144,17 +189,17 @@ export const HomeScreen: React.FC = () => {
         <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
           {/* Header */}
           <View style={styles.topBar}>
-            <TouchableOpacity onPress={openSidebar} style={[styles.menuButton, { borderColor: colors.border, backgroundColor: colors.card }]}>
+            <TouchableOpacity onPress={openSidebar} style={[styles.menuButton, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radius.sm }]}>
               <AppIcon name="menu" size={24} color={colors.foreground} />
             </TouchableOpacity>
 
             <View style={{ flex: 1 }} />
 
             <View style={styles.topActions}>
-              <Pressable onPress={() => setShowSearch(true)} style={[styles.iconButton, { borderColor: colors.border, backgroundColor: colors.card }]}>
+              <Pressable onPress={() => setShowSearch(true)} style={[styles.iconButton, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radius.sm }]}>
                 <AppIcon name="search" size={24} color={colors.foreground} />
               </Pressable>
-              <Pressable onPress={() => setShowNotifications(true)} style={[styles.iconButton, { borderColor: colors.border, backgroundColor: colors.card }]}>
+              <Pressable onPress={() => setShowNotifications(true)} style={[styles.iconButton, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radius.sm }]}>
                 <AppIcon name="bell" size={24} color={colors.foreground} />
                 {alerts.length > 0 && <View style={[styles.notificationDot, { backgroundColor: colors.danger }]} />}
               </Pressable>
@@ -171,7 +216,7 @@ export const HomeScreen: React.FC = () => {
           </View>
 
           {/* Family Card */}
-          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.foreground }]}>
+          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.foreground, borderRadius: radius.card }]}>
             <View style={styles.cardHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <AppIcon name="users" size={20} color={colors.primary} style={{ marginRight: 8 }} />
@@ -194,7 +239,11 @@ export const HomeScreen: React.FC = () => {
                   onPress={() => setActiveMember(member)}
                   style={[styles.memberCard]}
                 >
-                  <View style={[styles.memberIconWrapper, { borderColor: colors.border, backgroundColor: colors.background }, member.isActive && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
+                  <View style={[styles.memberIconWrapper, {
+                    borderColor: colors.border,
+                    backgroundColor: colors.background,
+                    borderRadius: radius.card
+                  }, member.isActive && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
                     <Text style={{ fontSize: 24 }}>{member.symbol}</Text>
                     {member.isActive && <View style={[styles.activeDot, { backgroundColor: colors.success, borderColor: colors.card }]} />}
                   </View>
@@ -207,7 +256,7 @@ export const HomeScreen: React.FC = () => {
           </View>
 
           {/* Today at a Glance - Primary Card */}
-          <View style={[styles.card, { backgroundColor: colors.primary, borderWidth: 0, shadowColor: colors.primary }]}>
+          <View style={[styles.card, { backgroundColor: colors.primary, borderWidth: 0, shadowColor: colors.primary, borderRadius: radius.card }]}>
             <View style={styles.cardHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <AppIcon name="sparkles" size={20} color={colors.primaryForeground} style={{ marginRight: 8 }} />
@@ -225,7 +274,10 @@ export const HomeScreen: React.FC = () => {
                   key={metric.label}
                   style={[
                     styles.glanceStat,
-                    { backgroundColor: colors.primaryForeground + '26' }, // 15% opacity white
+                    {
+                      backgroundColor: colors.primaryForeground + '26',
+                      borderRadius: radius.md
+                    },
                     index < glanceMetrics.length - 1 && styles.glanceStatSpacing,
                   ]}
                 >
@@ -243,8 +295,8 @@ export const HomeScreen: React.FC = () => {
             <Text style={{ fontSize: 18, fontWeight: "700", color: colors.foreground }}>Quick Actions</Text>
             <View style={styles.quickActionsRow}>
               {quickActions.map((action) => (
-                <Pressable key={action.label} style={[styles.quickActionItem, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={action.action}>
-                  <View style={[styles.quickActionIcon, { backgroundColor: action.bg }]}>
+                <Pressable key={action.label} style={[styles.quickActionItem, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.md }]} onPress={action.action}>
+                  <View style={[styles.quickActionIcon, { backgroundColor: action.bg, borderRadius: radius.sm }]}>
                     <AppIcon name={action.iconName} size={24} color={action.color} />
                   </View>
                   <Text style={{ fontSize: 11, fontWeight: "600", color: colors.foreground, textAlign: "center" }}>{action.label}</Text>
@@ -254,7 +306,7 @@ export const HomeScreen: React.FC = () => {
           </View>
 
           {/* Today's Schedule */}
-          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.foreground }]}>
+          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.foreground, borderRadius: radius.card }]}>
             <View style={styles.cardHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <AppIcon name="calendar" size={18} color={colors.primary} style={{ marginRight: 8 }} />
@@ -268,9 +320,9 @@ export const HomeScreen: React.FC = () => {
               <Text style={{ color: colors.mutedForeground, fontStyle: 'italic', marginVertical: 8 }}>No events for today</Text>
             ) : (
               events.slice(0, 3).map((event) => (
-                <View key={event.id} style={[styles.scheduleRow, { backgroundColor: colors.muted }]}>
+                <View key={event.id} style={[styles.scheduleRow, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                    <View style={[styles.scheduleIconBox, { backgroundColor: colors.card }]}>
+                    <View style={[styles.scheduleIconBox, { backgroundColor: colors.card, borderRadius: radius.xs }]}>
                       <Text style={{ fontSize: 18 }}>{event.icon}</Text>
                     </View>
                     <View style={{ marginLeft: 12 }}>
@@ -280,7 +332,7 @@ export const HomeScreen: React.FC = () => {
                       </Text>
                     </View>
                   </View>
-                  <View style={[styles.scheduleAvatar, { backgroundColor: colors.primary }]}>
+                  <View style={[styles.scheduleAvatar, { backgroundColor: colors.primary, borderRadius: radius.xs }]}>
                     <AppIcon name="user" size={14} color={colors.primaryForeground} />
                   </View>
                 </View>
@@ -289,7 +341,7 @@ export const HomeScreen: React.FC = () => {
           </View>
 
           {/* Meals Today */}
-          <View style={[styles.card, styles.cardSpacing, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.foreground }]}>
+          <View style={[styles.card, styles.cardSpacing, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.foreground, borderRadius: radius.card }]}>
             <View style={styles.cardHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <AppIcon name="utensils" size={18} color={colors.primary} style={{ marginRight: 8 }} />
@@ -302,7 +354,7 @@ export const HomeScreen: React.FC = () => {
                 {mealSummary.map((meal) => (
                   <View
                     key={meal.label}
-                    style={[styles.mealItem, { backgroundColor: meal.hasMeal ? colors.success + '20' : colors.muted }]}
+                    style={[styles.mealItem, { backgroundColor: meal.hasMeal ? colors.success + '20' : colors.muted, borderRadius: radius.md }]}
                   >
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
                       <Text style={{ fontSize: 20 }}>{meal.icon}</Text>
@@ -323,7 +375,7 @@ export const HomeScreen: React.FC = () => {
               <Text style={{ fontSize: 18, fontWeight: "700", color: colors.foreground }}>Alerts & Reminders</Text>
             </View>
             {alerts.map((alert) => (
-              <View key={alert.id} style={[styles.alertRow, { backgroundColor: alert.tone, borderColor: colors.border }]}>
+              <View key={alert.id} style={[styles.alertRow, { backgroundColor: alert.tone, borderColor: colors.border, borderRadius: radius.md }]}>
                 <View style={[styles.alertIconBox]}>
                   <AppIcon name={alert.icon} size={20} color={alert.textColor} />
                 </View>
@@ -338,22 +390,28 @@ export const HomeScreen: React.FC = () => {
 
           {/* Stats Grid */}
           <View style={styles.statsGrid}>
-            <View style={[styles.statCard, { marginRight: 12, backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.foreground }]}>
+            <Pressable
+              style={[styles.statCard, { marginRight: 12, backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.foreground, borderRadius: radius.card }]}
+              onPress={() => navigation.navigate("Lists" as never)}
+            >
               <View style={[styles.statIconCircle, { backgroundColor: colors.info + '25' }]}>
                 <AppIcon name="shoppingCart" size={20} color={colors.info} />
               </View>
               <Text style={{ fontSize: 16, fontWeight: "600", color: colors.foreground }}>Grocery</Text>
               <Text style={{ fontSize: 28, fontWeight: "700", color: colors.foreground, marginVertical: 4 }}>{pendingGroceries}</Text>
               <Text style={{ fontSize: 12, color: colors.mutedForeground }}>items pending</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.foreground }]}>
+            </Pressable>
+            <Pressable
+              style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.foreground, borderRadius: radius.card }]}
+              onPress={() => navigation.navigate("Vault" as never)}
+            >
               <View style={[styles.statIconCircle, { backgroundColor: colors.primary + '25' }]}>
                 <AppIcon name="shield" size={20} color={colors.primary} />
               </View>
               <Text style={{ fontSize: 16, fontWeight: "600", color: colors.foreground }}>Vault</Text>
               <Text style={{ fontSize: 28, fontWeight: "700", color: colors.foreground, marginVertical: 4 }}>{documentsCount}</Text>
               <Text style={{ fontSize: 12, color: colors.mutedForeground }}>documents</Text>
-            </View>
+            </Pressable>
           </View>
         </ScrollView>
       </AppLayout>
@@ -384,7 +442,6 @@ const styles = StyleSheet.create({
   menuButton: {
     width: 40,
     height: 40,
-    borderRadius: 8,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
@@ -396,7 +453,6 @@ const styles = StyleSheet.create({
   iconButton: {
     width: 40,
     height: 40,
-    borderRadius: 8,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
@@ -411,7 +467,6 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   card: {
-    borderRadius: CARD_RADIUS,
     padding: theme.spacing.lg,
     marginBottom: 24,
     shadowOffset: { width: 0, height: 2 },
@@ -440,7 +495,6 @@ const styles = StyleSheet.create({
   memberIconWrapper: {
     width: 56,
     height: 56,
-    borderRadius: 16,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
@@ -462,7 +516,6 @@ const styles = StyleSheet.create({
   },
   glanceStat: {
     flex: 1,
-    borderRadius: SMALL_RADIUS,
     paddingVertical: 16,
     paddingHorizontal: 4,
     alignItems: "center",
@@ -486,7 +539,6 @@ const styles = StyleSheet.create({
   quickActionItem: {
     flex: 1,
     aspectRatio: 0.9,
-    borderRadius: SMALL_RADIUS,
     alignItems: "center",
     justifyContent: "center",
     padding: 8,
@@ -495,7 +547,6 @@ const styles = StyleSheet.create({
   quickActionIcon: {
     width: 44,
     height: 44,
-    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 8,
@@ -508,35 +559,30 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    borderRadius: SMALL_RADIUS,
     padding: 12,
     marginBottom: 8,
   },
   scheduleIconBox: {
     width: 40,
     height: 40,
-    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
   },
   scheduleAvatar: {
     width: 32,
     height: 32,
-    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
   },
   mealItem: {
     width: 140,
     height: 120,
-    borderRadius: SMALL_RADIUS,
     padding: 12,
     justifyContent: "space-between",
   },
   alertRow: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: SMALL_RADIUS,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
@@ -553,7 +599,6 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    borderRadius: CARD_RADIUS,
     padding: 16,
     borderWidth: 1,
     minHeight: 120,

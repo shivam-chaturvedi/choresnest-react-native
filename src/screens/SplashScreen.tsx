@@ -2,36 +2,63 @@ import React, { useEffect } from "react";
 import { View, Text, StyleSheet, Pressable, StatusBar } from "react-native";
 import { theme } from "../theme";
 
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
 interface SplashScreenProps {
-  onContinue: () => void;
+  onContinue: (destination: "Onboarding" | "Auth") => void;
   isLoading?: boolean;
 }
 
 export const SplashScreen: React.FC<SplashScreenProps> = ({ onContinue }) => {
+  const radius = theme.radius;
+
   useEffect(() => {
-    const timer = setTimeout(onContinue, 2000);
-    return () => clearTimeout(timer);
+    const checkFirstTime = async () => {
+      try {
+        const hasSeen = await AsyncStorage.getItem("HAS_SEEN_ONBOARDING");
+        // Efficient checking - practically instant, just await storage
+        // A tiny delay (e.g. 500ms) can be kept for smooth transition if needed, 
+        // but user requested "super fast". removing artificial delay.
+        // await new Promise((resolve) => setTimeout(() => resolve(null), 2000)); 
+
+
+        if (hasSeen === "true") {
+          onContinue("Auth");
+        } else {
+          onContinue("Onboarding");
+        }
+      } catch (e) {
+        // Fallback
+        setTimeout(() => onContinue("Onboarding"), 2000);
+      }
+    };
+
+    checkFirstTime();
   }, [onContinue]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
       <StatusBar barStyle="light-content" />
       <View style={[styles.hero, { backgroundColor: theme.colors.primary }]}>
-        <View style={[styles.logoWrapper, { backgroundColor: theme.colors.card }]}>
+        <View style={[styles.logoWrapper, { backgroundColor: theme.colors.card, borderRadius: radius.xxl }]}>
           <Text style={styles.logoIcon}>🏠</Text>
-          <View style={[styles.badgeContainer, { backgroundColor: theme.colors.success }]}>
+          <View style={[styles.badgeContainer, { backgroundColor: theme.colors.success, borderRadius: radius.full }]}>
             <Text style={styles.badgeText}>✓</Text>
           </View>
         </View>
         <Text style={[styles.title, { color: theme.colors.primaryForeground }]}>Family Chores</Text>
         <Text style={[styles.subtitle, { color: theme.colors.primaryForeground + 'B3' }]}>One app for your entire family</Text>
-        <Pressable style={[styles.primaryButton, { backgroundColor: theme.colors.primaryForeground + '33' }]} onPress={onContinue}>
-          <Text style={[styles.buttonText, { color: theme.colors.primaryForeground }]}>Family Calendar</Text>
+        <Pressable
+          style={[styles.primaryButton, { backgroundColor: theme.colors.primaryForeground + '33', borderRadius: radius.full }]}
+          // Optional manual override if needed, though usually Splash is auto
+          onPress={() => { }}
+        >
+          <Text style={[styles.buttonText, { color: theme.colors.primaryForeground }]}>Loading...</Text>
         </Pressable>
         <View style={styles.dotRow}>
-          <View style={[styles.dot, styles.dotActive, { backgroundColor: theme.colors.primaryForeground }]} />
-          <View style={[styles.dot, { backgroundColor: theme.colors.primaryForeground + '40' }]} />
-          <View style={[styles.dot, { backgroundColor: theme.colors.primaryForeground + '40' }]} />
+          <View style={[styles.dot, styles.dotActive, { backgroundColor: theme.colors.primaryForeground, borderRadius: radius.xs }]} />
+          <View style={[styles.dot, { backgroundColor: theme.colors.primaryForeground + '40', borderRadius: radius.xs }]} />
+          <View style={[styles.dot, { backgroundColor: theme.colors.primaryForeground + '40', borderRadius: radius.xs }]} />
         </View>
       </View>
     </View>
@@ -55,7 +82,7 @@ const styles = StyleSheet.create({
   logoWrapper: {
     width: 96,
     height: 96,
-    borderRadius: 28,
+    // borderRadius moved
     alignItems: "center",
     justifyContent: "center",
     marginBottom: theme.spacing.lg,
@@ -75,7 +102,7 @@ const styles = StyleSheet.create({
     right: -6,
     width: 28,
     height: 28,
-    borderRadius: 14,
+    // borderRadius moved
     alignItems: "center",
     justifyContent: "center",
   },
@@ -100,7 +127,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 24,
     paddingVertical: 10,
-    borderRadius: 999,
+    // borderRadius moved
     marginBottom: theme.spacing.lg,
   },
   buttonText: {
@@ -114,7 +141,7 @@ const styles = StyleSheet.create({
   dot: {
     width: 10,
     height: 10,
-    borderRadius: 5,
+    // borderRadius moved
     marginHorizontal: 4,
   },
   dotActive: {

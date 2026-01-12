@@ -9,6 +9,7 @@ import {
 import { AppLayout } from "../components/layout/AppLayout";
 import { theme } from "../theme";
 import { useSidebar } from "../contexts/SidebarContext";
+import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 
 interface HomePlaceholderProps {
   onReset: () => void;
@@ -16,24 +17,26 @@ interface HomePlaceholderProps {
 
 export const HomePlaceholder: React.FC<HomePlaceholderProps> = ({ onReset }) => {
   const { openSidebar } = useSidebar();
+  const colors = useThemeColors();
+  const radius = useThemeRadius();
 
   return (
     <AppLayout>
       <ScrollView
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.title}>Family Chores</Text>
-        <Text style={styles.subtitle}>
+        <Text style={[styles.title, { color: colors.foreground }]}>Family Chores</Text>
+        <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
           This placeholder sits inside the shared layout components (AppLayout,
           BottomNavigation, AppSidebar). You can extend the remaining screens
           using the same building blocks.
         </Text>
-        <Pressable style={styles.actionButton} onPress={openSidebar}>
-          <Text style={styles.actionText}>Open Menu</Text>
+        <Pressable style={[styles.actionButton, { backgroundColor: colors.primary, borderRadius: radius.lg }]} onPress={openSidebar}>
+          <Text style={[styles.actionText, { color: colors.primaryForeground }]}>Open Menu</Text>
         </Pressable>
-        <Pressable style={styles.actionButton} onPress={onReset}>
-          <Text style={styles.actionText}>Revisit Onboarding</Text>
+        <Pressable style={[styles.actionButton, { backgroundColor: colors.primary, borderRadius: radius.lg }]} onPress={onReset}>
+          <Text style={[styles.actionText, { color: colors.primaryForeground }]}>Revisit Onboarding</Text>
         </Pressable>
       </ScrollView>
     </AppLayout>
@@ -46,33 +49,27 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: theme.spacing.lg,
-    backgroundColor: theme.colors.background,
   },
   title: {
     fontSize: 28,
     fontWeight: "700",
-    color: theme.colors.foreground,
     marginBottom: theme.spacing.md,
     textAlign: "center",
   },
   subtitle: {
     textAlign: "center",
-    color: theme.colors.mutedForeground,
     fontSize: 16,
     lineHeight: 22,
     marginBottom: theme.spacing.lg,
   },
   actionButton: {
     width: "100%",
-    borderRadius: 16,
     paddingVertical: theme.spacing.md,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: theme.colors.primary,
     marginBottom: theme.spacing.sm,
   },
   actionText: {
-    color: theme.colors.primaryForeground,
     fontWeight: "600",
   },
 });

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, StyleSheet, Pressable, Dimensions } from "react-native";
 import { theme } from "../theme";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const { width } = Dimensions.get("window");
 
@@ -42,29 +43,55 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 }) => {
   const [currentSlide, setCurrentSlide] = useState(0);
   const slide = onboardingSlides[currentSlide];
+  const radius = theme.radius;
+
+  const finishOnboarding = async (callback: () => void) => {
+    try {
+      await AsyncStorage.setItem('HAS_SEEN_ONBOARDING', 'true');
+    } catch (e) {
+      console.error("Failed to save onboarding flag", e);
+    }
+    callback();
+  };
 
   const handleNext = () => {
     if (currentSlide < onboardingSlides.length - 1) {
       setCurrentSlide((prev) => prev + 1);
     } else {
-      onComplete();
+      finishOnboarding(onComplete);
     }
+  };
+
+  const handleSkip = () => {
+    finishOnboarding(onSkip);
   };
 
   return (
     <View style={[styles.screenContainer, { backgroundColor: theme.colors.background }]}>
       <View style={styles.skipRow}>
-        <Pressable onPress={onSkip} style={[styles.skipButton, { backgroundColor: theme.colors.muted }]}>
+        <Pressable onPress={onSkip} style={[styles.skipButton, { backgroundColor: theme.colors.muted, borderRadius: radius.sm }]}>
           <Text style={[styles.skipText, { color: theme.colors.foreground }]}>Skip</Text>
         </Pressable>
       </View>
 
       <View style={styles.content}>
-        <View style={[styles.illustrationCard, { backgroundColor: theme.colors.primary + '20', shadowColor: theme.colors.shadow }]}>
-          <View style={[styles.iconCircle, { backgroundColor: theme.colors.card, shadowColor: theme.colors.shadow }]}>
+        <View style={[styles.illustrationCard, {
+          backgroundColor: theme.colors.primary + '20',
+          shadowColor: theme.colors.shadow,
+          borderRadius: radius.xxl
+        }]}>
+          <View style={[styles.iconCircle, {
+            backgroundColor: theme.colors.card,
+            shadowColor: theme.colors.shadow,
+            borderRadius: radius.xl
+          }]}>
             <Text style={styles.iconText}>{slide.icon}</Text>
           </View>
-          <View style={[styles.accentSpot, { backgroundColor: theme.colors.primary + '40', shadowColor: theme.colors.shadow }]} />
+          <View style={[styles.accentSpot, {
+            backgroundColor: theme.colors.primary + '40',
+            shadowColor: theme.colors.shadow,
+            borderRadius: radius.sm
+          }]} />
         </View>
 
         <View style={styles.textBlock}>
@@ -79,6 +106,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               onPress={() => setCurrentSlide(index)}
               style={[
                 styles.dot,
+                { borderRadius: radius.xs },
                 index === currentSlide ? { width: 36, backgroundColor: theme.colors.primary } : { width: 10, backgroundColor: theme.colors.border },
               ]}
             />
@@ -87,7 +115,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       </View>
 
       <View style={styles.footer}>
-        <Pressable style={[styles.primaryButton, { backgroundColor: theme.colors.primary, shadowColor: theme.colors.shadow }]} onPress={handleNext}>
+        <Pressable style={[styles.primaryButton, { backgroundColor: theme.colors.primary, shadowColor: theme.colors.shadow, borderRadius: radius.lg }]} onPress={handleNext}>
           <Text style={[styles.buttonText, { color: theme.colors.primaryForeground }]}>
             {currentSlide === onboardingSlides.length - 1 ? "Get Started →" : "Next →"}
           </Text>
@@ -112,7 +140,7 @@ const styles = StyleSheet.create({
   skipButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 8,
+    // borderRadius moved
   },
   skipText: {
     fontWeight: "600",
@@ -126,7 +154,7 @@ const styles = StyleSheet.create({
   illustrationCard: {
     width: width * 0.55,
     height: width * 0.55,
-    borderRadius: 28,
+    // borderRadius moved
     alignItems: "center",
     justifyContent: "center",
     marginBottom: theme.spacing.xl,
@@ -139,7 +167,7 @@ const styles = StyleSheet.create({
   iconCircle: {
     width: 80,
     height: 80,
-    borderRadius: 18,
+    // borderRadius moved
     alignItems: "center",
     justifyContent: "center",
     shadowOffset: { width: 0, height: 6 },
@@ -153,7 +181,7 @@ const styles = StyleSheet.create({
   accentSpot: {
     width: 18,
     height: 18,
-    borderRadius: 9,
+    // borderRadius moved
     position: "absolute",
     top: 24,
     right: width * 0.15,
@@ -183,7 +211,7 @@ const styles = StyleSheet.create({
   },
   dot: {
     height: 10,
-    borderRadius: 5,
+    // borderRadius moved
     marginHorizontal: 6,
   },
   footer: {
@@ -193,7 +221,7 @@ const styles = StyleSheet.create({
   primaryButton: {
     paddingVertical: theme.spacing.md,
     width: "85%",
-    borderRadius: 16,
+    // borderRadius moved
     alignItems: "center",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.15,

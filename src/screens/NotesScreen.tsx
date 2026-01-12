@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useNavigation, NavigationProp } from "@react-navigation/native";
 import { theme } from "../theme";
+import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { AppLayout } from "../components/layout/AppLayout";
 import { AppIcon } from "../components/ui/AppIcon";
 import { useSidebar } from "../contexts/SidebarContext"; // Assuming this exists or we use navigation drawer
@@ -85,6 +86,8 @@ const initialNotes: Note[] = [
 
 export const NotesScreen: React.FC = () => {
     const navigation = useNavigation<NavigationProp<Record<string, undefined>>>();
+    const colors = useThemeColors();
+    const radius = useThemeRadius();
     const [notes, setNotes] = useState<Note[]>(initialNotes);
     const [selectedNote, setSelectedNote] = useState<Note | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
@@ -164,22 +167,22 @@ export const NotesScreen: React.FC = () => {
                     {/* Editor Header */}
                     <View style={styles.editorHeader}>
                         <Pressable
-                            style={styles.iconBtn}
+                            style={[styles.iconBtn, { borderRadius: radius.md }]}
                             onPress={() => setSelectedNote(null)}
                         >
-                            <AppIcon name="chevronLeft" size={24} color={theme.colors.foreground} />
+                            <AppIcon name="chevronLeft" size={24} color={colors.foreground} />
                         </Pressable>
 
                         <View style={{ flex: 1 }} />
 
                         <Pressable
-                            style={styles.iconBtn}
+                            style={[styles.iconBtn, { borderRadius: radius.md }]}
                             onPress={() => toggleFavorite(selectedNote.id)}
                         >
                             <AppIcon
                                 name="star"
                                 size={22}
-                                color={selectedNote.isFavorite ? "#F59E0B" : theme.colors.mutedForeground}
+                                color={selectedNote.isFavorite ? "#F59E0B" : colors.mutedForeground}
                                 // fill={selectedNote.isFavorite ? "#F59E0B" : "none"} // Lucide icons use fill prop in some versions, but here color usually tints stroke. 
                                 // We'll rely on color for now or use a filled variant if available.
                                 style={selectedNote.isFavorite ? { opacity: 1 } : { opacity: 0.5 }}
@@ -187,23 +190,23 @@ export const NotesScreen: React.FC = () => {
                         </Pressable>
 
                         <Pressable
-                            style={styles.iconBtn}
+                            style={[styles.iconBtn, { borderRadius: radius.md }]}
                             onPress={() => setShowColorPicker(!showColorPicker)}
                         >
-                            <AppIcon name="more" size={22} color={theme.colors.foreground} />
+                            <AppIcon name="more" size={22} color={colors.foreground} />
                         </Pressable>
                     </View>
 
                     {/* Color Picker Dropdown (Simple absolute view) */}
                     {showColorPicker && (
-                        <View style={[styles.colorPicker, { shadowColor: theme.shadows.card.shadowColor }]}>
+                        <View style={[styles.colorPicker, { shadowColor: theme.shadows.card.shadowColor, borderRadius: radius.lg }]}>
                             <View style={styles.colorRow}>
                                 {noteColors.map(color => (
                                     <Pressable
                                         key={color}
                                         style={[
                                             styles.colorSwatch,
-                                            { backgroundColor: color },
+                                            { backgroundColor: color, borderRadius: radius.md },
                                             selectedNote.color === color && styles.colorSwatchActive
                                         ]}
                                         onPress={() => changeNoteColor(selectedNote.id, color)}
@@ -214,8 +217,8 @@ export const NotesScreen: React.FC = () => {
                                 style={styles.deleteOption}
                                 onPress={() => deleteNote(selectedNote.id)}
                             >
-                                <AppIcon name="trash" size={16} color={theme.colors.danger} style={{ marginRight: 8 }} />
-                                <Text style={{ color: theme.colors.danger, fontWeight: '600' }}>Delete Note</Text>
+                                <AppIcon name="trash" size={16} color={colors.danger} style={{ marginRight: 8 }} />
+                                <Text style={{ color: colors.danger, fontWeight: '600' }}>Delete Note</Text>
                             </Pressable>
                         </View>
                     )}
@@ -223,25 +226,25 @@ export const NotesScreen: React.FC = () => {
                     {/* Editor Content */}
                     <ScrollView contentContainerStyle={styles.editorContent}>
                         <TextInput
-                            style={styles.titleInput}
+                            style={[styles.titleInput, { color: colors.foreground }]}
                             value={selectedNote.title}
                             onChangeText={(t) => updateNote("title", t)}
                             placeholder="Note title..."
-                            placeholderTextColor={theme.colors.mutedForeground}
+                            placeholderTextColor={colors.mutedForeground}
                             multiline
                         />
                         <TextInput
-                            style={styles.contentInput}
+                            style={[styles.contentInput, { color: colors.foreground }]}
                             value={selectedNote.content}
                             onChangeText={(t) => updateNote("content", t)}
                             placeholder="Start writing..."
-                            placeholderTextColor={theme.colors.mutedForeground}
+                            placeholderTextColor={colors.mutedForeground}
                             multiline
                             textAlignVertical="top"
                         />
 
                         <View style={styles.editorFooter}>
-                            <AppIcon name="calendar" size={14} color={theme.colors.mutedForeground} style={{ marginRight: 6 }} />
+                            <AppIcon name="calendar" size={14} color={colors.mutedForeground} style={{ marginRight: 6 }} />
                             <Text style={styles.dateText}>Edited {format(selectedNote.updatedAt, "MMM d, yyyy")}</Text>
                         </View>
                     </ScrollView>
@@ -253,15 +256,15 @@ export const NotesScreen: React.FC = () => {
     // --- LIST VIEW ---
     return (
         <AppLayout showNav={false}>
-            <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+            <View style={[styles.container, { backgroundColor: colors.background }]}>
                 {/* Header */}
                 <View style={styles.header}>
                     <Pressable onPress={openSidebar} style={styles.menuBtn}>
-                        <AppIcon name="menu" size={24} color={theme.colors.foreground} />
+                        <AppIcon name="menu" size={24} color={colors.foreground} />
                     </Pressable>
-                    <Text style={[styles.headerTitle, { color: theme.colors.foreground }]}>Notes</Text>
+                    <Text style={[styles.headerTitle, { color: colors.foreground }]}>Notes</Text>
                     <Pressable
-                        style={[styles.addBtn, { backgroundColor: theme.colors.primary }]}
+                        style={[styles.addBtn, { backgroundColor: colors.primary, borderRadius: radius.md }]}
                         onPress={createNewNote}
                     >
                         <AppIcon name="plus" size={20} color="#fff" />
@@ -270,12 +273,12 @@ export const NotesScreen: React.FC = () => {
 
                 <ScrollView contentContainerStyle={styles.listContent}>
                     {/* Search */}
-                    <View style={[styles.searchBar, { backgroundColor: theme.colors.muted }]}>
-                        <AppIcon name="search" size={20} color={theme.colors.mutedForeground} style={{ marginRight: 10 }} />
+                    <View style={[styles.searchBar, { backgroundColor: colors.muted, borderRadius: radius.lg }]}>
+                        <AppIcon name="search" size={20} color={colors.mutedForeground} style={{ marginRight: 10 }} />
                         <TextInput
-                            style={[styles.searchInput, { color: theme.colors.foreground }]}
+                            style={[styles.searchInput, { color: colors.foreground }]}
                             placeholder="Search notes..."
-                            placeholderTextColor={theme.colors.mutedForeground}
+                            placeholderTextColor={colors.mutedForeground}
                             value={searchQuery}
                             onChangeText={setSearchQuery}
                         />
@@ -283,11 +286,11 @@ export const NotesScreen: React.FC = () => {
 
                     {/* Stats */}
                     <View style={styles.statsRow}>
-                        <View style={[styles.statCard, { backgroundColor: theme.colors.muted }]}>
-                            <Text style={[styles.statValue, { color: theme.colors.foreground }]}>{notes.length}</Text>
+                        <View style={[styles.statCard, { backgroundColor: colors.muted, borderRadius: radius.lg }]}>
+                            <Text style={[styles.statValue, { color: colors.foreground }]}>{notes.length}</Text>
                             <Text style={styles.statLabel}>Total</Text>
                         </View>
-                        <View style={[styles.statCard, { backgroundColor: theme.colors.muted }]}>
+                        <View style={[styles.statCard, { backgroundColor: colors.muted, borderRadius: radius.lg }]}>
                             <Text style={[styles.statValue, { color: "#F59E0B" }]}>{favoriteNotes.length}</Text>
                             <Text style={styles.statLabel}>Favorites</Text>
                         </View>
@@ -304,7 +307,7 @@ export const NotesScreen: React.FC = () => {
                                 {favoriteNotes.map((note) => (
                                     <Pressable
                                         key={note.id}
-                                        style={[styles.noteCard, { backgroundColor: note.color, borderColor: theme.colors.border }]}
+                                        style={[styles.noteCard, { backgroundColor: note.color, borderColor: colors.border, borderRadius: radius.card }]}
                                         onPress={() => setSelectedNote(note)}
                                     >
                                         {note.isFavorite && (
@@ -312,8 +315,8 @@ export const NotesScreen: React.FC = () => {
                                                 <AppIcon name="star" size={14} color="#F59E0B" />
                                             </View>
                                         )}
-                                        <Text style={[styles.cardTitle, { color: theme.colors.foreground }]} numberOfLines={1}>{note.title || "Untitled"}</Text>
-                                        <Text style={[styles.cardPreview, { color: theme.colors.mutedForeground }]} numberOfLines={3}>{note.content || "Empty note"}</Text>
+                                        <Text style={[styles.cardTitle, { color: colors.foreground }]} numberOfLines={1}>{note.title || "Untitled"}</Text>
+                                        <Text style={[styles.cardPreview, { color: colors.mutedForeground }]} numberOfLines={3}>{note.content || "Empty note"}</Text>
                                         <Text style={styles.cardDate}>{format(note.updatedAt, "MMM d")}</Text>
                                     </Pressable>
                                 ))}
@@ -325,18 +328,18 @@ export const NotesScreen: React.FC = () => {
                     {otherNotes.length > 0 && (
                         <View style={styles.section}>
                             <View style={styles.sectionHeader}>
-                                <AppIcon name="file" size={14} color={theme.colors.mutedForeground} style={{ marginRight: 6 }} />
+                                <AppIcon name="file" size={14} color={colors.mutedForeground} style={{ marginRight: 6 }} />
                                 <Text style={styles.sectionTitle}>ALL NOTES</Text>
                             </View>
                             <View style={styles.grid}>
                                 {otherNotes.map((note) => (
                                     <Pressable
                                         key={note.id}
-                                        style={[styles.noteCard, { backgroundColor: note.color, borderColor: theme.colors.border }]}
+                                        style={[styles.noteCard, { backgroundColor: note.color, borderColor: colors.border, borderRadius: radius.card }]}
                                         onPress={() => setSelectedNote(note)}
                                     >
-                                        <Text style={[styles.cardTitle, { color: theme.colors.foreground }]} numberOfLines={1}>{note.title || "Untitled"}</Text>
-                                        <Text style={[styles.cardPreview, { color: theme.colors.mutedForeground }]} numberOfLines={3}>{note.content || "Empty note"}</Text>
+                                        <Text style={[styles.cardTitle, { color: colors.foreground }]} numberOfLines={1}>{note.title || "Untitled"}</Text>
+                                        <Text style={[styles.cardPreview, { color: colors.mutedForeground }]} numberOfLines={3}>{note.content || "Empty note"}</Text>
                                         <Text style={styles.cardDate}>{format(note.updatedAt, "MMM d")}</Text>
                                     </Pressable>
                                 ))}
@@ -347,15 +350,15 @@ export const NotesScreen: React.FC = () => {
                     {/* Empty State */}
                     {filteredNotes.length === 0 && (
                         <View style={styles.emptyState}>
-                            <View style={[styles.emptyIcon, { backgroundColor: theme.colors.muted }]}>
-                                <AppIcon name="file" size={32} color={theme.colors.mutedForeground} />
+                            <View style={[styles.emptyIcon, { backgroundColor: colors.muted, borderRadius: radius.full }]}>
+                                <AppIcon name="file" size={32} color={colors.mutedForeground} />
                             </View>
-                            <Text style={[styles.emptyTitle, { color: theme.colors.foreground }]}>{searchQuery ? "No notes found" : "No notes yet"}</Text>
+                            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>{searchQuery ? "No notes found" : "No notes yet"}</Text>
                             <Text style={styles.emptySub}>{searchQuery ? "Try a different search term" : "Create your first note"}</Text>
                             {!searchQuery && (
-                                <Pressable style={[styles.emptyBtn, { backgroundColor: theme.colors.foreground }]} onPress={createNewNote}>
-                                    <AppIcon name="plus" size={16} color={theme.colors.background} style={{ marginRight: 8 }} />
-                                    <Text style={[styles.emptyBtnText, { color: theme.colors.background }]}>New Note</Text>
+                                <Pressable style={[styles.emptyBtn, { backgroundColor: colors.foreground, borderRadius: radius.md }]} onPress={createNewNote}>
+                                    <AppIcon name="plus" size={16} color={colors.background} style={{ marginRight: 8 }} />
+                                    <Text style={[styles.emptyBtnText, { color: colors.background }]}>New Note</Text>
                                 </Pressable>
                             )}
                         </View>
@@ -393,7 +396,6 @@ const styles = StyleSheet.create({
     addBtn: {
         width: 40,
         height: 40,
-        borderRadius: 14,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -404,7 +406,6 @@ const styles = StyleSheet.create({
     searchBar: {
         flexDirection: 'row',
         alignItems: 'center',
-        borderRadius: 16,
         paddingHorizontal: 16,
         height: 50,
         marginBottom: 20,
@@ -422,7 +423,6 @@ const styles = StyleSheet.create({
     statCard: {
         flex: 1,
         padding: 16,
-        borderRadius: 18,
         alignItems: 'center',
     },
     statValue: {
@@ -456,7 +456,6 @@ const styles = StyleSheet.create({
     noteCard: {
         width: (Dimensions.get('window').width - 40 - 12) / 2,
         padding: 16,
-        borderRadius: 20,
         borderWidth: 1,
         borderColor: 'rgba(0,0,0,0.05)',
 
@@ -492,7 +491,6 @@ const styles = StyleSheet.create({
     emptyIcon: {
         width: 64,
         height: 64,
-        borderRadius: 32,
         alignItems: 'center',
         justifyContent: 'center',
         marginBottom: 16,
@@ -512,7 +510,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 20,
         paddingVertical: 12,
-        borderRadius: 14,
     },
     emptyBtnText: {
         fontWeight: '600',
@@ -530,7 +527,6 @@ const styles = StyleSheet.create({
     },
     iconBtn: {
         padding: 8,
-        borderRadius: 12,
     },
     editorContent: {
         padding: 20,
@@ -539,14 +535,12 @@ const styles = StyleSheet.create({
     titleInput: {
         fontSize: 28,
         fontWeight: '700',
-        color: theme.colors.foreground,
         marginBottom: 16,
         padding: 0,
     },
     contentInput: {
         fontSize: 16,
         lineHeight: 24,
-        color: theme.colors.foreground,
         minHeight: 300,
         padding: 0,
         marginBottom: 20,
@@ -568,7 +562,6 @@ const styles = StyleSheet.create({
         right: 20,
         backgroundColor: '#fff',
         padding: 16,
-        borderRadius: 16,
         zIndex: 10,
         shadowOffset: { width: 0, height: 5 },
         shadowOpacity: 0.15,
@@ -583,7 +576,6 @@ const styles = StyleSheet.create({
     colorSwatch: {
         width: 24,
         height: 24,
-        borderRadius: 12,
         borderWidth: 2,
         borderColor: 'rgba(0,0,0,0.1)',
     },

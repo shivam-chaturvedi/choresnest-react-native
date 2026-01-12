@@ -8,6 +8,7 @@ import {
   TextInput,
   Image,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { theme } from "../theme";
 import { AppIcon } from "../components/ui/AppIcon";
 
@@ -30,7 +31,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     password: "",
   });
 
-  const handleSubmit = () => {
+  const radius = theme.radius;
+
+  const handleSubmit = async () => {
+    // We do NOT set the tutorial flag here anymore.
+    // The tutorial should show on the first home screen load for new users (flag is null).
+    // It will only be marked as seen ('false') when they finish/skip/close the tutorial.
     onAuthenticated();
   };
 
@@ -40,12 +46,20 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       contentContainerStyle={styles.screenContent}
       keyboardShouldPersistTaps="handled"
     >
-      <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
+      <View style={[styles.header, {
+        backgroundColor: theme.colors.primary,
+        borderBottomLeftRadius: radius.xxl,
+        borderBottomRightRadius: radius.xxl
+      }]}>
         <View style={styles.logoWrapper}>
-          <View style={[styles.logoSquare, { backgroundColor: theme.colors.card, shadowColor: theme.colors.shadow }]}>
+          <View style={[styles.logoSquare, {
+            backgroundColor: theme.colors.card,
+            shadowColor: theme.colors.shadow,
+            borderRadius: radius.card
+          }]}>
             <View style={styles.logoContainer}>
               <AppIcon name="home" size={32} color={theme.colors.primary} />
-              <View style={[styles.shieldBadge, { backgroundColor: theme.colors.card }]}>
+              <View style={[styles.shieldBadge, { backgroundColor: theme.colors.card, borderRadius: radius.xs }]}>
                 <AppIcon name="shield" size={16} color={theme.colors.secondary} />
               </View>
             </View>
@@ -56,12 +70,18 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       </View>
 
       <View style={styles.formWrapper}>
-        <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}>
-          <View style={[styles.tabs, { backgroundColor: theme.colors.muted }]}>
+        <View style={[styles.card, {
+          backgroundColor: theme.colors.card,
+          borderColor: theme.colors.border,
+          shadowColor: theme.colors.shadow,
+          borderRadius: radius.xl
+        }]}>
+          <View style={[styles.tabs, { backgroundColor: theme.colors.muted, borderRadius: radius.lg }]}>
             <Pressable
               onPress={() => setIsLogin(true)}
               style={[
                 styles.tab,
+                { borderRadius: radius.md },
                 isLogin ? [styles.tabActive, { backgroundColor: theme.colors.card, shadowColor: theme.colors.shadow }] : styles.tabInactive,
               ]}
             >
@@ -78,6 +98,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               onPress={() => setIsLogin(false)}
               style={[
                 styles.tab,
+                { borderRadius: radius.md },
                 !isLogin ? [styles.tabActive, { backgroundColor: theme.colors.card, shadowColor: theme.colors.shadow }] : styles.tabInactive,
               ]}
             >
@@ -94,7 +115,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
           <View style={styles.fieldStack}>
             {!isLogin && (
-              <View style={[styles.inputRow, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+              <View style={[styles.inputRow, {
+                backgroundColor: theme.colors.background,
+                borderColor: theme.colors.border,
+                borderRadius: radius.md
+              }]}>
                 <AppIcon name="user" size={20} color={theme.colors.mutedForeground} style={styles.inputIcon} />
                 <TextInput
                   style={[styles.textInput, { color: theme.colors.foreground }]}
@@ -108,7 +133,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               </View>
             )}
 
-            <View style={[styles.inputRow, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+            <View style={[styles.inputRow, {
+              backgroundColor: theme.colors.background,
+              borderColor: theme.colors.border,
+              borderRadius: radius.md
+            }]}>
               <AppIcon name="mail" size={20} color={theme.colors.mutedForeground} style={styles.inputIcon} />
               <TextInput
                 style={[styles.textInput, { color: theme.colors.foreground }]}
@@ -123,7 +152,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               />
             </View>
 
-            <View style={[styles.inputRow, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+            <View style={[styles.inputRow, {
+              backgroundColor: theme.colors.background,
+              borderColor: theme.colors.border,
+              borderRadius: radius.md
+            }]}>
               <AppIcon name="lock" size={20} color={theme.colors.mutedForeground} style={styles.inputIcon} />
               <TextInput
                 style={[styles.textInput, { color: theme.colors.foreground }]}
@@ -153,7 +186,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             </Pressable>
           )}
 
-          <Pressable style={[styles.primaryButton, { backgroundColor: theme.colors.primary }]} onPress={handleSubmit}>
+          <Pressable style={[styles.primaryButton, { backgroundColor: theme.colors.primary, borderRadius: radius.lg }]} onPress={handleSubmit}>
             <Text style={[styles.primaryButtonText, { color: theme.colors.primaryForeground }]}>
               {isLogin ? "Sign In" : "Create Account"}
             </Text>
@@ -165,7 +198,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             <View style={[styles.line, { backgroundColor: theme.colors.border }]} />
           </View>
 
-          <Pressable style={[styles.googleButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}>
+          <Pressable style={[styles.googleButton, {
+            backgroundColor: theme.colors.card,
+            borderColor: theme.colors.border,
+            shadowColor: theme.colors.shadow,
+            borderRadius: radius.lg
+          }]}>
             <View style={styles.googleIconWrapper}>
               <Image
                 source={require('../assets/images/google.png')}
@@ -177,8 +215,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           </Pressable>
         </View>
 
-        <View style={[styles.infoCard, { backgroundColor: theme.colors.primary + '10', borderColor: theme.colors.primary + '20' }]}>
-          <View style={[styles.infoIcon, { backgroundColor: theme.colors.primary }]}>
+        <View style={[styles.infoCard, {
+          backgroundColor: theme.colors.primary + '10',
+          borderColor: theme.colors.primary + '20',
+          borderRadius: radius.lg
+        }]}>
+          <View style={[styles.infoIcon, { backgroundColor: theme.colors.primary, borderRadius: radius.sm }]}>
             <AppIcon name="shield" size={20} color={theme.colors.primaryForeground} />
           </View>
           <View style={styles.infoTextContainer}>
@@ -215,8 +257,7 @@ const styles = StyleSheet.create({
   header: {
     paddingVertical: theme.spacing.xl,
     paddingHorizontal: theme.spacing.lg,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
+    // Radius moved to inline
     alignItems: "center",
     justifyContent: "center",
   },
@@ -226,7 +267,7 @@ const styles = StyleSheet.create({
   logoSquare: {
     width: 64,
     height: 64,
-    borderRadius: 16,
+    // Radius moved
     alignItems: "center",
     justifyContent: "center",
     shadowOffset: { width: 0, height: 4 },
@@ -243,7 +284,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: -6,
     bottom: -6,
-    borderRadius: 4,
     padding: 1,
   },
   title: {
@@ -260,7 +300,6 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.md,
   },
   card: {
-    borderRadius: 24,
     padding: theme.spacing.lg,
     borderWidth: 1,
     shadowOffset: { width: 0, height: 10 },
@@ -270,7 +309,6 @@ const styles = StyleSheet.create({
   },
   tabs: {
     flexDirection: "row",
-    borderRadius: 16,
     padding: 4,
     marginBottom: theme.spacing.md,
   },
@@ -278,7 +316,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: theme.spacing.sm,
     alignItems: "center",
-    borderRadius: 12,
   },
   tabActive: {
     shadowOffset: { width: 0, height: 3 },
@@ -297,7 +334,6 @@ const styles = StyleSheet.create({
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 14,
     paddingHorizontal: theme.spacing.sm,
     marginBottom: theme.spacing.sm,
     borderWidth: 1,
@@ -323,7 +359,6 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     paddingVertical: theme.spacing.md,
-    borderRadius: 16,
     alignItems: "center",
     marginTop: theme.spacing.sm,
   },
@@ -348,7 +383,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderRadius: 16,
     paddingVertical: 16,
     justifyContent: "center",
     shadowOffset: { width: 0, height: 2 },
@@ -371,7 +405,6 @@ const styles = StyleSheet.create({
   infoCard: {
     flexDirection: "row",
     alignItems: "flex-start",
-    borderRadius: 16,
     padding: 16,
     marginTop: 24,
     borderWidth: 1,
@@ -379,7 +412,6 @@ const styles = StyleSheet.create({
   infoIcon: {
     width: 40,
     height: 40,
-    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
