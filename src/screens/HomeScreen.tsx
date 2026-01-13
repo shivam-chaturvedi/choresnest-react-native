@@ -27,6 +27,8 @@ import { GettingStartedTutorial } from "../components/tutorial/GettingStartedTut
 import { GlobalSearch } from "../components/search/GlobalSearch";
 import { useSidebar } from "../contexts/SidebarContext";
 import { AppIcon, AppIconName } from "../components/ui/AppIcon";
+import { PROFILE_COLORS } from "../constants/profileColors";
+
 
 const STORAGE_TUTORIAL_KEY = "@familychore:firstSignUp";
 
@@ -76,9 +78,14 @@ export const HomeScreen: React.FC = () => {
   }, []);
 
   const handleTutorialClose = async () => {
-    // When closed, we mark it as seen ('false').
-    await AsyncStorage.setItem(STORAGE_TUTORIAL_KEY, "false");
-    setShowTutorial(false);
+    try {
+      // When closed, we mark it as seen ('false').
+      await AsyncStorage.setItem(STORAGE_TUTORIAL_KEY, "false");
+      setShowTutorial(false);
+    } catch (error) {
+      console.error("Error closing tutorial:", error);
+      setShowTutorial(false); // Still close it
+    }
   };
 
   const alerts: {
@@ -161,26 +168,36 @@ export const HomeScreen: React.FC = () => {
   ];
 
   const todayKey = new Date().toISOString().split("T")[0];
-  const todayMeals = getMealsForDay(todayKey);
-  const pendingGroceries = groceryList.filter((item) => !item.completed).length;
-  const documentsCount = Math.max(28, groceryList.length * 6 + 18); // Mock dynamic count
+  const todayMeals = getMealsForDay(todayKey) || [];
+  const pendingGroceries = (groceryList || []).filter((item) => !item.completed).length;
+  const documentsCount = Math.max(28, (groceryList || []).length * 6 + 18); // Mock dynamic count
 
   const mealSummary = MEAL_TYPES.map((mealType) => {
-    const plannedMeal = todayMeals.find((meal) => meal.mealType === mealType.key);
-    const recipe = plannedMeal ? getRecipeById(plannedMeal.recipeId) : undefined;
+    try {
+      const plannedMeal = (todayMeals || []).find((meal) => meal.mealType === mealType.key);
+      const recipe = plannedMeal ? getRecipeById(plannedMeal.recipeId) : undefined;
 
-    return {
-      label: mealType.label,
-      detail: recipe ? recipe.name : "Plan a meal",
-      icon: mealType.icon,
-      hasMeal: !!plannedMeal,
-    };
+      return {
+        label: mealType.label,
+        detail: recipe ? recipe.name : "Plan a meal",
+        icon: mealType.icon,
+        hasMeal: !!plannedMeal,
+      };
+    } catch (error) {
+      console.error("Error in mealSummary map:", error);
+      return {
+        label: mealType.label,
+        detail: "Plan a meal",
+        icon: mealType.icon,
+        hasMeal: false,
+      };
+    }
   });
 
   const glanceMetrics = [
-    { label: "Events", value: events.length },
-    { label: "Tasks", value: groceryList.length }, // Placeholder
-    { label: "Reminders", value: todayMeals.length },
+    { label: "Events", value: (events || []).length },
+    { label: "Tasks", value: (groceryList || []).length }, // Placeholder
+    { label: "Reminders", value: (todayMeals || []).length },
   ];
 
   return (
@@ -233,26 +250,31 @@ export const HomeScreen: React.FC = () => {
               </View>
             </View>
             <View style={styles.membersRow}>
-              {members.map((member) => (
-                <Pressable
-                  key={member.id}
-                  onPress={() => setActiveMember(member)}
-                  style={[styles.memberCard]}
-                >
-                  <View style={[styles.memberIconWrapper, {
-                    borderColor: colors.border,
-                    backgroundColor: colors.background,
-                    borderRadius: radius.card
-                  }, member.isActive && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
-                    <Text style={{ fontSize: 24 }}>{member.symbol}</Text>
-                    {member.isActive && <View style={[styles.activeDot, { backgroundColor: colors.success, borderColor: colors.card }]} />}
-                  </View>
-                  <Text style={{ fontSize: 12, fontWeight: "500", color: member.isActive ? colors.primary : colors.mutedForeground }}>
-                    {member.name}
-                  </Text>
-                </Pressable>
-              ))}
+              {(members || []).map((member) => {
+                const profileColor = PROFILE_COLORS.find(c => c.value === member.color)?.hex || colors.primary;
+                return (
+                  <Pressable
+                    key={member?.id || Math.random().toString()}
+                    onPress={() => member && setActiveMember(member)}
+                    style={[styles.memberCard]}
+                  >
+                    <View style={[styles.memberIconWrapper, {
+                      borderColor: member?.isActive ? profileColor : colors.border,
+                      backgroundColor: member?.isActive ? profileColor : colors.card,
+                      borderRadius: radius.card,
+                      borderWidth: 2,
+                    }]}>
+                      <Text style={{ fontSize: 24 }}>{member?.symbol || "?"}</Text>
+                      {member?.isActive && <View style={[styles.activeDot, { backgroundColor: colors.success, borderColor: colors.card }]} />}
+                    </View>
+                    <Text style={{ fontSize: 12, fontWeight: "600", color: member?.isActive ? profileColor : colors.mutedForeground }}>
+                      {member?.name || "Member"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
+
           </View>
 
           {/* Today at a Glance - Primary Card */}
@@ -316,19 +338,19 @@ export const HomeScreen: React.FC = () => {
                 <Text style={[styles.linkText, { color: colors.primary }]}>View All ›</Text>
               </Pressable>
             </View>
-            {events.length === 0 ? (
+            {(!events || events.length === 0) ? (
               <Text style={{ color: colors.mutedForeground, fontStyle: 'italic', marginVertical: 8 }}>No events for today</Text>
             ) : (
               events.slice(0, 3).map((event) => (
-                <View key={event.id} style={[styles.scheduleRow, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
+                <View key={event?.id || Math.random().toString()} style={[styles.scheduleRow, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                     <View style={[styles.scheduleIconBox, { backgroundColor: colors.card, borderRadius: radius.xs }]}>
-                      <Text style={{ fontSize: 18 }}>{event.icon}</Text>
+                      <Text style={{ fontSize: 18 }}>{event?.icon || "📅"}</Text>
                     </View>
                     <View style={{ marginLeft: 12 }}>
-                      <Text style={{ fontSize: 16, fontWeight: "600", color: colors.foreground }}>{event.title}</Text>
+                      <Text style={{ fontSize: 16, fontWeight: "600", color: colors.foreground }}>{event?.title || "Untitled Event"}</Text>
                       <Text style={{ fontSize: 13, color: colors.mutedForeground, marginTop: 2 }}>
-                        <AppIcon name="clock" size={12} color={colors.mutedForeground} /> {event.time}
+                        <AppIcon name="clock" size={12} color={colors.mutedForeground} /> {event?.time || "No time"}
                       </Text>
                     </View>
                   </View>

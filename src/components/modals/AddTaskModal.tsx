@@ -10,7 +10,9 @@ import {
   Platform,
 } from "react-native";
 import { useThemeColors } from "../../contexts/ThemeContext";
-import { theme } from "../../theme"; // Keep for spacing or other utils if needed, but prefer hooks
+import { useFamily } from "../../contexts/FamilyContext";
+import { PROFILE_COLORS } from "../../constants/profileColors";
+import { theme } from "../../theme";
 import { AppIcon, CustomDateTimePicker } from "../ui";
 
 interface AddTaskModalProps {
@@ -28,10 +30,10 @@ interface TaskData {
 }
 
 const taskIcons = ["📝", "📞", "💊", "📧", "🏫", "🔧", "📦", "🧹", "🧺", "🍽️", "🛏️", "🐕"];
-const familyMembers = ["You", "Mom", "Dad", "Kids"];
 
 export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSave }) => {
   const colors = useThemeColors();
+  const { members, activeMember } = useFamily();
 
   const priorities = [
     { label: "High", value: "high", color: colors.primary, bgColor: colors.danger + "20", textColor: colors.danger },
@@ -44,20 +46,28 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
     icon: "📝",
     priority: "medium",
     dueDate: new Date(),
-    person: "You",
+    person: activeMember?.id || (members?.[0]?.id || "1"),
   });
 
+
   const handleSave = () => {
-    if (formData.name.trim()) {
-      onSave?.(formData);
-      setFormData({
-        name: "",
-        icon: "📝",
-        priority: "medium",
-        dueDate: new Date(),
-        person: "You",
+    try {
+      if (formData.name.trim()) {
+        onSave?.(formData);
+        setFormData({
+          name: "",
+          icon: "📝",
+          priority: "medium",
+          dueDate: new Date(),
+          person: activeMember?.id || (members?.[0]?.id || "1"),
+        });
+        onClose();
+      }
+    } catch (error) {
+      console.error("Error saving task:", error);
+      import('react-native').then(({ Alert }) => {
+        Alert.alert("Error", "Failed to save task. Please try again.");
       });
-      onClose();
     }
   };
 
@@ -136,27 +146,34 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
               label="Due Date"
             />
 
-            {/* Assign Person */}
+            {/* Assign To */}
             <Text style={[styles.label, { color: colors.foreground }]}>Assign To</Text>
             <View style={styles.assigneeRow}>
-              {familyMembers.map((member) => (
-                <Pressable
-                  key={member}
-                  onPress={() => setFormData({ ...formData, person: member })}
-                  style={[
-                    styles.assigneeButton,
-                    { backgroundColor: colors.muted },
-                    formData.person === member && { backgroundColor: colors.success },
-                  ]}
-                >
-                  <Text style={[
-                    styles.assigneeText,
-                    { color: colors.mutedForeground },
-                    formData.person === member && { color: colors.primaryForeground }
-                  ]}>{member}</Text>
-                </Pressable>
-              ))}
+              {members.map((member) => {
+                const profileColor = PROFILE_COLORS.find(c => c.value === member.color)?.hex || colors.primary;
+                const isSelected = formData.person === member.id;
+                return (
+                  <Pressable
+                    key={member.id}
+                    onPress={() => setFormData({ ...formData, person: member.id })}
+                    style={[
+                      styles.assigneeButton,
+                      { backgroundColor: colors.muted },
+                      isSelected && { backgroundColor: profileColor },
+                    ]}
+                  >
+                    <Text style={[
+                      styles.assigneeText,
+                      { color: colors.mutedForeground },
+                      isSelected && { color: "#fff" }
+                    ]}>
+                      {member.symbol} {member.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
+
           </ScrollView>
 
           <View style={styles.footer}>

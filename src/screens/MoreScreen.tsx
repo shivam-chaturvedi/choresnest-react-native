@@ -13,6 +13,8 @@ import { theme } from "../theme";
 import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { useSidebar } from "../contexts/SidebarContext";
 import { AppIcon, AppIconName } from "../components/ui/AppIcon";
+import { useFamily } from "../contexts/FamilyContext";
+import { PROFILE_COLORS } from "../constants/profileColors";
 
 interface MenuItem {
   label: string;
@@ -34,6 +36,9 @@ export const MoreScreen: React.FC = () => {
   const radius = useThemeRadius(); // Reactively updated radius
   const navigation = useNavigation<NavigationProp<Record<string, undefined>>>();
   const { openSidebar } = useSidebar();
+  const { activeMember } = useFamily();
+
+  const activeProfileColor = PROFILE_COLORS.find(c => c.value === activeMember?.color)?.hex || colors.primary;
 
   const sections: MenuSection[] = [
     {
@@ -174,18 +179,18 @@ export const MoreScreen: React.FC = () => {
           {/* Profile Card */}
           <View style={[styles.profileCard, { backgroundColor: colors.card, shadowColor: colors.foreground, borderRadius: radius.card }]}>
             <View style={styles.avatarContainer}>
-              <View style={[styles.avatar, { backgroundColor: colors.primary + '20', borderRadius: radius.lg }]}>
-                <Text style={{ fontSize: 32 }}>👨</Text>
+              <View style={[styles.avatar, { backgroundColor: activeProfileColor + '20', borderRadius: radius.lg }]}>
+                <Text style={{ fontSize: 32 }}>{activeMember?.symbol || "👨"}</Text>
               </View>
               <View style={[styles.cameraBadge, { backgroundColor: colors.card, borderColor: colors.background, shadowColor: colors.foreground, borderRadius: radius.sm }]}>
                 <AppIcon name="camera" size={12} color={colors.mutedForeground} />
               </View>
             </View>
             <View style={styles.profileInfo}>
-              <Text style={[styles.profileName, { color: colors.foreground }]}>Shivam Kumar</Text>
-              <Text style={[styles.profileEmail, { color: colors.mutedForeground }]}>shivam@email.com</Text>
-              <View style={[styles.roleBadge, { backgroundColor: colors.primary + '20', borderRadius: radius.sm }]}>
-                <Text style={[styles.roleText, { color: colors.primary }]}>Family Admin</Text>
+              <Text style={[styles.profileName, { color: colors.foreground }]}>{activeMember?.name || "Family Member"}</Text>
+              <Text style={[styles.profileEmail, { color: colors.mutedForeground }]}>{activeMember?.name.toLowerCase().replace(/\s/g, '')}@email.com</Text>
+              <View style={[styles.roleBadge, { backgroundColor: activeProfileColor + '20', borderRadius: radius.sm }]}>
+                <Text style={[styles.roleText, { color: activeProfileColor }]}>{activeMember?.role || "Family Admin"}</Text>
               </View>
             </View>
           </View>

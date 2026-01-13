@@ -118,8 +118,11 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       }
       setStartTime(initTime);
 
-      setEndDate(null);
-      setEndTime(null);
+      setEndDate(initDate);
+      const defaultEndTime = new Date(initTime);
+      defaultEndTime.setHours(defaultEndTime.getHours() + 1);
+      setEndTime(defaultEndTime);
+
       setSelectedIcon("📅");
       setAllDay(false);
       setLocation("");
@@ -154,32 +157,43 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   }, [memberId, members]);
 
   const handleSave = () => {
-    if (!name.trim()) {
-      Alert.alert("Missing Information", "Please enter an event name.");
-      return;
+    try {
+      if (!name.trim()) {
+        Alert.alert("Missing Information", "Please enter an event name.");
+        return;
+      }
+      // Optional: if user really wants description required
+      // if (!description.trim()) { Alert.alert("Missing Information", "Please enter a description."); return; }
+
+      // Format date as YYYY-MM-DD using local time
+      const formattedDate = format(startDate, "yyyy-MM-dd");
+
+      // Format time as HH:MM AM/PM
+      const formattedTime = allDay ? "All Day" : startTime.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+      const formattedEndTime = (allDay || !endTime) ? undefined : endTime.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+      addEvent({
+        title: name.trim(),
+        date: formattedDate,
+        time: formattedTime,
+        endTime: formattedEndTime,
+        icon: selectedIcon,
+        memberId,
+        location,
+      });
+
+      onOpenChange(false);
+    } catch (error) {
+      console.error("Error saving event:", error);
+      Alert.alert("Error", "Failed to save event. Please try again.");
     }
-    // Optional: if user really wants description required
-    // if (!description.trim()) { Alert.alert("Missing Information", "Please enter a description."); return; }
-
-    // Format date as YYYY-MM-DD using local time
-    const formattedDate = format(startDate, "yyyy-MM-dd");
-
-    // Format time as HH:MM AM/PM
-    const formattedTime = allDay ? "All Day" : startTime.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-    addEvent({
-      title: name.trim(),
-      date: formattedDate,
-      time: formattedTime,
-      icon: selectedIcon,
-      memberId,
-      location,
-    });
-
-    onOpenChange(false);
   };
 
   const getRepeatLabel = () => {
@@ -497,24 +511,28 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                 <Text style={[styles.label, { color: colors.mutedForeground }]}>Assign to</Text>
               </View>
               <View style={styles.chipsContainer}>
-                {members.map((member) => (
-                  <Pressable
-                    key={member.id}
-                    onPress={() => setMemberId(member.id)}
-                    style={[
-                      styles.memberChip,
-                      { backgroundColor: colors.card },
-                      memberId === member.id && { backgroundColor: colors.primary }
-                    ]}
-                  >
-                    <Text style={styles.memberEmoji}>{member.symbol}</Text>
-                    <Text style={[
-                      styles.memberChipText,
-                      { color: colors.mutedForeground },
-                      memberId === member.id && { color: colors.primaryForeground }
-                    ]}>{member.name}</Text>
-                  </Pressable>
-                ))}
+                {members.map((member) => {
+                  const profileColor = PROFILE_COLORS.find(c => c.value === member.color)?.hex || colors.primary;
+                  return (
+                    <Pressable
+                      key={member.id}
+                      onPress={() => setMemberId(member.id)}
+                      style={[
+                        styles.memberChip,
+                        { backgroundColor: colors.card },
+                        memberId === member.id && { backgroundColor: profileColor }
+                      ]}
+                    >
+                      <Text style={styles.memberEmoji}>{member.symbol}</Text>
+                      <Text style={[
+                        styles.memberChipText,
+                        { color: colors.mutedForeground },
+                        memberId === member.id && { color: "#fff" }
+                      ]}>{member.name}</Text>
+                    </Pressable>
+                  );
+                })}
+
               </View>
             </View>
 

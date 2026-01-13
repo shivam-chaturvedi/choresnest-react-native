@@ -57,66 +57,99 @@ export const MealPlanProvider: React.FC<{ children: ReactNode }> = ({ children }
   );
 
   const addMealToPlan = (recipeId: number, date: string, mealType: MealType) => {
-    const newMeal: PlannedMeal = {
-      id: Date.now().toString(),
-      recipeId,
-      date,
-      mealType,
-    };
-    setPlannedMeals(prev => [...prev, newMeal]);
+    try {
+      if (!recipeId || !date || !mealType) return;
+      const newMeal: PlannedMeal = {
+        id: Date.now().toString(),
+        recipeId,
+        date,
+        mealType,
+      };
+      setPlannedMeals(prev => [...prev, newMeal]);
+    } catch (error) {
+      console.error("Error in addMealToPlan:", error);
+    }
   };
 
   const removeMealFromPlan = (mealId: string) => {
-    setPlannedMeals(prev => prev.filter(m => m.id !== mealId));
+    try {
+      if (!mealId) return;
+      setPlannedMeals(prev => prev.filter(m => m.id !== mealId));
+    } catch (error) {
+      console.error("Error in removeMealFromPlan:", error);
+    }
   };
 
   const getMealsForDay = (date: string): PlannedMeal[] => {
-    return plannedMeals.filter(m => m.date === date);
+    try {
+      if (!date) return [];
+      return plannedMeals.filter(m => m.date === date);
+    } catch (error) {
+      console.error("Error in getMealsForDay:", error);
+      return [];
+    }
   };
 
   const getRecipeById = (id: number): Recipe | undefined => {
-    return recipes.find(r => r.id === id);
+    try {
+      if (!id) return undefined;
+      return recipes.find(r => r.id === id);
+    } catch (error) {
+      console.error("Error in getRecipeById:", error);
+      return undefined;
+    }
   };
 
   const generateGroceryList = (): GroceryListItem[] => {
-    const ingredientMap = new Map<string, GroceryListItem>();
+    try {
+      const ingredientMap = new Map<string, GroceryListItem>();
 
-    plannedMeals.forEach(meal => {
-      const recipe = getRecipeById(meal.recipeId);
-      if (!recipe) return;
+      plannedMeals.forEach(meal => {
+        const recipe = getRecipeById(meal.recipeId);
+        if (!recipe || !recipe.ingredients) return;
 
-      recipe.ingredients.forEach(ingredient => {
-        const key = `${ingredient.name.toLowerCase()}-${ingredient.unit}`;
-        const existing = ingredientMap.get(key);
+        recipe.ingredients.forEach(ingredient => {
+          if (!ingredient.name || !ingredient.unit) return;
+          const key = `${ingredient.name.toLowerCase()}-${ingredient.unit}`;
+          const existing = ingredientMap.get(key);
 
-        if (existing) {
-          existing.quantity += ingredient.quantity;
-          if (!existing.fromRecipes.includes(recipe.name)) {
-            existing.fromRecipes.push(recipe.name);
+          if (existing) {
+            existing.quantity += ingredient.quantity || 0;
+            if (!existing.fromRecipes.includes(recipe.name)) {
+              existing.fromRecipes.push(recipe.name);
+            }
+          } else {
+            ingredientMap.set(key, {
+              name: ingredient.name,
+              quantity: ingredient.quantity || 0,
+              unit: ingredient.unit,
+              checked: false,
+              fromRecipes: [recipe.name],
+            });
           }
-        } else {
-          ingredientMap.set(key, {
-            name: ingredient.name,
-            quantity: ingredient.quantity,
-            unit: ingredient.unit,
-            checked: false,
-            fromRecipes: [recipe.name],
-          });
-        }
+        });
       });
-    });
 
-    return Array.from(ingredientMap.values()).sort((a, b) =>
-      a.name.localeCompare(b.name)
-    );
+      return Array.from(ingredientMap.values()).sort((a, b) =>
+        a.name.localeCompare(b.name)
+      );
+    } catch (error) {
+      console.error("Error in generateGroceryList:", error);
+      return [];
+    }
   };
 
   const clearWeekPlan = () => {
-    const weekEnd = addDays(currentWeekStart, 6);
-    setPlannedMeals(prev => prev.filter(m => {
-      const mealDate = new Date(m.date);
-      return mealDate < currentWeekStart || mealDate > weekEnd;
-    }));
+    try {
+      const weekEnd = addDays(currentWeekStart, 6);
+      setPlannedMeals(prev => prev.filter(m => {
+        if (!m.date) return false;
+        const mealDate = new Date(m.date);
+        return isNaN(mealDate.getTime()) || (mealDate < currentWeekStart || mealDate > weekEnd);
+      }));
+    } catch (error) {
+      console.error("Error in clearWeekPlan:", error);
+    }
   };
 
   return (

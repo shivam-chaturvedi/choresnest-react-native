@@ -10,16 +10,31 @@ import { name as appName } from './app.json';
 const defaultGlobalHandler = ErrorUtils.getGlobalHandler();
 ErrorUtils.setGlobalHandler((error, isFatal) => {
     if (isFatal) {
-        console.error('Fatal Error:', error);
-        // In a real app, you might show a graceful error alert here
-        // Alert.alert("Unexpected Error", "We encountered an error. Please restart the app.");
-        // We swallow the fatal flag (by not calling defaultHandler) to prevent immediate crash,
-        // though the app might be unstable.
+        console.error('CRITICAL FATAL ERROR:', error);
+
+        // In a real app, we would report to an error tracking service here
+        // Sentry.captureException(error);
+
+        // We show a simple alert for fatal errors in dev/prod to inform the user
+        // but we avoid calling the default handler to prevent immediate crash
+        // if we believe the app can still render the ErrorBoundary or basic UI.
+
+        import('react-native').then(({ Alert }) => {
+            Alert.alert(
+                "Unexpected Error",
+                "The application encountered a critical error. We've attempted to contain it, but you may need to restart the app if it becomes unstable.",
+                [{ text: "OK" }]
+            );
+        }).catch(e => console.error("Failed to show fatal alert:", e));
+
     } else {
-        // console.log('Non-fatal error:', error);
+        // Log non-fatal errors for debugging
+        console.log('Non-fatal error caught by global handler:', error);
     }
-    // Optional: Report to Sentry/Crashlytics here
+
+    // We don't call defaultGlobalHandler(error, isFatal) to prevent the "Red Box" or immediate crash in production
 });
+
 
 
 AppRegistry.registerComponent(appName, () => App);

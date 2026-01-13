@@ -8,7 +8,9 @@ export interface FamilyMember {
   symbol: string;
   color: string;
   isActive: boolean;
+  role?: string;
 }
+
 
 export interface VaultDocument {
   id: string;
@@ -220,100 +222,169 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   }, []);
 
   const setActiveMember = (member: FamilyMember) => {
-    setMembers((prev) => prev.map((m) => ({ ...m, isActive: m.id === member.id })));
-    AsyncStorage.setItem("ACTIVE_MEMBER_ID", member.id).catch(console.error);
+    try {
+      if (!member || !member.id) {
+        console.warn("Attempted to set invalid member active");
+        return;
+      }
+      setMembers((prev) => prev.map((m) => ({ ...m, isActive: m.id === member.id })));
+      AsyncStorage.setItem("ACTIVE_MEMBER_ID", member.id).catch(err => {
+        console.error("Failed to save active member ID to storage:", err);
+      });
+    } catch (error) {
+      console.error("Error in setActiveMember:", error);
+    }
   };
 
   const updateMemberColor = (memberId: string, colorValue: string) => {
-    setMembers((prev) => prev.map((m) =>
-      m.id === memberId ? { ...m, color: colorValue } : m
-    ));
+    try {
+      if (!memberId || !colorValue) return;
+      setMembers((prev) => prev.map((m) =>
+        m.id === memberId ? { ...m, color: colorValue } : m
+      ));
+    } catch (error) {
+      console.error("Error in updateMemberColor:", error);
+    }
   };
 
   const addMember = (member: Omit<FamilyMember, "id" | "isActive">) => {
-    // Attempt to auto-assign a color
-    const usedColors = new Set(members.map(m => m.color));
-    const availableColor = PROFILE_COLORS.find(c => !usedColors.has(c.value))?.value || PROFILE_COLORS[0].value;
+    try {
+      if (!member || !member.name) {
+        console.warn("Attempted to add member without name");
+        return;
+      }
 
-    const newMember: FamilyMember = {
-      ...member,
-      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-      color: member.color || availableColor,
-      isActive: false,
-    };
-    setMembers((prev) => [...prev, newMember]);
-    setMemberVaults((prev) => ({ ...prev, [newMember.id]: [] }));
+      // Attempt to auto-assign a color
+      const usedColors = new Set(members.map(m => m.color));
+      const availableColor = PROFILE_COLORS.find(c => !usedColors.has(c.value))?.value || PROFILE_COLORS[0].value;
+
+      const newMember: FamilyMember = {
+        ...member,
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+        color: member.color || availableColor,
+        isActive: false,
+      };
+      setMembers((prev) => [...prev, newMember]);
+      setMemberVaults((prev) => ({ ...prev, [newMember.id]: [] }));
+    } catch (error) {
+      console.error("Error in addMember:", error);
+    }
   };
 
   const removeMember = (id: string) => {
-    setMembers((prev) => prev.filter((m) => m.id !== id));
-    setMemberVaults((prev) => {
-      const { [id]: removed, ...rest } = prev;
-      return rest;
-    });
+    try {
+      if (!id) return;
+      setMembers((prev) => prev.filter((m) => m.id !== id));
+      setMemberVaults((prev) => {
+        const { [id]: removed, ...rest } = prev;
+        return rest;
+      });
+    } catch (error) {
+      console.error("Error in removeMember:", error);
+    }
   };
 
   const addDocument = (doc: Omit<VaultDocument, "id">) => {
-    const newDoc: VaultDocument = { ...doc, id: Date.now().toString() + Math.random().toString(36).substr(2, 9) };
-    if (doc.memberId === "global") {
-      setGlobalVault((prev) => [...prev, newDoc]);
-    } else {
-      setMemberVaults((prev) => ({
-        ...prev,
-        [doc.memberId]: [...(prev[doc.memberId] || []), newDoc],
-      }));
+    try {
+      if (!doc || !doc.name) return;
+      const newDoc: VaultDocument = { ...doc, id: Date.now().toString() + Math.random().toString(36).substr(2, 9) };
+      if (doc.memberId === "global") {
+        setGlobalVault((prev) => [...prev, newDoc]);
+      } else {
+        setMemberVaults((prev) => ({
+          ...prev,
+          [doc.memberId]: [...(prev[doc.memberId] || []), newDoc],
+        }));
+      }
+    } catch (error) {
+      console.error("Error in addDocument:", error);
     }
   };
 
   const shareDocument = (docId: string, memberId: string, targetMemberIds: string[]) => {
-    if (memberId === "global") {
-      setGlobalVault((prev) =>
-        prev.map((doc) => (doc.id === docId ? { ...doc, sharedWith: targetMemberIds } : doc))
-      );
-    } else {
-      setMemberVaults((prev) => ({
-        ...prev,
-        [memberId]: (prev[memberId] || []).map((doc) =>
-          doc.id === docId ? { ...doc, sharedWith: targetMemberIds } : doc
-        ),
-      }));
+    try {
+      if (!docId || !memberId || !targetMemberIds) return;
+      if (memberId === "global") {
+        setGlobalVault((prev) =>
+          prev.map((doc) => (doc.id === docId ? { ...doc, sharedWith: targetMemberIds } : doc))
+        );
+      } else {
+        setMemberVaults((prev) => ({
+          ...prev,
+          [memberId]: (prev[memberId] || []).map((doc) =>
+            doc.id === docId ? { ...doc, sharedWith: targetMemberIds } : doc
+          ),
+        }));
+      }
+    } catch (error) {
+      console.error("Error in shareDocument:", error);
     }
   };
 
   const addEvent = (event: Omit<CalendarEvent, "id">) => {
-    const newEvent: CalendarEvent = { ...event, id: Date.now().toString() + Math.random().toString(36).substr(2, 9) };
-    setEvents((prev) => [...prev, newEvent]);
+    try {
+      if (!event || !event.title) return;
+      const newEvent: CalendarEvent = { ...event, id: Date.now().toString() + Math.random().toString(36).substr(2, 9) };
+      setEvents((prev) => [...prev, newEvent]);
+    } catch (error) {
+      console.error("Error in addEvent:", error);
+    }
   };
 
   const addGroceryItem = (item: Omit<GroceryItem, "id">) => {
-    const newItem: GroceryItem = { ...item, id: Date.now().toString() + Math.random().toString(36).substr(2, 9) };
-    setGroceryList((prev) => [...prev, newItem]);
+    try {
+      if (!item || !item.name) return;
+      const newItem: GroceryItem = { ...item, id: Date.now().toString() + Math.random().toString(36).substr(2, 9) };
+      setGroceryList((prev) => [...prev, newItem]);
+    } catch (error) {
+      console.error("Error in addGroceryItem:", error);
+    }
   };
 
   const toggleGroceryItem = (id: string) => {
-    setGroceryList((prev) => prev.map((item) => (item.id === id ? { ...item, completed: !item.completed } : item)));
+    try {
+      if (!id) return;
+      setGroceryList((prev) => prev.map((item) => (item.id === id ? { ...item, completed: !item.completed } : item)));
+    } catch (error) {
+      console.error("Error in toggleGroceryItem:", error);
+    }
   };
 
   const addCategory = (category: Omit<GroceryCategory, "id">) => {
-    const newCategory: GroceryCategory = { ...category, id: Date.now().toString() + Math.random().toString(36).substr(2, 9) };
-    setCategories((prev) => [...prev, newCategory]);
+    try {
+      if (!category || !category.name) return;
+      const newCategory: GroceryCategory = { ...category, id: Date.now().toString() + Math.random().toString(36).substr(2, 9) };
+      setCategories((prev) => [...prev, newCategory]);
+    } catch (error) {
+      console.error("Error in addCategory:", error);
+    }
   };
 
   const removeCategory = (id: string) => {
-    // Move items from deleted category to "Other" category
-    const otherCategory = categories.find(c => c.name === "Other");
-    if (otherCategory) {
-      setGroceryList((prev) => prev.map((item) =>
-        item.categoryId === id ? { ...item, categoryId: otherCategory.id } : item
-      ));
+    try {
+      if (!id) return;
+      // Move items from deleted category to "Other" category
+      const otherCategory = categories.find(c => c.name === "Other");
+      if (otherCategory) {
+        setGroceryList((prev) => prev.map((item) =>
+          item.categoryId === id ? { ...item, categoryId: otherCategory.id } : item
+        ));
+      }
+      setCategories((prev) => prev.filter((cat) => cat.id !== id));
+    } catch (error) {
+      console.error("Error in removeCategory:", error);
     }
-    setCategories((prev) => prev.filter((cat) => cat.id !== id));
   };
 
   const updateCategory = (id: string, updates: Partial<Omit<GroceryCategory, "id">>) => {
-    setCategories((prev) => prev.map((cat) =>
-      cat.id === id ? { ...cat, ...updates } : cat
-    ));
+    try {
+      if (!id || !updates) return;
+      setCategories((prev) => prev.map((cat) =>
+        cat.id === id ? { ...cat, ...updates } : cat
+      ));
+    } catch (error) {
+      console.error("Error in updateCategory:", error);
+    }
   };
 
   return (

@@ -9,6 +9,7 @@ import {
 } from "react-native";
 
 import { useThemeColors } from "../../contexts/ThemeContext";
+import { useFamily } from "../../contexts/FamilyContext";
 
 interface AddMemberModalProps {
   open: boolean;
@@ -17,12 +18,23 @@ interface AddMemberModalProps {
 
 export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose }) => {
   const colors = useThemeColors();
+  const { addMember } = useFamily();
   const [name, setName] = useState("");
   const [role, setRole] = useState("");
 
   const handleSave = () => {
-    onClose();
+    if (name.trim()) {
+      addMember({
+        name: name.trim(),
+        symbol: "👤",
+        color: "", // Will be auto-assigned
+      });
+      setName("");
+      setRole("");
+      onClose();
+    }
   };
+
 
   return (
     <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>

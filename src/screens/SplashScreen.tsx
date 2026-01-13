@@ -8,7 +8,7 @@ interface SplashScreenProps {
   isLoading?: boolean;
 }
 
-export const SplashScreen: React.FC<SplashScreenProps> = ({ onContinue }) => {
+export const SplashScreen = ({ onContinue, isLoading }: SplashScreenProps) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
   const [splashColors, setSplashColors] = useState(theme.colors);
@@ -17,7 +17,6 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onContinue }) => {
   useEffect(() => {
     const initSplash = async () => {
       // 1. Load saved theme preferences in parallel to avoid flash
-      // Default to what we have, but try to fetch latest
       try {
         const [savedPalette, savedShape, savedMode, hasSeen] = await Promise.all([
           AsyncStorage.getItem('@app_theme_palette'),
@@ -28,12 +27,12 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onContinue }) => {
 
         // Resolve Config
         const palette = (savedPalette && savedPalette in palettes) ? savedPalette : 'sapphire';
-        const mode = savedMode === 'dark' ? 'dark' : 'light'; // Default light
+        const mode = savedMode === 'dark' ? 'dark' : 'light';
         const shape = (savedShape === 'squared') ? 'squared' : 'rounded';
 
         // Generate Colors
         const colors = createThemeColors(palette as any, mode);
-        const radius = radii[shape];
+        const radius = radii[shape as keyof typeof radii] || radii.rounded;
 
         setSplashColors(colors);
         setSplashRadius(radius);
@@ -53,8 +52,10 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onContinue }) => {
           })
         ]).start();
 
-        // 3. Wait for minimum duration (500ms requested)
-        await new Promise(resolve => setTimeout(resolve, 800)); // slightly more than 500 for animation to finish nicely
+        // 3. Wait for minimum duration (800ms for animation to finish nicely)
+        await new Promise<void>(resolve => {
+          setTimeout(() => resolve(), 800);
+        });
 
         // 4. Navigate
         if (hasSeen === "true") {
@@ -65,7 +66,6 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onContinue }) => {
 
       } catch (error) {
         console.error("Splash error:", error);
-        // Fallback
         onContinue("Onboarding");
       }
     };

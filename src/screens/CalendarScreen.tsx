@@ -249,36 +249,90 @@ export const CalendarScreen: React.FC = () => {
 
                 {days.map((day, dayIndex) => {
                   const dayEvents = currentEvents.filter(e => isSameDay(new Date(e.date), day));
-                  return dayEvents.map(event => {
-                    const timeParts = event.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
-                    if (!timeParts && event.time !== "All Day") return null;
 
-                    let startHour = 0, startMin = 0;
-                    if (timeParts) {
-                      startHour = parseInt(timeParts[1]);
-                      const period = timeParts[3].toUpperCase();
-                      if (period === "PM" && startHour !== 12) startHour += 12;
-                      if (period === "AM" && startHour === 12) startHour = 0;
-                      startMin = parseInt(timeParts[2]);
-                    } else { return null; }
+                  // Helper to parse time string to minutes from midnight
+                  const parseTimeToMinutes = (timeStr: string | undefined): number | null => {
+                    if (!timeStr || timeStr === "All Day") return null;
+                    const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+                    if (!match) return null;
+                    let hours = parseInt(match[1]);
+                    const minutes = parseInt(match[2]);
+                    const period = match[3].toUpperCase();
+                    if (period === "PM" && hours !== 12) hours += 12;
+                    if (period === "AM" && hours === 12) hours = 0;
+                    return (hours * 60) + minutes;
+                  };
 
-                    const top = (startHour * HOUR_HEIGHT) + (startMin * (HOUR_HEIGHT / 60));
-                    const height = HOUR_HEIGHT;
+                  // 1. Prepare events with positions
+                  const processedEvents = dayEvents.map(event => {
+                    const startMins = parseTimeToMinutes(event.time);
+                    if (startMins === null) return null;
 
+                    const endMins = parseTimeToMinutes(event.endTime) || (startMins + 60);
+
+                    const top = (startMins / 60) * HOUR_HEIGHT;
+                    let durationMins = endMins - startMins;
+
+                    // Handle events that cross midnight (unlikely in this UI but good to be safe)
+                    if (durationMins <= 0) durationMins = 60;
+
+                    // Minimum height of 25px for readability of tiny events
+                    const height = Math.max(25, (durationMins / 60) * HOUR_HEIGHT);
+                    const bottom = top + height;
+
+                    return { ...event, top, height, bottom };
+                  }).filter(Boolean) as any[];
+
+                  // 2. Sort by start time
+                  processedEvents.sort((a, b) => a.top - b.top);
+
+                  // 3. Group overlapping events and assign columns
+                  const columns: any[][] = [];
+                  processedEvents.forEach(event => {
+                    let placed = false;
+                    for (let i = 0; i < columns.length; i++) {
+                      // Check if this event overlaps with the last event in this column
+                      const lastEventInColumn = columns[i][columns[i].length - 1];
+                      if (event.top >= lastEventInColumn.bottom) {
+                        columns[i].push(event);
+                        event.colIndex = i;
+                        placed = true;
+                        break;
+                      }
+                    }
+                    if (!placed) {
+                      event.colIndex = columns.length;
+                      columns.push([event]);
+                    }
+                  });
+
+                  // 4. Calculate total columns for overlapping groups (simplified)
+                  // For each event, we need to know how many columns are in its "cluster"
+                  // A simpler way is to just use columns.length if they are truly overlapping
+                  // but clusters can be complex. Let's use a simpler approach: 
+                  // total columns for the whole group.
+                  processedEvents.forEach(event => {
+                    event.totalCols = columns.length;
+                  });
+
+                  return processedEvents.map(event => {
                     const member = members.find(m => m.id === event.memberId);
                     const profileColor = PROFILE_COLORS.find(c => c.value === member?.color);
                     const bgColor = profileColor ? profileColor.hex + "40" : colors.primary + "40";
                     const borderColor = profileColor ? profileColor.hex : colors.primary;
+
+                    const eventWidth = dayColumnWidth / event.totalCols;
+                    const eventLeft = (dayIndex * dayColumnWidth) + (event.colIndex * eventWidth);
 
                     return (
                       <Pressable
                         key={event.id}
                         style={{
                           position: 'absolute',
-                          top,
-                          left: `${dayIndex * dayColumnWidth}%`,
-                          width: `${dayColumnWidth}%`,
-                          height,
+                          top: event.top,
+                          left: `${eventLeft}%`,
+                          width: `${eventWidth}%`,
+                          height: event.height,
                           backgroundColor: bgColor,
                           borderLeftWidth: 3,
                           borderLeftColor: borderColor,
@@ -289,13 +343,22 @@ export const CalendarScreen: React.FC = () => {
                         }}
                         onPress={() => { console.log("Event pressed:", event.title); }}
                       >
-                        <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: '700', color: colors.foreground }}>
-                          {event.title}
-                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                          <Text style={{ fontSize: 10 }}>{event.icon}</Text>
+                          <Text numberOfLines={1} style={{ fontSize: 10, fontWeight: '700', color: colors.foreground, flex: 1 }}>
+                            {event.title}
+                          </Text>
+                        </View>
+                        {event.totalCols < 3 && (
+                          <Text numberOfLines={1} style={{ fontSize: 9, color: colors.mutedForeground, marginTop: 2 }}>
+                            {member?.name}
+                          </Text>
+                        )}
                       </Pressable>
                     );
                   });
                 })}
+
 
                 {/* Day View Red Line */}
                 {activeView === "Day" && isSameDay(selectedDate, now) && (
@@ -678,6 +741,10 @@ const styles = StyleSheet.create({
     paddingTop: 2,
     marginBottom: 0,
   },
+  dayCellFaded: {
+    opacity: 0.3,
+  },
+
   dayText: {
     fontSize: 13,
     fontWeight: "500",

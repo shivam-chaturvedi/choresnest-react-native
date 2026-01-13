@@ -99,46 +99,50 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   }, [open, sidebarWidth, translateX, overlayOpacity]);
 
   const handleNavigate = (route: string) => {
-    if (onNavigate) {
-      onNavigate(route);
-    } else {
-      // Helper to handle nested navigation
-      const navigateToNested = (tabName: string, screenName?: string) => {
-        navigation.dispatch(
-          CommonActions.navigate({
-            name: tabName,
-            params: screenName ? { screen: screenName } : undefined,
-          })
-        );
-      };
+    try {
+      if (onNavigate) {
+        onNavigate(route);
+      } else {
+        // Helper to handle nested navigation
+        const navigateToNested = (tabName: string, screenName?: string) => {
+          navigation.dispatch(
+            CommonActions.navigate({
+              name: tabName,
+              params: screenName ? { screen: screenName } : undefined,
+            })
+          );
+        };
 
-      switch (route) {
-        // More Stack
-        case 'Theme':
-        case 'Privacy':
-        case 'Help':
-        case 'Notifications':
-        case 'Export':
-        case 'DataExport':
-        case 'Tasks':
-          navigateToNested('more', route);
-          break;
+        switch (route) {
+          // More Stack
+          case 'Theme':
+          case 'Privacy':
+          case 'Help':
+          case 'Notifications':
+          case 'Export':
+          case 'DataExport':
+          case 'Tasks':
+            navigateToNested('more', route);
+            break;
 
-        // Home Stack
-        case 'Recipes':
-        case 'MealPlan':
-        case 'Family':
-        case 'Vault':
-        case 'Expenses':
-        case 'Notes':
-        case 'Nutrition':
-          navigateToNested('home', route);
-          break;
+          // Home Stack
+          case 'Recipes':
+          case 'MealPlan':
+          case 'Family':
+          case 'Vault':
+          case 'Expenses':
+          case 'Notes':
+          case 'Nutrition':
+            navigateToNested('home', route);
+            break;
 
-        // Tabs or Direct Routes
-        default:
-          navigation.navigate(route as never);
+          // Tabs or Direct Routes
+          default:
+            navigation.navigate(route as never);
+        }
       }
+    } catch (error) {
+      console.error("Navigation error in sidebar:", error);
     }
     onClose();
   };

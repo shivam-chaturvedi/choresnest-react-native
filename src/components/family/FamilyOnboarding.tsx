@@ -12,16 +12,9 @@ import {
 import { useFamily } from "../../contexts/FamilyContext";
 import { AppIcon } from "../ui/AppIcon";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
+import { PROFILE_COLORS } from "../../constants/profileColors";
 
 const avatarOptions = ["👤", "👩", "👨", "👶", "👧", "👦", "🧒", "👴", "👵", "🧑", "👱", "🧔", "👩‍🦰", "👨‍🦱", "🧑‍🦳", "👩‍🦲"];
-const colorOptions = [
-    { id: "member-blue", label: "Blue", color: "#DBEAFE" },
-    { id: "member-green", label: "Green", color: "#DCFCE7" },
-    { id: "member-purple", label: "Purple", color: "#F3E8FF" },
-    { id: "member-orange", label: "Orange", color: "#FFEDD5" },
-    { id: "member-pink", label: "Pink", color: "#FCE7F3" },
-    { id: "member-cyan", label: "Cyan", color: "#CFFAFE" },
-];
 
 const permissionOptions = [
     { id: "calendar", label: "Calendar", icon: "calendar" as const, description: "View and add events" },
@@ -74,7 +67,7 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
     const [currentMember, setCurrentMember] = useState<NewMember>({
         name: "",
         avatar: "👤",
-        color: "member-blue",
+        color: PROFILE_COLORS[0].value,
         role: "parent",
         permissions: getDefaultPermissions("parent"),
     });
@@ -85,11 +78,12 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
         setCurrentMember({
             name: "",
             avatar: "👤",
-            color: colorOptions[(newMembers.length + 1) % colorOptions.length].id,
+            color: PROFILE_COLORS[(newMembers.length + 1) % PROFILE_COLORS.length].value,
             role: "parent",
             permissions: getDefaultPermissions("parent"),
         });
     };
+
 
     const handleComplete = () => {
         if (newFamilyName.trim()) {
@@ -131,7 +125,7 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
                     ))}
                 </View>
 
-                <ScrollView contentContainerStyle={styles.content}>
+                <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
                     {step === 1 && (
                         <View style={styles.stepContainer}>
                             <View style={[styles.iconCircle, { backgroundColor: colors.muted }]}>
@@ -172,7 +166,7 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
 
                             {newMembers.map((member, index) => (
                                 <View key={index} style={[styles.memberItem, { backgroundColor: colors.muted }]}>
-                                    <View style={[styles.memberAvatarSmall, { backgroundColor: colorOptions.find(c => c.id === member.color)?.color }]}>
+                                    <View style={[styles.memberAvatarSmall, { backgroundColor: PROFILE_COLORS.find(c => c.value === member.color)?.hex || colors.muted }]}>
                                         <Text style={{ fontSize: 20 }}>{member.avatar}</Text>
                                     </View>
                                     <View style={{ flex: 1 }}>
@@ -275,14 +269,14 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
                             <Text style={[styles.stepTitle, { color: colors.foreground }]}>Review Your Family</Text>
                             <Text style={[styles.stepDesc, { color: colors.mutedForeground }]}>Everything looks good? Let's get started!</Text>
 
-                            <View style={[styles.reviewCard, { backgroundColor: colors.card, borderRadius: radius.card }]}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                            <View style={[styles.reviewCard, { backgroundColor: colors.card, borderRadius: radius.card, width: '100%', padding: 16, marginBottom: 32 }]}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
                                     <AppIcon name="users" size={20} color={colors.primary} style={{ marginRight: 8 }} />
                                     <Text style={{ fontSize: 18, fontWeight: '700', color: colors.foreground }}>{newFamilyName}</Text>
                                 </View>
                                 {newMembers.map((member, index) => (
                                     <View key={index} style={[styles.memberItem, { backgroundColor: colors.muted }]}>
-                                        <View style={[styles.memberAvatarSmall, { backgroundColor: colorOptions.find(c => c.id === member.color)?.color }]}>
+                                        <View style={[styles.memberAvatarSmall, { backgroundColor: PROFILE_COLORS.find(c => c.value === member.color)?.hex || colors.muted }]}>
                                             <Text style={{ fontSize: 16 }}>{member.avatar}</Text>
                                         </View>
                                         <View style={{ flex: 1 }}>
@@ -302,6 +296,7 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
             </View>
         </Modal>
     );
+
 };
 
 const styles = StyleSheet.create({

@@ -94,19 +94,31 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // Save palette
     useEffect(() => {
         if (!isLoaded) return;
-        AsyncStorage.setItem(THEME_STORAGE_KEY, currentPalette).catch(console.error);
+        try {
+            AsyncStorage.setItem(THEME_STORAGE_KEY, currentPalette).catch(console.error);
+        } catch (error) {
+            console.error("Error saving palette:", error);
+        }
     }, [currentPalette, isLoaded]);
 
     // Save shape
     useEffect(() => {
         if (!isLoaded) return;
-        AsyncStorage.setItem(THEME_SHAPE_STORAGE_KEY, shapeMode).catch(console.error);
+        try {
+            AsyncStorage.setItem(THEME_SHAPE_STORAGE_KEY, shapeMode).catch(console.error);
+        } catch (error) {
+            console.error("Error saving shape:", error);
+        }
     }, [shapeMode, isLoaded]);
 
     // Save mode
     useEffect(() => {
         if (!isLoaded) return;
-        AsyncStorage.setItem(THEME_MODE_STORAGE_KEY, isDarkMode ? 'dark' : 'light').catch(console.error);
+        try {
+            AsyncStorage.setItem(THEME_MODE_STORAGE_KEY, isDarkMode ? 'dark' : 'light').catch(console.error);
+        } catch (error) {
+            console.error("Error saving theme mode:", error);
+        }
     }, [isDarkMode, isLoaded]);
 
     // Update global theme object and bump version
