@@ -9,10 +9,12 @@ import {
   Animated,
   useWindowDimensions,
   TouchableWithoutFeedback,
+  Alert,
 } from "react-native";
 import { useNavigation, NavigationProp, CommonActions } from "@react-navigation/native";
 import { theme } from "../../theme";
 import { useFamily, FamilyMember } from "../../contexts/FamilyContext";
+import { PROFILE_COLORS, ProfileColor } from "../../constants/profileColors";
 import {
   Settings,
   FileText,
@@ -28,7 +30,8 @@ import {
   Calendar,
   ClipboardList,
   StickyNote,
-  Users
+  Users,
+  Palette
 } from "lucide-react-native";
 
 interface AppSidebarProps {
@@ -45,14 +48,55 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   const { width } = useWindowDimensions();
   const sidebarWidth = Math.min(width * 0.85, 360);
   const [mounted, setMounted] = useState(open);
+  const openRef = useRef(open); // Track latest open state
   const translateX = useRef(new Animated.Value(open ? 0 : -sidebarWidth)).current;
   const overlayOpacity = useRef(new Animated.Value(open ? 1 : 0)).current;
 
   // Dropdown state for profile switcher
   const [isProfilesOpen, setIsProfilesOpen] = useState(false);
 
+  // Color Picker State
+  const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
+
   const navigation = useNavigation<NavigationProp<Record<string, undefined>>>();
-  const { members, activeMember, setActiveMember, familyName } = useFamily();
+  const { members, activeMember, setActiveMember, familyName, updateMemberColor } = useFamily();
+
+  useEffect(() => {
+    openRef.current = open;
+    if (open) {
+      setMounted(true);
+      Animated.parallel([
+        Animated.timing(translateX, {
+          toValue: 0,
+          duration: 280,
+          useNativeDriver: true,
+        }),
+        Animated.timing(overlayOpacity, {
+          toValue: 1,
+          duration: 280,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(translateX, {
+          toValue: -sidebarWidth,
+          duration: 220,
+          useNativeDriver: true,
+        }),
+        Animated.timing(overlayOpacity, {
+          toValue: 0,
+          duration: 220,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        // Only unmount if we are still closed
+        if (!openRef.current) {
+          setMounted(false);
+        }
+      });
+    }
+  }, [open, sidebarWidth, translateX, overlayOpacity]);
 
   const handleNavigate = (route: string) => {
     if (onNavigate) {
@@ -76,6 +120,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         case 'Notifications':
         case 'Export':
         case 'DataExport':
+        case 'Tasks':
           navigateToNested('more', route);
           break;
 
@@ -103,36 +148,20 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     setIsProfilesOpen(false); // Close dropdown after selection
   };
 
-  useEffect(() => {
-    if (open) {
-      setMounted(true);
-      Animated.parallel([
-        Animated.timing(translateX, {
-          toValue: 0,
-          duration: 280,
-          useNativeDriver: true,
-        }),
-        Animated.timing(overlayOpacity, {
-          toValue: 1,
-          duration: 280,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    } else if (mounted) {
-      Animated.parallel([
-        Animated.timing(translateX, {
-          toValue: -sidebarWidth,
-          duration: 220,
-          useNativeDriver: true,
-        }),
-        Animated.timing(overlayOpacity, {
-          toValue: 0,
-          duration: 220,
-          useNativeDriver: true,
-        }),
-      ]).start(() => setMounted(false));
+  const handleUpdateColor = (color: ProfileColor) => {
+    if (!editingMemberId) return;
+
+    // Check if color is taken by another member
+    const isTaken = members.some(m => m.id !== editingMemberId && m.color === color.value);
+
+    if (isTaken) {
+      Alert.alert("Color Taken", "This color is already assigned to another family member. Please choose a unique color.");
+      return;
     }
-  }, [open, mounted, overlayOpacity, sidebarWidth, translateX]);
+
+    updateMemberColor(editingMemberId, color.value);
+    setEditingMemberId(null);
+  };
 
   if (!mounted) {
     return null;
@@ -146,6 +175,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     { icon: FileText, label: 'Vault', route: 'Vault' },
     { icon: DollarSign, label: 'Expenses', route: 'Expenses' },
     { icon: StickyNote, label: 'Notes', route: 'Notes' },
+    { icon: Check, label: 'Tasks', route: 'Tasks' },
   ];
 
   const bottomLinks = [
@@ -153,14 +183,14 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     { icon: HelpCircle, label: 'Help & Support', route: 'Help' },
   ];
 
+  // Find current member being edited
+  const editingMember = members.find(m => m.id === editingMemberId);
+
   return (
     <Modal visible={mounted} animationType="none" transparent onRequestClose={onClose}>
       <View style={styles.modalContainer}>
-        <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]} />
         <TouchableWithoutFeedback onPress={onClose}>
-          <Animated.View
-            style={[styles.overlayTouchable, { opacity: overlayOpacity }]}
-          />
+          <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]} />
         </TouchableWithoutFeedback>
         <Animated.View
           style={[
@@ -189,7 +219,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
 
               <Pressable
                 style={styles.settingsButton}
-                onPress={() => handleNavigate("Theme")} // Assuming Theme or More is settings
+                onPress={() => handleNavigate("more")}
               >
                 <Settings size={14} color="#f5f8ff" style={{ marginRight: 6 }} />
                 <Text style={styles.settingsText}>Settings</Text>
@@ -220,22 +250,37 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               {isProfilesOpen && (
                 <View style={{ gap: 8, marginTop: 8 }}>
                   {members.map((member) => (
-                    <Pressable
+                    <View
                       key={member.id}
                       style={[
                         styles.profileRow,
                         member.isActive && styles.profileRowActive
                       ]}
-                      onPress={() => handleSwitchMember(member)}
                     >
-                      <View style={[styles.profileAvatar, { backgroundColor: member.isActive ? '#dbeafe' : '#f3f4f6' }]}>
-                        <Text style={{ fontSize: 20 }}>{member.symbol}</Text>
-                      </View>
-                      <Text style={[styles.profileText, member.isActive && styles.profileTextActive]}>
-                        {member.name}
-                      </Text>
-                      {member.isActive && <Check size={20} color={theme.colors.primary} />}
-                    </Pressable>
+                      <Pressable
+                        style={styles.profileSelectArea}
+                        onPress={() => handleSwitchMember(member)}
+                      >
+                        <View style={[
+                          styles.profileAvatar,
+                          { backgroundColor: member.isActive ? '#dbeafe' : '#f3f4f6' }
+                        ]}>
+                          <Text style={{ fontSize: 20 }}>{member.symbol}</Text>
+                        </View>
+                        <Text style={[styles.profileText, member.isActive && styles.profileTextActive]}>
+                          {member.name}
+                        </Text>
+                        {member.isActive && <Check size={20} color={theme.colors.primary} style={{ marginRight: 8 }} />}
+                      </Pressable>
+
+                      {/* Color Picker Trigger */}
+                      <Pressable
+                        style={[styles.colorTrigger, { backgroundColor: theme.colors.card }]}
+                        onPress={() => setEditingMemberId(member.id)}
+                      >
+                        <Palette size={16} color={theme.colors.mutedForeground} />
+                      </Pressable>
+                    </View>
                   ))}
                 </View>
               )}
@@ -281,6 +326,50 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
 
           </ScrollView>
         </Animated.View>
+
+        {/* Color Picker Modal Overlay */}
+        {editingMemberId && (
+          <Modal visible={true} transparent animationType="fade" onRequestClose={() => setEditingMemberId(null)}>
+            <Pressable style={styles.colorPickerOverlay} onPress={() => setEditingMemberId(null)}>
+              <Pressable style={[styles.colorPickerContainer, { backgroundColor: theme.colors.card }]} onPress={e => e.stopPropagation()}>
+                <Text style={[styles.colorPickerTitle, { color: theme.colors.foreground }]}>
+                  Choose Color
+                </Text>
+                <Text style={[styles.colorPickerSubtitle, { color: theme.colors.mutedForeground }]}>
+                  for {editingMember?.name}
+                </Text>
+
+                <View style={styles.colorGrid}>
+                  {PROFILE_COLORS.map(color => {
+                    const isTaken = members.some(m => m.id !== editingMemberId && m.color === color.value);
+                    const isSelected = editingMember?.color === color.value;
+
+                    return (
+                      <Pressable
+                        key={color.id}
+                        style={[
+                          styles.colorSwatch,
+                          { backgroundColor: color.hex },
+                          isSelected && styles.colorSwatchSelected,
+                          isTaken && styles.colorSwatchTaken
+                        ]}
+                        onPress={() => handleUpdateColor(color)}
+                        disabled={isTaken}
+                      >
+                        {isSelected && <Check size={20} color="#fff" />}
+                        {isTaken && <Text style={{ color: "rgba(255,255,255,0.8)", fontSize: 16, fontWeight: 'bold' }}>✕</Text>}
+                      </Pressable>
+                    )
+                  })}
+                </View>
+
+                <Text style={[styles.colorPickerFooter, { color: theme.colors.mutedForeground }]}>
+                  Colors marked ✕ are taken
+                </Text>
+              </Pressable>
+            </Pressable>
+          </Modal>
+        )}
       </View>
     </Modal>
   );
@@ -294,9 +383,6 @@ const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.4)",
-  },
-  overlayTouchable: {
-    ...StyleSheet.absoluteFillObject,
   },
   sidebar: {
     backgroundColor: theme.colors.background,
@@ -388,7 +474,7 @@ const styles = StyleSheet.create({
   profileRow: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 12,
+    padding: 8,
     borderRadius: 12,
     backgroundColor: theme.colors.muted, // fallback
   },
@@ -396,6 +482,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#eff6ff', // primary-light
     borderWidth: 1,
     borderColor: theme.colors.primary,
+  },
+  profileSelectArea: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  colorTrigger: {
+    padding: 8,
+    borderRadius: 8,
+    marginLeft: 4,
   },
   profileAvatar: {
     width: 40,
@@ -437,4 +533,62 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: theme.colors.foreground,
   },
+
+  // Color Picker Popup
+  colorPickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  colorPickerContainer: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: 20,
+    padding: 20,
+    alignItems: 'center',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  colorPickerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  colorPickerSubtitle: {
+    fontSize: 14,
+    marginBottom: 20,
+  },
+  colorGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 12,
+    marginBottom: 20,
+  },
+  colorSwatch: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  colorSwatchSelected: {
+    borderWidth: 3,
+    borderColor: '#fff', // white border to indicate selection
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+  },
+  colorSwatchTaken: {
+    opacity: 0.5,
+  },
+  colorPickerFooter: {
+    fontSize: 12,
+  }
 });

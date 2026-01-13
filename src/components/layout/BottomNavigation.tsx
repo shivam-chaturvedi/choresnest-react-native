@@ -7,14 +7,12 @@ import { useTheme } from "../../contexts/ThemeContext";
 export type BottomNavRoute =
   | "home"
   | "calendar"
-  | "tasks"
   | "lists"
   | "more";
 
 const navItems: { label: string; route: BottomNavRoute; iconName: AppIconName }[] = [
   { label: "Home", route: "home", iconName: "home" },
   { label: "Calendar", route: "calendar", iconName: "calendar" },
-  { label: "Tasks", route: "tasks", iconName: "checkSquare" },
   { label: "Lists", route: "lists", iconName: "shoppingCart" },
   { label: "More", route: "more", iconName: "more" },
 ];

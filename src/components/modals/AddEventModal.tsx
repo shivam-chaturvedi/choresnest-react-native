@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { format } from "date-fns";
 import {
   Modal,
   Pressable,
@@ -9,10 +10,12 @@ import {
   View,
   Switch,
   Platform,
+  Alert,
 } from "react-native";
-import { theme } from "../../theme";
 import { useFamily } from "../../contexts/FamilyContext";
+import { useThemeColors } from "../../contexts/ThemeContext";
 import { AppIcon, AppIconName, CustomDateTimePicker } from "../ui";
+import { PROFILE_COLORS } from "../../constants/profileColors";
 
 interface AddEventModalProps {
   open: boolean;
@@ -62,6 +65,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   initialTime,
 }) => {
   const { members, addEvent } = useFamily();
+  const colors = useThemeColors();
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -119,8 +123,18 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       setSelectedIcon("📅");
       setAllDay(false);
       setLocation("");
-      setMemberId(members[0]?.id || "1");
-      setColor("member-blue");
+
+      // Default to active member if available
+      const activeMemberObj = (members && members.length > 0)
+        ? (members.find(m => m.isActive) || members[0])
+        : null;
+
+      setMemberId(activeMemberObj?.id || "1");
+
+      // Auto-set color based on active/initial member
+      const initialColor = activeMemberObj ? activeMemberObj.color : "member-blue";
+      setColor(initialColor);
+
       setRepeatType("never");
       setRepeatEndDate(null);
       setReminder(true);
@@ -131,11 +145,24 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
     }
   }, [open, initialDate, initialTime, members]);
 
-  const handleSave = () => {
-    if (!name.trim()) return;
+  // Update color when member selection changes
+  useEffect(() => {
+    const selectedMember = members.find(m => m.id === memberId);
+    if (selectedMember) {
+      setColor(selectedMember.color);
+    }
+  }, [memberId, members]);
 
-    // Format date as YYYY-MM-DD
-    const formattedDate = startDate.toISOString().split("T")[0];
+  const handleSave = () => {
+    if (!name.trim()) {
+      Alert.alert("Missing Information", "Please enter an event name.");
+      return;
+    }
+    // Optional: if user really wants description required
+    // if (!description.trim()) { Alert.alert("Missing Information", "Please enter a description."); return; }
+
+    // Format date as YYYY-MM-DD using local time
+    const formattedDate = format(startDate, "yyyy-MM-dd");
 
     // Format time as HH:MM AM/PM
     const formattedTime = allDay ? "All Day" : startTime.toLocaleTimeString("en-US", {
@@ -166,27 +193,30 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
   return (
     <Modal visible={open} transparent animationType="slide" onRequestClose={() => onOpenChange(false)}>
-      <View style={styles.overlay}>
-        <View style={styles.container}>
+      <Pressable style={styles.overlay} onPress={() => onOpenChange(false)}>
+        <Pressable
+          style={[styles.container, { backgroundColor: colors.background }]}
+          onPress={(e) => e.stopPropagation()}
+        >
           {/* Header */}
-          <View style={styles.header}>
+          <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <View style={styles.titleContainer}>
-              <View style={styles.headerIconCircle}>
-                <AppIcon name="calendar" size={20} color={theme.colors.primary} />
+              <View style={[styles.headerIconCircle, { backgroundColor: colors.primary + "1A" }]}>
+                <AppIcon name="calendar" size={20} color={colors.primary} />
               </View>
-              <Text style={styles.headerTitle}>New Event</Text>
+              <Text style={[styles.headerTitle, { color: colors.foreground }]}>New Event</Text>
             </View>
-            <Pressable onPress={() => onOpenChange(false)} style={styles.closeButton}>
-              <AppIcon name="x" size={20} color={theme.colors.mutedForeground} />
+            <Pressable onPress={() => onOpenChange(false)} style={[styles.closeButton, { backgroundColor: colors.muted }]}>
+              <AppIcon name="x" size={20} color={colors.mutedForeground} />
             </Pressable>
           </View>
 
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
             {/* Event Name */}
             <TextInput
-              style={styles.nameInput}
+              style={[styles.nameInput, { color: colors.foreground }]}
               placeholder="Event name"
-              placeholderTextColor={theme.colors.mutedForeground}
+              placeholderTextColor={colors.mutedForeground}
               value={name}
               onChangeText={setName}
             />
@@ -194,13 +224,13 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             {/* Description */}
             <View style={styles.fieldGroup}>
               <View style={styles.labelRow}>
-                <AppIcon name="file" size={14} color={theme.colors.mutedForeground} />
-                <Text style={styles.label}>Description</Text>
+                <AppIcon name="file" size={14} color={colors.mutedForeground} />
+                <Text style={[styles.label, { color: colors.mutedForeground }]}>Description</Text>
               </View>
               <TextInput
-                style={styles.textArea}
+                style={[styles.textArea, { backgroundColor: colors.card, color: colors.foreground }]}
                 placeholder="Add description..."
-                placeholderTextColor={theme.colors.mutedForeground}
+                placeholderTextColor={colors.mutedForeground}
                 multiline
                 value={description}
                 onChangeText={setDescription}
@@ -210,8 +240,8 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             {/* Icon Selection */}
             <View style={styles.fieldGroup}>
               <View style={styles.labelRow}>
-                <AppIcon name="tag" size={14} color={theme.colors.mutedForeground} />
-                <Text style={styles.label}>Icon</Text>
+                <AppIcon name="tag" size={14} color={colors.mutedForeground} />
+                <Text style={[styles.label, { color: colors.mutedForeground }]}>Icon</Text>
               </View>
               <View style={styles.iconGrid}>
                 {eventIcons.map((icon) => (
@@ -220,7 +250,8 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                     onPress={() => setSelectedIcon(icon)}
                     style={[
                       styles.iconButton,
-                      selectedIcon === icon && styles.iconButtonSelected
+                      { backgroundColor: colors.card },
+                      selectedIcon === icon && { backgroundColor: colors.primary, transform: [{ scale: 1.1 }] }
                     ]}
                   >
                     <Text style={styles.iconText}>{icon}</Text>
@@ -230,23 +261,23 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             </View>
 
             {/* All Day Toggle */}
-            <View style={styles.toggleRow}>
+            <View style={[styles.toggleRow, { backgroundColor: colors.card }]}>
               <View style={styles.toggleLabelContainer}>
-                <View style={[styles.iconBox, { backgroundColor: "rgba(249, 115, 22, 0.1)" }]}>
+                <View style={[styles.iconBox, { backgroundColor: "#f973161A" }]}>
                   <AppIcon name="clock" size={18} color="#f97316" />
                 </View>
-                <Text style={styles.toggleLabel}>All-day event</Text>
+                <Text style={[styles.toggleLabel, { color: colors.foreground }]}>All-day event</Text>
               </View>
               <Switch
                 value={allDay}
                 onValueChange={setAllDay}
-                trackColor={{ false: theme.colors.muted, true: theme.colors.primary }}
+                trackColor={{ false: colors.muted, true: colors.primary }}
               />
             </View>
 
             {/* Schedule */}
             <View style={styles.fieldGroup}>
-              <Text style={styles.sectionLabel}>Schedule</Text>
+              <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>Schedule</Text>
               <View style={styles.row}>
                 <View style={styles.halfField}>
                   <CustomDateTimePicker
@@ -293,28 +324,28 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             {/* Repeat Options */}
             <View style={styles.fieldGroup}>
               <Pressable
-                style={styles.expandableHeader}
+                style={[styles.expandableHeader, { backgroundColor: colors.card }]}
                 onPress={() => setShowRepeatOptions(!showRepeatOptions)}
               >
                 <View style={styles.toggleLabelContainer}>
-                  <View style={[styles.iconBox, { backgroundColor: "rgba(59, 130, 246, 0.1)" }]}>
+                  <View style={[styles.iconBox, { backgroundColor: "#3b82f61A" }]}>
                     <AppIcon name="repeat" size={18} color="#3b82f6" />
                   </View>
                   <View>
-                    <Text style={styles.toggleLabel}>Repeat</Text>
-                    <Text style={styles.valueLabel}>{getRepeatLabel()}</Text>
+                    <Text style={[styles.toggleLabel, { color: colors.foreground }]}>Repeat</Text>
+                    <Text style={[styles.valueLabel, { color: colors.mutedForeground }]}>{getRepeatLabel()}</Text>
                   </View>
                 </View>
                 <AppIcon
                   name="chevronDown"
                   size={20}
-                  color={theme.colors.mutedForeground}
+                  color={colors.mutedForeground}
                   style={{ transform: [{ rotate: showRepeatOptions ? '180deg' : '0deg' }] }}
                 />
               </Pressable>
 
               {showRepeatOptions && (
-                <View style={styles.expandableContent}>
+                <View style={[styles.expandableContent, { backgroundColor: colors.card }]}>
                   <View style={styles.chipsContainer}>
                     {repeatOptions.map((option) => (
                       <Pressable
@@ -322,12 +353,14 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                         onPress={() => setRepeatType(option.value)}
                         style={[
                           styles.chip,
-                          repeatType === option.value && styles.chipActive
+                          { backgroundColor: colors.background },
+                          repeatType === option.value && { backgroundColor: colors.primary }
                         ]}
                       >
                         <Text style={[
                           styles.chipText,
-                          repeatType === option.value && styles.chipTextActive
+                          { color: colors.foreground },
+                          repeatType === option.value && { color: colors.primaryForeground, fontWeight: "600" }
                         ]}>
                           {option.label}
                         </Text>
@@ -352,35 +385,35 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             {/* Reminder Options */}
             <View style={styles.fieldGroup}>
               <Pressable
-                style={styles.expandableHeader}
+                style={[styles.expandableHeader, { backgroundColor: colors.card }]}
                 onPress={() => setShowReminderOptions(!showReminderOptions)}
               >
                 <View style={styles.toggleLabelContainer}>
-                  <View style={[styles.iconBox, { backgroundColor: reminder ? "rgba(34, 197, 94, 0.1)" : theme.colors.muted }]}>
-                    <AppIcon name="bell" size={18} color={reminder ? "#22c55e" : theme.colors.mutedForeground} />
+                  <View style={[styles.iconBox, { backgroundColor: reminder ? "#22c55e1A" : colors.muted }]}>
+                    <AppIcon name="bell" size={18} color={reminder ? "#22c55e" : colors.mutedForeground} />
                   </View>
                   <View>
-                    <Text style={styles.toggleLabel}>Reminder</Text>
-                    <Text style={styles.valueLabel}>{getReminderLabel()}</Text>
+                    <Text style={[styles.toggleLabel, { color: colors.foreground }]}>Reminder</Text>
+                    <Text style={[styles.valueLabel, { color: colors.mutedForeground }]}>{getReminderLabel()}</Text>
                   </View>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <Switch
                     value={reminder}
                     onValueChange={setReminder}
-                    trackColor={{ false: theme.colors.muted, true: theme.colors.primary }}
+                    trackColor={{ false: colors.muted, true: colors.primary }}
                   />
                   <AppIcon
                     name="chevronDown"
                     size={20}
-                    color={theme.colors.mutedForeground}
+                    color={colors.mutedForeground}
                     style={{ transform: [{ rotate: showReminderOptions ? '180deg' : '0deg' }] }}
                   />
                 </View>
               </Pressable>
 
               {showReminderOptions && reminder && (
-                <View style={styles.expandableContent}>
+                <View style={[styles.expandableContent, { backgroundColor: colors.card }]}>
                   <View style={styles.chipsContainer}>
                     {reminderOptions.map((option) => (
                       <Pressable
@@ -388,12 +421,14 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                         onPress={() => setReminderTime(option.value)}
                         style={[
                           styles.chip,
-                          reminderTime === option.value && styles.chipActive
+                          { backgroundColor: colors.background },
+                          reminderTime === option.value && { backgroundColor: colors.primary }
                         ]}
                       >
                         <Text style={[
                           styles.chipText,
-                          reminderTime === option.value && styles.chipTextActive
+                          { color: colors.foreground },
+                          reminderTime === option.value && { color: colors.primaryForeground, fontWeight: "600" }
                         ]}>
                           {option.label}
                         </Text>
@@ -404,9 +439,10 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
               )}
             </View>
 
-            {/* Color Selection */}
+            {/* Color Selection - Hidden as it is auto-assigned */}
+            {/* 
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Color</Text>
+              <Text style={[styles.label, { color: colors.mutedForeground }]}>Color</Text>
               <View style={styles.colorRow}>
                 {eventColors.map((c) => (
                   <Pressable
@@ -415,32 +451,42 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                     style={[
                       styles.colorDot,
                       { backgroundColor: c.dot },
-                      color === c.value && styles.colorDotSelected
+                      color === c.value && {
+                        borderWidth: 3,
+                        borderColor: colors.background,
+                        shadowColor: colors.shadow,
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.2,
+                        shadowRadius: 4,
+                        transform: [{ scale: 1.1 }]
+                      }
                     ]}
                   />
                 ))}
               </View>
-            </View>
+            </View> 
+            */}
 
             {/* Location */}
             <View style={styles.fieldGroup}>
               <View style={styles.labelRow}>
-                <AppIcon name="pin" size={14} color={theme.colors.mutedForeground} />
-                <Text style={styles.label}>Location</Text>
+                <AppIcon name="pin" size={14} color={colors.mutedForeground} />
+                <Text style={[styles.label, { color: colors.mutedForeground }]}>Location</Text>
               </View>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.card, color: colors.foreground }]}
                 value={location}
                 onChangeText={setLocation}
                 placeholder="Add location..."
+                placeholderTextColor={colors.mutedForeground}
               />
             </View>
 
             {/* Assign To */}
             <View style={styles.fieldGroup}>
               <View style={styles.labelRow}>
-                <AppIcon name="user" size={14} color={theme.colors.mutedForeground} />
-                <Text style={styles.label}>Assign to</Text>
+                <AppIcon name="user" size={14} color={colors.mutedForeground} />
+                <Text style={[styles.label, { color: colors.mutedForeground }]}>Assign to</Text>
               </View>
               <View style={styles.chipsContainer}>
                 {members.map((member) => (
@@ -449,13 +495,15 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                     onPress={() => setMemberId(member.id)}
                     style={[
                       styles.memberChip,
-                      memberId === member.id && styles.memberChipActive
+                      { backgroundColor: colors.card },
+                      memberId === member.id && { backgroundColor: colors.primary }
                     ]}
                   >
                     <Text style={styles.memberEmoji}>{member.symbol}</Text>
                     <Text style={[
                       styles.memberChipText,
-                      memberId === member.id && styles.memberChipTextActive
+                      { color: colors.mutedForeground },
+                      memberId === member.id && { color: colors.primaryForeground }
                     ]}>{member.name}</Text>
                   </Pressable>
                 ))}
@@ -464,11 +512,11 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
             {/* Notes */}
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Notes</Text>
+              <Text style={[styles.label, { color: colors.mutedForeground }]}>Notes</Text>
               <TextInput
-                style={styles.textArea}
+                style={[styles.textArea, { backgroundColor: colors.card, color: colors.foreground }]}
                 placeholder="Add any additional notes..."
-                placeholderTextColor={theme.colors.mutedForeground}
+                placeholderTextColor={colors.mutedForeground}
                 multiline
                 value={notes}
                 onChangeText={setNotes}
@@ -479,22 +527,22 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
           </ScrollView>
 
           {/* Footer */}
-          <View style={styles.footer}>
+          <View style={[styles.footer, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
             <Pressable
-              style={styles.cancelButton}
+              style={[styles.cancelButton, { backgroundColor: colors.muted }]}
               onPress={() => onOpenChange(false)}
             >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
+              <Text style={[styles.cancelButtonText, { color: colors.foreground }]}>Cancel</Text>
             </Pressable>
             <Pressable
-              style={styles.saveButton}
+              style={[styles.saveButton, { backgroundColor: colors.primary }]}
               onPress={handleSave}
             >
-              <Text style={styles.saveButtonText}>Add Event</Text>
+              <Text style={[styles.saveButtonText, { color: colors.primaryForeground }]}>Add Event</Text>
             </Pressable>
           </View>
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 };
@@ -506,7 +554,6 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   container: {
-    backgroundColor: theme.colors.background,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     height: "92%",
@@ -522,7 +569,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
   },
   titleContainer: {
     flexDirection: "row",
@@ -533,19 +579,16 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: "rgba(59, 130, 246, 0.1)",
     alignItems: "center",
     justifyContent: "center",
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: "700",
-    color: theme.colors.foreground,
   },
   closeButton: {
     padding: 8,
     borderRadius: 20,
-    backgroundColor: theme.colors.muted,
   },
   content: {
     flex: 1,
@@ -554,7 +597,6 @@ const styles = StyleSheet.create({
   nameInput: {
     fontSize: 24,
     fontWeight: "600",
-    color: theme.colors.foreground,
     marginBottom: 24,
     paddingVertical: 8,
   },
@@ -570,16 +612,13 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: "600",
-    color: theme.colors.mutedForeground,
   },
   textArea: {
-    backgroundColor: "rgba(0,0,0,0.03)",
     borderRadius: 12,
     padding: 12,
     minHeight: 80,
     textAlignVertical: "top",
     fontSize: 16,
-    color: theme.colors.foreground,
   },
   iconGrid: {
     flexDirection: "row",
@@ -590,13 +629,8 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: "rgba(0,0,0,0.03)",
     alignItems: "center",
     justifyContent: "center",
-  },
-  iconButtonSelected: {
-    backgroundColor: theme.colors.primary,
-    transform: [{ scale: 1.1 }],
   },
   iconText: {
     fontSize: 20,
@@ -606,7 +640,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     padding: 16,
-    backgroundColor: "rgba(0,0,0,0.03)",
     borderRadius: 16,
     marginBottom: 24,
   },
@@ -625,12 +658,10 @@ const styles = StyleSheet.create({
   toggleLabel: {
     fontSize: 16,
     fontWeight: "500",
-    color: theme.colors.foreground,
   },
   sectionLabel: {
     fontSize: 14,
     fontWeight: "600",
-    color: theme.colors.mutedForeground,
     marginBottom: 12,
   },
   row: {
@@ -641,34 +672,24 @@ const styles = StyleSheet.create({
   halfField: {
     flex: 1,
   },
-  inputLabel: {
-    fontSize: 12,
-    color: theme.colors.mutedForeground,
-    marginBottom: 4,
-  },
   input: {
-    backgroundColor: "rgba(0,0,0,0.03)",
     borderRadius: 12,
     padding: 12,
     fontSize: 16,
-    color: theme.colors.foreground,
   },
   expandableHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     padding: 16,
-    backgroundColor: "rgba(0,0,0,0.03)",
     borderRadius: 16,
   },
   valueLabel: {
     fontSize: 13,
-    color: theme.colors.mutedForeground,
   },
   expandableContent: {
     marginTop: 12,
     padding: 12,
-    backgroundColor: "rgba(0,0,0,0.03)",
     borderRadius: 16,
   },
   chipsContainer: {
@@ -680,18 +701,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 10,
-    backgroundColor: theme.colors.card,
-  },
-  chipActive: {
-    backgroundColor: theme.colors.primary,
   },
   chipText: {
     fontSize: 14,
-    color: theme.colors.foreground,
-  },
-  chipTextActive: {
-    color: theme.colors.primaryForeground,
-    fontWeight: "600",
   },
   colorRow: {
     flexDirection: "row",
@@ -703,68 +715,45 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
   },
-  colorDotSelected: {
-    borderWidth: 3,
-    borderColor: theme.colors.background,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    transform: [{ scale: 1.1 }],
-  },
   memberChip: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: "rgba(0,0,0,0.03)",
     gap: 6,
-  },
-  memberChipActive: {
-    backgroundColor: theme.colors.primary,
   },
   memberEmoji: {
     fontSize: 16,
   },
   memberChipText: {
     fontSize: 14,
-    color: theme.colors.mutedForeground,
     fontWeight: "500",
-  },
-  memberChipTextActive: {
-    color: theme.colors.primaryForeground,
   },
   footer: {
     padding: 20,
     borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
     flexDirection: "row",
     gap: 16,
-    backgroundColor: theme.colors.background,
   },
   cancelButton: {
     flex: 1,
     padding: 16,
     borderRadius: 16,
-    backgroundColor: theme.colors.muted,
     alignItems: "center",
   },
   cancelButtonText: {
     fontSize: 16,
     fontWeight: "600",
-    color: theme.colors.foreground,
   },
   saveButton: {
     flex: 1,
     padding: 16,
     borderRadius: 16,
-    backgroundColor: theme.colors.primary,
     alignItems: "center",
   },
   saveButtonText: {
     fontSize: 16,
     fontWeight: "600",
-    color: theme.colors.primaryForeground,
   },
 });

@@ -22,7 +22,7 @@ const App = () => {
             <SidebarProvider>
               <ToastProvider>
                 <StatusBar
-                  barStyle="light-content"
+                  barStyle="dark-content"
                   backgroundColor={theme.colors.background}
                   animated
                 />

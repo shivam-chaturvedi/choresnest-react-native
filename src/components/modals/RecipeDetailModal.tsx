@@ -6,11 +6,9 @@ import {
     StyleSheet,
     ScrollView,
     Pressable,
-    Dimensions,
-    Platform,
 } from "react-native";
 import { AppIcon } from "../ui/AppIcon";
-import { theme } from "../../theme";
+import { useThemeColors } from "../../contexts/ThemeContext";
 import { Recipe } from "../../data/recipes";
 
 interface RecipeDetailModalProps {
@@ -20,7 +18,7 @@ interface RecipeDetailModalProps {
     onAddToGroceryList?: (recipe: Recipe) => void;
 }
 
-// Mock nutrition data - matches ReactJS logic
+// Mock nutrition data
 const getNutritionData = (recipe: Recipe) => ({
     calories: Math.round(recipe.servings * 150 + recipe.ingredients.length * 25),
     protein: Math.round(recipe.ingredients.length * 3.5),
@@ -28,7 +26,7 @@ const getNutritionData = (recipe: Recipe) => ({
     fat: Math.round(recipe.servings * 8 + recipe.ingredients.length * 2),
 });
 
-// Mock dynamic instructions - matches ReactJS logic
+// Mock dynamic instructions
 const getInstructions = (recipe: Recipe): string[] => {
     const baseSteps = [
         `Gather all ${recipe.ingredients.length} ingredients and prep your workspace.`,
@@ -64,6 +62,8 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
     onOpenChange,
     onAddToGroceryList,
 }) => {
+    const colors = useThemeColors();
+
     if (!recipe) return null;
 
     const nutrition = getNutritionData(recipe);
@@ -76,13 +76,14 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
             transparent={true}
             onRequestClose={() => onOpenChange(false)}
         >
-            <View style={[styles.modalContainer, { backgroundColor: theme.colors.primary }]}>
+            <View style={[styles.modalOverlay, { backgroundColor: colors.background }]}>
                 {/* Header Background */}
-                <View style={[styles.headerBackground, { backgroundColor: theme.colors.primary }]}>
+                <View style={[styles.headerBackground, { backgroundColor: colors.primary }]}>
                     <Text style={styles.heroEmoji}>{recipe.image}</Text>
                     <Pressable
                         style={styles.closeButton}
                         onPress={() => onOpenChange(false)}
+                        hitSlop={10}
                     >
                         <AppIcon name="x" size={20} color="#fff" />
                     </Pressable>
@@ -91,41 +92,40 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
                             name="bookmark"
                             size={20}
                             color="#fff"
-                            // fill={recipe.saved ? "#fff" : "none"} // Lucide RN logic
                             style={recipe.saved ? { opacity: 1 } : { opacity: 0.7 }}
                         />
                     </Pressable>
                 </View>
 
                 {/* Content Sheet */}
-                <View style={[styles.sheetContainer, { backgroundColor: theme.colors.card }]}>
+                <View style={[styles.sheetContainer, { backgroundColor: colors.card }]}>
                     <ScrollView
                         contentContainerStyle={styles.scrollContent}
                         showsVerticalScrollIndicator={false}
                     >
                         {/* Title & Tags */}
                         <View style={styles.titleSection}>
-                            <Text style={[styles.title, { color: theme.colors.foreground }]}>{recipe.name}</Text>
+                            <Text style={[styles.title, { color: colors.foreground }]}>{recipe.name}</Text>
 
                             <View style={styles.metaRow}>
                                 <View style={styles.metaItem}>
-                                    <AppIcon name="clock" size={14} color={theme.colors.mutedForeground} />
-                                    <Text style={[styles.metaText, { color: theme.colors.mutedForeground }]}>{recipe.time}</Text>
+                                    <AppIcon name="clock" size={14} color={colors.mutedForeground} />
+                                    <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.time}</Text>
                                 </View>
                                 <View style={styles.metaItem}>
-                                    <AppIcon name="users" size={14} color={theme.colors.mutedForeground} />
-                                    <Text style={[styles.metaText, { color: theme.colors.mutedForeground }]}>{recipe.servings} servings</Text>
+                                    <AppIcon name="users" size={14} color={colors.mutedForeground} />
+                                    <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.servings} servings</Text>
                                 </View>
                                 <View style={styles.metaItem}>
-                                    <AppIcon name="chefHat" size={14} color={theme.colors.mutedForeground} />
-                                    <Text style={[styles.metaText, { color: theme.colors.mutedForeground }]}>{recipe.ingredients.length} items</Text>
+                                    <AppIcon name="chefHat" size={14} color={colors.mutedForeground} />
+                                    <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.ingredients.length} items</Text>
                                 </View>
                             </View>
 
                             <View style={styles.tagsRow}>
                                 {recipe.tags.map((tag) => (
-                                    <View key={tag} style={[styles.tag, { backgroundColor: theme.colors.muted }]}>
-                                        <Text style={[styles.tagText, { color: theme.colors.primary }]}>{tag}</Text>
+                                    <View key={tag} style={[styles.tag, { backgroundColor: colors.muted }]}>
+                                        <Text style={[styles.tagText, { color: colors.primary }]}>{tag}</Text>
                                     </View>
                                 ))}
                             </View>
@@ -134,55 +134,58 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
                         {/* Nutrition Cards */}
                         <View style={styles.section}>
                             <View style={styles.sectionHeader}>
-                                <AppIcon name="zap" size={16} color={theme.colors.warning} style={{ marginRight: 6 }} />
-                                <Text style={[styles.sectionTitle, { color: theme.colors.foreground }]}>Nutrition (per serving)</Text>
+                                <AppIcon name="zap" size={16} color={colors.warning} style={{ marginRight: 6 }} />
+                                <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Nutrition (per serving)</Text>
                             </View>
 
                             <View style={styles.nutritionGrid}>
-                                <View style={[styles.nutritionCard, { backgroundColor: `${theme.colors.warning}20` }]}>
-                                    <AppIcon name="zap" size={20} color={theme.colors.warning} style={{ marginBottom: 4 }} />
-                                    <Text style={[styles.nutritionValue, { color: theme.colors.foreground }]}>{nutrition.calories}</Text>
-                                    <Text style={[styles.nutritionLabel, { color: theme.colors.mutedForeground }]}>kcal</Text>
+                                <View style={[styles.nutritionCard, { backgroundColor: `${colors.warning}20` }]}>
+                                    <AppIcon name="zap" size={20} color={colors.warning} style={{ marginBottom: 4 }} />
+                                    <Text style={[styles.nutritionValue, { color: colors.foreground }]}>{nutrition.calories}</Text>
+                                    <Text style={[styles.nutritionLabel, { color: colors.mutedForeground }]}>kcal</Text>
                                 </View>
-                                <View style={[styles.nutritionCard, { backgroundColor: `${theme.colors.danger}20` }]}>
-                                    <AppIcon name="biceps" size={20} color={theme.colors.danger} style={{ marginBottom: 4 }} />
-                                    <Text style={[styles.nutritionValue, { color: theme.colors.foreground }]}>{nutrition.protein}g</Text>
-                                    <Text style={[styles.nutritionLabel, { color: theme.colors.mutedForeground }]}>Protein</Text>
+                                <View style={[styles.nutritionCard, { backgroundColor: `${colors.danger}20` }]}>
+                                    <AppIcon name="biceps" size={20} color={colors.danger} style={{ marginBottom: 4 }} />
+                                    <Text style={[styles.nutritionValue, { color: colors.foreground }]}>{nutrition.protein}g</Text>
+                                    <Text style={[styles.nutritionLabel, { color: colors.mutedForeground }]}>Protein</Text>
                                 </View>
-                                <View style={[styles.nutritionCard, { backgroundColor: `${theme.colors.info}20` }]}>
-                                    <AppIcon name="leaf" size={20} color={theme.colors.info} style={{ marginBottom: 4 }} />
-                                    <Text style={[styles.nutritionValue, { color: theme.colors.foreground }]}>{nutrition.carbs}g</Text>
-                                    <Text style={[styles.nutritionLabel, { color: theme.colors.mutedForeground }]}>Carbs</Text>
+                                <View style={[styles.nutritionCard, { backgroundColor: `${colors.info}20` }]}>
+                                    <AppIcon name="leaf" size={20} color={colors.info} style={{ marginBottom: 4 }} />
+                                    <Text style={[styles.nutritionValue, { color: colors.foreground }]}>{nutrition.carbs}g</Text>
+                                    <Text style={[styles.nutritionLabel, { color: colors.mutedForeground }]}>Carbs</Text>
                                 </View>
-                                <View style={[styles.nutritionCard, { backgroundColor: `${theme.colors.primary}20` }]}>
+                                <View style={[styles.nutritionCard, { backgroundColor: `${colors.primary}20` }]}>
                                     <Text style={{ fontSize: 20, marginBottom: 4 }}>🥑</Text>
-                                    <Text style={[styles.nutritionValue, { color: theme.colors.foreground }]}>{nutrition.fat}g</Text>
-                                    <Text style={[styles.nutritionLabel, { color: theme.colors.mutedForeground }]}>Fat</Text>
+                                    <Text style={[styles.nutritionValue, { color: colors.foreground }]}>{nutrition.fat}g</Text>
+                                    <Text style={[styles.nutritionLabel, { color: colors.mutedForeground }]}>Fat</Text>
                                 </View>
                             </View>
                         </View>
 
                         {/* Ingredients */}
-                        <View style={[styles.section, styles.cardSoft, { backgroundColor: theme.colors.muted }]}>
+                        <View style={[styles.section, styles.cardSoft, { backgroundColor: colors.muted }]}>
                             <View style={styles.ingredientsHeader}>
-                                <Text style={[styles.cardTitle, { color: theme.colors.foreground }]}>Ingredients</Text>
+                                <Text style={[styles.cardTitle, { color: colors.foreground }]}>Ingredients</Text>
                                 <Pressable
-                                    style={[styles.addOutlineButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+                                    style={[
+                                        styles.addOutlineButton,
+                                        { backgroundColor: colors.card, borderColor: colors.border }
+                                    ]}
                                     onPress={() => onAddToGroceryList?.(recipe)}
                                 >
-                                    <AppIcon name="shoppingCart" size={14} color={theme.colors.foreground} style={{ marginRight: 6 }} />
-                                    <Text style={[styles.addOutlineText, { color: theme.colors.foreground }]}>Add to List</Text>
+                                    <AppIcon name="shoppingCart" size={14} color={colors.foreground} style={{ marginRight: 6 }} />
+                                    <Text style={[styles.addOutlineText, { color: colors.foreground }]}>Add to List</Text>
                                 </Pressable>
                             </View>
 
                             <View style={styles.ingredientsList}>
                                 {recipe.ingredients.map((ingredient, i) => (
                                     <View key={i} style={styles.ingredientRow}>
-                                        <View style={[styles.numberCircle, { backgroundColor: `${theme.colors.primary}20` }]}>
-                                            <Text style={[styles.numberText, { color: theme.colors.primary }]}>{i + 1}</Text>
+                                        <View style={[styles.numberCircle, { backgroundColor: `${colors.primary}20` }]}>
+                                            <Text style={[styles.numberText, { color: colors.primary }]}>{i + 1}</Text>
                                         </View>
-                                        <Text style={[styles.ingredientName, { color: theme.colors.foreground }]}>{ingredient.name}</Text>
-                                        <Text style={[styles.ingredientQty, { color: theme.colors.mutedForeground }]}>
+                                        <Text style={[styles.ingredientName, { color: colors.foreground }]}>{ingredient.name}</Text>
+                                        <Text style={[styles.ingredientQty, { color: colors.mutedForeground }]}>
                                             {ingredient.quantity} {ingredient.unit}
                                         </Text>
                                     </View>
@@ -191,19 +194,19 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
                         </View>
 
                         {/* Cooking Instructions */}
-                        <View style={[styles.section, styles.cardSoft, { backgroundColor: theme.colors.muted }]}>
+                        <View style={[styles.section, styles.cardSoft, { backgroundColor: colors.muted }]}>
                             <View style={styles.sectionHeader}>
-                                <AppIcon name="chefHat" size={16} color={theme.colors.primary} style={{ marginRight: 6 }} />
-                                <Text style={[styles.cardTitle, { color: theme.colors.foreground }]}>Cooking Instructions</Text>
+                                <AppIcon name="chefHat" size={16} color={colors.primary} style={{ marginRight: 6 }} />
+                                <Text style={[styles.cardTitle, { color: colors.foreground }]}>Cooking Instructions</Text>
                             </View>
 
                             <View style={styles.stepsList}>
                                 {instructions.map((step, i) => (
                                     <View key={i} style={styles.stepRow}>
-                                        <View style={[styles.stepCircle, { backgroundColor: theme.colors.primary }]}>
+                                        <View style={[styles.stepCircle, { backgroundColor: colors.primary }]}>
                                             <Text style={styles.stepNumber}>{i + 1}</Text>
                                         </View>
-                                        <Text style={[styles.stepText, { color: theme.colors.foreground }]}>{step}</Text>
+                                        <Text style={[styles.stepText, { color: colors.foreground }]}>{step}</Text>
                                     </View>
                                 ))}
                             </View>
@@ -211,7 +214,7 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
 
                         {/* Footer Action */}
                         <Pressable
-                            style={[styles.mainActionButton, { backgroundColor: theme.colors.primary }]}
+                            style={[styles.mainActionButton, { backgroundColor: colors.primary }]}
                             onPress={() => onAddToGroceryList?.(recipe)}
                         >
                             <AppIcon name="shoppingCart" size={20} color="#fff" style={{ marginRight: 8 }} />
@@ -226,7 +229,7 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
 };
 
 const styles = StyleSheet.create({
-    modalContainer: {
+    modalOverlay: {
         flex: 1,
     },
     headerBackground: {
@@ -240,7 +243,7 @@ const styles = StyleSheet.create({
     },
     closeButton: {
         position: "absolute",
-        top: 50, // Safe Area approx
+        top: 50,
         right: 20,
         width: 40,
         height: 40,

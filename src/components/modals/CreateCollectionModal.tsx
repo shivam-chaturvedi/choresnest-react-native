@@ -10,7 +10,7 @@ import {
     Pressable,
 } from "react-native";
 import { AppIcon } from "../ui/AppIcon";
-import { theme } from "../../theme";
+import { useThemeColors } from "../../contexts/ThemeContext";
 import { recipes } from "../../data/recipes";
 
 interface CreateCollectionModalProps {
@@ -19,16 +19,20 @@ interface CreateCollectionModalProps {
 }
 
 const EMOJI_OPTIONS = ['🍳', '🥗', '🍕', '🍜', '🍰', '🥘', '🌮', '🍱', '🥙', '🍲'];
-const COLOR_OPTIONS = [
-    '#DBEAFE', // bg-primary-light (blue-100)
-    '#E0E7FF', // bg-secondary (indigo-100)
-    '#DCFCE7', // bg-success-light (green-100)
-    '#FEF3C7', // bg-warning-light (amber-100)
-    '#F1F5F9', // bg-accent (slate-100)
-    '#1E293B', // Dark Navy
-];
 
 export const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({ open, onClose }) => {
+    const colors = useThemeColors();
+
+    // Dynamic color options based on theme
+    const COLOR_OPTIONS = [
+        colors.primary + '20',
+        colors.secondary + '20',
+        colors.success + '20',
+        colors.warning + '20',
+        colors.muted,
+        colors.card,
+    ];
+
     const [name, setName] = useState("");
     const [selectedEmoji, setSelectedEmoji] = useState("🍳");
     const [selectedColor, setSelectedColor] = useState(COLOR_OPTIONS[0]);
@@ -51,40 +55,57 @@ export const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({ op
     };
 
     return (
-        <Modal visible={open} animationType="slide" transparent>
-            <View style={styles.overlay}>
-                <View style={[styles.container, { backgroundColor: '#F8FAFC' }]}>
+        <Modal visible={open} animationType="slide" transparent onRequestClose={onClose}>
+            <Pressable style={styles.overlay} onPress={onClose}>
+                <Pressable
+                    style={[styles.container, { backgroundColor: colors.background }]}
+                    onPress={(e) => e.stopPropagation()}
+                >
                     {/* Header */}
-                    <View style={styles.header}>
+                    <View style={[styles.header, { borderBottomColor: colors.border }]}>
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            <AppIcon name="plus" size={20} color={theme.colors.primary} style={{ marginRight: 8 }} />
-                            <Text style={styles.title}>Create Collection</Text>
+                            <AppIcon name="plus" size={20} color={colors.primary} style={{ marginRight: 8 }} />
+                            <Text style={[styles.title, { color: colors.foreground }]}>Create Collection</Text>
                         </View>
                         <TouchableOpacity onPress={onClose}>
-                            <AppIcon name="x" size={20} color={theme.colors.mutedForeground} />
+                            <AppIcon name="x" size={20} color={colors.mutedForeground} />
                         </TouchableOpacity>
                     </View>
 
                     <ScrollView contentContainerStyle={styles.content}>
                         {/* Name */}
-                        <Text style={styles.label}>Collection Name</Text>
+                        <Text style={[styles.label, { color: colors.foreground }]}>Collection Name</Text>
                         <TextInput
-                            style={styles.input}
+                            style={[
+                                styles.input,
+                                {
+                                    backgroundColor: colors.card,
+                                    borderColor: colors.border,
+                                    color: colors.foreground
+                                }
+                            ]}
                             placeholder="e.g., Weekly Dinners, Kids Favorites"
-                            placeholderTextColor={theme.colors.mutedForeground}
+                            placeholderTextColor={colors.mutedForeground}
                             value={name}
                             onChangeText={setName}
                         />
 
                         {/* Icon Picker */}
-                        <Text style={styles.label}>Choose Icon</Text>
+                        <Text style={[styles.label, { color: colors.foreground }]}>Choose Icon</Text>
                         <View style={styles.emojiRow}>
                             {EMOJI_OPTIONS.map(emoji => (
                                 <TouchableOpacity
                                     key={emoji}
                                     style={[
                                         styles.emojiBtn,
-                                        selectedEmoji === emoji && styles.emojiBtnActive
+                                        {
+                                            backgroundColor: colors.card,
+                                            borderColor: colors.border
+                                        },
+                                        selectedEmoji === emoji && {
+                                            borderColor: colors.primary,
+                                            backgroundColor: colors.primary + '10'
+                                        }
                                     ]}
                                     onPress={() => setSelectedEmoji(emoji)}
                                 >
@@ -94,15 +115,18 @@ export const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({ op
                         </View>
 
                         {/* Color Picker */}
-                        <Text style={styles.label}>Choose Color</Text>
+                        <Text style={[styles.label, { color: colors.foreground }]}>Choose Color</Text>
                         <View style={styles.colorRow}>
-                            {COLOR_OPTIONS.map(color => (
+                            {COLOR_OPTIONS.map((color, index) => (
                                 <TouchableOpacity
-                                    key={color}
+                                    key={index}
                                     style={[
                                         styles.colorBtn,
                                         { backgroundColor: color },
-                                        selectedColor === color && styles.colorBtnActive
+                                        selectedColor === color && {
+                                            borderColor: colors.foreground,
+                                            transform: [{ scale: 1.1 }]
+                                        }
                                     ]}
                                     onPress={() => setSelectedColor(color)}
                                 />
@@ -110,7 +134,7 @@ export const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({ op
                         </View>
 
                         {/* Recipe Selector */}
-                        <Text style={styles.label}>Add Recipes ({selectedRecipes.length} selected)</Text>
+                        <Text style={[styles.label, { color: colors.foreground }]}>Add Recipes ({selectedRecipes.length} selected)</Text>
                         <View style={styles.recipeList}>
                             {recipes.map(recipe => {
                                 const isSelected = selectedRecipes.includes(recipe.id);
@@ -119,16 +143,23 @@ export const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({ op
                                         key={recipe.id}
                                         style={[
                                             styles.recipeRow,
-                                            isSelected && styles.recipeRowActive
+                                            {
+                                                backgroundColor: colors.card,
+                                                borderColor: colors.border
+                                            },
+                                            isSelected && {
+                                                borderColor: colors.primary,
+                                                backgroundColor: colors.primary + '10'
+                                            }
                                         ]}
                                         onPress={() => toggleRecipe(recipe.id)}
                                     >
                                         <Text style={{ fontSize: 24, marginRight: 12 }}>{recipe.image}</Text>
                                         <View style={{ flex: 1 }}>
-                                            <Text style={styles.recipeName}>{recipe.name}</Text>
-                                            <Text style={styles.recipeMeta}>{recipe.ingredients.length} ingredients</Text>
+                                            <Text style={[styles.recipeName, { color: colors.foreground }]}>{recipe.name}</Text>
+                                            <Text style={[styles.recipeMeta, { color: colors.mutedForeground }]}>{recipe.ingredients.length} ingredients</Text>
                                         </View>
-                                        {isSelected && <AppIcon name="check" size={20} color={theme.colors.primary} />}
+                                        {isSelected && <AppIcon name="check" size={20} color={colors.primary} />}
                                     </Pressable>
                                 );
                             })}
@@ -137,16 +168,31 @@ export const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({ op
                     </ScrollView>
 
                     {/* Footer */}
-                    <View style={styles.footer}>
-                        <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
-                            <Text style={styles.cancelText}>Cancel</Text>
+                    <View style={[styles.footer, {
+                        borderTopColor: colors.border,
+                        backgroundColor: colors.background
+                    }]}>
+                        <TouchableOpacity
+                            style={[
+                                styles.cancelBtn,
+                                { borderColor: colors.border }
+                            ]}
+                            onPress={onClose}
+                        >
+                            <Text style={[styles.cancelText, { color: colors.mutedForeground }]}>Cancel</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.createBtn} onPress={handleCreate}>
-                            <Text style={styles.createText}>Create Collection</Text>
+                        <TouchableOpacity
+                            style={[
+                                styles.createBtn,
+                                { backgroundColor: colors.primary }
+                            ]}
+                            onPress={handleCreate}
+                        >
+                            <Text style={[styles.createText, { color: colors.primaryForeground }]}>Create Collection</Text>
                         </TouchableOpacity>
                     </View>
-                </View>
-            </View>
+                </Pressable>
+            </Pressable>
         </Modal>
     );
 };
@@ -170,11 +216,11 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         padding: 20,
         paddingBottom: 10,
+        borderBottomWidth: 1, // Added border width for better separation
     },
     title: {
         fontSize: 18,
         fontWeight: '700',
-        color: '#0F172A',
     },
     content: {
         padding: 20,
@@ -183,19 +229,15 @@ const styles = StyleSheet.create({
     label: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#334155',
         marginBottom: 8,
         marginTop: 16,
     },
     input: {
-        backgroundColor: '#fff',
         borderWidth: 1,
-        borderColor: '#CBD5E1',
         borderRadius: 12,
         paddingHorizontal: 16,
         paddingVertical: 12,
         fontSize: 15,
-        color: '#0F172A',
         marginTop: 0,
     },
     emojiRow: {
@@ -209,13 +251,7 @@ const styles = StyleSheet.create({
         borderRadius: 24,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#fff',
         borderWidth: 1,
-        borderColor: '#E2E8F0',
-    },
-    emojiBtnActive: {
-        borderColor: theme.colors.primary,
-        backgroundColor: '#EFF6FF',
     },
     colorRow: {
         flexDirection: 'row',
@@ -228,66 +264,48 @@ const styles = StyleSheet.create({
         borderWidth: 2,
         borderColor: 'transparent',
     },
-    colorBtnActive: {
-        borderColor: '#0F172A',
-        transform: [{ scale: 1.1 }],
-    },
     recipeList: {
         gap: 8,
-        maxHeight: 200, // Roughly show 3-4 items
+        maxHeight: 200,
     },
     recipeRow: {
         flexDirection: 'row',
         alignItems: 'center',
         padding: 12,
-        backgroundColor: '#fff',
         borderRadius: 16,
         borderWidth: 1,
-        borderColor: '#E2E8F0',
-    },
-    recipeRowActive: {
-        borderColor: theme.colors.primary,
-        backgroundColor: '#EFF6FF',
     },
     recipeName: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#0F172A',
     },
     recipeMeta: {
         fontSize: 12,
-        color: '#64748B',
     },
     footer: {
         padding: 20,
         paddingTop: 16,
         borderTopWidth: 1,
-        borderTopColor: '#E2E8F0',
         flexDirection: 'row',
         gap: 12,
-        backgroundColor: '#fff',
     },
     cancelBtn: {
         flex: 1,
         paddingVertical: 12,
-        borderRadius: 24, // Pill
+        borderRadius: 24,
         borderWidth: 1,
-        borderColor: '#CBD5E1',
         alignItems: 'center',
     },
     cancelText: {
         fontWeight: '600',
-        color: '#334155',
     },
     createBtn: {
         flex: 1,
         paddingVertical: 12,
-        borderRadius: 24, // Pill
-        backgroundColor: '#2E5E99',
+        borderRadius: 24,
         alignItems: 'center',
     },
     createText: {
         fontWeight: '600',
-        color: '#fff',
     },
 });

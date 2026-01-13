@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { PROFILE_COLORS } from "../constants/profileColors";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export interface FamilyMember {
   id: string;
@@ -47,6 +49,7 @@ interface FamilyContextType {
   setActiveMember: (member: FamilyMember) => void;
   addMember: (member: Omit<FamilyMember, "id" | "isActive">) => void;
   removeMember: (id: string) => void;
+  updateMemberColor: (memberId: string, colorValue: string) => void; // New function
   globalVault: VaultDocument[];
   memberVaults: Record<string, VaultDocument[]>;
   addDocument: (doc: Omit<VaultDocument, "id">) => void;
@@ -180,14 +183,40 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const activeMember = members.find((m) => m.isActive) || null;
 
+  useEffect(() => {
+    const loadActiveMember = async () => {
+      try {
+        const savedId = await AsyncStorage.getItem("ACTIVE_MEMBER_ID");
+        if (savedId) {
+          setMembers((prev) => prev.map((m) => ({ ...m, isActive: m.id === savedId })));
+        }
+      } catch (e) {
+        console.error("Failed to load active member", e);
+      }
+    };
+    loadActiveMember();
+  }, []);
+
   const setActiveMember = (member: FamilyMember) => {
     setMembers((prev) => prev.map((m) => ({ ...m, isActive: m.id === member.id })));
+    AsyncStorage.setItem("ACTIVE_MEMBER_ID", member.id).catch(console.error);
+  };
+
+  const updateMemberColor = (memberId: string, colorValue: string) => {
+    setMembers((prev) => prev.map((m) =>
+      m.id === memberId ? { ...m, color: colorValue } : m
+    ));
   };
 
   const addMember = (member: Omit<FamilyMember, "id" | "isActive">) => {
+    // Attempt to auto-assign a color
+    const usedColors = new Set(members.map(m => m.color));
+    const availableColor = PROFILE_COLORS.find(c => !usedColors.has(c.value))?.value || PROFILE_COLORS[0].value;
+
     const newMember: FamilyMember = {
       ...member,
       id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+      color: member.color || availableColor,
       isActive: false,
     };
     setMembers((prev) => [...prev, newMember]);
@@ -253,6 +282,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         setActiveMember,
         addMember,
         removeMember,
+        updateMemberColor,
         globalVault,
         memberVaults,
         addDocument,

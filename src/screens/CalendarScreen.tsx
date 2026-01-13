@@ -16,6 +16,7 @@ import { useFamily } from "../contexts/FamilyContext";
 import { theme } from "../theme";
 import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { AppIcon } from "../components/ui/AppIcon";
+import { PROFILE_COLORS } from "../constants/profileColors";
 import { useSidebar } from "../contexts/SidebarContext";
 import { format, addMonths, subMonths, addDays, startOfWeek, endOfWeek, isSameMonth, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval } from "date-fns";
 import { useNavigation } from "@react-navigation/native";
@@ -116,11 +117,9 @@ export const CalendarScreen: React.FC = () => {
               <View style={styles.eventDotRx}>
                 {dayEvents.slice(0, 3).map((e, idx) => {
                   const member = members.find(m => m.id === e.memberId);
-                  const dotColor = member?.color === "member-blue" ? "#3b82f6" :
-                    member?.color === "member-green" ? "#22c55e" :
-                      member?.color === "member-orange" ? "#f97316" :
-                        member?.color === "member-pink" ? "#ec4899" :
-                          member?.color === "member-purple" ? "#8b5cf6" : "#ef4444";
+                  const profileColor = PROFILE_COLORS.find(c => c.value === member?.color);
+                  const dotColor = profileColor ? profileColor.hex : colors.primary;
+
                   return (
                     <View
                       key={idx}
@@ -179,7 +178,7 @@ export const CalendarScreen: React.FC = () => {
           </View>
         )}
 
-        <ScrollView style={{ height: 300 }} nestedScrollEnabled={true}>
+        <ScrollView style={{ height: 180 }} nestedScrollEnabled={true}>
           {Array.from({ length: 24 }).map((_, hour) => {
             const hourEvents = activeView === "Day"
               ? currentEvents.filter(e => {
@@ -193,7 +192,17 @@ export const CalendarScreen: React.FC = () => {
             const eventsInHour = currentEvents.filter(e => {
               if (!isSameDay(new Date(e.date), selectedDate)) return false;
               if (e.time === "All Day") return hour === 0;
-              const h = parseInt(e.time.split(":")[0]);
+
+              // Parse "HH:MM AM/PM"
+              const timeParts = e.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
+              if (!timeParts) return false;
+
+              let h = parseInt(timeParts[1]);
+              const period = timeParts[3].toUpperCase();
+
+              if (period === "PM" && h !== 12) h += 12;
+              if (period === "AM" && h === 12) h = 0;
+
               return h === hour;
             });
 
@@ -213,11 +222,13 @@ export const CalendarScreen: React.FC = () => {
                 <View style={[styles.timelineContent, { borderLeftColor: colors.border }]}>
                   {activeView === "Day" && eventsInHour.map((event, idx) => {
                     const member = members.find(m => m.id === event.memberId);
-                    const bgColor = member?.color === "member-blue" ? "#dbeafe" :
-                      member?.color === "member-green" ? "#dcfce7" : "#ffedd5";
+                    const profileColor = PROFILE_COLORS.find(c => c.value === member?.color);
+                    // Light background for event block
+                    const bgColor = profileColor ? profileColor.hex + "33" : colors.primary + "33";
+
                     return (
                       <View key={event.id} style={[styles.eventBlock, { backgroundColor: bgColor, borderRadius: radius.xs }]}>
-                        <Text style={[styles.eventBlockTitle, { color: "#1e293b" }]}>{event.title}</Text>
+                        <Text style={[styles.eventBlockTitle, { color: colors.foreground }]}>{event.title}</Text>
                       </View>
                     );
                   })}
@@ -250,12 +261,14 @@ export const CalendarScreen: React.FC = () => {
               <Pressable onPress={() => setShowSearch(true)} style={[styles.iconButton, { borderRadius: radius.sm }]}>
                 <AppIcon name="search" size={20} color="#fff" />
               </Pressable>
-              <Pressable style={[styles.iconButton, { borderRadius: radius.sm }]}>
-                <AppIcon name="bell" size={20} color="#fff" />
-              </Pressable>
+
               <Pressable
                 style={[styles.addBtn, { backgroundColor: "#fff", borderRadius: radius.sm }]}
-                onPress={() => setShowAddEventModal(true)}
+                onPress={() => {
+                  console.log("Opening Add Event Modal");
+                  setShowAddEventModal(true);
+                }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <AppIcon name="plus" size={20} color={colors.primary} />
               </Pressable>
@@ -386,6 +399,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 5,
+    zIndex: 100, // Ensure header is above other content
   },
   headerTop: {
     flexDirection: "row",
@@ -521,10 +535,10 @@ const styles = StyleSheet.create({
   },
   dayCell: {
     width: "14.28%",
-    aspectRatio: 1,
+    aspectRatio: 0.85,
     alignItems: "center",
     justifyContent: "flex-start",
-    paddingTop: 8,
+    paddingTop: 4,
   },
   dayCellFaded: {
     opacity: 0.3,
@@ -585,7 +599,7 @@ const styles = StyleSheet.create({
   },
   timelineRow: {
     flexDirection: "row",
-    minHeight: 60,
+    minHeight: 45,
   },
   timeLabel: {
     width: 60,

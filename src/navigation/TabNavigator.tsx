@@ -1,11 +1,10 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { getFocusedRouteNameFromRoute } from "@react-navigation/native";
+import { getFocusedRouteNameFromRoute, CommonActions } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import HomeScreen from "../screens/HomeScreen";
 import { CalendarScreen } from "../screens/CalendarScreen";
-import { TasksScreen } from "../screens/TasksScreen";
 import { ListsScreen } from "../screens/ListsScreen";
 import { MoreScreen } from "../screens/MoreScreen";
 import { BottomNavigation, BottomNavRoute } from "../components/layout/BottomNavigation";
@@ -28,6 +27,7 @@ import { PrivacyScreen } from "../screens/PrivacyScreen";
 import { ThemeScreen } from "../screens/ThemeScreen";
 import { DataExportScreen } from "../screens/DataExportScreen";
 import { HelpScreen } from "../screens/HelpScreen";
+import { TasksScreen } from "../screens/TasksScreen";
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -56,6 +56,7 @@ const MoreStack = () => (
     <Stack.Screen name="Export" component={ExportScreen} />
     <Stack.Screen name="DataExport" component={DataExportScreen} />
     <Stack.Screen name="Help" component={HelpScreen} />
+    <Stack.Screen name="Tasks" component={TasksScreen} />
   </Stack.Navigator>
 );
 
@@ -88,14 +89,43 @@ export const TabNavigator = () => (
         <BottomNavigation
           activeRoute={activeRoute}
           onNavigate={(route) => {
-            if (route === 'home') {
-              props.navigation.reset({
-                index: 0,
-                routes: [{ name: 'home' }],
-              });
-            } else {
-              props.navigation.navigate(route);
-            }
+        if (route === 'more') {
+          const state = props.navigation.getState();
+          const targetIndex = state.routes.findIndex(r => r.name === 'more');
+
+          if (targetIndex !== -1) {
+            const routes = state.routes.map((routeItem) => {
+              if (routeItem.name === 'more') {
+                return {
+                  ...routeItem,
+                  state: {
+                    index: 0,
+                    routes: [{ name: 'MoreMain' }],
+                  },
+                };
+              }
+
+              return routeItem;
+            });
+
+            props.navigation.dispatch(
+              CommonActions.reset({
+                ...state,
+                routes,
+                index: targetIndex,
+              })
+            );
+          } else {
+            props.navigation.navigate(route);
+          }
+        } else if (route === 'home') {
+          props.navigation.reset({
+            index: 0,
+            routes: [{ name: 'home' }],
+          });
+        } else {
+          props.navigation.navigate(route);
+        }
           }}
         />
       );
@@ -103,7 +133,6 @@ export const TabNavigator = () => (
   >
     <Tab.Screen name="home" component={HomeStack} />
     <Tab.Screen name="calendar" component={CalendarScreen} />
-    <Tab.Screen name="tasks" component={TasksScreen} />
     <Tab.Screen name="lists" component={ListsScreen} />
     <Tab.Screen name="more" component={MoreStack} />
   </Tab.Navigator>

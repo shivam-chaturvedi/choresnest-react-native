@@ -36,17 +36,18 @@ export const palettes = {
 type PaletteKey = keyof typeof palettes;
 
 // Helper to generate full theme colors from a palette
-const createThemeColors = (paletteKey: PaletteKey, mode: 'light' | 'dark') => {
+export const createThemeColors = (paletteKey: PaletteKey, mode: 'light' | 'dark') => {
   const safePaletteKey = palettes[paletteKey] ? paletteKey : 'sapphire';
   const p = palettes[safePaletteKey].palette;
   const isDark = mode === 'dark';
 
   return {
-    // Mode-dependent assignments
-    background: isDark ? p.dark : "#FFFFFF", // Strict White for Light Mode
-    foreground: isDark ? p.light : p.dark,
+    // Background: White for light mode, Cream (#F5F2E8) for "dark" (Cream) mode
+    background: isDark ? "#F5F2E8" : "#FFFFFF",
+    // Foreground: Always dark text now since both White and Cream are light backgrounds
+    foreground: p.dark,
 
-    // Primary usually keeps its brand identity, but might need adjustment for contrast
+    // Primary: Keep brand identity
     primary: p.mediumDark,
     primaryForeground: "#FFFFFF",
     primaryLight: p.mediumLight,
@@ -55,28 +56,28 @@ const createThemeColors = (paletteKey: PaletteKey, mode: 'light' | 'dark') => {
     secondaryForeground: p.dark,
     accent: p.mediumLight,
     accentForeground: p.dark,
-    muted: isDark ? p.mediumDark : p.light, // Use tinted light color for muted areas in light mode
-    mutedForeground: isDark ? p.mediumLight : "#64748B",
+    muted: p.light,
+    mutedForeground: "#64748B",
 
-    // Card background
-    card: isDark ? p.dark : "#FFFFFF",
+    // Card background: White for both, or slightly off-white for Cream mode
+    card: isDark ? "#FFFFFF" : "#FFFFFF",
 
-    border: isDark ? p.mediumDark : "#E2E8F0",
+    border: isDark ? "#E6E2D6" : "#E2E8F0",
 
     success: "#22C55E",
-    successLight: "#064E3B",
-    successDark: "#A7F3D0",
+    successLight: "#DCFCE7",
+    successDark: "#15803D",
     info: p.mediumDark,
-    infoLight: p.dark,
-    infoDark: p.mediumLight,
+    infoLight: p.light,
+    infoDark: p.mediumDark,
     warning: "#F59E0B",
-    warningLight: "#78350F",
-    warningDark: "#FDE68A",
+    warningLight: "#FEF3C7",
+    warningDark: "#B45309",
     danger: "#EF4444",
-    dangerLight: "#7F1D1D",
-    dangerDark: "#FECACA",
+    dangerLight: "#FEE2E2",
+    dangerDark: "#B91C1C",
     googleBlue: "#4285F4",
-    shadow: isDark ? "#000000" : "#000000",
+    shadow: isDark ? "#E6E2D6" : "#E2E8F0",
   };
 };
 

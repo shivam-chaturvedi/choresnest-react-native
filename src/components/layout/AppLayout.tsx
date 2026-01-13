@@ -50,6 +50,12 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }, style]}>
       <View style={styles.content}>{children}</View>
+      {showNav && (
+        <BottomNavigation
+          activeRoute={navActiveRoute}
+          onNavigate={navOnNavigate ?? handleNavigate}
+        />
+      )}
       {showAddButton && (
         <Pressable
           key={`fab-${themeVersion}`}
@@ -59,13 +65,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           <AppIcon name="plus" size={34} color={theme.colors.primaryForeground} />
         </Pressable>
       )}
-      {showNav && (
-        <BottomNavigation
-          activeRoute={navActiveRoute}
-          onNavigate={navOnNavigate ?? handleNavigate}
-        />
-      )
-      }
 
       <QuickAddModal
         open={showQuickAdd}
@@ -93,6 +92,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 24,
     bottom: 20,
+    zIndex: 999,
     width: 56,
     height: 56,
     borderRadius: 16,

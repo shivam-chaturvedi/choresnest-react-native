@@ -15,7 +15,7 @@ import { AppIcon } from "../components/ui/AppIcon";
 
 export const ThemeScreen: React.FC = () => {
   const navigation = useNavigation();
-  const { currentPalette, setPalette, shapeMode, setShapeMode } = useTheme();
+  const { currentPalette, setPalette, shapeMode, setShapeMode, isDark, setThemeMode } = useTheme();
   const colors = useThemeColors();
   const radius = useThemeRadius();
 
@@ -33,6 +33,34 @@ export const ThemeScreen: React.FC = () => {
             <AppIcon name="chevronLeft" size={24} color={colors.foreground} />
           </Pressable>
           <Text style={[styles.title, { color: colors.foreground }]}>Theme Gallery</Text>
+        </View>
+
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Appearance</Text>
+        <View style={styles.shapeList}>
+          {([
+            { mode: 'light', label: 'Light', icon: 'sun' },
+            { mode: 'dark', label: 'Cream', icon: 'coffee' }
+          ] as const).map((mode) => (
+            <Pressable
+              key={mode.mode}
+              style={[
+                styles.shapeCard,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: (isDark ? 'dark' : 'light') === mode.mode ? colors.success : colors.border,
+                  borderRadius: radius.card
+                },
+                (isDark ? 'dark' : 'light') === mode.mode && { borderWidth: 2 }
+              ]}
+              onPress={() => setThemeMode(mode.mode === 'dark')}
+            >
+              <AppIcon name={mode.icon} size={28} color={colors.primary} style={{ marginBottom: 12 }} />
+              <View style={styles.shapeInfo}>
+                <Text style={[styles.shapeLabel, { color: colors.foreground }]}>{mode.label}</Text>
+                {(isDark ? 'dark' : 'light') === mode.mode && <Check size={18} color={colors.success} />}
+              </View>
+            </Pressable>
+          ))}
         </View>
 
         <Text style={[styles.sectionTitle, { color: colors.foreground }]}>UI Shape</Text>

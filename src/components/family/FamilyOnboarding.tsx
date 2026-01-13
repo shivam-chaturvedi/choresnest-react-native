@@ -7,12 +7,11 @@ import {
     Text,
     TextInput,
     View,
-    Switch,
     Platform,
 } from "react-native";
-import { theme } from "../../theme";
 import { useFamily } from "../../contexts/FamilyContext";
 import { AppIcon } from "../ui/AppIcon";
+import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 
 const avatarOptions = ["👤", "👩", "👨", "👶", "👧", "👦", "🧒", "👴", "👵", "🧑", "👱", "🧔", "👩‍🦰", "👨‍🦱", "🧑‍🦳", "👩‍🦲"];
 const colorOptions = [
@@ -22,12 +21,6 @@ const colorOptions = [
     { id: "member-orange", label: "Orange", color: "#FFEDD5" },
     { id: "member-pink", label: "Pink", color: "#FCE7F3" },
     { id: "member-cyan", label: "Cyan", color: "#CFFAFE" },
-];
-
-const roleOptions = [
-    { id: "admin", label: "Admin", icon: "crown", description: "Full access to all features", color: theme.colors.warning || "#F59E0B" },
-    { id: "parent", label: "Parent", icon: "shield", description: "Can manage family settings", color: theme.colors.primary },
-    { id: "child", label: "Child", icon: "eye", description: "View and add items only", color: theme.colors.success },
 ];
 
 const permissionOptions = [
@@ -65,6 +58,16 @@ const getDefaultPermissions = (role: string) => {
 
 export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClose }) => {
     const { addMember, setFamilyName, familyName } = useFamily();
+    const colors = useThemeColors();
+    const radius = useThemeRadius();
+
+    // Dynamic roles based on theme
+    const roleOptions = [
+        { id: "admin", label: "Admin", icon: "crown", description: "Full access to all features", color: colors.warning },
+        { id: "parent", label: "Parent", icon: "shield", description: "Can manage family settings", color: colors.primary },
+        { id: "child", label: "Child", icon: "eye", description: "View and add items only", color: colors.success },
+    ];
+
     const [step, setStep] = useState(1);
     const [newFamilyName, setNewFamilyName] = useState(familyName || "");
     const [newMembers, setNewMembers] = useState<NewMember[]>([]);
@@ -75,7 +78,6 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
         role: "parent",
         permissions: getDefaultPermissions("parent"),
     });
-    const [editingPermissions, setEditingPermissions] = useState(false);
 
     const handleAddMember = () => {
         if (!currentMember.name.trim()) return;
@@ -87,7 +89,6 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
             role: "parent",
             permissions: getDefaultPermissions("parent"),
         });
-        setEditingPermissions(false);
     };
 
     const handleComplete = () => {
@@ -108,13 +109,13 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
 
     return (
         <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
-            <View style={styles.container}>
+            <View style={[styles.container, { backgroundColor: colors.background }]}>
                 <View style={styles.header}>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <AppIcon name="users" size={24} color={theme.colors.primary} style={{ marginRight: 8 }} />
-                        <Text style={styles.title}>Family Setup</Text>
+                        <AppIcon name="users" size={24} color={colors.primary} style={{ marginRight: 8 }} />
+                        <Text style={[styles.title, { color: colors.foreground }]}>Family Setup</Text>
                     </View>
-                    <Text style={styles.subtitle}>Step {step} of 3</Text>
+                    <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Step {step} of 3</Text>
                 </View>
 
                 {/* Progress Bar */}
@@ -124,7 +125,7 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
                             key={s}
                             style={[
                                 styles.progressSegment,
-                                s <= step ? styles.progressActive : styles.progressInactive,
+                                { backgroundColor: s <= step ? colors.primary : colors.muted },
                             ]}
                         />
                     ))}
@@ -133,104 +134,134 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
                 <ScrollView contentContainerStyle={styles.content}>
                     {step === 1 && (
                         <View style={styles.stepContainer}>
-                            <View style={styles.iconCircle}>
-                                <AppIcon name="users" size={40} color={theme.colors.primary} />
+                            <View style={[styles.iconCircle, { backgroundColor: colors.muted }]}>
+                                <AppIcon name="users" size={40} color={colors.primary} />
                             </View>
-                            <Text style={styles.stepTitle}>Name Your Family</Text>
-                            <Text style={styles.stepDesc}>This will be displayed at the top of your home screen</Text>
+                            <Text style={[styles.stepTitle, { color: colors.foreground }]}>Name Your Family</Text>
+                            <Text style={[styles.stepDesc, { color: colors.mutedForeground }]}>This will be displayed at the top of your home screen</Text>
 
-                            <Text style={styles.inputLabel}>Family Name</Text>
+                            <Text style={[styles.inputLabel, { color: colors.foreground }]}>Family Name</Text>
                             <TextInput
                                 value={newFamilyName}
                                 onChangeText={setNewFamilyName}
                                 placeholder="e.g., The Smiths"
-                                placeholderTextColor={theme.colors.mutedForeground}
-                                style={styles.bigInput}
+                                placeholderTextColor={colors.mutedForeground}
+                                style={[styles.bigInput, {
+                                    backgroundColor: colors.card,
+                                    borderColor: colors.border,
+                                    color: colors.foreground,
+                                    borderRadius: radius.md
+                                }]}
                             />
 
                             <Pressable
-                                style={[styles.primaryButton, !newFamilyName.trim() && styles.disabledButton]}
+                                style={[styles.primaryButton, { backgroundColor: colors.primary, borderRadius: radius.md }, !newFamilyName.trim() && styles.disabledButton]}
                                 onPress={() => setStep(2)}
                                 disabled={!newFamilyName.trim()}
                             >
-                                <Text style={styles.primaryButtonText}>Continue</Text>
-                                <AppIcon name="arrowRight" size={16} color="#fff" style={{ marginLeft: 8 }} />
+                                <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>Continue</Text>
+                                <AppIcon name="arrowRight" size={16} color={colors.primaryForeground} style={{ marginLeft: 8 }} />
                             </Pressable>
                         </View>
                     )}
 
                     {step === 2 && (
                         <View style={styles.stepContainer}>
-                            <Text style={styles.stepTitle}>Add Family Members</Text>
-                            <Text style={styles.stepDesc}>Add everyone in your household</Text>
+                            <Text style={[styles.stepTitle, { color: colors.foreground }]}>Add Family Members</Text>
+                            <Text style={[styles.stepDesc, { color: colors.mutedForeground }]}>Add everyone in your household</Text>
 
                             {newMembers.map((member, index) => (
-                                <View key={index} style={styles.memberItem}>
+                                <View key={index} style={[styles.memberItem, { backgroundColor: colors.muted }]}>
                                     <View style={[styles.memberAvatarSmall, { backgroundColor: colorOptions.find(c => c.id === member.color)?.color }]}>
                                         <Text style={{ fontSize: 20 }}>{member.avatar}</Text>
                                     </View>
                                     <View style={{ flex: 1 }}>
-                                        <Text style={styles.memberName}>{member.name}</Text>
-                                        <Text style={styles.memberRole}>{member.role} • {getPermissionCount(member.permissions)} permissions</Text>
+                                        <Text style={[styles.memberName, { color: colors.foreground }]}>{member.name}</Text>
+                                        <Text style={[styles.memberRole, { color: colors.mutedForeground }]}>{member.role} • {getPermissionCount(member.permissions)} permissions</Text>
                                     </View>
                                     <Pressable onPress={() => setNewMembers(newMembers.filter((_, i) => i !== index))}>
-                                        <Text style={{ fontSize: 18, color: theme.colors.mutedForeground }}>✕</Text>
+                                        <Text style={{ fontSize: 18, color: colors.mutedForeground }}>✕</Text>
                                     </Pressable>
                                 </View>
                             ))}
 
-                            <View style={styles.addMemberForm}>
+                            <View style={[styles.addMemberForm, {
+                                backgroundColor: colors.card,
+                                borderColor: colors.border,
+                                borderRadius: radius.card
+                            }]}>
                                 <TextInput
                                     value={currentMember.name}
                                     onChangeText={(text) => setCurrentMember({ ...currentMember, name: text })}
                                     placeholder="Member name"
-                                    placeholderTextColor={theme.colors.mutedForeground}
-                                    style={styles.input}
+                                    placeholderTextColor={colors.mutedForeground}
+                                    style={[styles.input, {
+                                        backgroundColor: colors.background,
+                                        borderColor: colors.border,
+                                        color: colors.foreground,
+                                        borderRadius: radius.sm
+                                    }]}
                                 />
 
-                                <Text style={styles.label}>Avatar</Text>
+                                <Text style={[styles.label, { color: colors.mutedForeground }]}>Avatar</Text>
                                 <View style={styles.grid}>
                                     {avatarOptions.map(avatar => (
                                         <Pressable
                                             key={avatar}
                                             onPress={() => setCurrentMember({ ...currentMember, avatar })}
-                                            style={[styles.avatarOption, currentMember.avatar === avatar && styles.avatarOptionActive]}
+                                            style={[
+                                                styles.avatarOption,
+                                                { backgroundColor: colors.muted, borderRadius: radius.xs },
+                                                currentMember.avatar === avatar && {
+                                                    backgroundColor: colors.primary,
+                                                    borderColor: colors.primary,
+                                                    borderWidth: 2
+                                                }
+                                            ]}
                                         >
                                             <Text style={{ fontSize: 20 }}>{avatar}</Text>
                                         </Pressable>
                                     ))}
                                 </View>
 
-                                <Text style={styles.label}>Role</Text>
+                                <Text style={[styles.label, { color: colors.mutedForeground }]}>Role</Text>
                                 {roleOptions.map(role => (
                                     <Pressable
                                         key={role.id}
                                         onPress={() => setCurrentMember({ ...currentMember, role: role.id, permissions: getDefaultPermissions(role.id) })}
-                                        style={[styles.roleOption, currentMember.role === role.id && styles.roleOptionActive]}
+                                        style={[
+                                            styles.roleOption,
+                                            { backgroundColor: colors.muted, borderRadius: radius.sm },
+                                            currentMember.role === role.id && {
+                                                backgroundColor: colors.primary + "1A",
+                                                borderColor: colors.primary,
+                                                borderWidth: 1
+                                            }
+                                        ]}
                                     >
                                         <AppIcon name={role.icon as any} size={20} color={role.color} />
                                         <View style={{ marginLeft: 12 }}>
-                                            <Text style={styles.roleLabel}>{role.label}</Text>
-                                            <Text style={styles.roleDesc}>{role.description}</Text>
+                                            <Text style={[styles.roleLabel, { color: colors.foreground }]}>{role.label}</Text>
+                                            <Text style={[styles.roleDesc, { color: colors.mutedForeground }]}>{role.description}</Text>
                                         </View>
                                     </Pressable>
                                 ))}
 
-                                <Pressable style={styles.outlineButton} onPress={handleAddMember}>
-                                    <Text style={styles.outlineButtonText}>Add Member</Text>
+                                <Pressable style={[styles.outlineButton, { borderColor: colors.border, borderRadius: radius.sm }]} onPress={handleAddMember}>
+                                    <Text style={[styles.outlineButtonText, { color: colors.foreground }]}>Add Member</Text>
                                 </Pressable>
                             </View>
 
                             <View style={styles.row}>
-                                <Pressable style={[styles.outlineButton, { flex: 1 }]} onPress={() => setStep(1)}>
-                                    <Text style={styles.outlineButtonText}>Back</Text>
+                                <Pressable style={[styles.outlineButton, { flex: 1, borderColor: colors.border, borderRadius: radius.md }]} onPress={() => setStep(1)}>
+                                    <Text style={[styles.outlineButtonText, { color: colors.foreground }]}>Back</Text>
                                 </Pressable>
                                 <Pressable
-                                    style={[styles.primaryButton, { flex: 1 }, newMembers.length === 0 && styles.disabledButton]}
+                                    style={[styles.primaryButton, { flex: 1, backgroundColor: colors.primary, borderRadius: radius.md }, newMembers.length === 0 && styles.disabledButton]}
                                     onPress={() => setStep(3)}
                                     disabled={newMembers.length === 0}
                                 >
-                                    <Text style={styles.primaryButtonText}>Review</Text>
+                                    <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>Review</Text>
                                 </Pressable>
                             </View>
                         </View>
@@ -238,32 +269,32 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
 
                     {step === 3 && (
                         <View style={styles.stepContainer}>
-                            <View style={[styles.iconCircle, { backgroundColor: "#DCFCE7" }]}>
-                                <AppIcon name="checkSquare" size={40} color={theme.colors.success} />
+                            <View style={[styles.iconCircle, { backgroundColor: colors.success + "20" }]}>
+                                <AppIcon name="checkSquare" size={40} color={colors.success} />
                             </View>
-                            <Text style={styles.stepTitle}>Review Your Family</Text>
-                            <Text style={styles.stepDesc}>Everything looks good? Let's get started!</Text>
+                            <Text style={[styles.stepTitle, { color: colors.foreground }]}>Review Your Family</Text>
+                            <Text style={[styles.stepDesc, { color: colors.mutedForeground }]}>Everything looks good? Let's get started!</Text>
 
-                            <View style={styles.reviewCard}>
+                            <View style={[styles.reviewCard, { backgroundColor: colors.card, borderRadius: radius.card }]}>
                                 <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                                    <AppIcon name="users" size={20} color={theme.colors.primary} style={{ marginRight: 8 }} />
-                                    <Text style={{ fontSize: 18, fontWeight: '700', color: theme.colors.foreground }}>{newFamilyName}</Text>
+                                    <AppIcon name="users" size={20} color={colors.primary} style={{ marginRight: 8 }} />
+                                    <Text style={{ fontSize: 18, fontWeight: '700', color: colors.foreground }}>{newFamilyName}</Text>
                                 </View>
                                 {newMembers.map((member, index) => (
-                                    <View key={index} style={styles.memberItem}>
+                                    <View key={index} style={[styles.memberItem, { backgroundColor: colors.muted }]}>
                                         <View style={[styles.memberAvatarSmall, { backgroundColor: colorOptions.find(c => c.id === member.color)?.color }]}>
                                             <Text style={{ fontSize: 16 }}>{member.avatar}</Text>
                                         </View>
                                         <View style={{ flex: 1 }}>
-                                            <Text style={styles.memberName}>{member.name}</Text>
-                                            <Text style={styles.memberRole}>{member.role}</Text>
+                                            <Text style={[styles.memberName, { color: colors.foreground }]}>{member.name}</Text>
+                                            <Text style={[styles.memberRole, { color: colors.mutedForeground }]}>{member.role}</Text>
                                         </View>
                                     </View>
                                 ))}
                             </View>
 
-                            <Pressable style={styles.primaryButton} onPress={handleComplete}>
-                                <Text style={styles.primaryButtonText}>Complete Setup</Text>
+                            <Pressable style={[styles.primaryButton, { backgroundColor: colors.primary, borderRadius: radius.md }]} onPress={handleComplete}>
+                                <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>Complete Setup</Text>
                             </Pressable>
                         </View>
                     )}
@@ -276,11 +307,10 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: theme.colors.background,
         paddingTop: Platform.OS === 'ios' ? 60 : 40,
     },
     header: {
-        paddingHorizontal: theme.spacing.lg,
+        paddingHorizontal: 20,
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -289,14 +319,13 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 20,
         fontWeight: '700',
-        color: theme.colors.foreground,
     },
     subtitle: {
-        color: theme.colors.mutedForeground,
+        fontSize: 14,
     },
     progressBar: {
         flexDirection: 'row',
-        paddingHorizontal: theme.spacing.lg,
+        paddingHorizontal: 20,
         gap: 4,
         marginBottom: 24,
     },
@@ -305,14 +334,8 @@ const styles = StyleSheet.create({
         height: 4,
         borderRadius: 2,
     },
-    progressActive: {
-        backgroundColor: theme.colors.primary,
-    },
-    progressInactive: {
-        backgroundColor: theme.colors.muted,
-    },
     content: {
-        paddingHorizontal: theme.spacing.lg,
+        paddingHorizontal: 20,
         paddingBottom: 40,
     },
     stepContainer: {
@@ -322,7 +345,6 @@ const styles = StyleSheet.create({
         width: 80,
         height: 80,
         borderRadius: 40,
-        backgroundColor: theme.colors.muted,
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 16,
@@ -330,13 +352,11 @@ const styles = StyleSheet.create({
     stepTitle: {
         fontSize: 24,
         fontWeight: '700',
-        color: theme.colors.foreground,
         marginBottom: 8,
         textAlign: 'center',
     },
     stepDesc: {
         fontSize: 14,
-        color: theme.colors.mutedForeground,
         textAlign: 'center',
         marginBottom: 32,
     },
@@ -345,31 +365,24 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
         marginBottom: 8,
-        color: theme.colors.foreground,
     },
     bigInput: {
         width: '100%',
         height: 56,
-        borderRadius: 16,
         borderWidth: 1,
-        borderColor: theme.colors.border,
         paddingHorizontal: 16,
         fontSize: 18,
         textAlign: 'center',
-        backgroundColor: theme.colors.card,
         marginBottom: 32,
     },
     primaryButton: {
         width: '100%',
         height: 50,
-        backgroundColor: theme.colors.primary,
-        borderRadius: 16,
         flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',
     },
     primaryButtonText: {
-        color: '#fff',
         fontSize: 16,
         fontWeight: '600',
     },
@@ -381,7 +394,6 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         padding: 12,
-        backgroundColor: theme.colors.muted,
         borderRadius: 12,
         marginBottom: 8,
     },
@@ -395,35 +407,26 @@ const styles = StyleSheet.create({
     },
     memberName: {
         fontWeight: '600',
-        color: theme.colors.foreground,
     },
     memberRole: {
         fontSize: 12,
-        color: theme.colors.mutedForeground,
     },
     addMemberForm: {
         width: '100%',
-        backgroundColor: theme.colors.card,
-        borderRadius: 16,
         padding: 16,
         borderWidth: 1,
-        borderColor: theme.colors.border,
         marginBottom: 24,
         marginTop: 16,
     },
     input: {
         height: 44,
         borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderRadius: 10,
         paddingHorizontal: 12,
         marginBottom: 16,
-        backgroundColor: theme.colors.background,
     },
     label: {
         fontSize: 12,
         fontWeight: '600',
-        color: theme.colors.mutedForeground,
         marginBottom: 8,
     },
     grid: {
@@ -435,50 +438,31 @@ const styles = StyleSheet.create({
     avatarOption: {
         width: 36,
         height: 36,
-        borderRadius: 8,
-        backgroundColor: theme.colors.muted,
         justifyContent: 'center',
         alignItems: 'center',
-    },
-    avatarOptionActive: {
-        backgroundColor: theme.colors.primary,
-        borderWidth: 2,
-        borderColor: theme.colors.primary,
     },
     roleOption: {
         flexDirection: 'row',
         alignItems: 'center',
         padding: 12,
-        borderRadius: 12,
-        backgroundColor: theme.colors.muted,
         marginBottom: 8,
-    },
-    roleOptionActive: {
-        backgroundColor: "#EFF6FF",
-        borderColor: theme.colors.primary,
-        borderWidth: 1,
     },
     roleLabel: {
         fontWeight: '600',
-        color: theme.colors.foreground,
     },
     roleDesc: {
         fontSize: 12,
-        color: theme.colors.mutedForeground,
     },
     outlineButton: {
         width: '100%',
         height: 44,
-        borderRadius: 12,
         borderWidth: 1,
-        borderColor: theme.colors.border,
         justifyContent: 'center',
         alignItems: 'center',
         marginTop: 8,
     },
     outlineButtonText: {
         fontWeight: '600',
-        color: theme.colors.foreground,
     },
     row: {
         flexDirection: 'row',
@@ -488,8 +472,6 @@ const styles = StyleSheet.create({
     reviewCard: {
         width: '100%',
         padding: 16,
-        backgroundColor: theme.colors.card,
-        borderRadius: 16,
         marginTop: 24,
         marginBottom: 32,
         shadowColor: "#000",

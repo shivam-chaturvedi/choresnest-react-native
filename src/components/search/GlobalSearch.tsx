@@ -11,8 +11,8 @@ import {
   SafeAreaView,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { theme } from "../../theme";
 import { AppIcon, AppIconName } from "../ui/AppIcon";
+import { useTheme, useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 
 interface SearchResult {
   id: string;
@@ -62,13 +62,6 @@ const sampleData: SearchResult[] = [
   { id: "d5", type: "document", title: "Property Papers", subtitle: "Legal Documents", icon: "🏠", path: "Vault", meta: "Permanent" },
 ];
 
-const typeConfig: Record<string, { label: string; icon: AppIconName; color: string; bg: string }> = {
-  event: { label: "Events", icon: "calendar", color: "#2563EB", bg: "#EFF6FF" },
-  task: { label: "Tasks", icon: "checkSquare", color: "#16A34A", bg: "#DCFCE7" },
-  grocery: { label: "Grocery", icon: "shoppingCart", color: "#EA580C", bg: "#FFEDD5" },
-  recipe: { label: "Recipes", icon: "utensils", color: "#4F46E5", bg: "#E0E7FF" },
-  document: { label: "Vault", icon: "file", color: "#0891B2", bg: "#CFFAFE" },
-};
 
 interface GlobalSearchProps {
   open: boolean;
@@ -77,6 +70,20 @@ interface GlobalSearchProps {
 
 export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => {
   const navigation = useNavigation<any>();
+  const colors = useThemeColors();
+  const radius = useThemeRadius();
+  const { themeVersion } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, radius), [colors, radius, themeVersion]);
+  const typeConfig = useMemo<Record<string, { label: string; icon: AppIconName; color: string; bg: string }>>(
+    () => ({
+      event: { label: "Events", icon: "calendar", color: colors.info, bg: colors.info + "20" },
+      task: { label: "Tasks", icon: "checkSquare", color: colors.success, bg: colors.success + "20" },
+      grocery: { label: "Grocery", icon: "shoppingCart", color: colors.warning, bg: colors.warning + "20" },
+      recipe: { label: "Recipes", icon: "utensils", color: colors.primary, bg: colors.primary + "20" },
+      document: { label: "Vault", icon: "file", color: colors.secondary, bg: colors.secondary + "20" },
+    }),
+    [colors]
+  );
   const [query, setQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
 
@@ -120,28 +127,28 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
   const recentSearches = ["Milk", "Birthday", "Doctor", "Butter Chicken"];
 
   return (
-    <Modal visible={open} animationType="fade" onRequestClose={onClose}>
+    <Modal visible={open} animationType="fade" transparent onRequestClose={onClose}>
       <SafeAreaView style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.searchBar}>
             <View style={styles.searchInputContainer}>
-              <AppIcon name="search" size={20} color={theme.colors.mutedForeground} style={styles.searchIcon} />
+              <AppIcon name="search" size={20} color={colors.mutedForeground} style={styles.searchIcon} />
               <TextInput
                 style={styles.input}
                 placeholder="Search events, tasks, recipes, vault..."
-                placeholderTextColor={theme.colors.mutedForeground}
+                placeholderTextColor={colors.mutedForeground}
                 value={query}
                 onChangeText={setQuery}
                 autoFocus
               />
               {query.length > 0 && (
                 <Pressable onPress={() => setQuery("")} style={styles.clearButton}>
-                  <AppIcon name="x" size={16} color={theme.colors.mutedForeground} />
+                  <AppIcon name="x" size={16} color={colors.mutedForeground} />
                 </Pressable>
               )}
             </View>
-            <Pressable onPress={onClose} style={styles.cancelButton}>
+            <Pressable onPress={onClose} style={styles.cancelButton} hitSlop={10}>
               <Text style={styles.cancelText}>Cancel</Text>
             </Pressable>
           </View>
@@ -170,7 +177,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
                 <AppIcon
                   name={config.icon}
                   size={14}
-                  color={activeFilter === type ? "#fff" : theme.colors.mutedForeground}
+                  color={activeFilter === type ? "#fff" : colors.mutedForeground}
                   style={{ marginRight: 6 }}
                 />
                 <Text style={activeFilter === type ? styles.filterTextActive : styles.filterTextInactive}>
@@ -230,7 +237,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
               <View style={styles.tipCard}>
                 <View style={styles.tipHeader}>
                   <View style={styles.tipIconBox}>
-                    <AppIcon name="sparkles" size={16} color="#fff" />
+                    <AppIcon name="sparkles" size={16} color={colors.primaryForeground} />
                   </View>
                   <View>
                     <Text style={styles.tipTitle}>Search Tips</Text>
@@ -276,7 +283,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
                               <Text style={styles.metaText}>{result.meta}</Text>
                             </View>
                           )}
-                          <AppIcon name="chevronRight" size={16} color={theme.colors.mutedForeground} />
+                          <AppIcon name="chevronRight" size={16} color={colors.mutedForeground} />
                         </Pressable>
                       ))}
                     </View>
@@ -285,7 +292,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
               ) : (
                 <View style={styles.emptyState}>
                   <View style={styles.emptyIconCircle}>
-                    <AppIcon name="search" size={32} color={theme.colors.mutedForeground} />
+                    <AppIcon name="search" size={32} color={colors.mutedForeground} />
                   </View>
                   <Text style={styles.emptyTitle}>No results found</Text>
                   <Text style={styles.emptySubtitle}>Try different keywords or filters</Text>
@@ -299,273 +306,277 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background, // Should be #F1F5F9 or similar light blue-grey based on screenshot
-  },
-  header: {
-    backgroundColor: theme.colors.background,
-    paddingTop: Platform.OS === "android" ? 40 : 0,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(0,0,0,0.05)",
-  },
-  searchBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
-  },
-  searchInputContainer: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#E2E8F0", // Slate-200ish
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 48,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    color: theme.colors.foreground,
-    height: "100%",
-  },
-  clearButton: {
-    padding: 4,
-  },
-  cancelButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-  },
-  cancelText: {
-    color: theme.colors.primary,
-    fontWeight: "600",
-    fontSize: 16,
-  },
-  filterScroll: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    gap: 8,
-  },
-  filterChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  filterChipActive: {
-    backgroundColor: theme.colors.primary, // Dark blue selected
-    borderColor: theme.colors.primary,
-  },
-  filterChipInactive: {
-    backgroundColor: theme.colors.muted, // Light grey unselected
-    borderColor: "transparent",
-  },
-  filterTextActive: {
-    color: "#fff",
-    fontWeight: "600",
-    fontSize: 14,
-  },
-  filterTextInactive: {
-    color: theme.colors.mutedForeground,
-    fontWeight: "500",
-    fontSize: 14,
-  },
-  content: {
-    flex: 1,
-  },
-  defaultContent: {
-    padding: 16,
-    gap: 24,
-  },
-  section: {
-    gap: 12,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: theme.colors.mutedForeground,
-  },
-  recentRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  recentChip: {
-    backgroundColor: theme.colors.muted,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  recentText: {
-    fontSize: 14,
-    color: theme.colors.foreground,
-  },
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  quickCard: {
-    width: "48%", // 2 columns approx
-    backgroundColor: theme.colors.card,
-    borderRadius: 12,
-    padding: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  quickIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  quickCardTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: theme.colors.foreground,
-  },
-  quickCardCount: {
-    fontSize: 12,
-    color: theme.colors.mutedForeground,
-  },
-  tipCard: {
-    backgroundColor: "#EFF6FF", // Light Blue
-    borderRadius: 12,
-    padding: 16,
-  },
-  tipHeader: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  tipIconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: "#2563EB",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tipTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#1E293B",
-    marginBottom: 4,
-  },
-  tipText: {
-    fontSize: 13,
-    color: "#475569",
-    marginBottom: 2,
-  },
-  resultsContent: {
-    padding: 16,
-    gap: 24,
-  },
-  resultGroup: {
-    marginBottom: 8,
-  },
-  resultGroupHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-    gap: 8,
-  },
-  groupIconBox: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  groupTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: theme.colors.foreground,
-  },
-  groupCount: {
-    fontSize: 12,
-    color: theme.colors.mutedForeground,
-  },
-  resultRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: theme.colors.card,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  resultEmojiBox: {
-    marginRight: 12,
-  },
-  resultEmoji: {
-    fontSize: 24,
-  },
-  resultInfo: {
-    flex: 1,
-  },
-  resultTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: theme.colors.foreground,
-  },
-  resultSubtitle: {
-    fontSize: 13,
-    color: theme.colors.mutedForeground,
-  },
-  metaTag: {
-    backgroundColor: theme.colors.muted,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    marginRight: 8,
-  },
-  metaText: {
-    fontSize: 11,
-    color: theme.colors.mutedForeground,
-  },
-  emptyState: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingTop: 64,
-  },
-  emptyIconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: theme.colors.muted,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: theme.colors.foreground,
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: theme.colors.mutedForeground,
-  },
-});
+type ThemeColors = ReturnType<typeof useThemeColors>;
+type ThemeRadius = ReturnType<typeof useThemeRadius>;
+
+const makeStyles = (colors: ThemeColors, radius: ThemeRadius) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    header: {
+      backgroundColor: colors.background,
+      paddingTop: Platform.OS === "android" ? 40 : 0,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    searchBar: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      gap: 12,
+    },
+    searchInputContainer: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.muted,
+      borderRadius: radius.md,
+      paddingHorizontal: 12,
+      height: 48,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    searchIcon: {
+      marginRight: 8,
+    },
+    input: {
+      flex: 1,
+      fontSize: 16,
+      color: colors.foreground,
+      height: "100%",
+    },
+    clearButton: {
+      padding: 4,
+    },
+    cancelButton: {
+      paddingVertical: 8,
+      paddingHorizontal: 4,
+    },
+    cancelText: {
+      color: colors.primary,
+      fontWeight: "600",
+      fontSize: 16,
+    },
+    filterScroll: {
+      paddingHorizontal: 16,
+      paddingBottom: 12,
+      gap: 8,
+    },
+    filterChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+    },
+    filterChipActive: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    filterChipInactive: {
+      backgroundColor: colors.muted,
+      borderColor: "transparent",
+    },
+    filterTextActive: {
+      color: "#fff",
+      fontWeight: "600",
+      fontSize: 14,
+    },
+    filterTextInactive: {
+      color: colors.mutedForeground,
+      fontWeight: "500",
+      fontSize: 14,
+    },
+    content: {
+      flex: 1,
+    },
+    defaultContent: {
+      padding: 16,
+      gap: 24,
+    },
+    section: {
+      gap: 12,
+    },
+    sectionTitle: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: colors.mutedForeground,
+    },
+    recentRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    recentChip: {
+      backgroundColor: colors.muted,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: radius.sm,
+    },
+    recentText: {
+      fontSize: 14,
+      color: colors.foreground,
+    },
+    grid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 12,
+    },
+    quickCard: {
+      width: "48%",
+      backgroundColor: colors.card,
+      borderRadius: radius.md,
+      padding: 12,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    quickIconBox: {
+      width: 40,
+      height: 40,
+      borderRadius: radius.md,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    quickCardTitle: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: colors.foreground,
+    },
+    quickCardCount: {
+      fontSize: 12,
+      color: colors.mutedForeground,
+    },
+    tipCard: {
+      backgroundColor: colors.primary + "15",
+      borderRadius: radius.md,
+      padding: 16,
+    },
+    tipHeader: {
+      flexDirection: "row",
+      gap: 12,
+    },
+    tipIconBox: {
+      width: 32,
+      height: 32,
+      borderRadius: radius.sm,
+      backgroundColor: colors.primary,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    tipTitle: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: colors.foreground,
+      marginBottom: 4,
+    },
+    tipText: {
+      fontSize: 13,
+      color: colors.mutedForeground,
+      marginBottom: 2,
+    },
+    resultsContent: {
+      padding: 16,
+      gap: 24,
+    },
+    resultGroup: {
+      marginBottom: 8,
+    },
+    resultGroupHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 12,
+      gap: 8,
+    },
+    groupIconBox: {
+      width: 24,
+      height: 24,
+      borderRadius: radius.sm,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    groupTitle: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: colors.foreground,
+    },
+    groupCount: {
+      fontSize: 12,
+      color: colors.mutedForeground,
+    },
+    resultRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.card,
+      borderRadius: radius.md,
+      padding: 12,
+      marginBottom: 8,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.05,
+      shadowRadius: 2,
+      elevation: 1,
+    },
+    resultEmojiBox: {
+      marginRight: 12,
+    },
+    resultEmoji: {
+      fontSize: 24,
+    },
+    resultInfo: {
+      flex: 1,
+    },
+    resultTitle: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: colors.foreground,
+    },
+    resultSubtitle: {
+      fontSize: 13,
+      color: colors.mutedForeground,
+    },
+    metaTag: {
+      backgroundColor: colors.muted,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: radius.sm,
+      marginRight: 8,
+    },
+    metaText: {
+      fontSize: 11,
+      color: colors.mutedForeground,
+    },
+    emptyState: {
+      alignItems: "center",
+      justifyContent: "center",
+      paddingTop: 64,
+    },
+    emptyIconCircle: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      backgroundColor: colors.muted,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 16,
+    },
+    emptyTitle: {
+      fontSize: 18,
+      fontWeight: "600",
+      color: colors.foreground,
+      marginBottom: 8,
+    },
+    emptySubtitle: {
+      fontSize: 14,
+      color: colors.mutedForeground,
+    },
+  });

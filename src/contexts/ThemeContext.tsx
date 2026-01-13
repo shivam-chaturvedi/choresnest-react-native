@@ -1,39 +1,38 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useColorScheme } from 'react-native';
 import { theme, palettes } from '../theme';
 
 // Add ShapeMode type
 export type ShapeMode = 'rounded' | 'squared';
 
 type ThemeKey = keyof typeof palettes;
-export type ThemeMode = 'light' | 'dark' | 'system';
 
 const THEME_STORAGE_KEY = '@app_theme_palette';
-const THEME_MODE_STORAGE_KEY = '@app_theme_mode';
 const THEME_SHAPE_STORAGE_KEY = '@app_theme_shape';
+const THEME_MODE_STORAGE_KEY = '@app_theme_mode';
 
 // Update context interface
 interface ThemeContextType {
     currentPalette: ThemeKey;
-    themeMode: ThemeMode;
     shapeMode: ShapeMode;
     isDark: boolean;
     themeVersion: number;
     setPalette: (key: ThemeKey) => void;
-    setThemeMode: (mode: ThemeMode) => void;
     setShapeMode: (mode: ShapeMode) => void;
+    toggleThemeMode: () => void;
+    setThemeMode: (isDark: boolean) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType>({
     currentPalette: 'sapphire',
-    themeMode: 'system',
     shapeMode: 'rounded',
-    isDark: true,
+    isDark: false,
     themeVersion: 0,
     setPalette: () => { },
-    setThemeMode: () => { },
     setShapeMode: () => { },
+    toggleThemeMode: () => { },
+    setThemeMode: () => { },
 });
 
 export const useTheme = () => useContext(ThemeContext);
@@ -50,38 +49,37 @@ export const useThemeRadius = () => {
 };
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const systemScheme = useColorScheme();
+    const systemColorScheme = useColorScheme();
     const [currentPalette, setCurrentPalette] = useState<ThemeKey>('sapphire');
-    const [themeMode, setThemeMode] = useState<ThemeMode>('system');
     const [shapeMode, setShapeMode] = useState<ShapeMode>('rounded');
+    const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
     const [themeVersion, setThemeVersion] = useState(0);
     const [isLoaded, setIsLoaded] = useState(false);
-
-    // Derive actual mode
-    const activeMode: 'light' | 'dark' = themeMode === 'system'
-        ? ((systemScheme === 'light' || systemScheme === 'dark') ? systemScheme : 'dark')
-        : themeMode;
 
     // Load theme
     useEffect(() => {
         const loadTheme = async () => {
             try {
-                const [savedPalette, savedMode, savedShape] = await Promise.all([
+                const [savedPalette, savedShape, savedMode] = await Promise.all([
                     AsyncStorage.getItem(THEME_STORAGE_KEY),
-                    AsyncStorage.getItem(THEME_MODE_STORAGE_KEY),
-                    AsyncStorage.getItem(THEME_SHAPE_STORAGE_KEY)
+                    AsyncStorage.getItem(THEME_SHAPE_STORAGE_KEY),
+                    AsyncStorage.getItem(THEME_MODE_STORAGE_KEY)
                 ]);
 
                 if (savedPalette && savedPalette in palettes) {
                     setCurrentPalette(savedPalette as ThemeKey);
                 }
 
-                if (savedMode && (savedMode === 'light' || savedMode === 'dark' || savedMode === 'system')) {
-                    setThemeMode(savedMode as ThemeMode);
-                }
-
                 if (savedShape && (savedShape === 'rounded' || savedShape === 'squared')) {
                     setShapeMode(savedShape as ShapeMode);
+                }
+
+                if (savedMode !== null) {
+                    setIsDarkMode(savedMode === 'dark');
+                } else {
+                    // Default to system, or light if system is unavailable
+                    // For now, default to light as per user request history "default to light"
+                    setIsDarkMode(false);
                 }
             } catch (error) {
                 console.error('Failed to load theme from storage:', error);
@@ -99,22 +97,23 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         AsyncStorage.setItem(THEME_STORAGE_KEY, currentPalette).catch(console.error);
     }, [currentPalette, isLoaded]);
 
-    // Save mode
-    useEffect(() => {
-        if (!isLoaded) return;
-        AsyncStorage.setItem(THEME_MODE_STORAGE_KEY, themeMode).catch(console.error);
-    }, [themeMode, isLoaded]);
-
     // Save shape
     useEffect(() => {
         if (!isLoaded) return;
         AsyncStorage.setItem(THEME_SHAPE_STORAGE_KEY, shapeMode).catch(console.error);
     }, [shapeMode, isLoaded]);
 
+    // Save mode
+    useEffect(() => {
+        if (!isLoaded) return;
+        AsyncStorage.setItem(THEME_MODE_STORAGE_KEY, isDarkMode ? 'dark' : 'light').catch(console.error);
+    }, [isDarkMode, isLoaded]);
+
     // Update global theme object and bump version
     useEffect(() => {
         try {
-            theme.updateTheme(currentPalette, activeMode);
+            const mode = isDarkMode ? 'dark' : 'light';
+            theme.updateTheme(currentPalette, mode);
 
             // Update radius in mutable theme object
             // Use type assertion or update theme.ts to export radii
@@ -126,24 +125,27 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             console.error("Failed to update theme:", error);
             // Fallback
             try {
-                theme.updateTheme('sapphire', 'dark');
+                theme.updateTheme('sapphire', 'light');
                 setThemeVersion(v => v + 1);
             } catch (e) {
                 console.error("Critical theme failure:", e);
             }
         }
-    }, [currentPalette, activeMode, shapeMode]);
+    }, [currentPalette, shapeMode, isDarkMode]);
+
+    const toggleThemeMode = () => setIsDarkMode(prev => !prev);
+    const setThemeMode = (isDark: boolean) => setIsDarkMode(isDark);
 
     return (
         <ThemeContext.Provider value={{
             currentPalette,
-            themeMode,
             shapeMode,
-            isDark: activeMode === 'dark',
+            isDark: isDarkMode,
             themeVersion,
             setPalette: setCurrentPalette,
-            setThemeMode: setThemeMode,
-            setShapeMode: setShapeMode
+            setShapeMode: setShapeMode,
+            toggleThemeMode,
+            setThemeMode,
         }}>
             {children}
         </ThemeContext.Provider>

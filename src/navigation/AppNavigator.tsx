@@ -21,7 +21,7 @@ import { useTheme } from "../contexts/ThemeContext";
 const Stack = createNativeStackNavigator();
 
 export const AppNavigator = () => {
-  const { themeMode, currentPalette, isDark } = useTheme();
+  const { isDark } = useTheme();
   const [navState, setNavState] = React.useState<any>();
 
   // Construct React Navigation compatible theme

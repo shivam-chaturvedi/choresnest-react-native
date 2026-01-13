@@ -71,6 +71,14 @@ export const MoreScreen: React.FC = () => {
           iconColor: colors.success,
           route: "Expenses"
         },
+        {
+          label: "Tasks & Chores",
+          description: "Track assignments & rotations",
+          icon: "checkSquare",
+          color: colors.primary + '25',
+          iconColor: colors.primary,
+          route: "Tasks"
+        },
       ],
     },
     {
@@ -108,7 +116,7 @@ export const MoreScreen: React.FC = () => {
         },
         {
           label: "Theme",
-          description: "Light / Dark mode",
+          description: "Light / Cream mode",
           icon: "palette",
           color: colors.primary + '25',
           iconColor: colors.primary,

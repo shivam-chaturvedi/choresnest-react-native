@@ -8,8 +8,8 @@ import {
     ScrollView,
 } from 'react-native';
 import { AppIcon } from '../ui/AppIcon';
-import { theme } from '../../theme';
-import { recipes, Recipe } from '../../data/recipes';
+import { useThemeColors } from '../../contexts/ThemeContext';
+import { recipes } from '../../data/recipes';
 
 interface AddMealModalProps {
     open: boolean;
@@ -22,6 +22,8 @@ export const AddMealModal: React.FC<AddMealModalProps> = ({
     onClose,
     onSelectRecipe,
 }) => {
+    const colors = useThemeColors();
+
     return (
         <Modal
             visible={open}
@@ -29,15 +31,18 @@ export const AddMealModal: React.FC<AddMealModalProps> = ({
             transparent={true}
             onRequestClose={onClose}
         >
-            <View style={styles.modalOverlay}>
-                <View style={styles.modalContent}>
-                    <View style={styles.header}>
+            <Pressable style={styles.modalOverlay} onPress={onClose}>
+                <Pressable
+                    style={[styles.modalContent, { backgroundColor: colors.card }]}
+                    onPress={(e) => e.stopPropagation()}
+                >
+                    <View style={[styles.header, { borderBottomColor: colors.border }]}>
                         <View style={styles.titleRow}>
-                            <AppIcon name="plus" size={20} color={theme.colors.primary} style={{ marginRight: 8 }} />
-                            <Text style={styles.title}>Select a Recipe</Text>
+                            <AppIcon name="plus" size={20} color={colors.primary} style={{ marginRight: 8 }} />
+                            <Text style={[styles.title, { color: colors.foreground }]}>Select a Recipe</Text>
                         </View>
                         <Pressable onPress={onClose} hitSlop={10}>
-                            <AppIcon name="x" size={20} color={theme.colors.mutedForeground} />
+                            <AppIcon name="x" size={20} color={colors.mutedForeground} />
                         </Pressable>
                     </View>
 
@@ -47,22 +52,22 @@ export const AddMealModal: React.FC<AddMealModalProps> = ({
                                 <Pressable
                                     key={recipe.id}
                                     onPress={() => onSelectRecipe(recipe.id)}
-                                    style={styles.recipeCard}
+                                    style={[styles.recipeCard, { backgroundColor: colors.muted }]}
                                 >
                                     <Text style={styles.recipeEmoji}>{recipe.image}</Text>
                                     <View style={styles.recipeInfo}>
-                                        <Text style={styles.recipeName}>{recipe.name}</Text>
-                                        <Text style={styles.recipeMeta}>
+                                        <Text style={[styles.recipeName, { color: colors.foreground }]}>{recipe.name}</Text>
+                                        <Text style={[styles.recipeMeta, { color: colors.mutedForeground }]}>
                                             {recipe.time} • {recipe.servings} servings
                                         </Text>
                                     </View>
-                                    <AppIcon name="plus" size={20} color={theme.colors.primary} />
+                                    <AppIcon name="plus" size={20} color={colors.primary} />
                                 </Pressable>
                             ))}
                         </View>
                     </ScrollView>
-                </View>
-            </View>
+                </Pressable>
+            </Pressable>
         </Modal>
     );
 };
@@ -75,7 +80,6 @@ const styles = StyleSheet.create({
         padding: 16,
     },
     modalContent: {
-        backgroundColor: theme.colors.card,
         borderRadius: 24,
         maxHeight: '80%',
         overflow: 'hidden',
@@ -86,7 +90,6 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         padding: 20,
         borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
     },
     titleRow: {
         flexDirection: 'row',
@@ -95,7 +98,6 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 18,
         fontWeight: '700',
-        color: theme.colors.foreground,
     },
     scrollContainer: {
         padding: 20,
@@ -106,7 +108,6 @@ const styles = StyleSheet.create({
     recipeCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: theme.colors.muted,
         padding: 16,
         borderRadius: 16,
     },
@@ -120,11 +121,9 @@ const styles = StyleSheet.create({
     recipeName: {
         fontSize: 15,
         fontWeight: '700',
-        color: theme.colors.foreground,
         marginBottom: 4,
     },
     recipeMeta: {
         fontSize: 13,
-        color: theme.colors.mutedForeground,
     },
 });
