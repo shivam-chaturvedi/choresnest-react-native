@@ -214,11 +214,19 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
             {/* Event Name */}
             <TextInput
-              style={[styles.nameInput, { color: colors.foreground }]}
+              style={[
+                styles.nameInput,
+                {
+                  color: colors.foreground,
+                  borderBottomWidth: 2,
+                  borderBottomColor: colors.primary
+                }
+              ]}
               placeholder="Event name"
               placeholderTextColor={colors.mutedForeground}
               value={name}
               onChangeText={setName}
+              autoFocus={true}
             />
 
             {/* Description */}

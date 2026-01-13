@@ -32,11 +32,19 @@ export interface CalendarEvent {
   location?: string;
 }
 
+export interface GroceryCategory {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+}
+
 export interface GroceryItem {
   id: string;
   name: string;
   quantity: number;
   unit: string;
+  categoryId: string;
   addedBy: string;
   completed: boolean;
 }
@@ -49,13 +57,17 @@ interface FamilyContextType {
   setActiveMember: (member: FamilyMember) => void;
   addMember: (member: Omit<FamilyMember, "id" | "isActive">) => void;
   removeMember: (id: string) => void;
-  updateMemberColor: (memberId: string, colorValue: string) => void; // New function
+  updateMemberColor: (memberId: string, colorValue: string) => void;
   globalVault: VaultDocument[];
   memberVaults: Record<string, VaultDocument[]>;
   addDocument: (doc: Omit<VaultDocument, "id">) => void;
   shareDocument: (docId: string, memberId: string, targetMemberIds: string[]) => void;
   events: CalendarEvent[];
   addEvent: (event: Omit<CalendarEvent, "id">) => void;
+  categories: GroceryCategory[];
+  addCategory: (category: Omit<GroceryCategory, "id">) => void;
+  removeCategory: (id: string) => void;
+  updateCategory: (id: string, updates: Partial<Omit<GroceryCategory, "id">>) => void;
   groceryList: GroceryItem[];
   addGroceryItem: (item: Omit<GroceryItem, "id">) => void;
   toggleGroceryItem: (id: string) => void;
@@ -164,11 +176,20 @@ const defaultEvents: CalendarEvent[] = [
   },
 ];
 
+const defaultCategories: GroceryCategory[] = [
+  { id: "cat1", name: "Dairy", icon: "🥛", color: "#FFE5B4" },
+  { id: "cat2", name: "Bakery", icon: "🍞", color: "#F4A460" },
+  { id: "cat3", name: "Produce", icon: "🥬", color: "#90EE90" },
+  { id: "cat4", name: "Meat & Protein", icon: "🍖", color: "#FFB6C1" },
+  { id: "cat5", name: "Pantry", icon: "🍝", color: "#DDA0DD" },
+  { id: "cat6", name: "Other", icon: "📦", color: "#D3D3D3" },
+];
+
 const defaultGroceryList: GroceryItem[] = [
-  { id: "gr1", name: "Milk", quantity: 2, unit: "L", addedBy: "2", completed: false },
-  { id: "gr2", name: "Bread", quantity: 1, unit: "loaf", addedBy: "1", completed: true },
-  { id: "gr3", name: "Eggs", quantity: 12, unit: "pcs", addedBy: "2", completed: false },
-  { id: "gr4", name: "Rice", quantity: 5, unit: "kg", addedBy: "1", completed: false },
+  { id: "gr1", name: "Milk", quantity: 2, unit: "L", categoryId: "cat1", addedBy: "2", completed: false },
+  { id: "gr2", name: "Bread", quantity: 1, unit: "loaf", categoryId: "cat2", addedBy: "1", completed: true },
+  { id: "gr3", name: "Eggs", quantity: 12, unit: "pcs", categoryId: "cat4", addedBy: "2", completed: false },
+  { id: "gr4", name: "Rice", quantity: 5, unit: "kg", categoryId: "cat5", addedBy: "1", completed: false },
 ];
 
 const FamilyContext = createContext<FamilyContextType | undefined>(undefined);
@@ -180,6 +201,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [memberVaults, setMemberVaults] = useState<Record<string, VaultDocument[]>>(defaultMemberVaults);
   const [events, setEvents] = useState<CalendarEvent[]>(defaultEvents);
   const [groceryList, setGroceryList] = useState<GroceryItem[]>(defaultGroceryList);
+  const [categories, setCategories] = useState<GroceryCategory[]>(defaultCategories);
 
   const activeMember = members.find((m) => m.isActive) || null;
 
@@ -272,6 +294,28 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setGroceryList((prev) => prev.map((item) => (item.id === id ? { ...item, completed: !item.completed } : item)));
   };
 
+  const addCategory = (category: Omit<GroceryCategory, "id">) => {
+    const newCategory: GroceryCategory = { ...category, id: Date.now().toString() + Math.random().toString(36).substr(2, 9) };
+    setCategories((prev) => [...prev, newCategory]);
+  };
+
+  const removeCategory = (id: string) => {
+    // Move items from deleted category to "Other" category
+    const otherCategory = categories.find(c => c.name === "Other");
+    if (otherCategory) {
+      setGroceryList((prev) => prev.map((item) =>
+        item.categoryId === id ? { ...item, categoryId: otherCategory.id } : item
+      ));
+    }
+    setCategories((prev) => prev.filter((cat) => cat.id !== id));
+  };
+
+  const updateCategory = (id: string, updates: Partial<Omit<GroceryCategory, "id">>) => {
+    setCategories((prev) => prev.map((cat) =>
+      cat.id === id ? { ...cat, ...updates } : cat
+    ));
+  };
+
   return (
     <FamilyContext.Provider
       value={{
@@ -289,6 +333,10 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         shareDocument,
         events,
         addEvent,
+        categories,
+        addCategory,
+        removeCategory,
+        updateCategory,
         groceryList,
         addGroceryItem,
         toggleGroceryItem,

@@ -1,5 +1,4 @@
-// ... imports
-import React, { useState, useRef, useMemo } from "react";
+import React, { useState, useRef, useMemo, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -19,7 +18,7 @@ import { AppIcon } from "../components/ui/AppIcon";
 import { PROFILE_COLORS } from "../constants/profileColors";
 import { useSidebar } from "../contexts/SidebarContext";
 import { format, addMonths, subMonths, addDays, startOfWeek, endOfWeek, isSameMonth, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval } from "date-fns";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 
 const filteredEvents = (events: any[], filterMember: string | null) => {
   if (!filterMember) return events;
@@ -41,11 +40,45 @@ export const CalendarScreen: React.FC = () => {
   const [showAddEventModal, setShowAddEventModal] = useState(false);
   const [filterMember, setFilterMember] = useState<string | null>(null);
   const [showSearch, setShowSearch] = useState(false);
+
+  /* New state for current time line */
+  const [now, setNow] = useState(new Date());
+  const scrollViewRef = useRef<ScrollView>(null);
+  const HOUR_HEIGHT = 60;
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60000); // Update every minute
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if ((activeView === "Day" || activeView === "Week") && scrollViewRef.current) {
+      const currentHour = new Date().getHours();
+      // Scroll to current time - 1 hour for context
+      const scrollY = Math.max(0, (currentHour - 1) * HOUR_HEIGHT);
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({ y: scrollY, animated: true });
+      }, 500);
+    }
+  }, [activeView]);
+
+  // Auto-scroll when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      if ((activeView === "Day" || activeView === "Week") && scrollViewRef.current) {
+        const currentHour = new Date().getHours();
+        const scrollY = Math.max(0, (currentHour - 1) * HOUR_HEIGHT);
+        setTimeout(() => {
+          scrollViewRef.current?.scrollTo({ y: scrollY, animated: true });
+        }, 500);
+      }
+    }, [activeView])
+  );
+
   const [selectedTime, setSelectedTime] = useState<string | undefined>(undefined);
 
   const today = new Date();
 
-  // ... (logic remains same)
   const currentEvents = useMemo(() =>
     filteredEvents(events, filterMember),
     [events, filterMember]
@@ -139,110 +172,211 @@ export const CalendarScreen: React.FC = () => {
     </View>
   );
 
-  const renderTimeline = (days: Date[]) => (
-    <View style={{ flex: 1 }}>
-      {/* Week Header if Week View */}
-      {activeView === "Week" && (
-        <View style={styles.weekHeaderRow}>
-          {days.map((day, i) => {
-            const isSelected = isSameDay(day, selectedDate);
-            const isToday = isSameDay(day, today);
-            return (
-              <Pressable
-                key={i}
-                onPress={() => setSelectedDate(day)}
-                style={[
-                  styles.weekHeaderCell,
-                  { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.md },
-                  isSelected && { backgroundColor: colors.primary, borderColor: colors.primary },
-                  isToday && !isSelected && { backgroundColor: colors.primary + '15' }
-                ]}
-              >
-                <Text style={[styles.weekDayLabel, { color: colors.mutedForeground }, isSelected && styles.textWhite]}>{format(day, "EEE")}</Text>
-                <Text style={[styles.weekDateLabel, { color: colors.foreground }, isSelected && styles.textWhite]}>{format(day, "d")}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      )}
+  const renderTimeline = (days: Date[]) => {
+    const isTodayInView = days.some(d => isSameDay(d, now));
+    const dayColumnWidth = 100 / days.length;
 
-      {/* Timeline */}
-      <View style={[styles.card, { backgroundColor: colors.card, borderRadius: radius.card }]}>
-        {activeView === "Day" && (
-          <View style={styles.dayHeader}>
-            <Text style={[styles.dayHeaderNumber, { color: colors.foreground }]}>{format(selectedDate, "d")}</Text>
-            <View>
-              <Text style={[styles.dayHeaderMonth, { color: colors.foreground }]}>{format(selectedDate, "MMMM yyyy")}</Text>
-              <Text style={[styles.dayHeaderWeekday, { color: colors.primary }]}>{format(selectedDate, "EEEE")}</Text>
-            </View>
+    return (
+      <View style={{ flex: 1 }}>
+        {activeView === "Week" && (
+          <View style={[styles.weekHeaderRow, { paddingLeft: 50 }]}>
+            {days.map((day, i) => {
+              const isSelected = isSameDay(day, selectedDate);
+              const isToday = isSameDay(day, now);
+              return (
+                <Pressable
+                  key={i}
+                  onPress={() => setSelectedDate(day)}
+                  style={[
+                    styles.weekHeaderCell,
+                    { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.md },
+                    isSelected && { backgroundColor: colors.primary, borderColor: colors.primary },
+                    isToday && !isSelected && { backgroundColor: colors.primary + '15' }
+                  ]}
+                >
+                  <Text style={[styles.weekDayLabel, { color: colors.mutedForeground }, isSelected && styles.textWhite]}>{format(day, "EEE")}</Text>
+                  <Text style={[styles.weekDateLabel, { color: colors.foreground }, isSelected && styles.textWhite]}>{format(day, "d")}</Text>
+                </Pressable>
+              );
+            })}
           </View>
         )}
 
-        <ScrollView style={{ height: 180 }} nestedScrollEnabled={true}>
-          {Array.from({ length: 24 }).map((_, hour) => {
-            const hourEvents = activeView === "Day"
-              ? currentEvents.filter(e => {
-                const d = new Date(e.date);
-                // Simple check: assumes event.time is HH:MM or similar. ideally use Date objects.
-                // For now, filtering by date string match + strict hour parsing if possible, or just date match for simplicity in this MVP step if filteredFilters is weak
-                return isSameDay(d, selectedDate) && (parseInt(e.time) === hour || (!parseInt(e.time) && hour === 9)); // fallback
-              })
-              : [];
-            // Improving time filter:
-            const eventsInHour = currentEvents.filter(e => {
-              if (!isSameDay(new Date(e.date), selectedDate)) return false;
-              if (e.time === "All Day") return hour === 0;
+        <View style={[styles.card, { backgroundColor: colors.card, borderRadius: radius.card, padding: 0, overflow: 'hidden', flex: 1 }]}>
+          {activeView === "Day" && (
+            <View style={styles.dayHeader}>
+              <Text style={[styles.dayHeaderNumber, { color: colors.foreground }]}>{format(selectedDate, "d")}</Text>
+              <View>
+                <Text style={[styles.dayHeaderMonth, { color: colors.foreground }]}>{format(selectedDate, "MMMM yyyy")}</Text>
+                <Text style={[styles.dayHeaderWeekday, { color: colors.primary }]}>{format(selectedDate, "EEEE")}</Text>
+              </View>
+            </View>
+          )}
 
-              // Parse "HH:MM AM/PM"
-              const timeParts = e.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
-              if (!timeParts) return false;
+          <ScrollView
+            ref={scrollViewRef}
+            style={{ height: 300 }}
+            contentContainerStyle={{ height: 24 * HOUR_HEIGHT }}
+            nestedScrollEnabled={true}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={{ flexDirection: 'row', height: '100%' }}>
+              <View style={{ width: 50, borderRightWidth: 1, borderRightColor: colors.border }}>
+                {Array.from({ length: 24 }).map((_, hour) => (
+                  <View key={hour} style={{ height: HOUR_HEIGHT, justifyContent: 'flex-start', alignItems: 'flex-end', paddingRight: 8 }}>
+                    <Text style={{ fontSize: 12, color: colors.mutedForeground, transform: [{ translateY: -8 }] }}>
+                      {hour === 0 ? "12 AM" : hour < 12 ? `${hour} AM` : hour === 12 ? "12 PM" : `${hour - 12} PM`}
+                    </Text>
+                  </View>
+                ))}
+              </View>
 
-              let h = parseInt(timeParts[1]);
-              const period = timeParts[3].toUpperCase();
+              <View style={{ flex: 1, position: 'relative' }}>
+                {Array.from({ length: 24 }).map((_, hour) => (
+                  <View
+                    key={`line-${hour}`}
+                    style={{
+                      position: 'absolute',
+                      top: hour * HOUR_HEIGHT,
+                      left: 0,
+                      right: 0,
+                      height: 1,
+                      backgroundColor: colors.border,
+                      opacity: 0.3
+                    }}
+                  />
+                ))}
 
-              if (period === "PM" && h !== 12) h += 12;
-              if (period === "AM" && h === 12) h = 0;
+                {days.map((day, dayIndex) => {
+                  const dayEvents = currentEvents.filter(e => isSameDay(new Date(e.date), day));
+                  return dayEvents.map(event => {
+                    const timeParts = event.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
+                    if (!timeParts && event.time !== "All Day") return null;
 
-              return h === hour;
-            });
+                    let startHour = 0, startMin = 0;
+                    if (timeParts) {
+                      startHour = parseInt(timeParts[1]);
+                      const period = timeParts[3].toUpperCase();
+                      if (period === "PM" && startHour !== 12) startHour += 12;
+                      if (period === "AM" && startHour === 12) startHour = 0;
+                      startMin = parseInt(timeParts[2]);
+                    } else { return null; }
 
-            return (
-              <Pressable
-                key={hour}
-                style={styles.timelineRow}
-                onPress={() => {
-                  const timeString = hour === 0 ? "12:00 AM" : hour < 12 ? `${hour}:00 AM` : hour === 12 ? "12:00 PM" : `${hour - 12}:00 PM`;
-                  setSelectedTime(timeString);
-                  setShowAddEventModal(true);
-                }}
-              >
-                <Text style={[styles.timeLabel, { color: colors.mutedForeground }]}>
-                  {hour === 0 ? "12 AM" : hour < 12 ? `${hour} AM` : hour === 12 ? "12 PM" : `${hour - 12} PM`}
-                </Text>
-                <View style={[styles.timelineContent, { borderLeftColor: colors.border }]}>
-                  {activeView === "Day" && eventsInHour.map((event, idx) => {
+                    const top = (startHour * HOUR_HEIGHT) + (startMin * (HOUR_HEIGHT / 60));
+                    const height = HOUR_HEIGHT;
+
                     const member = members.find(m => m.id === event.memberId);
                     const profileColor = PROFILE_COLORS.find(c => c.value === member?.color);
-                    // Light background for event block
-                    const bgColor = profileColor ? profileColor.hex + "33" : colors.primary + "33";
+                    const bgColor = profileColor ? profileColor.hex + "40" : colors.primary + "40";
+                    const borderColor = profileColor ? profileColor.hex : colors.primary;
 
                     return (
-                      <View key={event.id} style={[styles.eventBlock, { backgroundColor: bgColor, borderRadius: radius.xs }]}>
-                        <Text style={[styles.eventBlockTitle, { color: colors.foreground }]}>{event.title}</Text>
-                      </View>
+                      <Pressable
+                        key={event.id}
+                        style={{
+                          position: 'absolute',
+                          top,
+                          left: `${dayIndex * dayColumnWidth}%`,
+                          width: `${dayColumnWidth}%`,
+                          height,
+                          backgroundColor: bgColor,
+                          borderLeftWidth: 3,
+                          borderLeftColor: borderColor,
+                          borderRadius: 4,
+                          padding: 4,
+                          zIndex: 10,
+                          overflow: 'hidden'
+                        }}
+                        onPress={() => { console.log("Event pressed:", event.title); }}
+                      >
+                        <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: '700', color: colors.foreground }}>
+                          {event.title}
+                        </Text>
+                      </Pressable>
                     );
-                  })}
-                </View>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+                  });
+                })}
+
+                {/* Day View Red Line */}
+                {activeView === "Day" && isSameDay(selectedDate, now) && (
+                  <View
+                    style={{
+                      position: 'absolute',
+                      top: (now.getHours() * HOUR_HEIGHT) + (now.getMinutes() * (HOUR_HEIGHT / 60)),
+                      left: 0,
+                      right: 0,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      zIndex: 50
+                    }}
+                  >
+                    <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#ef4444', position: 'absolute', left: -6 }} />
+                    <View style={{ flex: 1, height: 2, backgroundColor: '#ef4444' }} />
+                  </View>
+                )}
+
+                {/* Week View Red Line */}
+                {activeView === "Week" && isTodayInView && (
+                  days.map((day, idx) => {
+                    if (!isSameDay(day, now)) return null;
+                    return (
+                      <View
+                        key="now-line-week"
+                        style={{
+                          position: 'absolute',
+                          top: (now.getHours() * HOUR_HEIGHT) + (now.getMinutes() * (HOUR_HEIGHT / 60)),
+                          left: `${idx * dayColumnWidth}%`,
+                          width: `${dayColumnWidth}%`,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          zIndex: 50
+                        }}
+                      >
+                        <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#ef4444', position: 'absolute', left: -6 }} />
+                        <View style={{ flex: 1, height: 2, backgroundColor: '#ef4444' }} />
+                      </View>
+                    )
+                  })
+                )}
+
+                {Array.from({ length: 24 }).map((_, hour) => (
+                  <Pressable
+                    key={`slot-${hour}`}
+                    style={{
+                      position: 'absolute',
+                      top: hour * HOUR_HEIGHT,
+                      left: 0,
+                      right: 0,
+                      height: HOUR_HEIGHT,
+                      zIndex: 1,
+                    }}
+                    onPress={() => {
+                      const timeString = hour === 0 ? "12:00 AM" : hour < 12 ? `${hour}:00 AM` : hour === 12 ? "12:00 PM" : `${hour - 12}:00 PM`;
+                      setSelectedTime(timeString);
+                      setShowAddEventModal(true);
+                    }}
+                  />
+                ))}
+              </View>
+            </View>
+          </ScrollView>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   return (
-    <AppLayout showNav={false} showAddButton={true} onAddPress={() => setShowAddEventModal(true)}>
+    <AppLayout showNav={false} showAddButton={true} onAddPress={() => {
+      const currentTime = new Date();
+      const hour = currentTime.getHours();
+      const minute = currentTime.getMinutes();
+      const timeString = hour === 0 ? `12:${minute.toString().padStart(2, '0')} AM`
+        : hour < 12 ? `${hour}:${minute.toString().padStart(2, '0')} AM`
+          : hour === 12 ? `12:${minute.toString().padStart(2, '0')} PM`
+            : `${hour - 12}:${minute.toString().padStart(2, '0')} PM`;
+      setSelectedTime(timeString);
+      setShowAddEventModal(true);
+    }}>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         {/* Header Section */}
         <View style={[styles.header, { backgroundColor: colors.primary }]}>
@@ -258,7 +392,11 @@ export const CalendarScreen: React.FC = () => {
             </View>
 
             <View style={styles.headerRight}>
-              <Pressable onPress={() => setShowSearch(true)} style={[styles.iconButton, { borderRadius: radius.sm }]}>
+              <Pressable
+                onPress={() => setShowSearch(true)}
+                style={[styles.iconButton, { borderRadius: radius.sm }]}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
                 <AppIcon name="search" size={20} color="#fff" />
               </Pressable>
 
@@ -399,7 +537,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 5,
-    zIndex: 100, // Ensure header is above other content
   },
   headerTop: {
     flexDirection: "row",
@@ -508,7 +645,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   card: {
-    padding: 12,
+    padding: 8,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -535,18 +672,16 @@ const styles = StyleSheet.create({
   },
   dayCell: {
     width: "14.28%",
-    aspectRatio: 0.85,
+    height: 65,
     alignItems: "center",
     justifyContent: "flex-start",
-    paddingTop: 4,
-  },
-  dayCellFaded: {
-    opacity: 0.3,
+    paddingTop: 2,
+    marginBottom: 0,
   },
   dayText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "500",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   eventDotRx: {
     flexDirection: "row",

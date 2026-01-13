@@ -82,12 +82,12 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
 
     const handleAddNote = () => {
         onClose();
-        navigation.navigate("Notes");
+        navigation.navigate("home", { screen: "Notes" });
     };
 
     const handleAddDocument = () => {
         onClose();
-        navigation.navigate("Vault");
+        navigation.navigate("home", { screen: "Vault" });
     };
 
     const options = [

@@ -23,7 +23,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   children,
   showNav = false,
   showAddButton = true,
-  onAddPress = () => { },
+  onAddPress,
   style = {},
   navActiveRoute,
   navOnNavigate,
@@ -60,7 +60,13 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         <Pressable
           key={`fab-${themeVersion}`}
           style={[styles.addButton, { backgroundColor: theme.colors.primary, borderRadius: radius.full }]}
-          onPress={() => setShowQuickAdd(true)}
+          onPress={() => {
+            if (onAddPress) {
+              onAddPress();
+            } else {
+              setShowQuickAdd(true);
+            }
+          }}
         >
           <AppIcon name="plus" size={34} color={theme.colors.primaryForeground} />
         </Pressable>

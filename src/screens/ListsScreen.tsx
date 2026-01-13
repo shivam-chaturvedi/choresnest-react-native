@@ -20,29 +20,20 @@ import { AppIcon } from "../components/ui/AppIcon";
 
 const tabs = ["By Category", "All Items"];
 
-const categorizeItem = (name: string): string => {
-  // Simple categorization logic for demo purposes
-  const lowerName = name.toLowerCase();
-  if (["milk", "cheese", "yogurt", "butter"].some(i => lowerName.includes(i))) return "Dairy";
-  if (["bread", "bagel", "croissant"].some(i => lowerName.includes(i))) return "Bakery";
-  if (["apple", "banana", "lettuce", "tomato", "vegetable", "fruit"].some(i => lowerName.includes(i))) return "Produce";
-  if (["chicken", "beef", "pork", "egg", "meat"].some(i => lowerName.includes(i))) return "Meat & Protein";
-  if (["rice", "pasta", "cereal", "flour"].some(i => lowerName.includes(i))) return "Pantry";
-  return "Other";
-};
-
 export const ListsScreen: React.FC = () => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
-  const { groceryList, addGroceryItem, toggleGroceryItem, activeMember, members } = useFamily();
+  const { groceryList, addGroceryItem, toggleGroceryItem, activeMember, members, categories, addCategory, removeCategory, updateCategory } = useFamily();
   const { generateGroceryList } = useMealPlan();
 
   const [activeTab, setActiveTab] = useState("By Category");
   const [searchQuery, setSearchQuery] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [newItemName, setNewItemName] = useState("");
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>(categories[0]?.id || "");
   const [showSearch, setShowSearch] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
   const { openSidebar } = useSidebar();
 
   const [mealPlanItems, setMealPlanItems] = useState<ReturnType<typeof generateGroceryList>>([]);
@@ -70,6 +61,7 @@ export const ListsScreen: React.FC = () => {
         name: newItemName.trim(),
         quantity: quantity,
         unit: "pcs", // Default unit
+        categoryId: selectedCategoryId || categories[0]?.id || "cat6",
         addedBy: activeMember?.id || "1",
         completed: false,
       });
@@ -89,6 +81,7 @@ export const ListsScreen: React.FC = () => {
       name: item.name,
       quantity: item.quantity,
       unit: item.unit,
+      categoryId: selectedCategoryId || categories[0]?.id || "cat6",
       addedBy: activeMember?.id || "1",
       completed: false,
     });
@@ -101,6 +94,7 @@ export const ListsScreen: React.FC = () => {
         name: item.name,
         quantity: item.quantity,
         unit: item.unit,
+        categoryId: selectedCategoryId || categories[0]?.id || "cat6",
         addedBy: activeMember?.id || "1",
         completed: false,
       });
@@ -115,16 +109,20 @@ export const ListsScreen: React.FC = () => {
   };
 
   const groupedByCategory = (items: GroceryItem[]) => {
-    const groups: Record<string, GroceryItem[]> = {};
+    const groups: Record<string, { category: any; items: GroceryItem[] }> = {};
+
+    // Group items by their categoryId
     items.forEach((item) => {
-      const category = categorizeItem(item.name);
-      if (!groups[category]) groups[category] = [];
-      groups[category].push(item);
+      const category = categories.find(c => c.id === item.categoryId);
+      if (category) {
+        if (!groups[category.id]) {
+          groups[category.id] = { category, items: [] };
+        }
+        groups[category.id].items.push(item);
+      }
     });
-    return Object.entries(groups).map(([category, groupItems]) => ({
-      category,
-      items: groupItems,
-    }));
+
+    return Object.values(groups);
   };
 
   const inputRef = React.useRef<TextInput>(null);
@@ -195,6 +193,23 @@ export const ListsScreen: React.FC = () => {
             })}
           </View>
 
+          {/* Category Selector */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+            {categories.map((cat) => (
+              <Pressable
+                key={cat.id}
+                onPress={() => setSelectedCategoryId(cat.id)}
+                style={[
+                  styles.categoryChip,
+                  { backgroundColor: selectedCategoryId === cat.id ? cat.color : colors.muted, borderRadius: radius.full }
+                ]}
+              >
+                <Text style={{ fontSize: 16 }}>{cat.icon}</Text>
+                <Text style={[styles.categoryChipText, { color: colors.foreground }]}>{cat.name}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+
           <View style={[styles.addRow, { backgroundColor: colors.card, borderRadius: radius.card }]}>
             <TextInput
               ref={inputRef}
@@ -222,9 +237,12 @@ export const ListsScreen: React.FC = () => {
           {activeTab === "By Category" ? (
             <>
               {groupedByCategory(todoItems).map((group) => (
-                <View key={group.category} style={[styles.categoryCard, { backgroundColor: colors.card, shadowColor: colors.border, borderRadius: radius.card }]}>
+                <View key={group.category.id} style={[styles.categoryCard, { backgroundColor: colors.card, shadowColor: colors.border, borderRadius: radius.card }]}>
                   <View style={styles.categoryHeader}>
-                    <Text style={[styles.categoryTitle, { color: colors.foreground }]}>{group.category}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text style={{ fontSize: 20 }}>{group.category.icon}</Text>
+                      <Text style={[styles.categoryTitle, { color: colors.foreground }]}>{group.category.name}</Text>
+                    </View>
                     <Text style={[styles.categoryCount, { color: colors.mutedForeground }]}>{group.items.length}</Text>
                   </View>
                   {group.items.map((item) => (
@@ -659,5 +677,17 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: 16,
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginRight: 8,
+    gap: 6,
+  },
+  categoryChipText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
