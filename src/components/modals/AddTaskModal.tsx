@@ -9,10 +9,9 @@ import {
   View,
   Platform,
 } from "react-native";
-import { useThemeColors } from "../../contexts/ThemeContext";
+import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { useFamily } from "../../contexts/FamilyContext";
 import { PROFILE_COLORS } from "../../constants/profileColors";
-import { theme } from "../../theme";
 import { AppIcon, CustomDateTimePicker } from "../ui";
 
 interface AddTaskModalProps {
@@ -33,11 +32,12 @@ const taskIcons = ["📝", "📞", "💊", "📧", "🏫", "🔧", "📦", "🧹
 
 export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSave }) => {
   const colors = useThemeColors();
+  const radius = useThemeRadius();
   const { members, activeMember } = useFamily();
 
   const priorities = [
     { label: "High", value: "high", color: colors.primary, bgColor: colors.danger + "20", textColor: colors.danger },
-    { label: "Medium", value: "medium", color: colors.success, bgColor: colors.warning + "20", textColor: colors.warningLight }, // Adjusted for visibility
+    { label: "Medium", value: "medium", color: colors.success, bgColor: colors.warning + "20", textColor: "#000000" }, // Adjusted for visibility
     { label: "Low", value: "low", color: colors.mutedForeground, bgColor: colors.muted, textColor: colors.mutedForeground },
   ];
 
@@ -75,7 +75,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
     <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.overlay} onPress={onClose}>
         <Pressable
-          style={[styles.container, { backgroundColor: colors.card }]}
+          style={[styles.container, { backgroundColor: colors.card, borderRadius: radius.xl }]}
           onPress={(e) => e.stopPropagation()}
         >
           <View style={styles.header}>
@@ -93,7 +93,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
               onChangeText={(text) => setFormData({ ...formData, name: text })}
               placeholder="Enter task name"
               placeholderTextColor={colors.mutedForeground}
-              style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground }]}
+              style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.md }]}
             />
 
             {/* Icon Selection */}
@@ -105,7 +105,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
                   onPress={() => setFormData({ ...formData, icon })}
                   style={[
                     styles.iconButton,
-                    { backgroundColor: colors.muted },
+                    { backgroundColor: colors.muted, borderRadius: radius.md },
                     formData.icon === icon && { backgroundColor: colors.success, transform: [{ scale: 1.1 }] },
                   ]}
                 >
@@ -125,7 +125,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
                     onPress={() => setFormData({ ...formData, priority: p.value })}
                     style={[
                       styles.priorityButton,
-                      { backgroundColor: colors.muted },
+                      { backgroundColor: colors.muted, borderRadius: radius.md },
                       isSelected && { backgroundColor: p.bgColor, borderColor: p.textColor, borderWidth: 1 }
                     ]}
                   >
@@ -158,7 +158,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
                     onPress={() => setFormData({ ...formData, person: member.id })}
                     style={[
                       styles.assigneeButton,
-                      { backgroundColor: colors.muted },
+                      { backgroundColor: colors.muted, borderRadius: radius.md },
                       isSelected && { backgroundColor: profileColor },
                     ]}
                   >
@@ -180,7 +180,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
             <Pressable
               style={[
                 styles.cancelButton,
-                { borderColor: colors.border }
+                { borderColor: colors.border, borderRadius: radius.md }
               ]}
               onPress={onClose}
             >
@@ -189,7 +189,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
             <Pressable
               style={[
                 styles.saveButton,
-                { backgroundColor: colors.success }
+                { backgroundColor: colors.success, borderRadius: radius.md }
               ]}
               onPress={handleSave}
             >
@@ -210,7 +210,6 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   container: {
-    borderRadius: 24,
     padding: 20,
     maxHeight: "85%",
     ...Platform.select({
@@ -239,7 +238,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   input: {
-    borderRadius: 12,
     padding: 12,
     fontSize: 16,
   },
@@ -251,7 +249,6 @@ const styles = StyleSheet.create({
   iconButton: {
     width: 44,
     height: 44,
-    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -265,7 +262,6 @@ const styles = StyleSheet.create({
   priorityButton: {
     flex: 1,
     paddingVertical: 10,
-    borderRadius: 12,
     alignItems: "center",
   },
   priorityText: {
@@ -279,7 +275,6 @@ const styles = StyleSheet.create({
   assigneeButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 12,
   },
   assigneeText: {
     fontWeight: "600",
@@ -292,7 +287,6 @@ const styles = StyleSheet.create({
   cancelButton: {
     flex: 1,
     paddingVertical: 14,
-    borderRadius: 12,
     borderWidth: 1,
     alignItems: "center",
   },
@@ -302,7 +296,6 @@ const styles = StyleSheet.create({
   saveButton: {
     flex: 1,
     paddingVertical: 14,
-    borderRadius: 12,
     alignItems: "center",
   },
   saveButtonText: {

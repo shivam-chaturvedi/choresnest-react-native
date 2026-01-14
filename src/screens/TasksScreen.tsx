@@ -7,7 +7,7 @@ import {
   Pressable,
 } from "react-native";
 import { AppLayout } from "../components/layout/AppLayout";
-import { theme } from "../theme";
+
 import { AddTaskModal } from "../components/modals/AddTaskModal";
 import { GlobalSearch } from "../components/search/GlobalSearch";
 import { useSidebar } from "../contexts/SidebarContext";

@@ -4,38 +4,38 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TextInput,
   Pressable,
   Modal,
   Alert,
 } from "react-native";
+import { Swipeable } from "react-native-gesture-handler";
 import { AppLayout } from "../components/layout/AppLayout";
 import { useFamily, GroceryItem } from "../contexts/FamilyContext";
 import { useMealPlan } from "../contexts/MealPlanContext";
-import { theme } from "../theme";
 import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { GlobalSearch } from "../components/search/GlobalSearch";
 import { useSidebar } from "../contexts/SidebarContext";
 import { AppIcon } from "../components/ui/AppIcon";
-
-const tabs = ["By Category", "All Items"];
+import { AddShoppingItemModal } from "../components/modals/AddShoppingItemModal";
 
 export const ListsScreen: React.FC = () => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
-  const { groceryList, addGroceryItem, toggleGroceryItem, activeMember, members, categories, addCategory, removeCategory, updateCategory } = useFamily();
+  const { groceryList, addGroceryItem, toggleGroceryItem, removeGroceryItem, activeMember, members, categories } = useFamily();
   const { generateGroceryList } = useMealPlan();
 
-  const [activeTab, setActiveTab] = useState("By Category");
   const [searchQuery, setSearchQuery] = useState("");
-  const [quantity, setQuantity] = useState(1);
-  const [newItemName, setNewItemName] = useState("");
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string>(categories[0]?.id || "");
   const [showSearch, setShowSearch] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
-  const [showCategoryModal, setShowCategoryModal] = useState(false);
-  const { openSidebar } = useSidebar();
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(false);
 
+  // State to track expanded categories. Default all expanded.
+  const [expandedCategories, setExpandedCategories] = useState<string[]>(
+    categories.map(c => c.id)
+  );
+
+  const { openSidebar } = useSidebar();
   const [mealPlanItems, setMealPlanItems] = useState<ReturnType<typeof generateGroceryList>>([]);
 
   const filteredItems = useMemo(() => {
@@ -51,24 +51,16 @@ export const ListsScreen: React.FC = () => {
     ? Math.round((doneItems.length / filteredItems.length) * 100)
     : 0;
 
-  const handleAddQuantity = (delta: number) => {
-    setQuantity((prev) => Math.max(1, prev + delta));
-  };
-
-  const handleAddItem = () => {
+  const handleAddItem = (item: { name: string; quantity: number; unit: string; categoryId: string }) => {
     try {
-      if (newItemName.trim()) {
-        addGroceryItem({
-          name: newItemName.trim(),
-          quantity: quantity,
-          unit: "pcs", // Default unit
-          categoryId: selectedCategoryId || categories[0]?.id || "cat6",
-          addedBy: activeMember?.id || "1",
-          completed: false,
-        });
-        setNewItemName("");
-        setQuantity(1);
-      }
+      addGroceryItem({
+        name: item.name,
+        quantity: item.quantity,
+        unit: item.unit,
+        categoryId: item.categoryId,
+        addedBy: activeMember?.id || "1",
+        completed: false,
+      });
     } catch (error) {
       console.error("Error adding grocery item:", error);
       Alert.alert("Error", "Failed to add item. Please try again.");
@@ -87,7 +79,7 @@ export const ListsScreen: React.FC = () => {
         name: item.name,
         quantity: item.quantity,
         unit: item.unit,
-        categoryId: selectedCategoryId || categories[0]?.id || "cat6",
+        categoryId: categories[0]?.id || "cat6", // Default to first or Other
         addedBy: activeMember?.id || "1",
         completed: false,
       });
@@ -105,7 +97,7 @@ export const ListsScreen: React.FC = () => {
           name: item.name,
           quantity: item.quantity,
           unit: item.unit,
-          categoryId: selectedCategoryId || categories[0]?.id || "cat6",
+          categoryId: categories[0]?.id || "cat6",
           addedBy: activeMember?.id || "1",
           completed: false,
         });
@@ -123,242 +115,324 @@ export const ListsScreen: React.FC = () => {
     return member ? member.symbol : "👤";
   };
 
-  const groupedByCategory = (items: GroceryItem[]) => {
-    const groups: Record<string, { category: any; items: GroceryItem[] }> = {};
+  const groupedItems = useMemo(() => {
+    const groups: Record<string, GroceryItem[]> = {};
+    categories.forEach(cat => groups[cat.id] = []);
 
-    // Group items by their categoryId
-    items.forEach((item) => {
-      const category = categories.find(c => c.id === item.categoryId);
-      if (category) {
-        if (!groups[category.id]) {
-          groups[category.id] = { category, items: [] };
-        }
-        groups[category.id].items.push(item);
+    // Also handle items with unknown categories by putting them in "Other" or creating a fallback group?
+    // For now, assume all items have valid categories or fall into 'Other' if we default correctly.
+    // However, let's allow dynamic keys just in case.
+
+    todoItems.forEach((item) => {
+      if (!groups[item.categoryId]) {
+        groups[item.categoryId] = [];
       }
+      groups[item.categoryId].push(item);
     });
+    return groups;
+  }, [todoItems, categories]);
 
-    return Object.values(groups);
+  const toggleCategory = (catId: string) => {
+    setExpandedCategories(prev =>
+      prev.includes(catId)
+        ? prev.filter(id => id !== catId)
+        : [...prev, catId]
+    );
   };
-
-  const inputRef = React.useRef<TextInput>(null);
 
   return (
     <>
       <AppLayout
-        showAddButton={true}
+        showAddButton={false} // We have our own add button
         showNav={false}
       >
-        <ScrollView contentContainerStyle={styles.container}>
+        <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+          {/* Header */}
           <View style={styles.headerRow}>
             <Pressable onPress={openSidebar} style={[styles.menuButton, { backgroundColor: colors.card, borderRadius: radius.md }]}>
               <AppIcon name="menu" size={20} color={colors.foreground} />
             </Pressable>
             <View style={{ flex: 1, marginLeft: 16 }}>
               <Text style={[styles.title, { color: colors.foreground }]}>Grocery List</Text>
+              <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Your family's shopping list</Text>
             </View>
             <View style={styles.headerActions}>
               <Pressable style={[styles.roundButton, { backgroundColor: colors.card, borderRadius: radius.md }]} onPress={() => setShowSearch(true)}>
                 <AppIcon source="🔍" size={18} color={colors.foreground} />
               </Pressable>
-
               <Pressable style={[styles.roundButton, { backgroundColor: colors.card, borderRadius: radius.md }]} onPress={handleOpenImport}>
                 <AppIcon source="📅" size={18} color={colors.foreground} />
               </Pressable>
             </View>
           </View>
 
-          <View style={[styles.progressCard, { backgroundColor: colors.card, shadowColor: colors.border, borderRadius: radius.card }]}>
-            <View style={[styles.progressIcon, { backgroundColor: colors.success + '20', borderRadius: radius.lg }]}>
-              <AppIcon name="shoppingCart" size={28} color={colors.success} />
-            </View>
-            <View style={styles.progressContent}>
-              <Text style={[styles.progressTitle, { color: colors.foreground }]}>{doneItems.length}/{filteredItems.length} items</Text>
-              <View style={[styles.progressBar, { backgroundColor: colors.muted, borderRadius: radius.sm }]}>
-                <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: colors.success, borderRadius: radius.sm }]} />
+          {/* Hero / Progress Card */}
+          <View style={[styles.heroCard, { backgroundColor: colors.card, borderRadius: radius.lg, borderColor: colors.success + '20', borderWidth: 1 }]}>
+            <View style={[styles.heroBg, { backgroundColor: colors.success + '05' }]} />
+            <View style={styles.heroContent}>
+              <View style={[styles.heroIcon, { backgroundColor: colors.success + '20', borderRadius: radius.md }]}>
+                <AppIcon name="shoppingBag" size={24} color={colors.success} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4 }}>
+                  <Text style={[styles.heroTitle, { color: colors.foreground }]}>{todoItems.length} items to buy</Text>
+                  <Text style={[styles.heroSubtitle, { color: colors.mutedForeground }]}>{doneItems.length}/{filteredItems.length} purchased</Text>
+                </View>
+                <View style={[styles.progressBar, { backgroundColor: colors.muted, borderRadius: radius.full }]}>
+                  <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: colors.success, borderRadius: radius.full }]} />
+                </View>
               </View>
             </View>
-          </View>
 
-          <View style={[styles.tabRow, { backgroundColor: colors.muted, borderRadius: radius.lg }]}>
-            {tabs.map((tab) => {
-              const active = tab === activeTab;
-              return (
-                <Pressable
-                  key={tab}
-                  style={[
-                    styles.tabPill,
-                    { borderRadius: radius.md },
-                    active && { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }
-                  ]}
-                  onPress={() => setActiveTab(tab)}
-                >
-                  <Text style={[
-                    styles.tabText,
-                    active ? { color: colors.foreground } : { color: colors.mutedForeground }
-                  ]}>
-                    {tab}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          {/* Category Selector for New Items */}
-          <View style={{ marginBottom: 12 }}>
-            <Text style={[styles.sectionLabel, { color: colors.mutedForeground, marginBottom: 8, paddingHorizontal: 4 }]}>
-              Select category for new items:
-            </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {categories.map((cat) => (
-                <Pressable
-                  key={cat.id}
-                  onPress={() => setSelectedCategoryId(cat.id)}
-                  style={[
-                    styles.categoryChip,
-                    { backgroundColor: selectedCategoryId === cat.id ? cat.color : colors.muted, borderRadius: radius.full }
-                  ]}
-                >
-                  <Text style={{ fontSize: 16 }}>{cat.icon}</Text>
-                  <Text style={[styles.categoryChipText, { color: colors.foreground }]}>{cat.name}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-
-          <View style={[styles.addRow, { backgroundColor: colors.card, borderRadius: radius.card }]}>
-            <TextInput
-              ref={inputRef}
-              style={[styles.addInput, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.md }]}
-              placeholder="Add item..."
-              placeholderTextColor={colors.mutedForeground}
-              value={newItemName}
-              onChangeText={setNewItemName}
-              onSubmitEditing={handleAddItem}
-            />
-            <View style={styles.qtyControl}>
-              <Pressable style={[styles.qtyButton, { backgroundColor: colors.muted, borderRadius: radius.sm }]} onPress={() => handleAddQuantity(-1)}>
-                <AppIcon name="minus" size={16} color={colors.foreground} />
-              </Pressable>
-              <Text style={[styles.qtyValue, { color: colors.foreground }]}>{quantity}</Text>
-              <Pressable style={[styles.qtyButton, { backgroundColor: colors.muted, borderRadius: radius.sm }]} onPress={() => handleAddQuantity(1)}>
-                <AppIcon name="plus" size={16} color={colors.foreground} />
+            {/* Quick Actions in Hero */}
+            <View style={styles.heroActions}>
+              <Pressable onPress={handleOpenImport} style={[styles.heroBtn, { backgroundColor: colors.background, borderColor: colors.success + '30', borderRadius: radius.md }]}>
+                <AppIcon name="calendar" size={14} color={colors.foreground} style={{ marginRight: 6 }} />
+                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.foreground }}>From Meal Plan</Text>
               </Pressable>
             </View>
-            <Pressable style={[styles.addButton, { backgroundColor: colors.primary, borderRadius: radius.lg }]} onPress={handleAddItem}>
-              <Text style={[styles.addText, { color: colors.primaryForeground }]}>Add</Text>
-            </Pressable>
           </View>
 
-          {activeTab === "By Category" ? (
-            <>
-              {groupedByCategory(todoItems).map((group) => (
-                <View key={group.category.id} style={[styles.categoryCard, { backgroundColor: colors.card, shadowColor: colors.border, borderRadius: radius.card }]}>
-                  <View style={styles.categoryHeader}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <Text style={{ fontSize: 20 }}>{group.category.icon}</Text>
-                      <Text style={[styles.categoryTitle, { color: colors.foreground }]}>{group.category.name}</Text>
-                    </View>
-                    <Text style={[styles.categoryCount, { color: colors.mutedForeground }]}>{group.items.length}</Text>
+          {/* Add Item Button (Prominent) */}
+          <Pressable
+            style={[styles.mainAddButton, { backgroundColor: colors.primary, borderRadius: radius.lg, shadowColor: colors.primary }]}
+            onPress={() => setShowAddModal(true)}
+          >
+            <AppIcon name="plus" size={20} color={colors.primaryForeground} />
+            <Text style={[styles.mainAddText, { color: colors.primaryForeground }]}>Add Item to List</Text>
+          </Pressable>
+
+          {/* Swipe Guide Tip */}
+          {filteredItems.length > 0 && (
+            <View style={[styles.guideCard, { backgroundColor: colors.info + '10', borderColor: colors.info + '20', borderRadius: radius.md }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <AppIcon name="info" size={16} color={colors.info} />
+                <Text style={[styles.guideTitle, { color: colors.foreground }]}>Pro Tip</Text>
+              </View>
+              <Text style={[styles.guideText, { color: colors.mutedForeground }]}>
+                Swipe <Text style={{ color: colors.success, fontWeight: '700' }}>Right</Text> to mark purchased,
+                Swipe <Text style={{ color: colors.danger, fontWeight: '700' }}>Left</Text> to delete.
+              </Text>
+            </View>
+          )}
+
+          {/* Empty State */}
+          {filteredItems.length === 0 && (
+            <View style={styles.emptyState}>
+              <View style={[styles.emptyIcon, { backgroundColor: colors.muted, borderRadius: radius.xl }]}>
+                <AppIcon name="shoppingCart" size={32} color={colors.mutedForeground} />
+              </View>
+              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Your list is empty</Text>
+              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>Add items above or import from your meal plan to get started</Text>
+            </View>
+          )}
+
+          {/* Categories Groups */}
+          {categories.map((category) => {
+            const items = groupedItems[category.id] || [];
+            if (items.length === 0) return null;
+            const isExpanded = expandedCategories.includes(category.id);
+
+            return (
+              <View key={category.id} style={[styles.groupCard, { backgroundColor: colors.card, borderRadius: radius.card, borderColor: colors.border, borderWidth: 1 }]}>
+                {/* ... header ... */}
+                <Pressable
+                  style={styles.groupHeader}
+                  onPress={() => toggleCategory(category.id)}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                    <Text style={{ fontSize: 22 }}>{category.icon}</Text>
+                    <Text style={[styles.groupTitle, { color: colors.foreground }]}>{category.name}</Text>
                   </View>
-                  {group.items.map((item) => (
-                    <View key={item.id} style={[styles.todoRow, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
-                      <View style={styles.todoLeft}>
+                  <View style={[styles.countBadge, { backgroundColor: colors.primary + '10', borderRadius: radius.full }]}>
+                    <Text style={[styles.countText, { color: colors.primary }]}>{items.length}</Text>
+                  </View>
+                  <AppIcon name={isExpanded ? "chevronDown" : "chevronRight"} size={18} color={colors.mutedForeground} />
+                </Pressable>
+
+                {isExpanded && (
+                  <View style={styles.groupItems}>
+                    {items.map((item, index) => {
+                      const renderRightActions = (progress: any, dragX: any) => {
+                        return (
+                          <Pressable
+                            style={[
+                              styles.swipedAction,
+                              { backgroundColor: colors.danger, borderTopRightRadius: index === 0 ? 0 : 0, borderBottomRightRadius: index === items.length - 1 ? radius.card : 0 }
+                            ]}
+                            onPress={() => removeGroceryItem(item.id)}
+                          >
+                            <AppIcon name="trash" size={20} color="#fff" />
+                            <Text style={styles.actionText}>Delete</Text>
+                          </Pressable>
+                        );
+                      };
+
+                      const renderLeftActions = (progress: any, dragX: any) => {
+                        return (
+                          <Pressable
+                            style={[
+                              styles.swipedAction,
+                              styles.leftAction,
+                              { backgroundColor: colors.success }
+                            ]}
+                            onPress={() => {
+                              if (!item.completed) toggleGroceryItem(item.id);
+                            }}
+                          >
+                            <AppIcon name="check" size={20} color="#fff" />
+                            <Text style={styles.actionText}>Mark Purchased</Text>
+                          </Pressable>
+                        );
+                      };
+
+                      return (
+                        <Swipeable
+                          key={item.id}
+                          renderRightActions={renderRightActions}
+                          renderLeftActions={renderLeftActions}
+                          onSwipeableRightOpen={() => removeGroceryItem(item.id)}
+                          onSwipeableLeftOpen={() => !item.completed && toggleGroceryItem(item.id)}
+                        >
+                          <View
+                            style={[
+                              styles.itemRow,
+                              {
+                                borderTopColor: colors.border,
+                                borderTopWidth: index > 0 ? 1 : 0,
+                                backgroundColor: colors.card // Ensure opaque background for swipe
+                              }
+                            ]}
+                          >
+                            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                              <Pressable
+                                onPress={() => toggleGroceryItem(item.id)}
+                                style={[
+                                  styles.checkbox,
+                                  { borderColor: colors.mutedForeground, borderRadius: radius.xs }
+                                ]}
+                              >
+                              </Pressable>
+                              <View style={{ flex: 1, marginLeft: 12 }}>
+                                <Text style={[styles.itemName, { color: colors.foreground }]}>{item.name}</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                                  <Text style={[styles.itemDetail, { color: colors.mutedForeground }]}>{item.quantity} {item.unit}</Text>
+                                  <View style={[styles.addedByBadge, { backgroundColor: colors.muted, borderRadius: radius.sm, marginLeft: 8 }]}>
+                                    <Text style={{ fontSize: 10 }}>{getMemberIcon(item.addedBy)}</Text>
+                                  </View>
+                                </View>
+                              </View>
+                            </View>
+
+                            {/* Visual cues arrows */}
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, opacity: 0.5 }}>
+                              <AppIcon name="chevronLeft" size={24} color={colors.danger} />
+                              <AppIcon name="chevronRight" size={24} color={colors.success} />
+                            </View>
+                          </View>
+                        </Swipeable>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+            );
+          })}
+
+          {/* Completed Items Section */}
+          {doneItems.length > 0 && (
+            <View style={[styles.groupCard, { backgroundColor: colors.card, borderRadius: radius.card, borderColor: colors.border, borderWidth: 1, marginTop: 16 }]}>
+              <Pressable
+                style={styles.groupHeader}
+                onPress={() => setShowCompleted(!showCompleted)}
+              >
+                <View style={[styles.completedIcon, { backgroundColor: colors.success + '20', borderRadius: radius.md }]}>
+                  <AppIcon name="check" size={16} color={colors.success} />
+                </View>
+                <Text style={[styles.groupTitle, { color: colors.foreground, marginLeft: 10, flex: 1 }]}>Purchased</Text>
+                <View style={[styles.countBadge, { backgroundColor: colors.success + '10', borderRadius: radius.full }]}>
+                  <Text style={[styles.countText, { color: colors.success }]}>{doneItems.length}</Text>
+                </View>
+                <AppIcon name={showCompleted ? "chevronDown" : "chevronRight"} size={18} color={colors.mutedForeground} />
+              </Pressable>
+
+              {showCompleted && (
+                <View style={[styles.groupItems, { backgroundColor: colors.success + '05' }]}>
+                  {doneItems.map((item, index) => (
+                    <Swipeable
+                      key={item.id}
+                      renderRightActions={(progress, dragX) => (
+                        <Pressable
+                          style={[
+                            styles.swipedAction,
+                            { backgroundColor: colors.danger }
+                          ]}
+                          onPress={() => removeGroceryItem(item.id)}
+                        >
+                          <AppIcon name="trash" size={20} color="#fff" />
+                          <Text style={styles.actionText}>Delete</Text>
+                        </Pressable>
+                      )}
+                      onSwipeableRightOpen={() => removeGroceryItem(item.id)}
+                    >
+                      <View
+                        key={item.id}
+                        style={[
+                          styles.itemRow,
+                          { borderTopColor: colors.border + '50', borderTopWidth: index > 0 ? 1 : 0 }
+                        ]}
+                      >
                         <Pressable
                           onPress={() => toggleGroceryItem(item.id)}
                           style={[
                             styles.checkbox,
-                            { borderColor: "#000", borderRadius: radius.xs },
-                            item.completed && { backgroundColor: colors.success, borderColor: colors.success }
+                            { backgroundColor: colors.success, borderColor: colors.success, borderRadius: radius.xs }
                           ]}
                         >
-                          {item.completed && <AppIcon name="check" size={14} color="#fff" />}
+                          <AppIcon name="check" size={12} color="#fff" />
                         </Pressable>
-                        <Text style={[styles.todoText, { color: colors.foreground }, item.completed && styles.completedText]}>{item.name}</Text>
-                      </View>
-                      <Text style={[styles.quantityText, { color: colors.mutedForeground }]}>{item.quantity} {item.unit}</Text>
-                      <View style={[styles.ownerBadge, { backgroundColor: colors.background, borderRadius: radius.sm }]}>
-                        <Text style={{ fontSize: 14 }}>{getMemberIcon(item.addedBy)}</Text>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              ))}
-            </>
-          ) : (
-            <>
-              <View style={[styles.listWrapper, { backgroundColor: colors.card, shadowColor: colors.border, borderRadius: radius.card }]}>
-                <Text style={[styles.sectionTitle, { color: colors.foreground }]}>To Buy ({todoItems.length})</Text>
-                {todoItems.length === 0 && (
-                  <Text style={[styles.todoText, { textAlign: 'center', opacity: 0.5, padding: 20, color: colors.foreground }]}>All items purchased!</Text>
-                )}
-                {todoItems.map((item) => (
-                  <View key={item.id} style={[styles.todoRow, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
-                    <View style={styles.todoLeft}>
-                      <Pressable
-                        onPress={() => toggleGroceryItem(item.id)}
-                        style={[
-                          styles.checkbox,
-                          { borderColor: "#000", borderRadius: radius.xs },
-                          item.completed && { backgroundColor: colors.success, borderColor: colors.success }
-                        ]}
-                      >
-                        {item.completed && <AppIcon name="check" size={14} color="#fff" />}
-                      </Pressable>
-                      <Text style={[styles.todoText, { color: colors.foreground }]}>{item.name}</Text>
-                    </View>
-                    <Text style={[styles.quantityText, { color: colors.mutedForeground }]}>{item.quantity} {item.unit}</Text>
-                    <View style={[styles.ownerBadge, { backgroundColor: colors.background, borderRadius: radius.sm }]}>
-                      <Text style={{ fontSize: 14 }}>{getMemberIcon(item.addedBy)}</Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
+                        <View style={{ flex: 1, marginLeft: 12 }}>
+                          <Text style={[styles.itemName, { color: colors.foreground, textDecorationLine: 'line-through', opacity: 0.7 }]}>{item.name}</Text>
+                          <Text style={[styles.itemDetail, { color: colors.mutedForeground }]}>{item.quantity} {item.unit}</Text>
+                        </View>
 
-              {doneItems.length > 0 && (
-                <View style={[styles.listWrapper, { backgroundColor: colors.card, shadowColor: colors.border, borderRadius: radius.card }]}>
-                  <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Completed ({doneItems.length})</Text>
-                  {doneItems.map((item) => (
-                    <View key={item.id} style={[styles.todoRow, { backgroundColor: colors.success + '10', borderRadius: radius.md }]}>
-                      <View style={styles.todoLeft}>
-                        <Pressable
-                          onPress={() => toggleGroceryItem(item.id)}
-                          style={[styles.checkbox, { backgroundColor: colors.success, borderColor: colors.success, borderRadius: radius.xs }]}
-                        >
-                          <AppIcon name="check" size={14} color="#fff" />
-                        </Pressable>
-                        <Text style={[styles.todoText, styles.completedText, { color: colors.foreground }]}>
-                          {item.name}
-                        </Text>
+                        {/* Visual cues arrows */}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, opacity: 0.5 }}>
+                          <AppIcon name="chevronLeft" size={24} color={colors.danger} />
+                          <AppIcon name="chevronRight" size={24} color={colors.success} />
+                        </View>
                       </View>
-                      <Text style={[styles.quantityText, { color: colors.mutedForeground }]}>{item.quantity} {item.unit}</Text>
-                      <View style={[styles.ownerBadge, { backgroundColor: colors.background, borderRadius: radius.sm }]}>
-                        <Text style={{ fontSize: 14 }}>{getMemberIcon(item.addedBy)}</Text>
-                      </View>
-                    </View>
+                    </Swipeable>
                   ))}
                 </View>
               )}
-            </>
+            </View>
           )}
 
-          <View style={styles.memberRow}>
-            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Added by</Text>
-            <View style={styles.badgeList}>
-              {members.map((member) => {
-                const count = groceryList.filter(i => i.addedBy === member.id).length;
-                if (count === 0) return null;
-                return (
-                  <View key={member.id} style={[styles.memberBadge, { backgroundColor: colors.card, shadowColor: colors.border, borderRadius: radius.md }]}>
-                    <Text>{member.symbol}</Text>
-                    <Text style={[styles.memberText, { color: colors.foreground }]}>{member.name}</Text>
-                    <Text style={[styles.memberCount, { color: colors.mutedForeground }]}>({count})</Text>
-                  </View>
-                );
-              })}
-            </View>
-          </View>
+          <View style={{ height: 40 }} />
         </ScrollView>
       </AppLayout>
+
+      <Pressable
+        style={[
+          styles.fab,
+          {
+            backgroundColor: colors.primary,
+            shadowColor: colors.primary,
+            borderRadius: radius.full,
+          },
+        ]}
+        onPress={() => setShowAddModal(true)}
+      >
+        <AppIcon name="plus" size={28} color={colors.primaryForeground} />
+      </Pressable>
+
+      {/* Add Item Modal */}
+      <AddShoppingItemModal
+        visible={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onAdd={handleAddItem}
+      />
 
       {/* Import Modal */}
       <Modal visible={showImportModal} transparent animationType="slide" onRequestClose={() => setShowImportModal(false)}>
@@ -414,13 +488,12 @@ const styles = StyleSheet.create({
   container: {
     padding: 20,
     paddingBottom: 120,
-    // Background handled by AppLayout
   },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 16,
+    marginBottom: 20,
   },
   menuButton: {
     width: 40,
@@ -436,6 +509,9 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "700",
   },
+  subtitle: {
+    fontSize: 12,
+  },
   headerActions: {
     flexDirection: "row",
     gap: 8,
@@ -446,190 +522,155 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  progressCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    marginBottom: 16,
-    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  progressIcon: {
-    width: 56,
-    height: 56,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 16,
-  },
-  progressContent: {
-    flex: 1,
-  },
-  progressTitle: {
-    fontWeight: "700",
-    fontSize: 18,
-    marginBottom: 4,
-  },
-  progressBar: {
-    height: 10,
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-  },
-  tabRow: {
-    flexDirection: "row",
-    padding: 4,
-    marginBottom: 24,
-  },
-  tabPill: {
-    flex: 1,
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  tabText: {
-    fontWeight: "600",
-  },
-  addRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 8,
-    marginBottom: 24,
-  },
-  addInput: {
-    flex: 1,
-    height: 46,
-    paddingHorizontal: 16,
-    fontSize: 16,
-  },
-  qtyControl: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginHorizontal: 8,
-  },
-  qtyButton: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  qtyValue: {
-    width: 30,
-    textAlign: "center",
-    fontWeight: "700",
-    fontSize: 16,
-  },
-  addButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  addText: {
-    fontWeight: "700",
-  },
-  categoryCard: {
-    padding: 16,
-    marginBottom: 16,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
+    shadowRadius: 4,
     elevation: 3,
   },
-  categoryHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 8,
-    alignItems: "center",
+  heroCard: {
+    padding: 16,
+    marginBottom: 20,
+    overflow: 'hidden',
+    position: 'relative',
   },
-  categoryTitle: {
-    fontSize: 18,
-    fontWeight: "700",
+  heroBg: {
+    ...StyleSheet.absoluteFillObject,
   },
-  categoryCount: {
-    fontSize: 14,
+  heroContent: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 16,
   },
-  todoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 8,
-    marginBottom: 8,
+  heroIcon: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  todoLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
+  heroTitle: {
+    fontSize: 20,
+    fontWeight: '700',
   },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderWidth: 2.5,
-    marginRight: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  todoText: {
-    fontWeight: "600",
-    flex: 1,
-  },
-  completedText: {
-    textDecorationLine: "line-through",
-  },
-  quantityText: {
-    marginHorizontal: 16,
+  heroSubtitle: {
     fontSize: 12,
   },
-  ownerBadge: {
-    width: 32,
-    height: 32,
-    justifyContent: "center",
-    alignItems: "center",
+  progressBar: {
+    height: 8,
+    width: '100%',
+    overflow: 'hidden',
   },
-  listWrapper: {
-    padding: 16,
-    marginBottom: 16,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 3,
+  progressFill: {
+    height: '100%',
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    marginBottom: 16,
-  },
-  completedRow: {
-    // handled inline now
-  },
-  memberRow: {
-    marginVertical: 16,
-  },
-  badgeList: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+  heroActions: {
+    flexDirection: 'row',
     gap: 8,
   },
-  memberBadge: {
-    flexDirection: "row",
-    alignItems: "center",
+  heroBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+  },
+  mainAddButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    marginBottom: 24,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  mainAddText: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  emptyState: {
+    alignItems: 'center',
+    padding: 32,
+  },
+  emptyIcon: {
+    width: 80,
+    height: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  emptyText: {
+    textAlign: 'center',
+    fontSize: 14,
+    maxWidth: 240,
+  },
+  groupCard: {
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  groupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 10,
+  },
+  groupTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  countBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    minWidth: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 4,
+  },
+  countText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  groupItems: {
     paddingHorizontal: 16,
-    paddingVertical: 4,
-    gap: 4,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
+    paddingBottom: 8,
   },
-  memberText: {
-    fontWeight: "600",
+  itemRow: {
+    flexDirection: 'row',
+    paddingVertical: 12,
+    alignItems: 'center',
   },
-  memberCount: {
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  // Modal
+  itemName: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  itemDetail: {
+    fontSize: 12,
+  },
+  addedByBadge: {
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  completedIcon: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Import Modal Styles (kept similar)
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -693,16 +734,47 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 16,
   },
-  categoryChip: {
-    flexDirection: 'row',
+  fab: {
+    position: 'absolute',
+    bottom: 20, // Match AppLayout default
+    right: 24,  // Match AppLayout default
+    width: 56,
+    height: 56,
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginRight: 8,
-    gap: 6,
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 100,
   },
-  categoryChipText: {
-    fontSize: 14,
+  swipedAction: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    height: '100%',
+  },
+  leftAction: {
+    // Left action appears on the left when swiping right
+    flexDirection: 'row',
+  },
+  actionText: {
+    color: '#fff',
     fontWeight: '600',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  guideCard: {
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+  },
+  guideTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  guideText: {
+    fontSize: 13,
+    lineHeight: 18,
   },
 });

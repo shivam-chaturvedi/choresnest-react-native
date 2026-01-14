@@ -18,7 +18,7 @@ import { theme } from "../theme";
 import { useThemeColors } from "../contexts/ThemeContext";
 import { AddEventModal } from "../components/modals/AddEventModal";
 import { AddTaskModal } from "../components/modals/AddTaskModal";
-import { AddItemModal } from "../components/modals/AddItemModal";
+import { AddShoppingItemModal } from "../components/modals/AddShoppingItemModal";
 import { FamilyOnboarding } from "../components/family/FamilyOnboarding";
 import { FamilyDashboard } from "../components/dashboard/FamilyDashboard";
 import { NotificationPanel } from "../components/notifications/NotificationPanel";
@@ -42,7 +42,7 @@ const MEAL_TYPES: { key: MealType; label: string; icon: string }[] = [
 export const HomeScreen: React.FC = () => {
   const colors = useThemeColors();
   const radius = theme.radius; // Dynamic radius
-  const { members, activeMember, events, groceryList, setActiveMember } = useFamily();
+  const { members, activeMember, events, groceryList, setActiveMember, addGroceryItem } = useFamily();
   const { getMealsForDay, getRecipeById } = useMealPlan();
   const navigation = useNavigation();
   const { openSidebar } = useSidebar();
@@ -65,6 +65,22 @@ export const HomeScreen: React.FC = () => {
   //   null -> First time app open (Show Tutorial)
   //   'false' -> Already seen (Don't show)
   //   'true' -> (Legacy/Unused but treated as unset if we wanted, but we will treating null as unset)
+
+  const handleAddItem = (item: { name: string; quantity: number; unit: string; categoryId: string }) => {
+    try {
+      addGroceryItem({
+        name: item.name,
+        quantity: item.quantity,
+        unit: item.unit,
+        categoryId: item.categoryId,
+        addedBy: activeMember?.id || "1",
+        completed: false,
+      });
+      // Optional: Show success feedback?
+    } catch (error) {
+      console.error("Error adding grocery item:", error);
+    }
+  };
 
   useEffect(() => {
     const checkTutorial = async () => {
@@ -244,7 +260,7 @@ export const HomeScreen: React.FC = () => {
                 <Text style={{ fontSize: 18, fontWeight: "700", color: colors.foreground }}>Family Chores</Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Pressable onPress={() => setShowFamilyOnboarding(true)} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16 }}>
+                <Pressable onPress={() => setShowFamilyOnboarding(true)} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 4 }}>
                   <AppIcon name="user" size={14} color={colors.primary} style={{ marginRight: 4 }} />
                   <Text style={{ color: colors.primary, fontWeight: "600" }}>Setup</Text>
                 </Pressable>
@@ -445,7 +461,11 @@ export const HomeScreen: React.FC = () => {
 
       <AddEventModal open={showAddEvent} onOpenChange={setShowAddEvent} />
       <AddTaskModal open={showAddTask} onClose={() => setShowAddTask(false)} />
-      <AddItemModal open={showAddItem} onClose={() => setShowAddItem(false)} />
+      <AddShoppingItemModal
+        visible={showAddItem}
+        onClose={() => setShowAddItem(false)}
+        onAdd={handleAddItem}
+      />
       <FamilyOnboarding open={showFamilyOnboarding} onClose={() => setShowFamilyOnboarding(false)} />
     </>
   );

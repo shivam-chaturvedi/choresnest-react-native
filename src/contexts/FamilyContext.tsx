@@ -80,6 +80,7 @@ interface FamilyContextType {
   groceryList: GroceryItem[];
   addGroceryItem: (item: Omit<GroceryItem, "id">) => void;
   toggleGroceryItem: (id: string) => void;
+  removeGroceryItem: (id: string) => void;
 }
 
 const defaultMembers: FamilyMember[] = [
@@ -388,6 +389,15 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   };
 
+  const removeGroceryItem = (id: string) => {
+    try {
+      if (!id) return;
+      setGroceryList((prev) => prev.filter((item) => item.id !== id));
+    } catch (error) {
+      console.error("Error in removeGroceryItem:", error);
+    }
+  };
+
   const addCategory = (category: Omit<GroceryCategory, "id">) => {
     try {
       if (!category || !category.name) return;
@@ -452,6 +462,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         groceryList,
         addGroceryItem,
         toggleGroceryItem,
+        removeGroceryItem,
       }}
     >
       {children}

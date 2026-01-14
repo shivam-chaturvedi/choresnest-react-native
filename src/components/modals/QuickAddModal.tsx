@@ -105,7 +105,10 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
             icon: "checkSquare",
             color: colors.foreground,
             bg: colors.secondary,
-            action: () => { onClose(); onAddTask(); }
+            action: () => {
+                onClose();
+                navigation.navigate("more", { screen: "Tasks" });
+            }
         },
         {
             id: "note",

@@ -105,12 +105,14 @@ import {
   Bookmark,
   LogOut,
   AlertCircle,
+  ChevronUp,
 } from "lucide-react-native";
 import { theme } from "../../theme";
 
 const ICON_COMPONENTS = {
   alert: AlertTriangle,
   alertCircle: AlertCircle,
+  chevronUp: ChevronUp,
   award: Award,
   baby: Baby,
   bed: Bed,

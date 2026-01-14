@@ -85,8 +85,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     setIsDarkMode(savedMode === 'dark');
                 } else {
                     // Default to system, or light if system is unavailable
-                    // For now, default to light as per user request history "default to light"
-                    setIsDarkMode(false);
+                    // Default to Cream (isDark=true in current implementation) as per user request
+                    setIsDarkMode(true);
                 }
             } catch (error) {
                 console.error('Failed to load theme from storage:', error);
