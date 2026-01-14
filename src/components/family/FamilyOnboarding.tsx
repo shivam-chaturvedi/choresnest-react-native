@@ -30,76 +30,116 @@ interface FamilyOnboardingProps {
 }
 
 interface NewMember {
+    id?: string;
     name: string;
     avatar: string;
     color: string;
-    role: string;
-    permissions: Record<string, boolean>;
 }
 
-const getDefaultPermissions = (role: string) => {
-    switch (role) {
-        case "admin":
-        case "parent":
-            return { calendar: true, grocery: true, mealplan: true, vault: true, notifications: true };
-        case "child":
-            return { calendar: true, grocery: true, mealplan: false, vault: false, notifications: true };
-        default:
-            return { calendar: true, grocery: true, mealplan: true, vault: false, notifications: true };
-    }
-};
-
 export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClose }) => {
-    const { addMember, setFamilyName, familyName } = useFamily();
+    const { members, addMember, updateMember, removeMember, setFamilyName, familyName } = useFamily();
     const colors = useThemeColors();
     const radius = useThemeRadius();
 
-    // Dynamic roles based on theme
-    const roleOptions = [
-        { id: "admin", label: "Admin", icon: "crown", description: "Full access to all features", color: colors.warning },
-        { id: "parent", label: "Parent", icon: "shield", description: "Can manage family settings", color: colors.primary },
-        { id: "child", label: "Child", icon: "eye", description: "View and add items only", color: colors.success },
-    ];
-
     const [step, setStep] = useState(1);
     const [newFamilyName, setNewFamilyName] = useState(familyName || "");
-    const [newMembers, setNewMembers] = useState<NewMember[]>([]);
+    const [localMembers, setLocalMembers] = useState<NewMember[]>([]);
+    const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [currentMember, setCurrentMember] = useState<NewMember>({
         name: "",
         avatar: "👤",
         color: PROFILE_COLORS[0].value,
-        role: "parent",
-        permissions: getDefaultPermissions("parent"),
     });
 
-    const handleAddMember = () => {
+    // Initialize localMembers from context when modal opens
+    React.useEffect(() => {
+        if (open) {
+            setLocalMembers(members.map(m => ({
+                id: m.id,
+                name: m.name,
+                avatar: m.symbol,
+                color: m.color
+            })));
+            setNewFamilyName(familyName);
+            setStep(1);
+        }
+    }, [open, members, familyName]);
+
+    const usedColors = localMembers.map(m => m.color);
+
+    // Auto-select first available color
+    React.useEffect(() => {
+        if (editingIndex === null) {
+            const available = PROFILE_COLORS.find(c => !usedColors.includes(c.value));
+            if (available && currentMember.color !== available.value && !currentMember.name) {
+                setCurrentMember(prev => ({ ...prev, color: available.value }));
+            }
+        }
+    }, [localMembers, editingIndex]);
+
+    const handleAddOrUpdateMember = () => {
         if (!currentMember.name.trim()) return;
-        setNewMembers([...newMembers, currentMember]);
+
+        if (editingIndex !== null) {
+            const updated = [...localMembers];
+            updated[editingIndex] = currentMember;
+            setLocalMembers(updated);
+            setEditingIndex(null);
+        } else {
+            setLocalMembers([...localMembers, currentMember]);
+        }
+
         setCurrentMember({
             name: "",
             avatar: "👤",
-            color: PROFILE_COLORS[(newMembers.length + 1) % PROFILE_COLORS.length].value,
-            role: "parent",
-            permissions: getDefaultPermissions("parent"),
+            color: PROFILE_COLORS.find(c => !localMembers.some(lm => lm.color === c.value))?.value || PROFILE_COLORS[0].value,
         });
     };
 
+    const handleEditMember = (index: number) => {
+        setEditingIndex(index);
+        setCurrentMember(localMembers[index]);
+    };
+
+    const handleDeleteMember = (index: number) => {
+        setLocalMembers(localMembers.filter((_, i) => i !== index));
+        if (editingIndex === index) {
+            setEditingIndex(null);
+            setCurrentMember({ name: "", avatar: "👤", color: PROFILE_COLORS[0].value });
+        }
+    };
 
     const handleComplete = () => {
         if (newFamilyName.trim()) {
             setFamilyName(newFamilyName);
         }
-        newMembers.forEach(m => addMember({
-            name: m.name,
-            symbol: m.avatar,
-            color: m.color,
-        }));
-        onClose();
-        setStep(1);
-        setNewMembers([]);
-    };
 
-    const getPermissionCount = (perms: Record<string, boolean>) => Object.values(perms).filter(Boolean).length;
+        // Apply changes
+        // 1. Members to remove (in context but not in local)
+        const localIds = new Set(localMembers.filter(m => m.id).map(m => m.id));
+        members.forEach(m => {
+            if (!localIds.has(m.id)) removeMember(m.id);
+        });
+
+        // 2. Members to update or add
+        localMembers.forEach(m => {
+            if (m.id) {
+                updateMember(m.id, {
+                    name: m.name,
+                    symbol: m.avatar,
+                    color: m.color
+                });
+            } else {
+                addMember({
+                    name: m.name,
+                    symbol: m.avatar,
+                    color: m.color
+                });
+            }
+        });
+
+        onClose();
+    };
 
     return (
         <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
@@ -109,7 +149,12 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
                         <AppIcon name="users" size={24} color={colors.primary} style={{ marginRight: 8 }} />
                         <Text style={[styles.title, { color: colors.foreground }]}>Family Setup</Text>
                     </View>
-                    <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Step {step} of 3</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={[styles.subtitle, { color: colors.mutedForeground, marginRight: 12 }]}>Step {step} of 3</Text>
+                        <Pressable onPress={onClose}>
+                            <AppIcon name="x" size={20} color={colors.mutedForeground} />
+                        </Pressable>
+                    </View>
                 </View>
 
                 {/* Progress Bar */}
@@ -161,29 +206,41 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
 
                     {step === 2 && (
                         <View style={styles.stepContainer}>
-                            <Text style={[styles.stepTitle, { color: colors.foreground }]}>Add Family Members</Text>
-                            <Text style={[styles.stepDesc, { color: colors.mutedForeground }]}>Add everyone in your household</Text>
+                            <Text style={[styles.stepTitle, { color: colors.foreground }]}>Manage Family Members</Text>
+                            <Text style={[styles.stepDesc, { color: colors.mutedForeground }]}>Add or edit people in your household</Text>
 
-                            {newMembers.map((member, index) => (
-                                <View key={index} style={[styles.memberItem, { backgroundColor: colors.muted }]}>
-                                    <View style={[styles.memberAvatarSmall, { backgroundColor: PROFILE_COLORS.find(c => c.value === member.color)?.hex || colors.muted }]}>
-                                        <Text style={{ fontSize: 20 }}>{member.avatar}</Text>
+                            <View style={{ width: '100%', marginBottom: 24 }}>
+                                {localMembers.map((member, index) => (
+                                    <View key={index} style={[styles.memberItem, { backgroundColor: colors.card, borderColor: editingIndex === index ? colors.primary : colors.border, borderWidth: 1 }]}>
+                                        <View style={[styles.memberAvatarSmall, { backgroundColor: PROFILE_COLORS.find(c => c.value === member.color)?.hex + "20" }]}>
+                                            <Text style={{ fontSize: 20 }}>{member.avatar}</Text>
+                                        </View>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={[styles.memberName, { color: colors.foreground }]}>{member.name}</Text>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: PROFILE_COLORS.find(c => c.value === member.color)?.hex, marginRight: 6 }} />
+                                                <Text style={[styles.memberRole, { color: colors.mutedForeground }]}>{PROFILE_COLORS.find(c => c.value === member.color)?.name}</Text>
+                                            </View>
+                                        </View>
+                                        <View style={{ flexDirection: 'row', gap: 12 }}>
+                                            <Pressable onPress={() => handleEditMember(index)}>
+                                                <AppIcon name="edit" size={18} color={colors.primary} />
+                                            </Pressable>
+                                            <Pressable onPress={() => handleDeleteMember(index)}>
+                                                <AppIcon name="trash" size={18} color={colors.danger} />
+                                            </Pressable>
+                                        </View>
                                     </View>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={[styles.memberName, { color: colors.foreground }]}>{member.name}</Text>
-                                        <Text style={[styles.memberRole, { color: colors.mutedForeground }]}>{member.role} • {getPermissionCount(member.permissions)} permissions</Text>
-                                    </View>
-                                    <Pressable onPress={() => setNewMembers(newMembers.filter((_, i) => i !== index))}>
-                                        <Text style={{ fontSize: 18, color: colors.mutedForeground }}>✕</Text>
-                                    </Pressable>
-                                </View>
-                            ))}
+                                ))}
+                            </View>
 
                             <View style={[styles.addMemberForm, {
                                 backgroundColor: colors.card,
                                 borderColor: colors.border,
                                 borderRadius: radius.card
                             }]}>
+                                <Text style={[styles.formTitle, { color: colors.foreground }]}>{editingIndex !== null ? "Edit Member" : "Add New Member"}</Text>
+
                                 <TextInput
                                     value={currentMember.name}
                                     onChangeText={(text) => setCurrentMember({ ...currentMember, name: text })}
@@ -218,32 +275,39 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
                                     ))}
                                 </View>
 
-                                <Text style={[styles.label, { color: colors.mutedForeground }]}>Role</Text>
-                                {roleOptions.map(role => (
-                                    <Pressable
-                                        key={role.id}
-                                        onPress={() => setCurrentMember({ ...currentMember, role: role.id, permissions: getDefaultPermissions(role.id) })}
-                                        style={[
-                                            styles.roleOption,
-                                            { backgroundColor: colors.muted, borderRadius: radius.sm },
-                                            currentMember.role === role.id && {
-                                                backgroundColor: colors.primary + "1A",
-                                                borderColor: colors.primary,
-                                                borderWidth: 1
-                                            }
-                                        ]}
-                                    >
-                                        <AppIcon name={role.icon as any} size={20} color={role.color} />
-                                        <View style={{ marginLeft: 12 }}>
-                                            <Text style={[styles.roleLabel, { color: colors.foreground }]}>{role.label}</Text>
-                                            <Text style={[styles.roleDesc, { color: colors.mutedForeground }]}>{role.description}</Text>
-                                        </View>
-                                    </Pressable>
-                                ))}
+                                <Text style={[styles.label, { color: colors.mutedForeground }]}>Profile Color</Text>
+                                <View style={styles.grid}>
+                                    {PROFILE_COLORS.map(color => {
+                                        const isTaken = usedColors.includes(color.value) && (editingIndex === null || localMembers[editingIndex].color !== color.value);
+                                        return (
+                                            <Pressable
+                                                key={color.id}
+                                                onPress={() => !isTaken && setCurrentMember({ ...currentMember, color: color.value })}
+                                                style={[
+                                                    styles.colorOption,
+                                                    { backgroundColor: color.hex, borderRadius: radius.xs },
+                                                    currentMember.color === color.value && {
+                                                        borderWidth: 3,
+                                                        borderColor: colors.foreground,
+                                                    },
+                                                    isTaken && { opacity: 0.1, backgroundColor: '#ccc' }
+                                                ]}
+                                            >
+                                                {isTaken && <AppIcon name="x" size={12} color="#000" />}
+                                                {currentMember.color === color.value && <AppIcon name="check" size={14} color="#fff" />}
+                                            </Pressable>
+                                        );
+                                    })}
+                                </View>
 
-                                <Pressable style={[styles.outlineButton, { borderColor: colors.border, borderRadius: radius.sm }]} onPress={handleAddMember}>
-                                    <Text style={[styles.outlineButtonText, { color: colors.foreground }]}>Add Member</Text>
+                                <Pressable style={[styles.outlineButton, { borderColor: colors.border, borderRadius: radius.sm }]} onPress={handleAddOrUpdateMember}>
+                                    <Text style={[styles.outlineButtonText, { color: colors.foreground }]}>{editingIndex !== null ? "Save Changes" : "Add Member"}</Text>
                                 </Pressable>
+                                {(editingIndex !== null || currentMember.name.trim() !== "") && (
+                                    <Pressable style={{ marginTop: 12, alignItems: 'center' }} onPress={() => { setEditingIndex(null); setCurrentMember({ name: "", avatar: "👤", color: PROFILE_COLORS[0].value }); }}>
+                                        <Text style={{ color: colors.mutedForeground }}>{editingIndex !== null ? "Cancel Edit" : "Clear Form"}</Text>
+                                    </Pressable>
+                                )}
                             </View>
 
                             <View style={styles.row}>
@@ -251,9 +315,9 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
                                     <Text style={[styles.outlineButtonText, { color: colors.foreground }]}>Back</Text>
                                 </Pressable>
                                 <Pressable
-                                    style={[styles.primaryButton, { flex: 1, backgroundColor: colors.primary, borderRadius: radius.md }, newMembers.length === 0 && styles.disabledButton]}
+                                    style={[styles.primaryButton, { flex: 1, backgroundColor: colors.primary, borderRadius: radius.md }, localMembers.length === 0 && styles.disabledButton]}
                                     onPress={() => setStep(3)}
-                                    disabled={newMembers.length === 0}
+                                    disabled={localMembers.length === 0}
                                 >
                                     <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>Review</Text>
                                 </Pressable>
@@ -274,14 +338,14 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
                                     <AppIcon name="users" size={20} color={colors.primary} style={{ marginRight: 8 }} />
                                     <Text style={{ fontSize: 18, fontWeight: '700', color: colors.foreground }}>{newFamilyName}</Text>
                                 </View>
-                                {newMembers.map((member, index) => (
+                                {localMembers.map((member, index) => (
                                     <View key={index} style={[styles.memberItem, { backgroundColor: colors.muted }]}>
                                         <View style={[styles.memberAvatarSmall, { backgroundColor: PROFILE_COLORS.find(c => c.value === member.color)?.hex || colors.muted }]}>
                                             <Text style={{ fontSize: 16 }}>{member.avatar}</Text>
                                         </View>
                                         <View style={{ flex: 1 }}>
                                             <Text style={[styles.memberName, { color: colors.foreground }]}>{member.name}</Text>
-                                            <Text style={[styles.memberRole, { color: colors.mutedForeground }]}>{member.role}</Text>
+                                            <Text style={[styles.memberRole, { color: colors.mutedForeground }]}>{PROFILE_COLORS.find(c => c.value === member.color)?.name}</Text>
                                         </View>
                                     </View>
                                 ))}
@@ -436,17 +500,16 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-    roleOption: {
-        flexDirection: 'row',
+    formTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        marginBottom: 16,
+    },
+    colorOption: {
+        width: 36,
+        height: 36,
+        justifyContent: 'center',
         alignItems: 'center',
-        padding: 12,
-        marginBottom: 8,
-    },
-    roleLabel: {
-        fontWeight: '600',
-    },
-    roleDesc: {
-        fontSize: 12,
     },
     outlineButton: {
         width: '100%',

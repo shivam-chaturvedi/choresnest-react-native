@@ -38,4 +38,3 @@ ErrorUtils.setGlobalHandler((error, isFatal) => {
 
 
 AppRegistry.registerComponent(appName, () => App);
-AppRegistry.registerComponent('react_native', () => App); // Fallback for legacy builds requesting old name

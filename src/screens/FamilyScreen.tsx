@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -20,18 +20,17 @@ import {
   Menu,
   ChevronLeft
 } from "lucide-react-native";
+import { PROFILE_COLORS } from "../constants/profileColors";
+import { FamilyOnboarding } from "../components/family/FamilyOnboarding";
 
-const roles = [
-  { label: "Admin", description: "Full access to all features", icon: Crown, color: "warning" },
-  { label: "Parent", description: "Can manage family settings", icon: Shield, color: "info" },
-  { label: "Child", description: "Limited access", icon: Users, color: "success" },
-];
+// No explicit roles as per new requirement
 
 export const FamilyScreen: React.FC = () => {
   const { familyName, members } = useFamily();
   const { openSidebar } = useSidebar();
   const colors = useThemeColors();
   const radius = useThemeRadius();
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   // Helper to get color values
   const getColor = (colorName: string) => {
@@ -51,9 +50,6 @@ export const FamilyScreen: React.FC = () => {
             <Text style={[styles.title, { color: colors.foreground }]}>Family Members</Text>
             <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{familyName}</Text>
           </View>
-          <Pressable style={[styles.iconButton, { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border, borderRadius: radius.md }]}>
-            <UserPlus size={20} color={colors.foreground} />
-          </Pressable>
         </View>
 
         {/* Family Card */}
@@ -65,7 +61,7 @@ export const FamilyScreen: React.FC = () => {
             <Text style={[styles.cardTitle, { color: colors.primaryForeground }]}>{familyName}</Text>
             <Text style={[styles.cardSubtitle, { color: colors.primaryForeground, opacity: 0.8 }]}>{members.length} members</Text>
           </View>
-          <Pressable style={[styles.cardEditButton, { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: radius.sm }]}>
+          <Pressable onPress={() => setShowOnboarding(true)} style={[styles.cardEditButton, { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: radius.sm }]}>
             <Edit size={20} color={colors.primaryForeground} />
           </Pressable>
         </View>
@@ -81,49 +77,33 @@ export const FamilyScreen: React.FC = () => {
               <View style={{ flex: 1 }}>
                 <Text style={[styles.memberName, { color: colors.foreground }]}>{member.name}</Text>
                 <View style={styles.statusContainer}>
-                  <View style={[styles.roleBadge, { backgroundColor: colors.muted, borderRadius: radius.xs }]}>
-                    <Text style={[styles.roleText, { color: colors.primary }]}>Member</Text>
+                  <View style={[styles.roleBadge, { backgroundColor: PROFILE_COLORS.find(c => c.value === member.color)?.hex + "20", borderRadius: radius.xs }]}>
+                    <Text style={[styles.roleText, { color: PROFILE_COLORS.find(c => c.value === member.color)?.hex }]}>{PROFILE_COLORS.find(c => c.value === member.color)?.name || "Member"}</Text>
                   </View>
                   {member.isActive && (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                       <View style={[styles.onlineDot, { backgroundColor: colors.success, borderRadius: radius.xs }]} />
-                      <Text style={[styles.onlineText, { color: colors.success }]}>Online</Text>
+                      <Text style={[styles.onlineText, { color: colors.success }]}>Active Profile</Text>
                     </View>
                   )}
                 </View>
               </View>
-              <Pressable style={styles.editIconButton}>
+              <Pressable style={styles.editIconButton} onPress={() => setShowOnboarding(true)}>
                 <Edit size={16} color={colors.mutedForeground} />
               </Pressable>
             </View>
           ))}
         </View>
 
-        {/* Roles Info */}
-        <View style={styles.rolesSection}>
-          <Text style={[styles.sectionHeader, { color: colors.foreground }]}>Available Roles</Text>
-          <View style={[styles.rolesCard, { backgroundColor: colors.card, borderRadius: radius.card }]}>
-            {roles.map((role) => (
-              <View key={role.label} style={styles.roleRow}>
-                <View style={[styles.roleIconBg, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
-                  <role.icon size={20} color={getColor(role.color)} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.roleName, { color: colors.foreground }]}>{role.label}</Text>
-                  <Text style={[styles.roleDesc, { color: colors.mutedForeground }]}>{role.description}</Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        </View>
 
         {/* Add Button */}
-        <Pressable style={[styles.addButton, { backgroundColor: colors.primary, borderRadius: radius.md }]}>
+        <Pressable onPress={() => setShowOnboarding(true)} style={[styles.addButton, { backgroundColor: colors.primary, borderRadius: radius.md }]}>
           <UserPlus size={20} color="#fff" />
-          <Text style={styles.addButtonText}>Add Family Member</Text>
+          <Text style={styles.addButtonText}>Family Setup</Text>
         </Pressable>
 
       </ScrollView>
+      <FamilyOnboarding open={showOnboarding} onClose={() => setShowOnboarding(false)} />
     </AppLayout>
   );
 };

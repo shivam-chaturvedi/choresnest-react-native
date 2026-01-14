@@ -190,7 +190,7 @@ export const MoreScreen: React.FC = () => {
               <Text style={[styles.profileName, { color: colors.foreground }]}>{activeMember?.name || "Family Member"}</Text>
               <Text style={[styles.profileEmail, { color: colors.mutedForeground }]}>{activeMember?.name.toLowerCase().replace(/\s/g, '')}@email.com</Text>
               <View style={[styles.roleBadge, { backgroundColor: activeProfileColor + '20', borderRadius: radius.sm }]}>
-                <Text style={[styles.roleText, { color: activeProfileColor }]}>{activeMember?.role || "Family Admin"}</Text>
+                <Text style={[styles.roleText, { color: activeProfileColor }]}>{PROFILE_COLORS.find(c => c.value === activeMember?.color)?.name || "Member"}</Text>
               </View>
             </View>
           </View>

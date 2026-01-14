@@ -70,13 +70,18 @@ export const TasksScreen: React.FC = () => {
   const progress = totalCount ? Math.round((completedCount / totalCount) * 100) : 0;
 
   const toggleTask = (taskId: string) => {
-    setTaskEntries((prev) =>
-      prev.map((task) =>
-        task.id === taskId
-          ? { ...task, status: task.status === "done" ? "pending" : "done" }
-          : task
-      )
-    );
+    try {
+      if (!taskId) return;
+      setTaskEntries((prev) =>
+        prev.map((task) =>
+          task.id === taskId
+            ? { ...task, status: task.status === "done" ? "pending" : "done" }
+            : task
+        )
+      );
+    } catch (error) {
+      console.error("Error toggling task:", error);
+    }
   };
 
   return (

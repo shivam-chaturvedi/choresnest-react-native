@@ -17,7 +17,6 @@ import { MealType, useMealPlan } from "../contexts/MealPlanContext";
 import { theme } from "../theme";
 import { useThemeColors } from "../contexts/ThemeContext";
 import { AddEventModal } from "../components/modals/AddEventModal";
-import { AddMemberModal } from "../components/modals/AddMemberModal";
 import { AddTaskModal } from "../components/modals/AddTaskModal";
 import { AddItemModal } from "../components/modals/AddItemModal";
 import { FamilyOnboarding } from "../components/family/FamilyOnboarding";
@@ -55,7 +54,6 @@ export const HomeScreen: React.FC = () => {
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [showAddTask, setShowAddTask] = useState(false);
   const [showAddItem, setShowAddItem] = useState(false);
-  const [showAddMember, setShowAddMember] = useState(false);
   const [showFamilyOnboarding, setShowFamilyOnboarding] = useState(false);
 
   // Dashboard Toggle
@@ -69,12 +67,18 @@ export const HomeScreen: React.FC = () => {
   //   'true' -> (Legacy/Unused but treated as unset if we wanted, but we will treating null as unset)
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_TUTORIAL_KEY).then((value) => {
-      // Show if value is NULL. meaning it has never been set.
-      if (value === null) {
-        setShowTutorial(true);
+    const checkTutorial = async () => {
+      try {
+        const value = await AsyncStorage.getItem(STORAGE_TUTORIAL_KEY);
+        // Show if value is NULL. meaning it has never been set.
+        if (value === null) {
+          setShowTutorial(true);
+        }
+      } catch (error) {
+        console.error("Failed to check tutorial status:", error);
       }
-    });
+    };
+    checkTutorial();
   }, []);
 
   const handleTutorialClose = async () => {
@@ -243,9 +247,6 @@ export const HomeScreen: React.FC = () => {
                 <Pressable onPress={() => setShowFamilyOnboarding(true)} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16 }}>
                   <AppIcon name="user" size={14} color={colors.primary} style={{ marginRight: 4 }} />
                   <Text style={{ color: colors.primary, fontWeight: "600" }}>Setup</Text>
-                </Pressable>
-                <Pressable onPress={() => setShowAddMember(true)} style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={{ color: colors.mutedForeground, fontWeight: "500" }}>+ Add</Text>
                 </Pressable>
               </View>
             </View>
@@ -445,7 +446,6 @@ export const HomeScreen: React.FC = () => {
       <AddEventModal open={showAddEvent} onOpenChange={setShowAddEvent} />
       <AddTaskModal open={showAddTask} onClose={() => setShowAddTask(false)} />
       <AddItemModal open={showAddItem} onClose={() => setShowAddItem(false)} />
-      <AddMemberModal open={showAddMember} onClose={() => setShowAddMember(false)} />
       <FamilyOnboarding open={showFamilyOnboarding} onClose={() => setShowFamilyOnboarding(false)} />
     </>
   );

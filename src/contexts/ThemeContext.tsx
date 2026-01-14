@@ -26,7 +26,7 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType>({
     currentPalette: 'sapphire',
-    shapeMode: 'rounded',
+    shapeMode: 'squared',
     isDark: false,
     themeVersion: 0,
     setPalette: () => { },
@@ -51,7 +51,7 @@ export const useThemeRadius = () => {
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const systemColorScheme = useColorScheme();
     const [currentPalette, setCurrentPalette] = useState<ThemeKey>('sapphire');
-    const [shapeMode, setShapeMode] = useState<ShapeMode>('rounded');
+    const [shapeMode, setShapeMode] = useState<ShapeMode>('squared');
     const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
     const [themeVersion, setThemeVersion] = useState(0);
     const [isLoaded, setIsLoaded] = useState(false);
@@ -71,7 +71,14 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 }
 
                 if (savedShape && (savedShape === 'rounded' || savedShape === 'squared')) {
-                    setShapeMode(savedShape as ShapeMode);
+                    // Force squared as default - override old 'rounded' preferences
+                    // TODO: Remove this override after all users have migrated
+                    setShapeMode('squared');
+                    AsyncStorage.setItem(THEME_SHAPE_STORAGE_KEY, 'squared').catch(console.error);
+                } else {
+                    // No saved preference - set default to 'squared' and save it
+                    setShapeMode('squared');
+                    AsyncStorage.setItem(THEME_SHAPE_STORAGE_KEY, 'squared').catch(console.error);
                 }
 
                 if (savedMode !== null) {

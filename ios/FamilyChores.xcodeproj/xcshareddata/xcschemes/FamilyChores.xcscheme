@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-               BuildableName = "react_native.app"
-               BlueprintName = "react_native"
-               ReferencedContainer = "container:react_native.xcodeproj">
+               BuildableName = "FamilyChores.app"
+               BlueprintName = "FamilyChores"
+               ReferencedContainer = "container:FamilyChores.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -33,9 +33,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "00E356ED1AD99517003FC87E"
-               BuildableName = "react_nativeTests.xctest"
-               BlueprintName = "react_nativeTests"
-               ReferencedContainer = "container:react_native.xcodeproj">
+               BuildableName = "FamilyChoresTests.xctest"
+               BlueprintName = "FamilyChoresTests"
+               ReferencedContainer = "container:FamilyChores.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -55,9 +55,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "react_native.app"
-            BlueprintName = "react_native"
-            ReferencedContainer = "container:react_native.xcodeproj">
+            BuildableName = "FamilyChores.app"
+            BlueprintName = "FamilyChores"
+            ReferencedContainer = "container:FamilyChores.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -72,9 +72,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "react_native.app"
-            BlueprintName = "react_native"
-            ReferencedContainer = "container:react_native.xcodeproj">
+            BuildableName = "FamilyChores.app"
+            BlueprintName = "FamilyChores"
+            ReferencedContainer = "container:FamilyChores.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

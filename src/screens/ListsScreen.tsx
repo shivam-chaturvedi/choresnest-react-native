@@ -56,17 +56,22 @@ export const ListsScreen: React.FC = () => {
   };
 
   const handleAddItem = () => {
-    if (newItemName.trim()) {
-      addGroceryItem({
-        name: newItemName.trim(),
-        quantity: quantity,
-        unit: "pcs", // Default unit
-        categoryId: selectedCategoryId || categories[0]?.id || "cat6",
-        addedBy: activeMember?.id || "1",
-        completed: false,
-      });
-      setNewItemName("");
-      setQuantity(1);
+    try {
+      if (newItemName.trim()) {
+        addGroceryItem({
+          name: newItemName.trim(),
+          quantity: quantity,
+          unit: "pcs", // Default unit
+          categoryId: selectedCategoryId || categories[0]?.id || "cat6",
+          addedBy: activeMember?.id || "1",
+          completed: false,
+        });
+        setNewItemName("");
+        setQuantity(1);
+      }
+    } catch (error) {
+      console.error("Error adding grocery item:", error);
+      Alert.alert("Error", "Failed to add item. Please try again.");
     }
   };
 
@@ -77,19 +82,7 @@ export const ListsScreen: React.FC = () => {
   };
 
   const handleImportItem = (item: { name: string; quantity: number; unit: string }) => {
-    addGroceryItem({
-      name: item.name,
-      quantity: item.quantity,
-      unit: item.unit,
-      categoryId: selectedCategoryId || categories[0]?.id || "cat6",
-      addedBy: activeMember?.id || "1",
-      completed: false,
-    });
-    Alert.alert("Item added", `${item.name} added to grocery list`);
-  };
-
-  const handleImportAll = () => {
-    mealPlanItems.forEach((item) => {
+    try {
       addGroceryItem({
         name: item.name,
         quantity: item.quantity,
@@ -98,9 +91,31 @@ export const ListsScreen: React.FC = () => {
         addedBy: activeMember?.id || "1",
         completed: false,
       });
-    });
-    setShowImportModal(false);
-    Alert.alert("All items imported!", `${mealPlanItems.length} items added to your list`);
+      Alert.alert("Item added", `${item.name} added to grocery list`);
+    } catch (error) {
+      console.error("Error importing item:", error);
+      Alert.alert("Error", "Failed to import item.");
+    }
+  };
+
+  const handleImportAll = () => {
+    try {
+      mealPlanItems.forEach((item) => {
+        addGroceryItem({
+          name: item.name,
+          quantity: item.quantity,
+          unit: item.unit,
+          categoryId: selectedCategoryId || categories[0]?.id || "cat6",
+          addedBy: activeMember?.id || "1",
+          completed: false,
+        });
+      });
+      setShowImportModal(false);
+      Alert.alert("All items imported!", `${mealPlanItems.length} items added to your list`);
+    } catch (error) {
+      console.error("Error importing all items:", error);
+      Alert.alert("Error", "Failed to import all items.");
+    }
   };
 
   const getMemberIcon = (memberId: string) => {
@@ -127,16 +142,11 @@ export const ListsScreen: React.FC = () => {
 
   const inputRef = React.useRef<TextInput>(null);
 
-  const handleFabPress = () => {
-    inputRef.current?.focus();
-  };
-
   return (
     <>
       <AppLayout
         showAddButton={true}
         showNav={false}
-        onAddPress={handleFabPress}
       >
         <ScrollView contentContainerStyle={styles.container}>
           <View style={styles.headerRow}>
@@ -193,22 +203,27 @@ export const ListsScreen: React.FC = () => {
             })}
           </View>
 
-          {/* Category Selector */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
-            {categories.map((cat) => (
-              <Pressable
-                key={cat.id}
-                onPress={() => setSelectedCategoryId(cat.id)}
-                style={[
-                  styles.categoryChip,
-                  { backgroundColor: selectedCategoryId === cat.id ? cat.color : colors.muted, borderRadius: radius.full }
-                ]}
-              >
-                <Text style={{ fontSize: 16 }}>{cat.icon}</Text>
-                <Text style={[styles.categoryChipText, { color: colors.foreground }]}>{cat.name}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
+          {/* Category Selector for New Items */}
+          <View style={{ marginBottom: 12 }}>
+            <Text style={[styles.sectionLabel, { color: colors.mutedForeground, marginBottom: 8, paddingHorizontal: 4 }]}>
+              Select category for new items:
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {categories.map((cat) => (
+                <Pressable
+                  key={cat.id}
+                  onPress={() => setSelectedCategoryId(cat.id)}
+                  style={[
+                    styles.categoryChip,
+                    { backgroundColor: selectedCategoryId === cat.id ? cat.color : colors.muted, borderRadius: radius.full }
+                  ]}
+                >
+                  <Text style={{ fontSize: 16 }}>{cat.icon}</Text>
+                  <Text style={[styles.categoryChipText, { color: colors.foreground }]}>{cat.name}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
 
           <View style={[styles.addRow, { backgroundColor: colors.card, borderRadius: radius.card }]}>
             <TextInput

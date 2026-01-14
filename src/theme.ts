@@ -157,15 +157,15 @@ export const theme = {
   },
   // Radius will be updated dynamically
   radius: {
-    xs: 6,
-    sm: 10,
-    md: 16,
-    lg: 20,
-    xl: 24,
-    xxl: 32,
-    card: 16,
-    button: 16,
-    full: 9999,
+    xs: 2,
+    sm: 2,
+    md: 4,
+    lg: 4,
+    xl: 6,
+    xxl: 8,
+    card: 4,
+    button: 4,
+    full: 12,
   }
 };
 

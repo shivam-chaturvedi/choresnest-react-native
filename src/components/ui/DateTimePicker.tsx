@@ -12,6 +12,7 @@ interface DateTimePickerProps {
     placeholder?: string;
     minimumDate?: Date;
     maximumDate?: Date;
+    disabled?: boolean;
 }
 
 export const CustomDateTimePicker: React.FC<DateTimePickerProps> = ({
@@ -22,6 +23,7 @@ export const CustomDateTimePicker: React.FC<DateTimePickerProps> = ({
     placeholder,
     minimumDate,
     maximumDate,
+    disabled,
 }) => {
     const [show, setShow] = useState(false);
 
@@ -61,8 +63,8 @@ export const CustomDateTimePicker: React.FC<DateTimePickerProps> = ({
         <View style={styles.container}>
             {label && <Text style={styles.label}>{label}</Text>}
             <Pressable
-                style={styles.button}
-                onPress={onPress}
+                style={[styles.button, disabled && { opacity: 0.5 }]}
+                onPress={() => !disabled && onPress()}
             >
                 <AppIcon
                     name={mode === "date" ? "calendar" : "clock"}

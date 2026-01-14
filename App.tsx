@@ -1,5 +1,5 @@
 import "react-native-gesture-handler";
-import React from "react";
+import React, { useEffect } from "react";
 import { StatusBar, StyleSheet } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -12,31 +12,33 @@ import { ToastProvider } from "./src/components/ui/Toast";
 import { ErrorBoundary } from "./src/components/ErrorBoundary";
 import { AppNavigator } from "./src/navigation/AppNavigator";
 import { ThemeProvider } from "./src/contexts/ThemeContext";
-
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 const App = () => {
   return (
-    <SafeAreaProvider>
-      <ThemeProvider>
-        <FamilyProvider>
-          <MealPlanProvider>
-            <SidebarProvider>
-              <ToastProvider>
-                <StatusBar
-                  barStyle="dark-content"
-                  backgroundColor={theme.colors.background}
-                  animated
-                />
-                <SafeAreaView style={styles.appWrapper} edges={["top", "bottom", "left", "right"]}>
-                  <ErrorBoundary>
-                    <AppNavigator />
-                  </ErrorBoundary>
-                </SafeAreaView>
-              </ToastProvider>
-            </SidebarProvider>
-          </MealPlanProvider>
-        </FamilyProvider>
-      </ThemeProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <FamilyProvider>
+            <MealPlanProvider>
+              <SidebarProvider>
+                <ToastProvider>
+                  <StatusBar
+                    barStyle="dark-content"
+                    backgroundColor={theme.colors.background}
+                    animated
+                  />
+                  <SafeAreaView style={styles.appWrapper} edges={["top", "bottom", "left", "right"]}>
+                    <ErrorBoundary>
+                      <AppNavigator />
+                    </ErrorBoundary>
+                  </SafeAreaView>
+                </ToastProvider>
+              </SidebarProvider>
+            </MealPlanProvider>
+          </FamilyProvider>
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 };
 

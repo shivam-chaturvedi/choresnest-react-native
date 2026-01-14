@@ -32,6 +32,10 @@ export interface CalendarEvent {
   endTime?: string;
   memberId: string;
   location?: string;
+  visibility?: "default" | "public" | "private";
+  timeZone?: string;
+  isRecurring?: boolean;
+  recurrenceRule?: string;
 }
 
 export interface GroceryCategory {
@@ -60,12 +64,15 @@ interface FamilyContextType {
   addMember: (member: Omit<FamilyMember, "id" | "isActive">) => void;
   removeMember: (id: string) => void;
   updateMemberColor: (memberId: string, colorValue: string) => void;
+  updateMember: (id: string, updates: Partial<Omit<FamilyMember, "id" | "isActive">>) => void;
   globalVault: VaultDocument[];
   memberVaults: Record<string, VaultDocument[]>;
   addDocument: (doc: Omit<VaultDocument, "id">) => void;
   shareDocument: (docId: string, memberId: string, targetMemberIds: string[]) => void;
   events: CalendarEvent[];
   addEvent: (event: Omit<CalendarEvent, "id">) => void;
+  updateEvent: (id: string, updates: Partial<Omit<CalendarEvent, "id">>) => void;
+  deleteEvent: (id: string) => void;
   categories: GroceryCategory[];
   addCategory: (category: Omit<GroceryCategory, "id">) => void;
   removeCategory: (id: string) => void;
@@ -247,6 +254,17 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   };
 
+  const updateMember = (id: string, updates: Partial<Omit<FamilyMember, "id" | "isActive">>) => {
+    try {
+      if (!id || !updates) return;
+      setMembers((prev) => prev.map((m) =>
+        m.id === id ? { ...m, ...updates } : m
+      ));
+    } catch (error) {
+      console.error("Error in updateMember:", error);
+    }
+  };
+
   const addMember = (member: Omit<FamilyMember, "id" | "isActive">) => {
     try {
       if (!member || !member.name) {
@@ -331,6 +349,26 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   };
 
+  const updateEvent = (id: string, updates: Partial<Omit<CalendarEvent, "id">>) => {
+    try {
+      if (!id || !updates) return;
+      setEvents((prev) => prev.map((event) =>
+        event.id === id ? { ...event, ...updates } : event
+      ));
+    } catch (error) {
+      console.error("Error in updateEvent:", error);
+    }
+  };
+
+  const deleteEvent = (id: string) => {
+    try {
+      if (!id) return;
+      setEvents((prev) => prev.filter((event) => event.id !== id));
+    } catch (error) {
+      console.error("Error in deleteEvent:", error);
+    }
+  };
+
   const addGroceryItem = (item: Omit<GroceryItem, "id">) => {
     try {
       if (!item || !item.name) return;
@@ -398,12 +436,15 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         addMember,
         removeMember,
         updateMemberColor,
+        updateMember,
         globalVault,
         memberVaults,
         addDocument,
         shareDocument,
         events,
         addEvent,
+        updateEvent,
+        deleteEvent,
         categories,
         addCategory,
         removeCategory,

@@ -74,74 +74,117 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     // Load from storage
     useEffect(() => {
-        AsyncStorage.getItem(STORAGE_KEY).then(json => {
-            if (json) {
-                setFolders(JSON.parse(json));
+        const loadNotes = async () => {
+            try {
+                const json = await AsyncStorage.getItem(STORAGE_KEY);
+                if (json) {
+                    setFolders(JSON.parse(json));
+                }
+            } catch (error) {
+                console.error("Failed to load notes from storage:", error);
             }
-        });
+        };
+        loadNotes();
     }, []);
 
     // Save to storage
     useEffect(() => {
-        AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(folders));
+        const saveNotes = async () => {
+            try {
+                await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(folders));
+            } catch (error) {
+                console.error("Failed to save notes to storage:", error);
+            }
+        };
+        saveNotes();
     }, [folders]);
 
     const addFolder = (title: string) => {
-        const newFolder: Folder = {
-            id: Date.now().toString(),
-            title,
-            icon: 'folder',
-            notes: []
-        };
-        setFolders(prev => [...prev, newFolder]);
+        try {
+            if (!title) return;
+            const newFolder: Folder = {
+                id: Date.now().toString(),
+                title,
+                icon: 'folder',
+                notes: []
+            };
+            setFolders(prev => [...prev, newFolder]);
+        } catch (error) {
+            console.error("Error adding folder:", error);
+        }
     };
 
     const deleteFolder = (id: string) => {
-        setFolders(prev => prev.filter(f => f.id !== id));
+        try {
+            if (!id) return;
+            setFolders(prev => prev.filter(f => f.id !== id));
+        } catch (error) {
+            console.error("Error deleting folder:", error);
+        }
     };
 
     const addNote = (folderId: string, noteData?: Partial<Note>) => {
-        const newNote: Note = {
-            id: Date.now().toString(),
-            title: noteData?.title || 'Untitled',
-            preview: noteData?.preview || 'No content',
-            tag: 'General',
-            color: '#fff',
-            updatedAt: new Date().toISOString(),
-            blocks: noteData?.blocks || [{ id: '1', type: 'text', content: '' }]
-        };
+        try {
+            if (!folderId) return;
+            const newNote: Note = {
+                id: Date.now().toString(),
+                title: noteData?.title || 'Untitled',
+                preview: noteData?.preview || 'No content',
+                tag: 'General',
+                color: '#fff',
+                updatedAt: new Date().toISOString(),
+                blocks: noteData?.blocks || [{ id: '1', type: 'text', content: '' }]
+            };
 
-        setFolders(prev => prev.map(folder => {
-            if (folder.id === folderId) {
-                return { ...folder, notes: [newNote, ...folder.notes] };
-            }
-            return folder;
-        }));
+            setFolders(prev => prev.map(folder => {
+                if (folder.id === folderId) {
+                    return { ...folder, notes: [newNote, ...folder.notes] };
+                }
+                return folder;
+            }));
+        } catch (error) {
+            console.error("Error adding note:", error);
+        }
     };
 
     const updateNote = (noteId: string, updates: Partial<Note>) => {
-        setFolders(prev => prev.map(folder => ({
-            ...folder,
-            notes: folder.notes.map(note => {
-                if (note.id === noteId) {
-                    return { ...note, ...updates, updatedAt: new Date().toISOString() };
-                }
-                return note;
-            })
-        })));
+        try {
+            if (!noteId || !updates) return;
+            setFolders(prev => prev.map(folder => ({
+                ...folder,
+                notes: folder.notes.map(note => {
+                    if (note.id === noteId) {
+                        return { ...note, ...updates, updatedAt: new Date().toISOString() };
+                    }
+                    return note;
+                })
+            })));
+        } catch (error) {
+            console.error("Error updating note:", error);
+        }
     };
 
     const deleteNote = (noteId: string) => {
-        setFolders(prev => prev.map(folder => ({
-            ...folder,
-            notes: folder.notes.filter(n => n.id !== noteId)
-        })));
+        try {
+            if (!noteId) return;
+            setFolders(prev => prev.map(folder => ({
+                ...folder,
+                notes: folder.notes.filter(n => n.id !== noteId)
+            })));
+        } catch (error) {
+            console.error("Error deleting note:", error);
+        }
     };
 
     const getNote = (noteId: string) => {
-        for (const folder of folders) {
-            const note = folder.notes.find(n => n.id === noteId);
-            if (note) return note;
+        try {
+            if (!noteId) return undefined;
+            for (const folder of folders) {
+                const note = folder.notes.find(n => n.id === noteId);
+                if (note) return note;
+            }
+        } catch (error) {
+            console.error("Error getting note:", error);
         }
         return undefined;
     };

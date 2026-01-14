@@ -83,6 +83,7 @@ export const RecipesScreen: React.FC = () => {
           name: ing.name,
           quantity: ing.quantity,
           unit: ing.unit,
+          categoryId: "cat6", // Default category
           addedBy: "1", // Current user ID (mock)
           completed: false,
         });
@@ -289,7 +290,7 @@ export const RecipesScreen: React.FC = () => {
 
   return (
     <>
-      <AppLayout showNav={false}>
+      <AppLayout showNav={false} onAddPress={() => setShowAddRecipeModal(true)}>
         <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}>
           {/* Header */}
           <View style={styles.headerRow}>

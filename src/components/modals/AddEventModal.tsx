@@ -12,7 +12,7 @@ import {
   Platform,
   Alert,
 } from "react-native";
-import { useFamily } from "../../contexts/FamilyContext";
+import { useFamily, CalendarEvent } from "../../contexts/FamilyContext";
 import { useThemeColors } from "../../contexts/ThemeContext";
 import { AppIcon, AppIconName, CustomDateTimePicker } from "../ui";
 import { PROFILE_COLORS } from "../../constants/profileColors";
@@ -22,6 +22,7 @@ interface AddEventModalProps {
   onOpenChange: (open: boolean) => void;
   initialDate?: string;
   initialTime?: string;
+  eventToEdit?: CalendarEvent;
 }
 
 const eventIcons: string[] = [
@@ -58,14 +59,31 @@ const reminderOptions = [
   { value: "10080", label: "1 week before" },
 ];
 
+const visibilityOptions = [
+  { value: "default", label: "Default visibility" },
+  { value: "public", label: "Public" },
+  { value: "private", label: "Private" },
+];
+
+const timeZoneOptions = [
+  { value: "UTC", label: "(UTC-00:00) Universal Coordinated Time" },
+  { value: "EST", label: "(UTC-05:00) Eastern Standard Time" },
+  { value: "PST", label: "(UTC-08:00) Pacific Standard Time" },
+  { value: "IST", label: "(UTC+05:30) Indian Standard Time" },
+];
+
 export const AddEventModal: React.FC<AddEventModalProps> = ({
   open,
   onOpenChange,
   initialDate,
   initialTime,
+  eventToEdit,
 }) => {
-  const { members, addEvent } = useFamily();
+  const { members, activeMember, addEvent, updateEvent, deleteEvent } = useFamily();
   const colors = useThemeColors();
+
+  const isEditing = !!eventToEdit;
+  const isOwner = !eventToEdit || activeMember?.id === eventToEdit.memberId;
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -88,10 +106,59 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   const [showReminderOptions, setShowReminderOptions] = useState(false);
 
   const [notes, setNotes] = useState("");
+  const [visibility, setVisibility] = useState("default");
+  const [timeZone, setTimeZone] = useState("UTC");
+  const [showVisibilityOptions, setShowVisibilityOptions] = useState(false);
+  const [showTimeZoneOptions, setShowTimeZoneOptions] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      // Reset form
+    if (eventToEdit) {
+      // Initialize with existing event data
+      setName(eventToEdit.title);
+      setDescription(""); // Description not in CalendarEvent interface currently
+      setStartDate(new Date(eventToEdit.date));
+
+      // Parse time
+      if (eventToEdit.time === "All Day") {
+        setAllDay(true);
+      } else {
+        setAllDay(false);
+        const timeParts = eventToEdit.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
+        if (timeParts) {
+          let hours = parseInt(timeParts[1]);
+          const minutes = parseInt(timeParts[2]);
+          const period = timeParts[3].toUpperCase();
+          if (period === "PM" && hours !== 12) hours += 12;
+          if (period === "AM" && hours === 12) hours = 0;
+          const timeDate = new Date();
+          timeDate.setHours(hours, minutes, 0, 0);
+          setStartTime(timeDate);
+        }
+      }
+
+      if (eventToEdit.endTime) {
+        const timeParts = eventToEdit.endTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
+        if (timeParts) {
+          let hours = parseInt(timeParts[1]);
+          const minutes = parseInt(timeParts[2]);
+          const period = timeParts[3].toUpperCase();
+          if (period === "PM" && hours !== 12) hours += 12;
+          if (period === "AM" && hours === 12) hours = 0;
+          const timeDate = new Date();
+          timeDate.setHours(hours, minutes, 0, 0);
+          setEndTime(timeDate);
+        }
+      }
+
+      setSelectedIcon(eventToEdit.icon);
+      setLocation(eventToEdit.location || "");
+      setMemberId(eventToEdit.memberId);
+
+      const member = members.find(m => m.id === eventToEdit.memberId);
+      if (member) setColor(member.color);
+
+    } else {
+      // Reset form for new event
       setName("");
       setDescription("");
 
@@ -144,9 +211,8 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       setReminderTime("15");
       setNotes("");
       setShowRepeatOptions(false);
-      setShowReminderOptions(false);
     }
-  }, [open, initialDate, initialTime, members]);
+  }, [open, initialDate, initialTime, members, eventToEdit]);
 
   // Update color when member selection changes
   useEffect(() => {
@@ -179,15 +245,31 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         minute: "2-digit",
       });
 
-      addEvent({
-        title: name.trim(),
-        date: formattedDate,
-        time: formattedTime,
-        endTime: formattedEndTime,
-        icon: selectedIcon,
-        memberId,
-        location,
-      });
+      if (isEditing && eventToEdit) {
+        updateEvent(eventToEdit.id, {
+          title: name.trim(),
+          date: formattedDate,
+          time: formattedTime,
+          endTime: formattedEndTime,
+          icon: selectedIcon,
+          memberId,
+          location,
+          visibility: visibility as any,
+          timeZone,
+        });
+      } else {
+        addEvent({
+          title: name.trim(),
+          date: formattedDate,
+          time: formattedTime,
+          endTime: formattedEndTime,
+          icon: selectedIcon,
+          memberId,
+          location,
+          visibility: visibility as any,
+          timeZone,
+        });
+      }
 
       onOpenChange(false);
     } catch (error) {
@@ -218,7 +300,9 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
               <View style={[styles.headerIconCircle, { backgroundColor: colors.primary + "1A" }]}>
                 <AppIcon name="calendar" size={20} color={colors.primary} />
               </View>
-              <Text style={[styles.headerTitle, { color: colors.foreground }]}>New Event</Text>
+              <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+                {isEditing ? "Edit Event" : "New Event"}
+              </Text>
             </View>
             <Pressable onPress={() => onOpenChange(false)} style={[styles.closeButton, { backgroundColor: colors.muted }]}>
               <AppIcon name="x" size={20} color={colors.mutedForeground} />
@@ -226,6 +310,16 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
           </View>
 
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+            {/* Ownership Notice */}
+            {!isOwner && eventToEdit && (
+              <View style={[styles.ownerNotice, { backgroundColor: colors.primary + "1A" }]}>
+                <AppIcon name="info" size={16} color={colors.primary} />
+                <Text style={[styles.ownerNoticeText, { color: colors.primary }]}>
+                  Only {members.find(m => m.id === eventToEdit.memberId)?.name || "the owner"} can update this event
+                </Text>
+              </View>
+            )}
+
             {/* Event Name */}
             <TextInput
               style={[
@@ -240,7 +334,8 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
               placeholderTextColor={colors.mutedForeground}
               value={name}
               onChangeText={setName}
-              autoFocus={true}
+              autoFocus={!isEditing}
+              editable={isOwner}
             />
 
             {/* Description */}
@@ -256,6 +351,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                 multiline
                 value={description}
                 onChangeText={setDescription}
+                editable={isOwner}
               />
             </View>
 
@@ -269,11 +365,12 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                 {eventIcons.map((icon) => (
                   <Pressable
                     key={icon}
-                    onPress={() => setSelectedIcon(icon)}
+                    onPress={() => isOwner && setSelectedIcon(icon)}
                     style={[
                       styles.iconButton,
                       { backgroundColor: colors.card },
-                      selectedIcon === icon && { backgroundColor: colors.primary, transform: [{ scale: 1.1 }] }
+                      selectedIcon === icon && { backgroundColor: colors.primary, transform: [{ scale: 1.1 }] },
+                      !isOwner && { opacity: 0.6 }
                     ]}
                   >
                     <Text style={styles.iconText}>{icon}</Text>
@@ -294,6 +391,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                 value={allDay}
                 onValueChange={setAllDay}
                 trackColor={{ false: colors.muted, true: colors.primary }}
+                disabled={!isOwner}
               />
             </View>
 
@@ -307,6 +405,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                     value={startDate}
                     onChange={setStartDate}
                     label="Start Date"
+                    disabled={!isOwner}
                   />
                 </View>
                 {!allDay && (
@@ -316,6 +415,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                       value={startTime}
                       onChange={setStartTime}
                       label="Start Time"
+                      disabled={!isOwner}
                     />
                   </View>
                 )}
@@ -328,6 +428,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                     value={endDate || new Date()}
                     onChange={setEndDate}
                     label="End Date (Optional)"
+                    disabled={!isOwner}
                   />
                 </View>
                 {!allDay && (
@@ -337,6 +438,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                       value={endTime || new Date()}
                       onChange={setEndTime}
                       label="End Time"
+                      disabled={!isOwner}
                     />
                   </View>
                 )}
@@ -347,7 +449,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             <View style={styles.fieldGroup}>
               <Pressable
                 style={[styles.expandableHeader, { backgroundColor: colors.card }]}
-                onPress={() => setShowRepeatOptions(!showRepeatOptions)}
+                onPress={() => isOwner && setShowRepeatOptions(!showRepeatOptions)}
               >
                 <View style={styles.toggleLabelContainer}>
                   <View style={[styles.iconBox, { backgroundColor: "#3b82f61A" }]}>
@@ -372,11 +474,12 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                     {repeatOptions.map((option) => (
                       <Pressable
                         key={option.value}
-                        onPress={() => setRepeatType(option.value)}
+                        onPress={() => isOwner && setRepeatType(option.value)}
                         style={[
                           styles.chip,
                           { backgroundColor: colors.background },
-                          repeatType === option.value && { backgroundColor: colors.primary }
+                          repeatType === option.value && { backgroundColor: colors.primary },
+                          !isOwner && { opacity: 0.6 }
                         ]}
                       >
                         <Text style={[
@@ -397,6 +500,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                         onChange={setRepeatEndDate}
                         label="End repeat (Optional)"
                         placeholder="Never"
+                        disabled={!isOwner}
                       />
                     </View>
                   )}
@@ -408,7 +512,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             <View style={styles.fieldGroup}>
               <Pressable
                 style={[styles.expandableHeader, { backgroundColor: colors.card }]}
-                onPress={() => setShowReminderOptions(!showReminderOptions)}
+                onPress={() => isOwner && setShowReminderOptions(!showReminderOptions)}
               >
                 <View style={styles.toggleLabelContainer}>
                   <View style={[styles.iconBox, { backgroundColor: reminder ? "#22c55e1A" : colors.muted }]}>
@@ -424,6 +528,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                     value={reminder}
                     onValueChange={setReminder}
                     trackColor={{ false: colors.muted, true: colors.primary }}
+                    disabled={!isOwner}
                   />
                   <AppIcon
                     name="chevronDown"
@@ -440,11 +545,12 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                     {reminderOptions.map((option) => (
                       <Pressable
                         key={option.value}
-                        onPress={() => setReminderTime(option.value)}
+                        onPress={() => isOwner && setReminderTime(option.value)}
                         style={[
                           styles.chip,
                           { backgroundColor: colors.background },
-                          reminderTime === option.value && { backgroundColor: colors.primary }
+                          reminderTime === option.value && { backgroundColor: colors.primary },
+                          !isOwner && { opacity: 0.6 }
                         ]}
                       >
                         <Text style={[
@@ -501,6 +607,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                 onChangeText={setLocation}
                 placeholder="Add location..."
                 placeholderTextColor={colors.mutedForeground}
+                editable={isOwner}
               />
             </View>
 
@@ -516,11 +623,12 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                   return (
                     <Pressable
                       key={member.id}
-                      onPress={() => setMemberId(member.id)}
+                      onPress={() => isOwner && setMemberId(member.id)}
                       style={[
                         styles.memberChip,
                         { backgroundColor: colors.card },
-                        memberId === member.id && { backgroundColor: profileColor }
+                        memberId === member.id && { backgroundColor: profileColor },
+                        !isOwner && { opacity: 0.6 }
                       ]}
                     >
                       <Text style={styles.memberEmoji}>{member.symbol}</Text>
@@ -546,7 +654,88 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                 multiline
                 value={notes}
                 onChangeText={setNotes}
+                editable={isOwner}
               />
+            </View>
+
+            {/* Visibility */}
+            <View style={styles.fieldGroup}>
+              <Pressable
+                style={[styles.expandableHeader, { backgroundColor: colors.card }]}
+                onPress={() => isOwner && setShowVisibilityOptions(!showVisibilityOptions)}
+              >
+                <View style={styles.toggleLabelContainer}>
+                  <View style={[styles.iconBox, { backgroundColor: "#8b5cf61A" }]}>
+                    <AppIcon name="lock" size={18} color="#8b5cf6" />
+                  </View>
+                  <View>
+                    <Text style={[styles.toggleLabel, { color: colors.foreground }]}>Visibility</Text>
+                    <Text style={[styles.valueLabel, { color: colors.mutedForeground }]}>
+                      {visibilityOptions.find(o => o.value === visibility)?.label}
+                    </Text>
+                  </View>
+                </View>
+                <AppIcon
+                  name="chevronDown"
+                  size={20}
+                  color={colors.mutedForeground}
+                  style={{ transform: [{ rotate: showVisibilityOptions ? '180deg' : '0deg' }] }}
+                />
+              </Pressable>
+              {showVisibilityOptions && (
+                <View style={[styles.expandableContent, { backgroundColor: colors.card }]}>
+                  {visibilityOptions.map((option) => (
+                    <Pressable
+                      key={option.value}
+                      onPress={() => isOwner && setVisibility(option.value)}
+                      style={[styles.optionRow, visibility === option.value && { backgroundColor: colors.primary + "1A" }]}
+                    >
+                      <Text style={[styles.optionText, { color: colors.foreground }]}>{option.label}</Text>
+                      {visibility === option.value && <AppIcon name="check" size={16} color={colors.primary} />}
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            {/* Time Zone */}
+            <View style={styles.fieldGroup}>
+              <Pressable
+                style={[styles.expandableHeader, { backgroundColor: colors.card }]}
+                onPress={() => isOwner && setShowTimeZoneOptions(!showTimeZoneOptions)}
+              >
+                <View style={styles.toggleLabelContainer}>
+                  <View style={[styles.iconBox, { backgroundColor: "#06b6d41A" }]}>
+                    <AppIcon name="globe" size={18} color="#06b6d4" />
+                  </View>
+                  <View>
+                    <Text style={[styles.toggleLabel, { color: colors.foreground }]}>Time Zone</Text>
+                    <Text style={[styles.valueLabel, { color: colors.mutedForeground }]}>
+                      {timeZoneOptions.find(o => o.value === timeZone)?.label}
+                    </Text>
+                  </View>
+                </View>
+                <AppIcon
+                  name="chevronDown"
+                  size={20}
+                  color={colors.mutedForeground}
+                  style={{ transform: [{ rotate: showTimeZoneOptions ? '180deg' : '0deg' }] }}
+                />
+              </Pressable>
+              {showTimeZoneOptions && (
+                <View style={[styles.expandableContent, { backgroundColor: colors.card }]}>
+                  {timeZoneOptions.map((option) => (
+                    <Pressable
+                      key={option.value}
+                      onPress={() => isOwner && setTimeZone(option.value)}
+                      style={[styles.optionRow, timeZone === option.value && { backgroundColor: colors.primary + "1A" }]}
+                    >
+                      <Text style={[styles.optionText, { color: colors.foreground }]}>{option.label}</Text>
+                      {timeZone === option.value && <AppIcon name="check" size={16} color={colors.primary} />}
+                    </Pressable>
+                  ))}
+                </View>
+              )}
             </View>
 
             <View style={{ height: 40 }} />
@@ -560,12 +749,40 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             >
               <Text style={[styles.cancelButtonText, { color: colors.foreground }]}>Cancel</Text>
             </Pressable>
-            <Pressable
-              style={[styles.saveButton, { backgroundColor: colors.primary }]}
-              onPress={handleSave}
-            >
-              <Text style={[styles.saveButtonText, { color: colors.primaryForeground }]}>Add Event</Text>
-            </Pressable>
+            {isEditing && isOwner && (
+              <Pressable
+                style={[styles.deleteButton, { backgroundColor: colors.muted }]}
+                onPress={() => {
+                  Alert.alert(
+                    "Delete Event",
+                    "Are you sure you want to delete this event?",
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      {
+                        text: "Delete",
+                        style: "destructive",
+                        onPress: () => {
+                          deleteEvent(eventToEdit.id);
+                          onOpenChange(false);
+                        }
+                      }
+                    ]
+                  );
+                }}
+              >
+                <AppIcon name="trash" size={20} color={colors.danger} />
+              </Pressable>
+            )}
+            {isOwner && (
+              <Pressable
+                style={[styles.saveButton, { backgroundColor: colors.primary }]}
+                onPress={handleSave}
+              >
+                <Text style={[styles.saveButtonText, { color: colors.primaryForeground }]}>
+                  {isEditing ? "Save Changes" : "Add Event"}
+                </Text>
+              </Pressable>
+            )}
           </View>
         </Pressable>
       </Pressable>
@@ -781,5 +998,37 @@ const styles = StyleSheet.create({
   saveButtonText: {
     fontSize: 16,
     fontWeight: "600",
+  },
+  deleteButton: {
+    padding: 16,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  destructive: {
+    color: "#ef4444",
+  },
+  optionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 12,
+    borderRadius: 8,
+  },
+  optionText: {
+    fontSize: 14,
+  },
+  ownerNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+  ownerNoticeText: {
+    fontSize: 13,
+    fontWeight: "500",
+    flex: 1,
   },
 });

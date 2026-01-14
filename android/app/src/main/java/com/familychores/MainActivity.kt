@@ -1,4 +1,4 @@
-package com.react_native
+package com.familychores
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

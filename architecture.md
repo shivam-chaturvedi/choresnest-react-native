@@ -1,4 +1,4 @@
-## React Native Architecture Plan (mirroring React JS)
+## Family Chores React Native Architecture Plan
 
 ### Folder Layout
 - `src/screens/`: one screen per React JS route (Splash, Onboarding, Auth, Forgot Password, Home, Calendar, Tasks, Lists, Vault, More, Recipes, Recipe Detail, Meal Plan, Nutrition, Documents, Expenses, Family, Notifications, Privacy, Theme, Export, Help). Each file mirrors the web screen (`reactjs/src/pages/...`).
@@ -37,4 +37,4 @@
 - For data fetching, while React Query is used on web, RN can either reuse `@tanstack/react-query` (if installed) or just fetch via contexts; plan to keep the same query client + provider for parity.
 
 ### Output Location
-- Save this plan in `react_native/architecture.md`. Subsequent prompts will use these paths when porting files.
+- Save this plan in `architecture.md`. Subsequent prompts will use these paths when porting files.
