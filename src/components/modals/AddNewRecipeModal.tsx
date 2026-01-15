@@ -10,20 +10,27 @@ import {
     Pressable,
 } from "react-native";
 import { AppIcon } from "../ui/AppIcon";
-import { useThemeColors } from "../../contexts/ThemeContext";
+import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
+import { useRecipes } from "../../contexts/RecipeContext";
+import { useToast } from "../ui/Toast";
+
 
 interface AddNewRecipeModalProps {
     open: boolean;
     onClose: () => void;
 }
 
-type TabType = "Text" | "Image" | "Link" | "Audio";
+type TabType = "Text" | "Link";
 
 export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
     open,
     onClose,
 }) => {
     const colors = useThemeColors();
+    const radius = useThemeRadius();
+    const { addRecipe } = useRecipes();
+    const { showToast } = useToast();
+
     const [activeTab, setActiveTab] = useState<TabType>("Text");
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
@@ -32,8 +39,15 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
     const [servings, setServings] = useState("");
     const [ingredients, setIngredients] = useState<string[]>(["", ""]);
     const [instructions, setInstructions] = useState<string[]>([""]);
+    const [tags, setTags] = useState<string[]>([]);
     const [tagInput, setTagInput] = useState("");
     const [linkUrl, setLinkUrl] = useState("");
+
+    // Nutrition State
+    const [kcal, setKcal] = useState("");
+    const [protein, setProtein] = useState("");
+    const [carbs, setCarbs] = useState("");
+    const [fats, setFats] = useState("");
 
     const handleAddIngredient = () => setIngredients([...ingredients, ""]);
     const handleRemoveIngredient = (index: number) => {
@@ -61,6 +75,17 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
         setInstructions(newInstructions);
     };
 
+    const handleAddTag = () => {
+        if (tagInput.trim()) {
+            setTags([...tags, tagInput.trim()]);
+            setTagInput("");
+        }
+    };
+
+    const handleRemoveTag = (tagToRemove: string) => {
+        setTags(tags.filter(tag => tag !== tagToRemove));
+    };
+
     const handleClear = () => {
         setName("");
         setDescription("");
@@ -69,19 +94,81 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
         setServings("");
         setIngredients(["", ""]);
         setInstructions([""]);
+        setTags([]);
+        setTagInput("");
         setLinkUrl("");
+        setKcal("");
+        setProtein("");
+        setCarbs("");
+        setFats("");
+    };
+
+    const handleSave = () => {
+        try {
+            // Validation
+            if (!name.trim()) {
+                showToast({ title: "Error", description: "Recipe name is required", type: "warning" });
+                return;
+            }
+
+            // Convert ingredients to object structure expected by Recipe interface
+            const formattedIngredients = ingredients
+                .filter(i => i.trim())
+                .map(i => ({ name: i, quantity: 1, unit: 'unit' }));
+
+            // Validate at least one ingredient
+            if (formattedIngredients.length === 0) {
+                showToast({ title: "Error", description: "Please add at least one ingredient", type: "warning" });
+                return;
+            }
+
+            // Safely parse numeric values
+            const parsedPrepTime = parseInt(prepTime || '0', 10);
+            const parsedCookTime = parseInt(cookTime || '0', 10);
+            const parsedServings = parseInt(servings || '4', 10);
+
+            // Validate numeric values
+            if (isNaN(parsedPrepTime) || isNaN(parsedCookTime) || isNaN(parsedServings)) {
+                showToast({ title: "Error", description: "Please enter valid numbers for time and servings", type: "warning" });
+                return;
+            }
+
+            addRecipe({
+                name: name.trim(),
+                image: '🍲',
+                time: `${parsedPrepTime + parsedCookTime} min`,
+                servings: parsedServings,
+                tags,
+                ingredients: formattedIngredients,
+                nutrition: {
+                    kcal: kcal.trim() || "0",
+                    protein: protein.trim() || "0g",
+                    carbs: carbs.trim() || "0g",
+                    fats: fats.trim() || "0g"
+                }
+            });
+
+            showToast({ title: "Success", description: "Recipe added successfully", type: "success" });
+            handleClear();
+            onClose();
+        } catch (error) {
+            console.error("Error saving recipe:", error);
+            showToast({
+                title: "Error",
+                description: "Failed to save recipe. Please try again.",
+                type: "warning"
+            });
+        }
     };
 
     // --- RENDER HELPERS ---
 
     const renderTabs = () => (
-        <View style={[styles.tabContainer, { backgroundColor: colors.muted }]}>
-            {(["Text", "Image", "Link", "Audio"] as TabType[]).map((tab) => {
+        <View style={[styles.tabContainer, { backgroundColor: colors.muted, borderRadius: radius.lg }]}>
+            {(["Text", "Link"] as TabType[]).map((tab) => {
                 const icons: Record<TabType, any> = {
                     Text: "file",
-                    Image: "image",
                     Link: "link",
-                    Audio: "mic"
                 };
                 const isActive = activeTab === tab;
                 return (
@@ -89,6 +176,7 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
                         key={tab}
                         style={[
                             styles.tabItem,
+                            { borderRadius: radius.md },
                             isActive && {
                                 backgroundColor: colors.card,
                                 shadowColor: colors.shadow,
@@ -115,11 +203,13 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
         </View>
     );
 
+    // ... (Text Tab updates needed separately if missed, but focusing on Audio/Image structure now)
+
     const renderTextTab = () => (
         <View style={styles.formContainer}>
             <Text style={[styles.label, { color: colors.foreground }]}>Recipe Name *</Text>
             <TextInput
-                style={[styles.input, { backgroundColor: colors.muted, borderColor: colors.border, color: colors.foreground }]}
+                style={[styles.input, { backgroundColor: colors.muted, borderColor: colors.border, color: colors.foreground, borderRadius: radius.md }]}
                 placeholder="e.g., Grandma's Apple Pie"
                 placeholderTextColor={colors.mutedForeground}
                 value={name}
@@ -128,7 +218,7 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
 
             <Text style={[styles.label, { marginTop: 16, color: colors.foreground }]}>Description</Text>
             <TextInput
-                style={[styles.input, styles.textArea, { backgroundColor: colors.muted, borderColor: colors.border, color: colors.foreground }]}
+                style={[styles.input, styles.textArea, { backgroundColor: colors.muted, borderColor: colors.border, color: colors.foreground, borderRadius: radius.md }]}
                 placeholder="A brief description of your recipe..."
                 placeholderTextColor={colors.mutedForeground}
                 multiline
@@ -145,11 +235,12 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
                         <AppIcon name="clock" size={12} color={colors.mutedForeground} /> Prep
                     </Text>
                     <TextInput
-                        style={[styles.miniInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
+                        style={[styles.miniInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground, borderRadius: radius.md }]}
                         placeholder="15 min"
                         placeholderTextColor={colors.mutedForeground}
                         value={prepTime}
                         onChangeText={setPrepTime}
+                        keyboardType="numeric"
                     />
                 </View>
                 <View style={styles.metaCol}>
@@ -157,11 +248,12 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
                         <AppIcon name="clock" size={12} color={colors.mutedForeground} /> Cook
                     </Text>
                     <TextInput
-                        style={[styles.miniInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
+                        style={[styles.miniInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground, borderRadius: radius.md }]}
                         placeholder="30 min"
                         placeholderTextColor={colors.mutedForeground}
                         value={cookTime}
                         onChangeText={setCookTime}
+                        keyboardType="numeric"
                     />
                 </View>
                 <View style={styles.metaCol}>
@@ -169,11 +261,58 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
                         <AppIcon name="users" size={12} color={colors.mutedForeground} /> Serves
                     </Text>
                     <TextInput
-                        style={[styles.miniInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
+                        style={[styles.miniInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground, borderRadius: radius.md }]}
                         placeholder="4"
                         placeholderTextColor={colors.mutedForeground}
                         value={servings}
                         onChangeText={setServings}
+                        keyboardType="numeric"
+                    />
+                </View>
+            </View>
+
+            {/* Nutrition Row */}
+            <Text style={[styles.label, { marginTop: 16, color: colors.foreground }]}>Nutrition (per serving)</Text>
+            <View style={styles.metaRow}>
+                <View style={styles.metaCol}>
+                    <Text style={[styles.miniLabel, { color: colors.mutedForeground }]}>Kcal</Text>
+                    <TextInput
+                        style={[styles.miniInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground, borderRadius: radius.md }]}
+                        placeholder="350"
+                        placeholderTextColor={colors.mutedForeground}
+                        value={kcal}
+                        onChangeText={setKcal}
+                        keyboardType="numeric"
+                    />
+                </View>
+                <View style={styles.metaCol}>
+                    <Text style={[styles.miniLabel, { color: colors.mutedForeground }]}>Protein</Text>
+                    <TextInput
+                        style={[styles.miniInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground, borderRadius: radius.md }]}
+                        placeholder="20g"
+                        placeholderTextColor={colors.mutedForeground}
+                        value={protein}
+                        onChangeText={setProtein}
+                    />
+                </View>
+                <View style={styles.metaCol}>
+                    <Text style={[styles.miniLabel, { color: colors.mutedForeground }]}>Carbs</Text>
+                    <TextInput
+                        style={[styles.miniInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground, borderRadius: radius.md }]}
+                        placeholder="45g"
+                        placeholderTextColor={colors.mutedForeground}
+                        value={carbs}
+                        onChangeText={setCarbs}
+                    />
+                </View>
+                <View style={styles.metaCol}>
+                    <Text style={[styles.miniLabel, { color: colors.mutedForeground }]}>Fats</Text>
+                    <TextInput
+                        style={[styles.miniInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground, borderRadius: radius.md }]}
+                        placeholder="12g"
+                        placeholderTextColor={colors.mutedForeground}
+                        value={fats}
+                        onChangeText={setFats}
                     />
                 </View>
             </View>
@@ -184,7 +323,7 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
                 {ingredients.map((ing, i) => (
                     <View key={i} style={styles.dynamicRow}>
                         <TextInput
-                            style={[styles.input, { flex: 1, marginBottom: 0, backgroundColor: colors.muted, borderColor: colors.border, color: colors.foreground }]}
+                            style={[styles.input, { flex: 1, marginBottom: 0, backgroundColor: colors.muted, borderColor: colors.border, color: colors.foreground, borderRadius: radius.md }]}
                             placeholder={`Ingredient ${i + 1}`}
                             placeholderTextColor={colors.mutedForeground}
                             value={ing}
@@ -196,7 +335,7 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
                     </View>
                 ))}
                 <TouchableOpacity
-                    style={[styles.addButton, { backgroundColor: colors.muted, borderColor: colors.border }]}
+                    style={[styles.addButton, { backgroundColor: colors.muted, borderColor: colors.border, borderRadius: radius.md }]}
                     onPress={handleAddIngredient}
                 >
                     <AppIcon name="plus" size={16} color={colors.foreground} style={{ marginRight: 6 }} />
@@ -209,11 +348,11 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
             <View style={styles.dynamicList}>
                 {instructions.map((inst, i) => (
                     <View key={i} style={styles.dynamicRow}>
-                        <View style={[styles.stepBadge, { backgroundColor: colors.border }]}>
+                        <View style={[styles.stepBadge, { backgroundColor: colors.border, borderRadius: radius.xs }]}>
                             <Text style={[styles.stepText, { color: colors.foreground }]}>{i + 1}</Text>
                         </View>
                         <TextInput
-                            style={[styles.input, { flex: 1, marginBottom: 0, backgroundColor: colors.muted, borderColor: colors.border, color: colors.foreground }]}
+                            style={[styles.input, { flex: 1, marginBottom: 0, backgroundColor: colors.muted, borderColor: colors.border, color: colors.foreground, borderRadius: radius.md }]}
                             placeholder={`Step ${i + 1}`}
                             placeholderTextColor={colors.mutedForeground}
                             value={inst}
@@ -225,7 +364,7 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
                     </View>
                 ))}
                 <TouchableOpacity
-                    style={[styles.addButton, { backgroundColor: colors.muted, borderColor: colors.border }]}
+                    style={[styles.addButton, { backgroundColor: colors.muted, borderColor: colors.border, borderRadius: radius.md }]}
                     onPress={handleAddInstruction}
                 >
                     <AppIcon name="plus" size={16} color={colors.foreground} style={{ marginRight: 6 }} />
@@ -235,44 +374,25 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
 
             {/* Tags */}
             <Text style={[styles.label, { marginTop: 20, color: colors.foreground }]}>Tags</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                {tags.map(tag => (
+                    <TouchableOpacity key={tag} onPress={() => handleRemoveTag(tag)} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary + '20', paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.full }}>
+                        <Text style={{ color: colors.primary, fontWeight: '600', marginRight: 4 }}>{tag}</Text>
+                        <AppIcon name="x" size={14} color={colors.primary} />
+                    </TouchableOpacity>
+                ))}
+            </View>
             <View style={{ flexDirection: 'row', gap: 12 }}>
                 <TextInput
-                    style={[styles.input, { flex: 1, backgroundColor: colors.muted, borderColor: colors.border, color: colors.foreground }]}
+                    style={[styles.input, { flex: 1, backgroundColor: colors.muted, borderColor: colors.border, color: colors.foreground, borderRadius: radius.md }]}
                     placeholder="Add tag (e.g., Vegetarian)"
                     placeholderTextColor={colors.mutedForeground}
                     value={tagInput}
                     onChangeText={setTagInput}
                 />
-                <TouchableOpacity style={[styles.tagAddBtn, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+                <TouchableOpacity style={[styles.tagAddBtn, { backgroundColor: colors.muted, borderColor: colors.border, borderRadius: radius.md }]} onPress={handleAddTag}>
                     <AppIcon name="plus" size={20} color={colors.foreground} />
                 </TouchableOpacity>
-            </View>
-        </View>
-    );
-
-    const renderImageTab = () => (
-        <View style={styles.formContainer}>
-            <Text style={[styles.label, { color: colors.foreground }]}>Recipe Name *</Text>
-            <TextInput
-                style={[styles.input, { backgroundColor: colors.muted, borderColor: colors.border, color: colors.foreground }]}
-                placeholder="e.g., Grandma's Apple Pie"
-                placeholderTextColor={colors.mutedForeground}
-                value={name}
-                onChangeText={setName}
-            />
-            <Text style={[styles.label, { marginTop: 16, color: colors.foreground }]}>Upload Recipe Image</Text>
-
-            <View style={[styles.uploadArea, { borderColor: colors.border, backgroundColor: colors.background }]}>
-                <View style={[styles.uploadIconCircle, { backgroundColor: colors.primary + '20' }]}>
-                    <AppIcon name="download" size={24} color={colors.primary} />
-                </View>
-                <Text style={[styles.uploadTextMain, { color: colors.foreground }]}>Click to upload</Text>
-                <Text style={[styles.uploadTextSub, { color: colors.mutedForeground }]}>JPG, PNG, GIF up to 10MB</Text>
-            </View>
-
-            <View style={[styles.tipBox, { backgroundColor: colors.muted }]}>
-                <Text style={{ fontSize: 20, marginRight: 12 }}>📸</Text>
-                <Text style={[styles.tipText, { color: colors.mutedForeground }]}>Upload a photo of a handwritten recipe, cookbook page, or food magazine. We'll help you extract the recipe details!</Text>
             </View>
         </View>
     );
@@ -281,7 +401,7 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
         <View style={styles.formContainer}>
             <Text style={[styles.label, { color: colors.foreground }]}>Recipe Name *</Text>
             <TextInput
-                style={[styles.input, { backgroundColor: colors.muted, borderColor: colors.border, color: colors.foreground }]}
+                style={[styles.input, { backgroundColor: colors.muted, borderColor: colors.border, color: colors.foreground, borderRadius: radius.md }]}
                 placeholder="e.g., Grandma's Apple Pie"
                 placeholderTextColor={colors.mutedForeground}
                 value={name}
@@ -289,7 +409,7 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
             />
             <Text style={[styles.label, { marginTop: 16, color: colors.foreground }]}>Paste Recipe URL</Text>
             <TextInput
-                style={[styles.input, { backgroundColor: colors.muted, borderColor: colors.border, color: colors.foreground }]}
+                style={[styles.input, { backgroundColor: colors.muted, borderColor: colors.border, color: colors.foreground, borderRadius: radius.md }]}
                 placeholder="https://example.com/recipe or YouTube link"
                 placeholderTextColor={colors.mutedForeground}
                 value={linkUrl}
@@ -297,12 +417,12 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
             />
 
             <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
-                <View style={[styles.importCard, { backgroundColor: colors.muted }]}>
+                <View style={[styles.importCard, { backgroundColor: colors.muted, borderRadius: radius.lg }]}>
                     <AppIcon name="globe" size={32} color={colors.primary} style={{ marginBottom: 8 }} />
                     <Text style={[styles.importCardTitle, { color: colors.foreground }]}>Recipe Articles</Text>
                     <Text style={[styles.importCardDesc, { color: colors.mutedForeground }]}>Import from any website</Text>
                 </View>
-                <View style={[styles.importCard, { backgroundColor: colors.muted }]}>
+                <View style={[styles.importCard, { backgroundColor: colors.muted, borderRadius: radius.lg }]}>
                     <AppIcon name="youtube" size={32} color={colors.danger} style={{ marginBottom: 8 }} />
                     <Text style={[styles.importCardTitle, { color: colors.foreground }]}>YouTube Videos</Text>
                     <Text style={[styles.importCardDesc, { color: colors.mutedForeground }]}>Save cooking tutorials</Text>
@@ -311,38 +431,11 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
         </View>
     );
 
-    const renderAudioTab = () => (
-        <View style={styles.formContainer}>
-            <Text style={[styles.label, { color: colors.foreground }]}>Recipe Name *</Text>
-            <TextInput
-                style={[styles.input, { backgroundColor: colors.muted, borderColor: colors.border, color: colors.foreground }]}
-                placeholder="e.g., Grandma's Apple Pie"
-                placeholderTextColor={colors.mutedForeground}
-                value={name}
-                onChangeText={setName}
-            />
-            <Text style={[styles.label, { marginTop: 16, color: colors.foreground }]}>Record Your Recipe</Text>
-
-            <View style={[styles.audioArea, { backgroundColor: colors.muted }]}>
-                <Text style={[styles.timerText, { color: colors.mutedForeground }]}>00 : 00</Text>
-                <TouchableOpacity style={[styles.recordButton, { backgroundColor: colors.danger, shadowColor: colors.danger }]}>
-                    <AppIcon name="mic" size={24} color="#fff" />
-                </TouchableOpacity>
-                <Text style={[styles.recordHint, { color: colors.mutedForeground }]}>Tap the mic to start recording your recipe</Text>
-            </View>
-
-            <View style={[styles.tipBox, { backgroundColor: colors.muted }]}>
-                <Text style={{ fontSize: 20, marginRight: 12 }}>🎙️</Text>
-                <Text style={[styles.tipText, { color: colors.mutedForeground }]}>Speak your recipe aloud - ingredients, steps, and tips! Perfect for capturing family recipes passed down verbally.</Text>
-            </View>
-        </View>
-    );
-
     return (
         <Modal visible={open} animationType="slide" transparent>
             <View style={styles.modalOverlay}>
                 <Pressable onPress={onClose} style={StyleSheet.absoluteFill} />
-                <View style={[styles.modalContainer, { backgroundColor: colors.card }]}>
+                <View style={[styles.modalContainer, { backgroundColor: colors.card, borderRadius: radius.xl }]}>
                     {/* Header */}
                     <View style={styles.header}>
                         <Text style={[styles.title, { color: colors.foreground }]}>Add New Recipe</Text>
@@ -357,22 +450,20 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
                     {/* Content */}
                     <ScrollView contentContainerStyle={styles.contentScroll}>
                         {activeTab === "Text" && renderTextTab()}
-                        {activeTab === "Image" && renderImageTab()}
                         {activeTab === "Link" && renderLinkTab()}
-                        {activeTab === "Audio" && renderAudioTab()}
                     </ScrollView>
 
                     {/* Footer */}
                     <View style={[styles.footer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
                         <TouchableOpacity
-                            style={[styles.btnSecondary, { backgroundColor: colors.muted, borderColor: colors.border }]}
+                            style={[styles.btnSecondary, { backgroundColor: colors.muted, borderColor: colors.border, borderRadius: radius.lg }]}
                             onPress={handleClear}
                         >
                             <Text style={[styles.btnSecondaryText, { color: colors.mutedForeground }]}>Clear</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                            style={[styles.btnPrimary, { backgroundColor: colors.primary }]}
-                            onPress={onClose}
+                            style={[styles.btnPrimary, { backgroundColor: colors.primary, borderRadius: radius.lg }]}
+                            onPress={handleSave}
                         >
                             <Text style={[styles.btnPrimaryText, { color: colors.primaryForeground }]}>Save Recipe</Text>
                         </TouchableOpacity>
@@ -622,5 +713,15 @@ const styles = StyleSheet.create({
     },
     recordHint: {
         fontSize: 14,
+    },
+    controlBtn: {
+        width: 60,
+        height: 60,
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+        elevation: 3,
     },
 });

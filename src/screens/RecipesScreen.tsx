@@ -16,10 +16,12 @@ import { useSidebar } from "../contexts/SidebarContext";
 import { useFamily } from "../contexts/FamilyContext";
 import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { AppIcon } from "../components/ui/AppIcon";
-import { recipes, collections, Recipe } from "../data/recipes";
+import { useRecipes } from "../contexts/RecipeContext";
+import { Recipe } from "../data/recipes";
 import { RecipeDetailModal } from "../components/modals/RecipeDetailModal";
 import { AddNewRecipeModal } from "../components/modals/AddNewRecipeModal";
 import { CreateCollectionModal } from "../components/modals/CreateCollectionModal";
+import { CollectionDetailModal } from "../components/modals/CollectionDetailModal";
 import { useToast } from "../components/ui/Toast";
 
 const preferences = [
@@ -39,6 +41,7 @@ export const RecipesScreen: React.FC = () => {
   const { addGroceryItem } = useFamily();
   const colors = useThemeColors();
   const radius = useThemeRadius();
+  const { recipes, collections, toggleBookmark } = useRecipes();
 
   const [showSearch, setShowSearch] = useState(false);
   const [activeTab, setActiveTab] = useState("For You");
@@ -49,6 +52,15 @@ export const RecipesScreen: React.FC = () => {
   const [showRecipeDetail, setShowRecipeDetail] = useState(false);
   const [showAddRecipeModal, setShowAddRecipeModal] = useState(false);
   const [showCreateCollectionModal, setShowCreateCollectionModal] = useState(false);
+  const [selectedCollection, setSelectedCollection] = useState<any | null>(null);
+
+  const [activePreferences, setActivePreferences] = useState<string[]>([]);
+
+  const togglePreference = (pref: string) => {
+    setActivePreferences(prev =>
+      prev.includes(pref) ? prev.filter(p => p !== pref) : [...prev, pref]
+    );
+  };
 
   const filteredRecipes = useMemo(() => {
     const lowerQuery = query.toLowerCase();
@@ -57,16 +69,45 @@ export const RecipesScreen: React.FC = () => {
         recipe.name.toLowerCase().includes(lowerQuery) ||
         recipe.tags.some((tag) => tag.toLowerCase().includes(lowerQuery))
     );
-  }, [query]);
+  }, [query, recipes]);
 
-  // For "Quick Meals" (under 20 mins)
-  const quickMeals = recipes.filter((r) => {
-    const timeVal = parseInt(r.time.split(" ")[0]);
-    return timeVal <= 20;
-  });
+  // For "Quick Meals" (under 25 mins, sorted)
+  const quickMeals = useMemo(() => {
+    return recipes
+      .filter((r) => {
+        const timeVal = parseInt(r.time.split(" ")[0]);
+        return timeVal <= 25;
+      })
+      .sort((a, b) => {
+        const timeA = parseInt(a.time.split(" ")[0]);
+        const timeB = parseInt(b.time.split(" ")[0]);
+        return timeA - timeB;
+      });
+  }, [recipes]);
 
-  // Recommended (just showing all for now, or could filter)
-  const recommended = recipes.slice(0, 4);
+  // Favorites - Show ALL saved
+  const favorites = recipes.filter(r => r.saved);
+
+  // Recommended - Based on active preferences or show random
+  const recommended = useMemo(() => {
+    if (activePreferences.length === 0) {
+      // If no preferences, show generic mix (excluding saved to avoid dupe if we want, or just random)
+      // For now, let's just show top 4
+      return recipes.slice(0, 4);
+    }
+    return recipes.filter(r =>
+      r.tags.some(tag => activePreferences.includes(tag)) ||
+      activePreferences.some(pref => {
+        if (pref === "Quick Meals") return parseInt(r.time) <= 25;
+        if (pref === "Vegetarian") return r.tags.includes("Vegetarian");
+        if (pref === "High Protein") return r.tags.includes("High Protein");
+        if (pref === "Low Sugar") return r.tags.includes("Low Sugar");
+        if (pref === "Kids Friendly") return r.tags.includes("Kids Friendly");
+        if (pref === "Healthy") return r.tags.includes("Healthy");
+        return false;
+      })
+    );
+  }, [recipes, activePreferences]);
 
   // Handle Recipe Click
   const handleRecipePress = (recipe: Recipe) => {
@@ -95,6 +136,21 @@ export const RecipesScreen: React.FC = () => {
     }
   };
 
+  const handleAddCollectionToGrocery = (collectionId: number) => {
+    // Logic to add all recipes in collection to grocery list
+    // For now, since collections don't have explicit recipe mapping in the UI, we'll skipping this or mocking it.
+    // But the context update allows mapping.
+    // If collection.recipeIds exists:
+    const collection = collections.find(c => c.id === collectionId);
+    if (collection && collection.recipeIds) {
+      const recipesInCollection = recipes.filter(r => collection.recipeIds?.includes(r.id));
+      recipesInCollection.forEach(r => handleAddToGroceryList(r));
+      showToast({ title: "Success", description: `Added recipes from ${collection.name} to list`, type: "success" });
+    } else {
+      showToast({ title: "Info", description: "No recipes in this collection yet", type: "default" });
+    }
+  };
+
   const renderForYou = () => (
     <>
       {/* Preferences */}
@@ -104,24 +160,37 @@ export const RecipesScreen: React.FC = () => {
           <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Your Preferences</Text>
         </View>
         <View style={styles.tagGroup}>
-          {preferences.map((tag) => (
-            <Pressable key={tag} style={[styles.prefTag, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
-              <View style={styles.prefIcon}>
-                <AppIcon
-                  name={
-                    tag === "Vegetarian" ? "leaf" :
-                      tag.includes("Protein") ? "biceps" :
-                        tag.includes("Sugar") ? "droplet" :
-                          tag.includes("Quick") ? "clock" :
-                            tag.includes("Kids") ? "smile" : "heart"
+          {preferences.map((tag) => {
+            const isActive = activePreferences.includes(tag);
+            return (
+              <Pressable
+                key={tag}
+                style={[
+                  styles.prefTag,
+                  {
+                    backgroundColor: isActive ? colors.primary : colors.muted,
+                    borderRadius: radius.md
                   }
-                  size={14}
-                  color={colors.mutedForeground}
-                />
-              </View>
-              <Text style={[styles.prefText, { color: colors.mutedForeground }]}>{tag}</Text>
-            </Pressable>
-          ))}
+                ]}
+                onPress={() => togglePreference(tag)}
+              >
+                <View style={styles.prefIcon}>
+                  <AppIcon
+                    name={
+                      tag === "Vegetarian" ? "leaf" :
+                        tag.includes("Protein") ? "biceps" :
+                          tag.includes("Sugar") ? "droplet" :
+                            tag.includes("Quick") ? "clock" :
+                              tag.includes("Kids") ? "smile" : "heart"
+                    }
+                    size={14}
+                    color={isActive ? colors.primaryForeground : colors.mutedForeground}
+                  />
+                </View>
+                <Text style={[styles.prefText, { color: isActive ? colors.primaryForeground : colors.mutedForeground }]}>{tag}</Text>
+              </Pressable>
+            );
+          })}
         </View>
         <View style={styles.groceryNoteRow}>
           <Text style={{ fontSize: 16, marginRight: 8 }}>📦</Text>
@@ -129,47 +198,89 @@ export const RecipesScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* Recommended For You */}
-      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
-        <View style={styles.sectionHeader}>
-          <AppIcon name="sparkles" size={20} color={colors.primary} style={{ marginRight: 8 }} />
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Recommended For You</Text>
-        </View>
+      {/* Recommended for Preference (Dynamic) */}
+      {activePreferences.length > 0 && (
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+          <View style={styles.sectionHeader}>
+            <AppIcon name="star" size={20} color={colors.primary} style={{ marginRight: 8 }} />
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+              Recommended For You
+            </Text>
+          </View>
 
-        {recommended.map((recipe) => (
-          <Pressable
-            key={recipe.id}
-            style={[styles.recommendRow, { backgroundColor: colors.muted, borderRadius: radius.lg }]}
-            onPress={() => handleRecipePress(recipe)}
-          >
-            <View style={styles.recommendLeft}>
-              <View style={[styles.emojiContainer, { backgroundColor: colors.card, borderRadius: radius.sm }]}>
-                <Text style={styles.recommendEmoji}>{recipe.image}</Text>
+          {recommended.length > 0 ? recommended.map((recipe) => (
+            <Pressable
+              key={recipe.id}
+              style={[styles.recommendRow, { backgroundColor: colors.muted, borderRadius: radius.lg }]}
+              onPress={() => handleRecipePress(recipe)}
+            >
+              <View style={styles.recommendLeft}>
+                <View style={[styles.emojiContainer, { backgroundColor: colors.card, borderRadius: radius.sm }]}>
+                  <Text style={styles.recommendEmoji}>{recipe.image}</Text>
+                </View>
+                <View>
+                  <Text style={[styles.recommendTitle, { color: colors.foreground }]}>{recipe.name}</Text>
+                  <Text style={[styles.recommendMeta, { color: colors.mutedForeground }]}>
+                    {recipe.time}
+                  </Text>
+                </View>
               </View>
-              <View>
-                <Text style={[styles.recommendTitle, { color: colors.foreground }]}>{recipe.name}</Text>
-                <Text style={[styles.recommendMeta, { color: colors.mutedForeground }]}>
-                  {recipe.time}
-                </Text>
+              <View style={styles.recommendRight}>
+                <Pressable onPress={() => toggleBookmark(recipe.id)}>
+                  <AppIcon name="bookmark" size={20} color={recipe.saved ? colors.primary : colors.mutedForeground} style={recipe.saved ? { opacity: 1 } : { opacity: 0.5 }} />
+                </Pressable>
+                <AppIcon name="chevronRight" size={20} color={colors.mutedForeground} />
               </View>
-            </View>
-            <View style={styles.recommendRight}>
-              <View style={[styles.ratingBadge, { backgroundColor: '#7b8aac', borderRadius: radius.sm }]}>
-                <Text style={styles.ratingText}>
-                  {recipe.id === 1 ? "37%" : recipe.id === 2 ? "18%" : "20%"}
-                </Text>
+            </Pressable>
+          )) : (
+            <Text style={{ color: colors.mutedForeground, padding: 8 }}>No recipes match these preferences.</Text>
+          )}
+        </View>
+      )}
+
+      {/* Favorites Section */}
+      {favorites.length > 0 && (
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+          <View style={styles.sectionHeader}>
+            <AppIcon name="heart" size={20} color={colors.danger} style={{ marginRight: 8 }} />
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+              Your Favorites
+            </Text>
+          </View>
+
+          {favorites.map((recipe) => (
+            <Pressable
+              key={recipe.id}
+              style={[styles.recommendRow, { backgroundColor: colors.muted, borderRadius: radius.lg }]}
+              onPress={() => handleRecipePress(recipe)}
+            >
+              <View style={styles.recommendLeft}>
+                <View style={[styles.emojiContainer, { backgroundColor: colors.card, borderRadius: radius.sm }]}>
+                  <Text style={styles.recommendEmoji}>{recipe.image}</Text>
+                </View>
+                <View>
+                  <Text style={[styles.recommendTitle, { color: colors.foreground }]}>{recipe.name}</Text>
+                  <Text style={[styles.recommendMeta, { color: colors.mutedForeground }]}>
+                    {recipe.time}
+                  </Text>
+                </View>
               </View>
-              <AppIcon name="chevronRight" size={20} color={colors.mutedForeground} />
-            </View>
-          </Pressable>
-        ))}
-      </View>
+              <View style={styles.recommendRight}>
+                <Pressable onPress={() => toggleBookmark(recipe.id)}>
+                  <AppIcon name="bookmark" size={20} color={recipe.saved ? colors.primary : colors.mutedForeground} style={recipe.saved ? { opacity: 1 } : { opacity: 0.5 }} />
+                </Pressable>
+                <AppIcon name="chevronRight" size={20} color={colors.mutedForeground} />
+              </View>
+            </Pressable>
+          ))}
+        </View>
+      )}
 
       {/* Quick Meals */}
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
         <View style={styles.sectionHeader}>
           <AppIcon name="clock" size={20} color={colors.primary} style={{ marginRight: 8 }} />
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Quick Meals (Under 20 min)</Text>
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Quick Meals (Under 25 min)</Text>
         </View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
@@ -217,12 +328,17 @@ export const RecipesScreen: React.FC = () => {
           <View style={styles.recipeInfo}>
             <View style={styles.recipeHeader}>
               <Text style={[styles.recipeName, { color: colors.foreground }]}>{recipe.name}</Text>
-              <AppIcon
-                name="bookmark"
-                size={20}
-                color={recipe.saved ? colors.primary : colors.mutedForeground}
-                style={recipe.saved ? { opacity: 1 } : { opacity: 0.5 }}
-              />
+              <Pressable onPress={(e) => {
+                e.stopPropagation();
+                toggleBookmark(recipe.id);
+              }}>
+                <AppIcon
+                  name="bookmark"
+                  size={20}
+                  color={recipe.saved ? colors.primary : colors.mutedForeground}
+                  style={recipe.saved ? { opacity: 1 } : { opacity: 0.5 }}
+                />
+              </Pressable>
             </View>
 
             <View style={styles.recipeMetaRow}>
@@ -262,6 +378,7 @@ export const RecipesScreen: React.FC = () => {
           <Pressable
             key={collection.id}
             style={[styles.collectionCard, { backgroundColor: collection.color, borderRadius: radius.card }]}
+            onPress={() => setSelectedCollection(collection)}
           >
             <Text style={styles.collectionEmoji}>{collection.name.split(' ')[0]}</Text>
             <Text style={styles.collectionTitle}>{collection.name.substring(2)}</Text>
@@ -269,7 +386,7 @@ export const RecipesScreen: React.FC = () => {
 
             <View style={styles.collectionFooter}>
               <AppIcon name="chevronRight" size={20} color={colors.mutedForeground} />
-              <Pressable style={[styles.addAllButton, { borderRadius: radius.sm }]}>
+              <Pressable style={[styles.addAllButton, { borderRadius: radius.sm }]} onPress={() => handleAddCollectionToGrocery(collection.id)}>
                 <AppIcon name="shoppingCart" size={14} color={colors.foreground} style={{ marginRight: 4 }} />
                 <Text style={styles.addAllText}>Add All</Text>
               </Pressable>
@@ -374,6 +491,12 @@ export const RecipesScreen: React.FC = () => {
       <CreateCollectionModal
         open={showCreateCollectionModal}
         onClose={() => setShowCreateCollectionModal(false)}
+      />
+
+      <CollectionDetailModal
+        open={!!selectedCollection}
+        onClose={() => setSelectedCollection(null)}
+        collection={selectedCollection}
       />
     </>
   );

@@ -8,6 +8,7 @@ import { theme } from "./src/theme";
 import { FamilyProvider } from "./src/contexts/FamilyContext";
 import { MealPlanProvider } from "./src/contexts/MealPlanContext";
 import { SidebarProvider } from "./src/contexts/SidebarContext";
+import { RecipeProvider } from "./src/contexts/RecipeContext";
 import { ToastProvider } from "./src/components/ui/Toast";
 import { ErrorBoundary } from "./src/components/ErrorBoundary";
 import { AppNavigator } from "./src/navigation/AppNavigator";
@@ -19,22 +20,24 @@ const App = () => {
       <SafeAreaProvider>
         <ThemeProvider>
           <FamilyProvider>
-            <MealPlanProvider>
-              <SidebarProvider>
-                <ToastProvider>
-                  <StatusBar
-                    barStyle="dark-content"
-                    backgroundColor={theme.colors.background}
-                    animated
-                  />
-                  <SafeAreaView style={styles.appWrapper} edges={["top", "bottom", "left", "right"]}>
-                    <ErrorBoundary>
-                      <AppNavigator />
-                    </ErrorBoundary>
-                  </SafeAreaView>
-                </ToastProvider>
-              </SidebarProvider>
-            </MealPlanProvider>
+            <RecipeProvider>
+              <MealPlanProvider>
+                <SidebarProvider>
+                  <ToastProvider>
+                    <StatusBar
+                      barStyle="dark-content"
+                      backgroundColor={theme.colors.background}
+                      animated
+                    />
+                    <SafeAreaView style={styles.appWrapper} edges={["top", "bottom", "left", "right"]}>
+                      <ErrorBoundary>
+                        <AppNavigator />
+                      </ErrorBoundary>
+                    </SafeAreaView>
+                  </ToastProvider>
+                </SidebarProvider>
+              </MealPlanProvider>
+            </RecipeProvider>
           </FamilyProvider>
         </ThemeProvider>
       </SafeAreaProvider>

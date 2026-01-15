@@ -13,6 +13,12 @@ export interface Recipe {
   tags: string[];
   saved: boolean;
   ingredients: Ingredient[];
+  nutrition?: {
+    kcal: string;
+    protein: string;
+    carbs: string;
+    fats: string;
+  };
 }
 
 export const recipes: Recipe[] = [
@@ -169,8 +175,8 @@ export const recipes: Recipe[] = [
 ];
 
 export const collections = [
-  { id: 1, name: '🧒 Kids Tiffin', count: 12, color: 'rgba(123, 164, 208, 0.2)' }, // bg-secondary
-  { id: 2, name: '💪 Gym Diet', count: 8, color: 'rgba(46, 94, 153, 0.15)' }, // bg-success-light
-  { id: 3, name: '🏠 Family Meals', count: 24, color: 'rgba(123, 164, 208, 0.2)' }, // bg-primary-light
-  { id: 4, name: '🎉 Party Specials', count: 6, color: 'rgba(245, 158, 11, 0.15)' }, // bg-warning-light
+  { id: 1, name: '🧒 Kids Tiffin', count: 12, color: 'rgba(123, 164, 208, 0.2)', description: 'Healthy and tasty lunchbox ideas for kids.' }, // bg-secondary
+  { id: 2, name: '💪 Gym Diet', count: 8, color: 'rgba(46, 94, 153, 0.15)', description: 'High protein meals for post-workout recovery.' }, // bg-success-light
+  { id: 3, name: '🏠 Family Meals', count: 24, color: 'rgba(123, 164, 208, 0.2)', description: 'Perfect recipes for the whole family.' }, // bg-primary-light
+  { id: 4, name: '🎉 Party Specials', count: 6, color: 'rgba(245, 158, 11, 0.15)', description: 'Crowd-pleasers for your next gathering.' }, // bg-warning-light
 ];

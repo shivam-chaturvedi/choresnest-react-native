@@ -9,9 +9,10 @@ import {
     ScrollView,
     Pressable,
 } from "react-native";
+import { recipes as staticRecipes } from "../../data/recipes";
 import { AppIcon } from "../ui/AppIcon";
-import { useThemeColors } from "../../contexts/ThemeContext";
-import { recipes } from "../../data/recipes";
+import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
+import { useRecipes } from "../../contexts/RecipeContext";
 
 interface CreateCollectionModalProps {
     open: boolean;
@@ -22,6 +23,8 @@ const EMOJI_OPTIONS = ['🍳', '🥗', '🍕', '🍜', '🍰', '🥘', '🌮', '
 
 export const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({ open, onClose }) => {
     const colors = useThemeColors();
+    const radius = useThemeRadius();
+    const { addCollection, recipes } = useRecipes();
 
     // Dynamic color options based on theme
     const COLOR_OPTIONS = [
@@ -46,9 +49,23 @@ export const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({ op
         }
     };
 
+    const handleSelectAll = () => {
+        if (selectedRecipes.length === recipes.length) {
+            setSelectedRecipes([]);
+        } else {
+            setSelectedRecipes(recipes.map(r => r.id));
+        }
+    };
+
     const handleCreate = () => {
-        // Logic to create would go here
-        console.log("Creating collection:", { name, emoji: selectedEmoji, color: selectedColor, recipes: selectedRecipes });
+        if (!name.trim()) return;
+
+        addCollection({
+            name: `${selectedEmoji} ${name}`,
+            color: selectedColor,
+            recipeIds: selectedRecipes
+        });
+
         onClose();
         setName("");
         setSelectedRecipes([]);
@@ -58,7 +75,7 @@ export const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({ op
         <Modal visible={open} animationType="slide" transparent onRequestClose={onClose}>
             <Pressable style={styles.overlay} onPress={onClose}>
                 <Pressable
-                    style={[styles.container, { backgroundColor: colors.background }]}
+                    style={[styles.container, { backgroundColor: colors.background, borderRadius: radius.card }]}
                     onPress={(e) => e.stopPropagation()}
                 >
                     {/* Header */}
@@ -81,7 +98,8 @@ export const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({ op
                                 {
                                     backgroundColor: colors.card,
                                     borderColor: colors.border,
-                                    color: colors.foreground
+                                    color: colors.foreground,
+                                    borderRadius: radius.md
                                 }
                             ]}
                             placeholder="e.g., Weekly Dinners, Kids Favorites"
@@ -100,7 +118,8 @@ export const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({ op
                                         styles.emojiBtn,
                                         {
                                             backgroundColor: colors.card,
-                                            borderColor: colors.border
+                                            borderColor: colors.border,
+                                            borderRadius: radius.full
                                         },
                                         selectedEmoji === emoji && {
                                             borderColor: colors.primary,
@@ -134,7 +153,15 @@ export const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({ op
                         </View>
 
                         {/* Recipe Selector */}
-                        <Text style={[styles.label, { color: colors.foreground }]}>Add Recipes ({selectedRecipes.length} selected)</Text>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, marginBottom: 8 }}>
+                            <Text style={[styles.label, { marginTop: 0, marginBottom: 0, color: colors.foreground }]}>Add Recipes ({selectedRecipes.length})</Text>
+                            <TouchableOpacity onPress={handleSelectAll}>
+                                <Text style={{ color: colors.primary, fontWeight: '600', fontSize: 13 }}>
+                                    {selectedRecipes.length === recipes.length ? "Deselect All" : "Select All"}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+
                         <View style={styles.recipeList}>
                             {recipes.map(recipe => {
                                 const isSelected = selectedRecipes.includes(recipe.id);
@@ -145,7 +172,8 @@ export const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({ op
                                             styles.recipeRow,
                                             {
                                                 backgroundColor: colors.card,
-                                                borderColor: colors.border
+                                                borderColor: colors.border,
+                                                borderRadius: radius.md
                                             },
                                             isSelected && {
                                                 borderColor: colors.primary,
@@ -207,7 +235,6 @@ const styles = StyleSheet.create({
     container: {
         width: '90%',
         maxHeight: '90%',
-        borderRadius: 24,
         overflow: 'hidden',
     },
     header: {
@@ -234,7 +261,6 @@ const styles = StyleSheet.create({
     },
     input: {
         borderWidth: 1,
-        borderRadius: 12,
         paddingHorizontal: 16,
         paddingVertical: 12,
         fontSize: 15,
@@ -248,7 +274,6 @@ const styles = StyleSheet.create({
     emojiBtn: {
         width: 48,
         height: 48,
-        borderRadius: 24,
         alignItems: 'center',
         justifyContent: 'center',
         borderWidth: 1,
@@ -266,13 +291,11 @@ const styles = StyleSheet.create({
     },
     recipeList: {
         gap: 8,
-        maxHeight: 200,
     },
     recipeRow: {
         flexDirection: 'row',
         alignItems: 'center',
         padding: 12,
-        borderRadius: 16,
         borderWidth: 1,
     },
     recipeName: {
