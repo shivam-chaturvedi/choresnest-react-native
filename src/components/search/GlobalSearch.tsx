@@ -121,7 +121,21 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
 
   const handleSelect = (result: SearchResult) => {
     onClose();
-    navigation.navigate(result.path);
+
+    // Handle nested navigation based on path/type
+    const homeScreens = ["Recipes", "RecipeDetail", "MealPlan", "Nutrition", "Vault", "Expenses", "Family", "Notes", "NoteDetail"];
+    const moreScreens = ["Notifications", "Privacy", "Theme", "Export", "DataExport", "Help", "Tasks"];
+
+    if (homeScreens.includes(result.path)) {
+      // Navigate to Home Stack
+      navigation.navigate("home", { screen: result.path });
+    } else if (moreScreens.includes(result.path)) {
+      // Navigate to More Stack
+      navigation.navigate("more", { screen: result.path });
+    } else {
+      // Navigate directly (Tabs or other root screens)
+      navigation.navigate(result.path);
+    }
   };
 
   const recentSearches = ["Milk", "Birthday", "Doctor", "Butter Chicken"];

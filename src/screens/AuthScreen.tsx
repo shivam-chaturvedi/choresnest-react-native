@@ -11,6 +11,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { theme } from "../theme";
 import { AppIcon } from "../components/ui/AppIcon";
+import { useAuth } from "../contexts/AuthContext";
 
 interface AuthScreenProps {
   onAuthenticated: () => void;
@@ -23,6 +24,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   onForgotPassword,
   onPrivacy,
 }) => {
+  const { login, loginAsGuest } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -34,9 +36,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const radius = theme.radius;
 
   const handleSubmit = async () => {
-    // We do NOT set the tutorial flag here anymore.
-    // The tutorial should show on the first home screen load for new users (flag is null).
-    // It will only be marked as seen ('false') when they finish/skip/close the tutorial.
+    // In a real app, validate and use login(email, password)
+    await login(formData.email, formData.password);
+    onAuthenticated();
+  };
+
+  const handleGuestLogin = async () => {
+    await loginAsGuest();
     onAuthenticated();
   };
 
@@ -212,6 +218,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               />
             </View>
             <Text style={[styles.googleButtonText, { color: theme.colors.foreground }]}>Continue with Google</Text>
+          </Pressable>
+
+          <Pressable style={{ marginTop: 16, alignItems: 'center' }} onPress={handleGuestLogin}>
+            <Text style={{ fontSize: 14, color: theme.colors.mutedForeground }}>
+              Skip for now? <Text style={{ color: theme.colors.primary, fontWeight: '600' }}>Continue as Guest</Text>
+            </Text>
           </Pressable>
         </View>
 

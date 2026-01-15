@@ -14,6 +14,7 @@ import {
 import { useNavigation, NavigationProp, CommonActions } from "@react-navigation/native";
 import { theme } from "../../theme";
 import { useFamily, FamilyMember } from "../../contexts/FamilyContext";
+import { useAuth } from "../../contexts/AuthContext";
 import { PROFILE_COLORS, ProfileColor } from "../../constants/profileColors";
 import {
   Settings,
@@ -31,7 +32,8 @@ import {
   ClipboardList,
   StickyNote,
   Users,
-  Palette
+  Palette,
+  LogOut
 } from "lucide-react-native";
 
 interface AppSidebarProps {
@@ -60,6 +62,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
 
   const navigation = useNavigation<NavigationProp<Record<string, undefined>>>();
   const { members, activeMember, setActiveMember, familyName, updateMemberColor } = useFamily();
+  const { logout } = useAuth();
 
   useEffect(() => {
     openRef.current = open;
@@ -103,14 +106,13 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       if (onNavigate) {
         onNavigate(route);
       } else {
-        // Helper to handle nested navigation
-        const navigateToNested = (tabName: string, screenName?: string) => {
-          navigation.dispatch(
-            CommonActions.navigate({
-              name: tabName,
-              params: screenName ? { screen: screenName } : undefined,
-            })
-          );
+        // Helper to handle nested navigation from Root -> MainTabs -> Tab -> Stack
+        const navigateToNested = (tabName: string, stackScreenName?: string) => {
+          // We must navigate to 'MainTabs' first because AppSidebar is at Root level
+          navigation.navigate('MainTabs', {
+            screen: tabName,
+            params: stackScreenName ? { screen: stackScreenName } : undefined,
+          } as any);
         };
 
         switch (route) {
@@ -136,15 +138,34 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             navigateToNested('home', route);
             break;
 
-          // Tabs or Direct Routes
+          // Tabs
+          case 'lists':
+          case 'calendar':
+            navigateToNested(route);
+            break;
+
+          // Direct Routes (if any at root, e.g. Auth, but sidebar is usually auth-only)
           default:
-            navigation.navigate(route as never);
+            // If it's none of the above, it might be a root screen or we default to MainTabs->home?
+            // But actually 'lists' and 'calendar' are tabs. 
+            // If we just have a route name that matches a tab, we go there.
+            navigateToNested(route);
         }
       }
     } catch (error) {
       console.error("Navigation error in sidebar:", error);
     }
     onClose();
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      onClose();
+      // Navigation replacement happens automatically via AppNavigator auth state
+    } catch (error) {
+      console.error("Logout failed", error);
+    }
   };
 
   const handleSwitchMember = (member: FamilyMember) => {
@@ -203,31 +224,55 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           ]}
         >
           {/* Profile Section (Gradient Header) */}
+          {/* Profile Section (Gradient Header) */}
           <View style={[styles.headerGradient, { backgroundColor: theme.colors.primary }]}>
             <Pressable onPress={onClose} style={styles.closeIcon}>
               <X size={24} color="#f5f8ff" />
             </Pressable>
 
             <View style={styles.profileContent}>
-              <View style={styles.avatar}>
-                {activeMember ? (
-                  <Text style={styles.avatarIcon}>{activeMember.symbol}</Text>
-                ) : (
-                  <User size={32} color="#f5f8ff" />
-                )}
-              </View>
-              <Text style={styles.familyName}>{familyName}</Text>
-              <Text style={styles.memberName}>
-                {activeMember?.name || 'Select a profile'}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+                {/* Avatar with Color Edit */}
+                <View>
+                  <Pressable
+                    style={styles.avatar}
+                    onPress={() => {
+                      if (activeMember) setEditingMemberId(activeMember.id);
+                    }}
+                  >
+                    {activeMember ? (
+                      <Text style={styles.avatarIcon}>{activeMember.symbol}</Text>
+                    ) : (
+                      <User size={32} color="#f5f8ff" />
+                    )}
+                  </Pressable>
+                  {/* Edit Color Badge */}
+                  <Pressable
+                    style={styles.editColorBadge}
+                    onPress={() => {
+                      if (activeMember) setEditingMemberId(activeMember.id);
+                    }}
+                  >
+                    <Palette size={12} color={theme.colors.primary} />
+                  </Pressable>
+                </View>
 
-              <Pressable
-                style={styles.settingsButton}
-                onPress={() => handleNavigate("more")}
-              >
-                <Settings size={14} color="#f5f8ff" style={{ marginRight: 6 }} />
-                <Text style={styles.settingsText}>Settings</Text>
-              </Pressable>
+                {/* Name & Switcher */}
+                <Pressable
+                  style={{ flex: 1 }}
+                  onPress={() => setIsProfilesOpen(!isProfilesOpen)}
+                >
+                  <Text style={styles.familyName} numberOfLines={1}>{activeMember?.name || 'Select Profile'}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={styles.memberName}>{isProfilesOpen ? 'Close profiles' : 'Switch profile'}</Text>
+                    {isProfilesOpen ? (
+                      <ChevronDown size={14} color="rgba(255,255,255,0.7)" style={{ marginLeft: 4 }} />
+                    ) : (
+                      <ChevronRight size={14} color="rgba(255,255,255,0.7)" style={{ marginLeft: 4 }} />
+                    )}
+                  </View>
+                </Pressable>
+              </View>
             </View>
           </View>
 
@@ -243,7 +288,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                 style={styles.dropdownHeader}
                 onPress={() => setIsProfilesOpen(!isProfilesOpen)}
               >
-                <Text style={styles.sectionLabel}>Switch Profile</Text>
+                <Text style={styles.sectionLabel}>More</Text>
                 {isProfilesOpen ? (
                   <ChevronDown size={16} color={theme.colors.mutedForeground} />
                 ) : (
@@ -326,6 +371,19 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                   </Pressable>
                 ))}
               </View>
+            </View>
+
+            <View style={styles.separator} />
+
+            {/* Logout Section */}
+            <View style={styles.section}>
+              <Pressable
+                style={[styles.linkRow, { opacity: 0.8 }]}
+                onPress={handleLogout}
+              >
+                <LogOut size={20} color={theme.colors.danger} style={styles.linkIcon} />
+                <Text style={[styles.linkText, { color: theme.colors.danger }]}>Log Out</Text>
+              </Pressable>
             </View>
 
           </ScrollView>
@@ -426,6 +484,19 @@ const styles = StyleSheet.create({
   avatarIcon: {
     fontSize: 32,
     color: "#f5f8ff",
+  },
+  editColorBadge: {
+    position: 'absolute',
+    bottom: 12, // adjusted to overlap bottom-right of avatar
+    right: -4,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
   },
   familyName: {
     fontSize: 20,

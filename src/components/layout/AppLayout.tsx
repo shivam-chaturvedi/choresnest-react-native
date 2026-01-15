@@ -19,6 +19,10 @@ interface AppLayoutProps {
   navOnNavigate?: (route: BottomNavRoute) => void;
 }
 
+import { PanGestureHandler, State, PanGestureHandlerStateChangeEvent } from "react-native-gesture-handler";
+import { useSidebar } from "../../contexts/SidebarContext";
+import { Dimensions } from "react-native";
+
 export const AppLayout: React.FC<AppLayoutProps> = ({
   children,
   showNav = false,
@@ -35,6 +39,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const navigation = useNavigation<NavigationProp<MainTabsParamList>>();
   const { themeVersion } = useTheme(); // Force re-render on theme change
   const radius = useThemeRadius();
+  const { openSidebar } = useSidebar();
 
   const handleNavigate = useCallback(
     (route: BottomNavRoute) => {
@@ -47,41 +52,63 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const [showAddEvent, setShowAddEvent] = React.useState(false);
   const [showAddTask, setShowAddTask] = React.useState(false);
 
+  const onGestureEvent = (event: PanGestureHandlerStateChangeEvent) => {
+    if (event.nativeEvent.state === State.ACTIVE) {
+      const { x, translationX } = event.nativeEvent;
+      // Detect swipe from left edge (moving Right to open)
+      // Increased edge zone to 60px for easier activation
+      if (x < 60 && translationX > 20) {
+        openSidebar();
+      }
+    }
+  };
+
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }, style]}>
-      <View style={styles.content}>{children}</View>
-      {showNav && (
-        <BottomNavigation
-          activeRoute={navActiveRoute}
-          onNavigate={navOnNavigate ?? handleNavigate}
+    <PanGestureHandler
+      onHandlerStateChange={onGestureEvent}
+      // activeOffsetX: [-left_fail, +right_activate]
+      // We want to activate only on Right swipe (positive). 
+      // We set left threshold extremely low (-500) effectively ignoring left swipes
+      // We set right threshold to 10px for quick activation
+      activeOffsetX={[-500, 10]}
+      activeOffsetY={[-20, 20]} // increased vertical tolerance slightly? No, keeping strict to avoid scrolling confusion
+      failOffsetY={[-20, 20]}
+    >
+      <View style={[styles.container, { backgroundColor: theme.colors.background }, style]}>
+        <View style={styles.content}>{children}</View>
+        {showNav && (
+          <BottomNavigation
+            activeRoute={navActiveRoute}
+            onNavigate={navOnNavigate ?? handleNavigate}
+          />
+        )}
+        {showAddButton && (
+          <Pressable
+            key={`fab-${themeVersion}`}
+            style={[styles.addButton, { backgroundColor: theme.colors.primary, borderRadius: radius.full }]}
+            onPress={() => {
+              if (onAddPress) {
+                onAddPress();
+              } else {
+                setShowQuickAdd(true);
+              }
+            }}
+          >
+            <AppIcon name="plus" size={34} color={theme.colors.primaryForeground} />
+          </Pressable>
+        )}
+
+        <QuickAddModal
+          open={showQuickAdd}
+          onClose={() => setShowQuickAdd(false)}
+          onAddEvent={() => setShowAddEvent(true)}
+          onAddTask={() => setShowAddTask(true)}
         />
-      )}
-      {showAddButton && (
-        <Pressable
-          key={`fab-${themeVersion}`}
-          style={[styles.addButton, { backgroundColor: theme.colors.primary, borderRadius: radius.full }]}
-          onPress={() => {
-            if (onAddPress) {
-              onAddPress();
-            } else {
-              setShowQuickAdd(true);
-            }
-          }}
-        >
-          <AppIcon name="plus" size={34} color={theme.colors.primaryForeground} />
-        </Pressable>
-      )}
 
-      <QuickAddModal
-        open={showQuickAdd}
-        onClose={() => setShowQuickAdd(false)}
-        onAddEvent={() => setShowAddEvent(true)}
-        onAddTask={() => setShowAddTask(true)}
-      />
-
-      <AddEventModal open={showAddEvent} onOpenChange={setShowAddEvent} />
-      <AddTaskModal open={showAddTask} onClose={() => setShowAddTask(false)} />
-    </View >
+        <AddEventModal open={showAddEvent} onOpenChange={setShowAddEvent} />
+        <AddTaskModal open={showAddTask} onClose={() => setShowAddTask(false)} />
+      </View >
+    </PanGestureHandler>
   );
 };
 

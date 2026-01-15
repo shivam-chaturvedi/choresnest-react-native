@@ -23,6 +23,9 @@ import { AddNewRecipeModal } from "../components/modals/AddNewRecipeModal";
 import { CreateCollectionModal } from "../components/modals/CreateCollectionModal";
 import { CollectionDetailModal } from "../components/modals/CollectionDetailModal";
 import { useToast } from "../components/ui/Toast";
+import { Linking } from "react-native";
+import { ImageGalleryModal } from "../components/modals/ImageGalleryModal";
+import { AudioPlayerModal } from "../components/modals/AudioPlayerModal";
 
 const preferences = [
   "Vegetarian",
@@ -110,9 +113,28 @@ export const RecipesScreen: React.FC = () => {
   }, [recipes, activePreferences]);
 
   // Handle Recipe Click
+  const [showImageGallery, setShowImageGallery] = useState(false);
+  const [showAudioPlayer, setShowAudioPlayer] = useState(false);
+
   const handleRecipePress = (recipe: Recipe) => {
     setSelectedRecipe(recipe);
-    setShowRecipeDetail(true);
+
+    if (recipe.url) {
+      // Link Recipe -> Open URL
+      Linking.openURL(recipe.url).catch(err => {
+        console.error("Failed to open URL:", err);
+        showToast({ title: "Error", description: "Could not open link", type: "warning" });
+      });
+    } else if (recipe.audio) {
+      // Audio Recipe -> Open Audio Player
+      setShowAudioPlayer(true);
+    } else if (recipe.images && recipe.images.length > 0) {
+      // Image Recipe -> Open Gallery
+      setShowImageGallery(true);
+    } else {
+      // Standard Text Recipe -> Open Detail Modal
+      setShowRecipeDetail(true);
+    }
   };
 
   const { showToast } = useToast();
@@ -407,7 +429,13 @@ export const RecipesScreen: React.FC = () => {
 
   return (
     <>
-      <AppLayout showNav={false} onAddPress={() => setShowAddRecipeModal(true)}>
+      <AppLayout showNav={false} onAddPress={() => {
+        if (activeTab === "Collections") {
+          setShowCreateCollectionModal(true);
+        } else {
+          setShowAddRecipeModal(true);
+        }
+      }}>
         <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}>
           {/* Header */}
           <View style={styles.headerRow}>
@@ -426,7 +454,13 @@ export const RecipesScreen: React.FC = () => {
               </Pressable>
               <Pressable
                 style={[styles.iconButton, { backgroundColor: colors.primary, borderRadius: radius.md }]}
-                onPress={() => setShowAddRecipeModal(true)}
+                onPress={() => {
+                  if (activeTab === "Collections") {
+                    setShowCreateCollectionModal(true);
+                  } else {
+                    setShowAddRecipeModal(true);
+                  }
+                }}
               >
                 <AppIcon name="plus" size={20} color="#fff" />
               </Pressable>
@@ -497,6 +531,21 @@ export const RecipesScreen: React.FC = () => {
         open={!!selectedCollection}
         onClose={() => setSelectedCollection(null)}
         collection={selectedCollection}
+      />
+
+      {/* Rich Media Modals */}
+      <ImageGalleryModal
+        open={showImageGallery}
+        onClose={() => setShowImageGallery(false)}
+        images={selectedRecipe?.images || (selectedRecipe?.image ? [selectedRecipe.image] : [])} // Fallback to single image if array empty (though logic prioritizes array)
+        title={selectedRecipe?.name}
+      />
+
+      <AudioPlayerModal
+        open={showAudioPlayer}
+        onClose={() => setShowAudioPlayer(false)}
+        audioSrc={selectedRecipe?.audio || ""}
+        title={selectedRecipe?.name}
       />
     </>
   );

@@ -182,13 +182,10 @@ export const MoreScreen: React.FC = () => {
               <View style={[styles.avatar, { backgroundColor: activeProfileColor + '20', borderRadius: radius.lg }]}>
                 <Text style={{ fontSize: 32 }}>{activeMember?.symbol || "👨"}</Text>
               </View>
-              <View style={[styles.cameraBadge, { backgroundColor: colors.card, borderColor: colors.background, shadowColor: colors.foreground, borderRadius: radius.sm }]}>
-                <AppIcon name="camera" size={12} color={colors.mutedForeground} />
-              </View>
             </View>
             <View style={styles.profileInfo}>
               <Text style={[styles.profileName, { color: colors.foreground }]}>{activeMember?.name || "Family Member"}</Text>
-              <Text style={[styles.profileEmail, { color: colors.mutedForeground }]}>{activeMember?.name.toLowerCase().replace(/\s/g, '')}@email.com</Text>
+              {/* <Text style={[styles.profileEmail, { color: colors.mutedForeground }]}>{activeMember?.name.toLowerCase().replace(/\s/g, '')}@email.com</Text> */}
               <View style={[styles.roleBadge, { backgroundColor: activeProfileColor + '20', borderRadius: radius.sm }]}>
                 <Text style={[styles.roleText, { color: activeProfileColor }]}>{PROFILE_COLORS.find(c => c.value === activeMember?.color)?.name || "Member"}</Text>
               </View>
@@ -199,33 +196,37 @@ export const MoreScreen: React.FC = () => {
             <View key={section.title} style={styles.sectionContainer}>
               <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>{section.title}</Text>
               <View style={[styles.sectionCard, { backgroundColor: colors.card, shadowColor: colors.foreground, borderRadius: radius.card }]}>
-                {section.items.map((item, index) => (
-                  <Pressable
-                    key={item.label}
-                    style={[
-                      styles.itemRow,
-                      { borderRadius: radius.md },
-                      index !== section.items.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }
-                    ]}
-                    onPress={() => navigation.navigate(item.route)}
-                  >
-                    <View style={[styles.itemIcon, { backgroundColor: item.color, borderRadius: radius.md }]}>
-                      <AppIcon name={item.icon} size={20} color={item.iconColor} />
-                    </View>
-                    <View style={styles.itemTextContainer}>
-                      <Text style={[styles.itemLabel, { color: colors.foreground }]}>{item.label}</Text>
-                      {item.description && (
-                        <Text style={[styles.itemDesc, { color: colors.mutedForeground }]}>{item.description}</Text>
-                      )}
-                    </View>
-                    {item.badge && (
-                      <View style={[styles.badge, { backgroundColor: colors.primary }]}>
-                        <Text style={[styles.badgeText, { color: colors.primaryForeground }]}>{item.badge}</Text>
+                {section.items.map((item, index) => {
+                  if (item.label === "Nutrition & Health") return null; // Hide Nutrition button as requested
+
+                  return (
+                    <Pressable
+                      key={item.label}
+                      style={[
+                        styles.itemRow,
+                        { borderRadius: radius.md },
+                        index !== section.items.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }
+                      ]}
+                      onPress={() => navigation.navigate(item.route)}
+                    >
+                      <View style={[styles.itemIcon, { backgroundColor: item.color, borderRadius: radius.md }]}>
+                        <AppIcon name={item.icon} size={20} color={item.iconColor} />
                       </View>
-                    )}
-                    <AppIcon name="chevronRight" size={20} color={colors.mutedForeground} />
-                  </Pressable>
-                ))}
+                      <View style={styles.itemTextContainer}>
+                        <Text style={[styles.itemLabel, { color: colors.foreground }]}>{item.label}</Text>
+                        {item.description && (
+                          <Text style={[styles.itemDesc, { color: colors.mutedForeground }]}>{item.description}</Text>
+                        )}
+                      </View>
+                      {item.badge && (
+                        <View style={[styles.badge, { backgroundColor: colors.primary }]}>
+                          <Text style={[styles.badgeText, { color: colors.primaryForeground }]}>{item.badge}</Text>
+                        </View>
+                      )}
+                      <AppIcon name="chevronRight" size={20} color={colors.mutedForeground} />
+                    </Pressable>
+                  );
+                })}
               </View>
             </View>
           ))}

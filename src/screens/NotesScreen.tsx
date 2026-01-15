@@ -255,7 +255,7 @@ export const NotesScreen: React.FC = () => {
 
     // --- LIST VIEW ---
     return (
-        <AppLayout showNav={false}>
+        <AppLayout showNav={false} onAddPress={createNewNote}>
             <View style={[styles.container, { backgroundColor: colors.background }]}>
                 {/* Header */}
                 <View style={styles.header}>

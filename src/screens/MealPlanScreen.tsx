@@ -466,14 +466,7 @@ export const MealPlanScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Info Card - Themed */}
-          <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.primary, borderWidth: 1, borderRadius: radius.lg }]}>
-            <AppIcon name="sparkles" size={20} color={colors.primary} style={{ marginTop: 2, marginRight: 12 }} />
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.infoTitle, { color: colors.foreground }]}>Drag & Drop Recipes</Text>
-              <Text style={[styles.infoDesc, { color: colors.mutedForeground }]}>Drag recipes from the list to any meal slot, or tap to add manually.</Text>
-            </View>
-          </View>
+
 
           {/* Tabs */}
           <View style={[styles.tabBar, { backgroundColor: colors.muted, borderRadius: radius.lg }]}>

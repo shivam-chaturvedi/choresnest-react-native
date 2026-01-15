@@ -8,6 +8,7 @@ import {
     ScrollView,
     TextInput,
     Pressable,
+    Alert,
 } from "react-native";
 import { AppIcon } from "../ui/AppIcon";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
@@ -15,12 +16,15 @@ import { useRecipes } from "../../contexts/RecipeContext";
 import { useToast } from "../ui/Toast";
 
 
+import { requestPermission } from "../../utils/permissions";
+import { Platform } from "react-native";
+
 interface AddNewRecipeModalProps {
     open: boolean;
     onClose: () => void;
 }
 
-type TabType = "Text" | "Link";
+type TabType = "Text" | "Image" | "Link" | "Audio";
 
 export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
     open,
@@ -50,6 +54,98 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
     const [fats, setFats] = useState("");
 
     const handleAddIngredient = () => setIngredients([...ingredients, ""]);
+
+    // Audio Recorder State
+    const [isRecording, setIsRecording] = useState(false);
+    const [isPaused, setIsPaused] = useState(false);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [recordingTime, setRecordingTime] = useState(0);
+    const [imagePath, setImagePath] = useState<string | null>(null);
+    const [images, setImages] = useState<string[]>([]); // Added for multiple images
+    const [audioPath, setAudioPath] = useState<string | null>(null);
+
+    // Helpers
+    const formatTime = (seconds: number) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins < 10 ? '0' : ''}${mins} : ${secs < 10 ? '0' : ''}${secs}`;
+    };
+
+    const handleStartRecording = async () => {
+        try {
+            const hasPermission = await requestPermission('audio');
+            if (!hasPermission) return;
+
+            // Placeholder for actual recording logic
+            setIsRecording(true);
+            setIsPaused(false);
+            showToast({ title: "Recording", description: "Recording started...", type: "success" });
+        } catch (error) {
+            console.error("Error starting recording:", error);
+            showToast({ title: "Error", description: "Failed to start recording", type: "warning" });
+        }
+    };
+
+    const handlePauseRecording = () => {
+        try {
+            setIsPaused(true);
+            // Placeholder for pause logic
+        } catch (error) {
+            console.error("Error pausing recording:", error);
+            showToast({ title: "Error", description: "Failed to pause recording", type: "warning" });
+        }
+    };
+
+    const handleResumeRecording = () => {
+        try {
+            setIsPaused(false);
+            // Placeholder for resume logic
+        } catch (error) {
+            console.error("Error resuming recording:", error);
+            showToast({ title: "Error", description: "Failed to resume recording", type: "warning" });
+        }
+    };
+
+    const handleStopRecording = () => {
+        try {
+            setIsRecording(false);
+            setIsPaused(false);
+            setAudioPath("dummy_path.mp3"); // Simulate saved file
+            showToast({ title: "Success", description: "Audio saved!", type: "success" });
+        } catch (error) {
+            console.error("Error stopping recording:", error);
+            showToast({ title: "Error", description: "Failed to stop recording", type: "warning" });
+        }
+    };
+
+    const handleDeleteRecording = () => {
+        try {
+            setAudioPath(null);
+            setRecordingTime(0);
+            showToast({ title: "Deleted", description: "Recording deleted", type: "success" });
+        } catch (error) {
+            console.error("Error deleting recording:", error);
+            showToast({ title: "Error", description: "Failed to delete recording", type: "warning" });
+        }
+    };
+
+    const handleImageUpload = async () => {
+        try {
+            const hasPermission = await requestPermission('photo');
+            if (!hasPermission) return;
+
+            // Placeholder for image picker logic
+            // In a real app, use react-native-image-picker here
+            // Simulate adding multiple images
+            const newImage = "dummy_image_" + (images.length + 1) + ".jpg";
+            setImages([...images, newImage]);
+
+            showToast({ title: "Success", description: "Image added", type: "success" });
+        } catch (error) {
+            console.error("Error selecting image:", error);
+            showToast({ title: "Error", description: "Failed to select image", type: "warning" });
+        }
+    };
     const handleRemoveIngredient = (index: number) => {
         const newIngredients = [...ingredients];
         newIngredients.splice(index, 1);
@@ -101,51 +197,88 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
         setProtein("");
         setCarbs("");
         setFats("");
+        setAudioPath(null);
+        setImagePath(null);
+        setImages([]);
+        setIsRecording(false);
+        setIsPaused(false);
+        setRecordingTime(0);
     };
 
     const handleSave = () => {
         try {
-            // Validation
+            // Common Validation
             if (!name.trim()) {
                 showToast({ title: "Error", description: "Recipe name is required", type: "warning" });
                 return;
             }
 
-            // Convert ingredients to object structure expected by Recipe interface
+            // Validation by Tab
+            if (activeTab === "Text") {
+                // Text Mode: strict validation for ingredients and times
+                const formattedIngredients = ingredients
+                    .filter(i => i.trim())
+                    .map(i => ({ name: i, quantity: 1, unit: 'unit' }));
+
+                if (formattedIngredients.length === 0) {
+                    showToast({ title: "Error", description: "Please add at least one ingredient", type: "warning" });
+                    return;
+                }
+
+                // Safely parse numeric values
+                const parsedPrepTime = parseInt(prepTime || '0', 10);
+                const parsedCookTime = parseInt(cookTime || '0', 10);
+                const parsedServings = parseInt(servings || '4', 10);
+
+                if (isNaN(parsedPrepTime) || isNaN(parsedCookTime) || isNaN(parsedServings)) {
+                    showToast({ title: "Error", description: "Please enter valid numbers for time and servings", type: "warning" });
+                    return;
+                }
+            } else if (activeTab === "Link") {
+                if (!linkUrl.trim()) {
+                    showToast({ title: "Error", description: "Recipe URL is required", type: "warning" });
+                    return;
+                }
+            } else if (activeTab === "Image") {
+                if (images.length === 0) {
+                    showToast({ title: "Error", description: "Please upload at least one image", type: "warning" });
+                    return;
+                }
+            } else if (activeTab === "Audio") {
+                if (!audioPath) {
+                    showToast({ title: "Error", description: "Please record audio", type: "warning" });
+                    return;
+                }
+            }
+
+            // Prepare Data for Saving
             const formattedIngredients = ingredients
                 .filter(i => i.trim())
                 .map(i => ({ name: i, quantity: 1, unit: 'unit' }));
 
-            // Validate at least one ingredient
-            if (formattedIngredients.length === 0) {
-                showToast({ title: "Error", description: "Please add at least one ingredient", type: "warning" });
-                return;
-            }
+            const finalIngredients = formattedIngredients.length > 0 ? formattedIngredients :
+                (activeTab !== "Text" ? [{ name: "See details", quantity: 1, unit: "unit" }] : []);
 
-            // Safely parse numeric values
             const parsedPrepTime = parseInt(prepTime || '0', 10);
             const parsedCookTime = parseInt(cookTime || '0', 10);
             const parsedServings = parseInt(servings || '4', 10);
 
-            // Validate numeric values
-            if (isNaN(parsedPrepTime) || isNaN(parsedCookTime) || isNaN(parsedServings)) {
-                showToast({ title: "Error", description: "Please enter valid numbers for time and servings", type: "warning" });
-                return;
-            }
-
             addRecipe({
                 name: name.trim(),
-                image: '🍲',
-                time: `${parsedPrepTime + parsedCookTime} min`,
-                servings: parsedServings,
+                image: images.length > 0 ? images[0] : (activeTab === "Link" ? "🔗" : activeTab === "Audio" ? "�" : "🍲"),
+                time: (parsedPrepTime + parsedCookTime) > 0 ? `${parsedPrepTime + parsedCookTime} min` : "15 min", // Default for quick add
+                servings: parsedServings > 0 ? parsedServings : 4,
                 tags,
-                ingredients: formattedIngredients,
+                ingredients: finalIngredients,
                 nutrition: {
-                    kcal: kcal.trim() || "0",
-                    protein: protein.trim() || "0g",
-                    carbs: carbs.trim() || "0g",
-                    fats: fats.trim() || "0g"
-                }
+                    kcal: kcal.trim() || "-",
+                    protein: protein.trim() || "-",
+                    carbs: carbs.trim() || "-",
+                    fats: fats.trim() || "-"
+                },
+                audio: audioPath || undefined,
+                url: linkUrl || undefined,
+                images: images.length > 0 ? images : undefined
             });
 
             showToast({ title: "Success", description: "Recipe added successfully", type: "success" });
@@ -165,10 +298,12 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
 
     const renderTabs = () => (
         <View style={[styles.tabContainer, { backgroundColor: colors.muted, borderRadius: radius.lg }]}>
-            {(["Text", "Link"] as TabType[]).map((tab) => {
+            {(["Text", "Image", "Link", "Audio"] as TabType[]).map((tab) => {
                 const icons: Record<TabType, any> = {
                     Text: "file",
+                    Image: "image",
                     Link: "link",
+                    Audio: "mic"
                 };
                 const isActive = activeTab === tab;
                 return (
@@ -374,6 +509,61 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
 
             {/* Tags */}
             <Text style={[styles.label, { marginTop: 20, color: colors.foreground }]}>Tags</Text>
+
+            {/* Suggested Tags Chips */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                {["Vegetarian", "Non-Veg", "Breakfast", "Lunch", "Dinner", "Dessert", "Healthy", "Quick"].map(suggestedTag => {
+                    const isSelected = tags.includes(suggestedTag);
+                    return (
+                        <TouchableOpacity
+                            key={suggestedTag}
+                            onPress={() => {
+                                if (isSelected) {
+                                    handleRemoveTag(suggestedTag);
+                                } else {
+                                    // Mutually Exclusive Logic
+                                    // 1. Dietary: Veg vs Non-Veg
+                                    // 2. Meal Type: Breakfast vs Lunch vs Dinner
+
+                                    let newTags = [...tags];
+
+                                    // Group 1: Dietary
+                                    const dietaryGroup = ["Vegetarian", "Non-Veg"];
+                                    if (dietaryGroup.includes(suggestedTag)) {
+                                        // Remove other dietary tags
+                                        newTags = newTags.filter(t => !dietaryGroup.includes(t));
+                                    }
+
+                                    // Group 2: Meal Types (as requested: "like if it is breakfast so [remove] diner")
+                                    const mealGroup = ["Breakfast", "Lunch", "Dinner"];
+                                    if (mealGroup.includes(suggestedTag)) {
+                                        newTags = newTags.filter(t => !mealGroup.includes(t));
+                                    }
+
+                                    setTags([...newTags, suggestedTag]);
+                                }
+                            }}
+                            style={{
+                                backgroundColor: isSelected ? colors.primary : colors.card,
+                                borderWidth: 1,
+                                borderColor: isSelected ? colors.primary : colors.border,
+                                paddingHorizontal: 12,
+                                paddingVertical: 6,
+                                borderRadius: radius.full
+                            }}
+                        >
+                            <Text style={{
+                                color: isSelected ? colors.primaryForeground : colors.mutedForeground,
+                                fontWeight: '600',
+                                fontSize: 12
+                            }}>
+                                {suggestedTag}
+                            </Text>
+                        </TouchableOpacity>
+                    );
+                })}
+            </View>
+
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
                 {tags.map(tag => (
                     <TouchableOpacity key={tag} onPress={() => handleRemoveTag(tag)} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary + '20', paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.full }}>
@@ -393,6 +583,153 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
                 <TouchableOpacity style={[styles.tagAddBtn, { backgroundColor: colors.muted, borderColor: colors.border, borderRadius: radius.md }]} onPress={handleAddTag}>
                     <AppIcon name="plus" size={20} color={colors.foreground} />
                 </TouchableOpacity>
+            </View>
+        </View>
+    );
+
+    const renderImageTab = () => (
+        <View style={styles.formContainer}>
+            <Text style={[styles.label, { color: colors.foreground }]}>Recipe Name *</Text>
+            <TextInput
+                style={[styles.input, { backgroundColor: colors.muted, borderColor: colors.border, color: colors.foreground, borderRadius: radius.md }]}
+                placeholder="e.g., Grandma's Apple Pie"
+                placeholderTextColor={colors.mutedForeground}
+                value={name}
+                onChangeText={setName}
+            />
+            <Text style={[styles.label, { marginTop: 16, color: colors.foreground }]}>Upload Recipe Images</Text>
+
+            <TouchableOpacity
+                style={[styles.uploadArea, { borderColor: colors.border, backgroundColor: colors.background, borderRadius: radius.xl }]}
+                onPress={handleImageUpload}
+            >
+                <View style={[styles.uploadIconCircle, { backgroundColor: images.length > 0 ? colors.success + '20' : colors.primary + '20', borderRadius: radius.full }]}>
+                    <AppIcon name={images.length > 0 ? "check" : "download"} size={24} color={images.length > 0 ? colors.success : colors.primary} />
+                </View>
+                <Text style={[styles.uploadTextMain, { color: colors.foreground }]}>{images.length > 0 ? `${images.length} Images Selected` : "Click to upload"}</Text>
+                <Text style={[styles.uploadTextSub, { color: colors.mutedForeground }]}>JPG, PNG, GIF up to 10MB</Text>
+            </TouchableOpacity>
+
+            {/* Image Preview List */}
+            {images.length > 0 && (
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                        {images.map((img, index) => (
+                            <View key={index} style={{ width: 60, height: 60, borderRadius: 8, backgroundColor: colors.muted, alignItems: 'center', justifyContent: 'center' }}>
+                                <AppIcon name="image" size={24} color={colors.mutedForeground} />
+                                <TouchableOpacity
+                                    style={{ position: 'absolute', top: -5, right: -5, backgroundColor: colors.danger, borderRadius: 10, padding: 2 }}
+                                    onPress={() => setImages(images.filter((_, i) => i !== index))}
+                                >
+                                    <AppIcon name="x" size={12} color="#fff" />
+                                </TouchableOpacity>
+                            </View>
+                        ))}
+                    </ScrollView>
+                </View>
+            )}
+
+            <View style={[styles.tipBox, { backgroundColor: colors.muted, borderRadius: radius.lg, marginTop: 16 }]}>
+                <Text style={{ fontSize: 20, marginRight: 12 }}>📸</Text>
+                <Text style={[styles.tipText, { color: colors.mutedForeground }]}>Upload photos of handwritten recipes, cookbook pages, or food magazines!</Text>
+            </View>
+        </View>
+    );
+
+    const renderAudioTab = () => (
+        <View style={styles.formContainer}>
+            <Text style={[styles.label, { color: colors.foreground }]}>Recipe Name *</Text>
+            <TextInput
+                style={[styles.input, { backgroundColor: colors.muted, borderColor: colors.border, color: colors.foreground, borderRadius: radius.md }]}
+                placeholder="e.g., Grandma's Apple Pie"
+                placeholderTextColor={colors.mutedForeground}
+                value={name}
+                onChangeText={setName}
+            />
+            <Text style={[styles.label, { marginTop: 16, color: colors.foreground }]}>Record Your Recipe</Text>
+
+            <View style={[styles.audioArea, { backgroundColor: colors.muted, borderRadius: radius.xl }]}>
+                {!audioPath ? (
+                    <>
+                        <Text style={[styles.timerText, { color: colors.foreground }]}>{formatTime(recordingTime)}</Text>
+
+                        {isRecording && (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+                                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.danger, marginRight: 6 }} />
+                                <Text style={{ color: colors.danger, fontWeight: '600' }}>
+                                    {isPaused ? "Paused" : "Recording..."}
+                                </Text>
+                            </View>
+                        )}
+
+                        {!isRecording ? (
+                            <TouchableOpacity
+                                style={[styles.recordButton, { width: 72, height: 72, backgroundColor: colors.danger, shadowColor: colors.danger, borderRadius: radius.full }]}
+                                onPress={handleStartRecording}
+                            >
+                                <AppIcon name="mic" size={32} color="#fff" />
+                            </TouchableOpacity>
+                        ) : (
+                            <View style={{ flexDirection: 'row', gap: 24, alignItems: 'center' }}>
+                                {/* Pause/Resume Button */}
+                                <TouchableOpacity
+                                    style={[styles.controlBtn, { backgroundColor: '#FFB020', borderRadius: radius.full }]}
+                                    onPress={isPaused ? handleResumeRecording : handlePauseRecording}
+                                >
+                                    <AppIcon name={isPaused ? "play" : "pause"} size={24} color="#fff" />
+                                </TouchableOpacity>
+
+                                {/* Stop Button */}
+                                <TouchableOpacity
+                                    style={[styles.controlBtn, { width: 72, height: 72, backgroundColor: '#2E5C8D', borderRadius: radius.full }]}
+                                    onPress={handleStopRecording}
+                                >
+                                    <AppIcon name="stop" size={24} color="#fff" />
+                                </TouchableOpacity>
+                            </View>
+                        )}
+
+                        <Text style={[styles.recordHint, { color: colors.mutedForeground, marginTop: 24 }]}>
+                            {isRecording
+                                ? "Tap stop to finish recording"
+                                : "Tap the mic to start recording your recipe"}
+                        </Text>
+                    </>
+                ) : (
+                    // Saved State - Player UI
+                    <View style={{ width: '100%', paddingHorizontal: 4 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+                            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                                <AppIcon name="mic" size={20} color={colors.primary} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={{ color: colors.foreground, fontWeight: '600', fontSize: 16 }}>Voice Recording</Text>
+                                <Text style={{ color: colors.mutedForeground, fontSize: 13 }}>{formatTime(recordingTime)}</Text>
+                            </View>
+                            <TouchableOpacity onPress={handleDeleteRecording}>
+                                <AppIcon name="trash" size={20} color={colors.danger} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Player Controls */}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                            <TouchableOpacity onPress={() => setIsPlaying(!isPlaying)}>
+                                <AppIcon name={isPlaying ? "pause" : "play"} size={24} color={colors.foreground} />
+                            </TouchableOpacity>
+                            <View style={{ flex: 1, height: 4, backgroundColor: colors.border, borderRadius: 2 }}>
+                                <View style={{ width: '40%', height: '100%', backgroundColor: colors.foreground, borderRadius: 2 }} />
+                            </View>
+                            <View style={{ flexDirection: 'row', gap: 8 }}>
+                                <AppIcon name="moreVertical" size={20} color={colors.mutedForeground} />
+                            </View>
+                        </View>
+                    </View>
+                )}
+            </View>
+
+            <View style={[styles.tipBox, { backgroundColor: colors.muted, borderRadius: radius.lg }]}>
+                <Text style={{ fontSize: 20, marginRight: 12 }}>🎙️</Text>
+                <Text style={[styles.tipText, { color: colors.mutedForeground }]}>Speak your recipe aloud - ingredients, steps, and tips! Perfect for capturing family recipes passed down verbally.</Text>
             </View>
         </View>
     );
@@ -450,6 +787,8 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
                     {/* Content */}
                     <ScrollView contentContainerStyle={styles.contentScroll}>
                         {activeTab === "Text" && renderTextTab()}
+                        {activeTab === "Image" && renderImageTab()}
+                        {activeTab === "Audio" && renderAudioTab()}
                         {activeTab === "Link" && renderLinkTab()}
                     </ScrollView>
 
@@ -457,9 +796,25 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
                     <View style={[styles.footer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
                         <TouchableOpacity
                             style={[styles.btnSecondary, { backgroundColor: colors.muted, borderColor: colors.border, borderRadius: radius.lg }]}
-                            onPress={handleClear}
+                            onPress={() => {
+                                Alert.alert(
+                                    "Discard Changes?",
+                                    "Are you sure you want to discard your changes?",
+                                    [
+                                        { text: "Keep Editing", style: "cancel" },
+                                        {
+                                            text: "Discard",
+                                            style: "destructive",
+                                            onPress: () => {
+                                                handleClear();
+                                                onClose();
+                                            }
+                                        }
+                                    ]
+                                );
+                            }}
                         >
-                            <Text style={[styles.btnSecondaryText, { color: colors.mutedForeground }]}>Clear</Text>
+                            <Text style={[styles.btnSecondaryText, { color: colors.mutedForeground }]}>Cancel</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={[styles.btnPrimary, { backgroundColor: colors.primary, borderRadius: radius.lg }]}

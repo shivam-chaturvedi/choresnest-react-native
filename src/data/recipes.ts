@@ -19,6 +19,9 @@ export interface Recipe {
     carbs: string;
     fats: string;
   };
+  audio?: string;
+  url?: string;
+  images?: string[];
 }
 
 export const recipes: Recipe[] = [

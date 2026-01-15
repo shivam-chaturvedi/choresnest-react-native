@@ -14,6 +14,7 @@ import { useSidebar } from "../contexts/SidebarContext";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { NotesProvider } from "../contexts/NotesContext";
 import { useTheme } from "../contexts/ThemeContext";
+import { AuthProvider, useAuth } from "../contexts/AuthContext";
 
 
 
@@ -40,51 +41,64 @@ export const AppNavigator = () => {
 
   return (
     <ErrorBoundary>
-      <NotesProvider>
-        <NavigationContainer
-          theme={navigationTheme}
-          initialState={navState}
-          onStateChange={(state) => setNavState(state)}
-        >
-          <AppNavigatorInner />
-        </NavigationContainer>
-      </NotesProvider>
+      <AuthProvider>
+        <NotesProvider>
+          <NavigationContainer
+            theme={navigationTheme}
+            initialState={navState}
+            onStateChange={(state) => setNavState(state)}
+          >
+            <AppNavigatorInner />
+          </NavigationContainer>
+        </NotesProvider>
+      </AuthProvider>
     </ErrorBoundary>
   );
 };
 
 const AppNavigatorInner = () => {
   const { isSidebarOpen, closeSidebar } = useSidebar();
+  const { isAuthenticated, isLoading } = useAuth();
+  const [showSplash, setShowSplash] = React.useState(true);
+
+  if (isLoading || showSplash) {
+    return (
+      <SplashScreen
+        onContinue={() => setShowSplash(false)}
+      />
+    );
+  }
 
   return (
     <>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="Splash">
-          {({ navigation }) => (
-            <SplashScreen
-              onContinue={(destination) => navigation.replace(destination)}
-            />
-          )}
-        </Stack.Screen>
-        <Stack.Screen name="Onboarding">
-          {({ navigation }) => (
-            <OnboardingScreen
-              onSkip={() => navigation.replace("Auth")}
-              onComplete={() => navigation.replace("Auth")}
-            />
-          )}
-        </Stack.Screen>
-        <Stack.Screen name="Auth">
-          {({ navigation }) => (
-            <AuthScreen
-              onAuthenticated={() => navigation.replace("MainTabs")}
-              onForgotPassword={() => navigation.navigate("ForgotPassword")}
-              onPrivacy={() => navigation.navigate("Privacy")}
-            />
-          )}
-        </Stack.Screen>
-        <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-        <Stack.Screen name="MainTabs" component={TabNavigator} />
+        {isAuthenticated ? (
+          <Stack.Screen name="MainTabs" component={TabNavigator} />
+        ) : (
+          <>
+            <Stack.Screen name="Onboarding">
+              {({ navigation }) => (
+                <OnboardingScreen
+                  onSkip={() => navigation.replace("Auth")}
+                  onComplete={() => navigation.replace("Auth")}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="Auth">
+              {({ navigation }) => (
+                <AuthScreen
+                  onAuthenticated={() => {
+                    // MainTabs will render automatically due to state change,
+                    // but explicitly replacing can be safer if navigation state allows
+                  }}
+                  onForgotPassword={() => navigation.navigate("ForgotPassword")}
+                  onPrivacy={() => navigation.navigate("Privacy")}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+          </>
+        )}
       </Stack.Navigator>
       <AppSidebar open={isSidebarOpen} onClose={closeSidebar} />
     </>

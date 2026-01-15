@@ -106,6 +106,10 @@ import {
   LogOut,
   AlertCircle,
   ChevronUp,
+  Play,
+  Pause,
+  Square,
+  MoreVertical,
 } from "lucide-react-native";
 import { theme } from "../../theme";
 
@@ -214,6 +218,10 @@ const ICON_COMPONENTS = {
   gripVertical: GripVertical,
   arrowLeft: ArrowLeft,
   trash: Trash2,
+  play: Play,
+  pause: Pause,
+  stop: Square,
+  moreVertical: MoreVertical,
 } as const;
 
 export type AppIconName = keyof typeof ICON_COMPONENTS;

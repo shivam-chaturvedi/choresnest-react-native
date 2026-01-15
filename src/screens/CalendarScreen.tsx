@@ -20,7 +20,7 @@ import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { AppIcon } from "../components/ui/AppIcon";
 import { PROFILE_COLORS } from "../constants/profileColors";
 import { useSidebar } from "../contexts/SidebarContext";
-import { format, addMonths, subMonths, addDays, startOfWeek, endOfWeek, isSameMonth, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval } from "date-fns";
+import { format, addMonths, subMonths, addDays, subDays, startOfWeek, endOfWeek, isSameMonth, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval } from "date-fns";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 
 const filteredEvents = (events: any[], filterMember: string | null) => {
@@ -75,6 +75,10 @@ const DraggableEvent: React.FC<{
 
         // Calculate new day if in Week view
         let newDate = event.date;
+        // In the new Week view (Single Day with Header), we disable dragging between days
+        // because only one day is rendered at a time in the body.
+
+        /* 
         if (activeView === "Week") {
           const colShift = Math.round(deltaX / (Dimensions.get('window').width * (dayColumnWidth / 100)));
           if (colShift !== 0) {
@@ -83,6 +87,7 @@ const DraggableEvent: React.FC<{
             newDate = format(currentDate, "yyyy-MM-dd");
           }
         }
+        */
 
         // Calculate new start time in minutes
         const totalMinutes = (totalY / HOUR_HEIGHT) * 60;
@@ -283,10 +288,19 @@ export const CalendarScreen: React.FC = () => {
   }, [activeView]);
 
   // Auto-scroll when screen comes into focus
+  // Auto-scroll when screen comes into focus and reset to today
   useFocusEffect(
     React.useCallback(() => {
+      // Ensure we have the latest system time
+      const currentNow = new Date();
+      setNow(currentNow);
+
+      // User request: Always show current date ("system time and date current") when viewing
+      // This fixes the issue where the calendar shows an old date (e.g. Jan 11) if kept open.
+      setSelectedDate(currentNow);
+
       if ((activeView === "Day" || activeView === "Week") && scrollViewRef.current) {
-        const currentHour = new Date().getHours();
+        const currentHour = currentNow.getHours();
         const scrollY = Math.max(0, (currentHour - 1) * HOUR_HEIGHT);
         setTimeout(() => {
           scrollViewRef.current?.scrollTo({ y: scrollY, animated: true });
@@ -294,6 +308,37 @@ export const CalendarScreen: React.FC = () => {
       }
     }, [activeView])
   );
+
+  // Auto-scroll header to selected date
+  useEffect(() => {
+    if (activeView === "Week" && headerScrollRef.current) {
+      // Find index of selected date in our generated window
+      // Our window starts at: subDays(startOfWeek(selectedDate), 7)
+      // But wait, if selectedDate changes, the window shifts, so selectedDate is always at index 7 relative to start?
+      // Let's re-verify the generateWeekDays logic.
+      // start = subDays(startOfWeek(selectedDate), 7).
+      // selectedDate is within startOfWeek(selectedDate)...endOfWeek.
+      // So selectedDate index depends on day of week.
+      // Start of window is (StartOfWeek - 7).
+      // Index of StartOfWeek is 7.
+      // Index of selectedDate is 7 + (dayOfWeekIndex).
+      // e.g. Sunday=0 -> Index 7. Saturday=6 -> Index 13.
+      // DATE_CELL_WIDTH = 60 + 8 = 68.
+      // We want to center it? Or just scroll to it.
+      // Let's scroll to center: (Index * 68) - (ScreenWith / 2) + (CellWidth / 2)
+
+      const dayOfWeek = selectedDate.getDay(); // 0-6
+      const index = 7 + dayOfWeek;
+      const ITEM_WIDTH = 68;
+      const screenWidth = Dimensions.get('window').width;
+
+      const scrollX = (index * ITEM_WIDTH) - (screenWidth / 2) + (ITEM_WIDTH / 2);
+
+      setTimeout(() => {
+        headerScrollRef.current?.scrollTo({ x: Math.max(0, scrollX), animated: true });
+      }, 100);
+    }
+  }, [selectedDate, activeView]);
 
   const today = new Date();
 
@@ -305,8 +350,16 @@ export const CalendarScreen: React.FC = () => {
   const navigateDate = (direction: number) => {
     if (activeView === "Month") {
       setSelectedDate(prev => direction > 0 ? addMonths(prev, 1) : subMonths(prev, 1));
+    } else if (activeView === "Week") {
+      // User requested "next week starting from sunday view"
+      // So when navigating week, snap to the start of the next/prev week
+      setSelectedDate(prev => {
+        const nextWeek = direction > 0 ? addDays(prev, 7) : subDays(prev, 7);
+        return startOfWeek(nextWeek);
+      });
     } else {
-      setSelectedDate(prev => addDays(prev, direction * (activeView === "Week" ? 7 : 1)));
+      // Day view
+      setSelectedDate(prev => addDays(prev, direction));
     }
   };
 
@@ -316,9 +369,13 @@ export const CalendarScreen: React.FC = () => {
     return eachDayOfInterval({ start, end });
   };
 
+  // User requested "scroll through dates" in Week view. 
+  // Instead of just 7 days, we generate a larger sliding window around the selected date.
   const generateWeekDays = () => {
-    const start = startOfWeek(selectedDate);
-    return Array.from({ length: 7 }).map((_, i) => addDays(start, i));
+    // Start 7 days before the selected date's week start
+    const start = subDays(startOfWeek(selectedDate), 7);
+    // Generate 30 days (approx 1 month sliding window)
+    return Array.from({ length: 30 }).map((_, i) => addDays(start, i));
   };
 
   const monthDays = useMemo(() => generateMonthDays(), [selectedDate]);
@@ -346,7 +403,11 @@ export const CalendarScreen: React.FC = () => {
           return (
             <Pressable
               key={i}
-              onPress={() => setSelectedDate(day)}
+              onPress={() => {
+                setSelectedDate(day);
+                // User requested: "when user lcisk on a dayte then also oepn add event modal form"
+                setShowAddEventModal(true);
+              }}
               style={[
                 styles.dayCell,
                 { borderRadius: radius.sm },
@@ -429,7 +490,13 @@ export const CalendarScreen: React.FC = () => {
 
   const renderTimeline = (days: Date[]) => {
     const isTodayInView = days.some(d => isSameDay(d, now));
-    const dayColumnWidthPercent = activeView === "Week" ? (100 / 7) : 100;
+
+    // For Week view, we now show only the selected date in the body (Full Width), 
+    // effectively acting like Day view but with a week header.
+    const dayColumnWidthPercent = 100;
+
+    // Used for the body grid rendering
+    const daysToRender = activeView === "Week" ? [selectedDate] : days;
 
     return (
       <View style={{ flex: 1 }}>
@@ -438,8 +505,9 @@ export const CalendarScreen: React.FC = () => {
             horizontal
             showsHorizontalScrollIndicator={false}
             ref={headerScrollRef}
-            scrollEnabled={false}
-            contentContainerStyle={{ paddingLeft: 50, minWidth: 7 * 120 }}
+            // User requested scrolling through dates, so we must enable this.
+            scrollEnabled={true}
+            contentContainerStyle={{ paddingLeft: 16, paddingRight: 16 }} // Reduced padding
           >
             <View style={styles.weekHeaderRow}>
               {days.map((day, i) => {
@@ -451,13 +519,15 @@ export const CalendarScreen: React.FC = () => {
                     onPress={() => setSelectedDate(day)}
                     style={[
                       styles.weekHeaderCell,
-                      { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.md, width: 112 },
+                      // Reduced width from 112 to something smaller like 50-60 to fit more
+                      { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.md, width: 60, marginRight: 8 },
                       isSelected && { backgroundColor: colors.primary, borderColor: colors.primary },
-                      isToday && !isSelected && { backgroundColor: colors.primary + '15' }
+                      // If today is not selected, show a subtle indicator
+                      isToday && !isSelected && { backgroundColor: colors.primary + '10', borderColor: colors.primary, borderWidth: 1 }
                     ]}
                   >
-                    <Text style={[styles.weekDayLabel, { color: colors.mutedForeground }, isSelected && styles.textWhite]}>{format(day, "EEE")}</Text>
-                    <Text style={[styles.weekDateLabel, { color: colors.foreground }, isSelected && styles.textWhite]}>{format(day, "d")}</Text>
+                    <Text style={[styles.weekDayLabel, { color: colors.mutedForeground, fontSize: 11 }, isSelected && styles.textWhite]}>{format(day, "EEE")}</Text>
+                    <Text style={[styles.weekDateLabel, { color: colors.foreground, fontSize: 16, fontWeight: '600' }, isSelected && styles.textWhite]}>{format(day, "d")}</Text>
                   </Pressable>
                 );
               })}
@@ -466,7 +536,7 @@ export const CalendarScreen: React.FC = () => {
         )}
 
         <View style={[styles.card, { backgroundColor: colors.card, borderRadius: radius.card, padding: 0, overflow: 'hidden', flex: 1 }]}>
-          {activeView === "Day" && (
+          {(activeView === "Day" || activeView === "Week") && (
             <View style={styles.dayHeader}>
               <Text style={[styles.dayHeaderNumber, { color: colors.foreground }]}>{format(selectedDate, "d")}</Text>
               <View>
@@ -497,12 +567,10 @@ export const CalendarScreen: React.FC = () => {
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                onScroll={(e) => {
-                  const x = e.nativeEvent.contentOffset.x;
-                  headerScrollRef.current?.scrollTo({ x, animated: false });
-                }}
+                // We don't need to sync header anymore as Week header uses different scroll
                 scrollEventThrottle={16}
-                contentContainerStyle={{ width: activeView === "Week" ? 7 * 120 : (Dimensions.get('window').width - 50) }}
+                // Width is now always window width for single day display
+                contentContainerStyle={{ width: (Dimensions.get('window').width - 50) }}
               >
                 <View style={{ flex: 1, position: 'relative' }}>
                   {Array.from({ length: 24 }).map((_, hour) => (
@@ -520,7 +588,7 @@ export const CalendarScreen: React.FC = () => {
                     />
                   ))}
 
-                  {days.map((day, dayIndex) => {
+                  {daysToRender.map((day, dayIndex) => {
                     const dateStr = format(day, "yyyy-MM-dd");
                     const dayEvents = currentEvents.filter(e => e.date === dateStr);
 
@@ -615,8 +683,8 @@ export const CalendarScreen: React.FC = () => {
                   })}
 
 
-                  {/* Day View Red Line */}
-                  {activeView === "Day" && isSameDay(selectedDate, now) && (
+                  {/* Current Time Red Line - Unified for Day/Week since we show single day */}
+                  {(activeView === "Day" || activeView === "Week") && isSameDay(selectedDate, now) && (
                     <View
                       style={{
                         position: 'absolute',
@@ -631,30 +699,6 @@ export const CalendarScreen: React.FC = () => {
                       <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#ef4444', position: 'absolute', left: -6 }} />
                       <View style={{ flex: 1, height: 2, backgroundColor: '#ef4444' }} />
                     </View>
-                  )}
-
-                  {/* Week View Red Line */}
-                  {activeView === "Week" && isTodayInView && (
-                    days.map((day, idx) => {
-                      if (!isSameDay(day, now)) return null;
-                      return (
-                        <View
-                          key="now-line-week"
-                          style={{
-                            position: 'absolute',
-                            top: (now.getHours() * HOUR_HEIGHT) + (now.getMinutes() * (HOUR_HEIGHT / 60)),
-                            left: `${idx * dayColumnWidthPercent}%`,
-                            width: `${dayColumnWidthPercent}%`,
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            zIndex: 50
-                          }}
-                        >
-                          <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#ef4444', position: 'absolute', left: -6 }} />
-                          <View style={{ flex: 1, height: 2, backgroundColor: '#ef4444' }} />
-                        </View>
-                      )
-                    })
                   )}
 
                   {Array.from({ length: 24 }).map((_, hour) => (
@@ -699,8 +743,13 @@ export const CalendarScreen: React.FC = () => {
               </Pressable>
               {!showSearch && (
                 <View style={styles.monthSelector}>
-                  <Text style={styles.monthTitle}>{format(selectedDate, "MMMM yyyy")}</Text>
-                  <AppIcon name="chevronRight" size={16} color="#fff" />
+                  <Pressable onPress={() => navigateDate(-1)} style={{ padding: 4 }}>
+                    <AppIcon name="chevronLeft" size={20} color="#fff" />
+                  </Pressable>
+                  <Text style={[styles.monthTitle, { marginHorizontal: 8 }]}>{format(selectedDate, "MMMM yyyy")}</Text>
+                  <Pressable onPress={() => navigateDate(1)} style={{ padding: 4 }}>
+                    <AppIcon name="chevronRight" size={20} color="#fff" />
+                  </Pressable>
                 </View>
               )}
             </View>
