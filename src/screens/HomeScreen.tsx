@@ -248,7 +248,14 @@ export const HomeScreen: React.FC = () => {
               {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
             </Text>
             <Text style={{ fontSize: 24, fontWeight: "800", color: colors.foreground, marginTop: 4 }}>
-              Good {new Date().getHours() < 12 ? "Morning" : "Afternoon"}, {activeMember?.name || "Me"} 👋
+              {(() => {
+                const hour = new Date().getHours();
+                if (hour < 5) return "Good Night";
+                if (hour < 12) return "Good Morning";
+                if (hour < 17) return "Good Afternoon";
+                if (hour < 21) return "Good Evening";
+                return "Good Night";
+              })()}, {activeMember?.name || "Me"} 👋
             </Text>
           </View>
 
@@ -351,7 +358,7 @@ export const HomeScreen: React.FC = () => {
                 <AppIcon name="calendar" size={18} color={colors.primary} style={{ marginRight: 8 }} />
                 <Text style={{ fontSize: 18, fontWeight: "700", color: colors.foreground }}>Today's Schedule</Text>
               </View>
-              <Pressable>
+              <Pressable onPress={() => (navigation as any).navigate('MainTabs', { screen: 'calendar' })}>
                 <Text style={[styles.linkText, { color: colors.primary }]}>View All ›</Text>
               </Pressable>
             </View>
@@ -386,7 +393,9 @@ export const HomeScreen: React.FC = () => {
                 <AppIcon name="utensils" size={18} color={colors.primary} style={{ marginRight: 8 }} />
                 <Text style={{ fontSize: 18, fontWeight: "700", color: colors.foreground }}>Meals Today</Text>
               </View>
-              <Text style={{ color: colors.primary, fontWeight: "600", fontSize: 14 }}>Meal Plan ›</Text>
+              <Pressable onPress={() => (navigation as any).navigate('MealPlan')}>
+                <Text style={{ color: colors.primary, fontWeight: "600", fontSize: 14 }}>Meal Plan ›</Text>
+              </Pressable>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 16 }}>
               <View style={{ flexDirection: 'row', gap: 12 }}>

@@ -8,25 +8,41 @@ interface AudioPlayerModalProps {
     onClose: () => void;
     audioSrc: string;
     title?: string;
+    duration: number;
 }
 
-export const AudioPlayerModal: React.FC<AudioPlayerModalProps> = ({ open, onClose, audioSrc, title }) => {
+export const AudioPlayerModal: React.FC<AudioPlayerModalProps> = ({ open, onClose, audioSrc, title, duration }) => {
     const colors = useThemeColors();
     const radius = useThemeRadius();
 
     const [isPlaying, setIsPlaying] = useState(false);
-    const [progress, setProgress] = useState(0); // 0 to 100
+    const [currentTime, setCurrentTime] = useState(0);
 
-    // Dummy Progress Interval
+    // Simulated Playback Interval
     useEffect(() => {
         let interval: any;
         if (isPlaying) {
             interval = setInterval(() => {
-                setProgress(p => (p >= 100 ? 0 : p + 1));
-            }, 100);
+                setCurrentTime(prev => {
+                    if (prev >= duration) {
+                        setIsPlaying(false);
+                        return 0;
+                    }
+                    return prev + 1; // 1 second update
+                });
+            }, 1000); // Real-time seconds
         }
         return () => clearInterval(interval);
-    }, [isPlaying]);
+    }, [isPlaying, duration]);
+
+    // Format seconds to MM:SS
+    const formatTime = (totalSeconds: number) => {
+        const mins = Math.floor(totalSeconds / 60);
+        const secs = totalSeconds % 60;
+        return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+    };
+
+    const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
     if (!open) return null;
 
@@ -48,16 +64,16 @@ export const AudioPlayerModal: React.FC<AudioPlayerModalProps> = ({ open, onClos
 
                         {/* Progress Bar */}
                         <View style={[styles.progressBar, { backgroundColor: colors.muted }]}>
-                            <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: colors.primary }]} />
+                            <View style={[styles.progressFill, { width: `${progressPercent}%`, backgroundColor: colors.primary }]} />
                         </View>
                         <View style={styles.timeRow}>
-                            <Text style={[styles.timeText, { color: colors.mutedForeground }]}>0:00</Text>
-                            <Text style={[styles.timeText, { color: colors.mutedForeground }]}>3:45</Text>
+                            <Text style={[styles.timeText, { color: colors.mutedForeground }]}>{formatTime(currentTime)}</Text>
+                            <Text style={[styles.timeText, { color: colors.mutedForeground }]}>{formatTime(duration)}</Text>
                         </View>
 
                         {/* Controls */}
                         <View style={styles.controls}>
-                            <TouchableOpacity onPress={() => setProgress(Math.max(0, progress - 10))}>
+                            <TouchableOpacity onPress={() => setCurrentTime(Math.max(0, currentTime - 10))}>
                                 <AppIcon name="chevronLeft" size={28} color={colors.foreground} />
                             </TouchableOpacity>
 
@@ -68,7 +84,7 @@ export const AudioPlayerModal: React.FC<AudioPlayerModalProps> = ({ open, onClos
                                 <AppIcon name={isPlaying ? "pause" : "play"} size={32} color="#fff" />
                             </TouchableOpacity>
 
-                            <TouchableOpacity onPress={() => setProgress(Math.min(100, progress + 10))}>
+                            <TouchableOpacity onPress={() => setCurrentTime(Math.min(duration, currentTime + 10))}>
                                 <AppIcon name="chevronRight" size={28} color={colors.foreground} />
                             </TouchableOpacity>
                         </View>

@@ -263,9 +263,16 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
             const parsedCookTime = parseInt(cookTime || '0', 10);
             const parsedServings = parseInt(servings || '4', 10);
 
+
+            // Process URL to ensure it has a protocol
+            let formattedUrl = linkUrl ? linkUrl.trim() : undefined;
+            if (formattedUrl && !/^https?:\/\//i.test(formattedUrl)) {
+                formattedUrl = `https://${formattedUrl}`;
+            }
+
             addRecipe({
                 name: name.trim(),
-                image: images.length > 0 ? images[0] : (activeTab === "Link" ? "🔗" : activeTab === "Audio" ? "�" : "🍲"),
+                image: images.length > 0 ? images[0] : (activeTab === "Link" ? "LINK_ICON" : activeTab === "Audio" ? "AUDIO_ICON" : "🍲"),
                 time: (parsedPrepTime + parsedCookTime) > 0 ? `${parsedPrepTime + parsedCookTime} min` : "15 min", // Default for quick add
                 servings: parsedServings > 0 ? parsedServings : 4,
                 tags,
@@ -277,11 +284,12 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
                     fats: fats.trim() || "-"
                 },
                 audio: audioPath || undefined,
-                url: linkUrl || undefined,
-                images: images.length > 0 ? images : undefined
+                duration: recordingTime > 0 ? recordingTime : undefined,
+                url: formattedUrl,
+                images: images.length > 0 ? images : undefined,
             });
 
-            showToast({ title: "Success", description: "Recipe added successfully", type: "success" });
+            showToast({ title: "Recipe Added", description: `${name} has been added to your cookbook`, type: "success" });
             handleClear();
             onClose();
         } catch (error) {

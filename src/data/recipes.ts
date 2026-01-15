@@ -20,7 +20,8 @@ export interface Recipe {
     fats: string;
   };
   audio?: string;
-  url?: string;
+  duration?: number; // Duration in seconds
+  url?: string; // New field for linked recipes
   images?: string[];
 }
 

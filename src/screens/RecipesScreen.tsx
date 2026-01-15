@@ -121,10 +121,23 @@ export const RecipesScreen: React.FC = () => {
 
     if (recipe.url) {
       // Link Recipe -> Open URL
-      Linking.openURL(recipe.url).catch(err => {
-        console.error("Failed to open URL:", err);
-        showToast({ title: "Error", description: "Could not open link", type: "warning" });
-      });
+      let targetUrl = recipe.url;
+      if (!/^https?:\/\//i.test(targetUrl)) {
+        targetUrl = `https://${targetUrl}`;
+      }
+
+      Linking.canOpenURL(targetUrl).then(supported => {
+        if (supported) {
+          Linking.openURL(targetUrl).catch(err => {
+            console.error("Failed to open URL:", err);
+            showToast({ title: "Error", description: "Could not open link", type: "warning" });
+          });
+        } else {
+          console.warn("Cannot handle URL:", targetUrl);
+          showToast({ title: "Error", description: "Invalid link format", type: "warning" });
+        }
+      }).catch(err => console.error("An error occurred", err));
+
     } else if (recipe.audio) {
       // Audio Recipe -> Open Audio Player
       setShowAudioPlayer(true);
@@ -173,14 +186,53 @@ export const RecipesScreen: React.FC = () => {
     }
   };
 
+  // Helper to render recipe image or icon
+  const renderRecipeImage = (imageString: string) => {
+    if (imageString === "AUDIO_ICON") {
+      return <AppIcon name="mic" size={24} color={theme.colors.primary} />;
+    }
+    if (imageString === "LINK_ICON") {
+      return <AppIcon name="link" size={24} color={theme.colors.primary} />;
+    }
+    return <Text style={{ fontSize: 32 }}>{imageString}</Text>;
+  };
+
+  const renderRecommendedItem = (recipe: Recipe) => (
+    <Pressable
+      key={recipe.id}
+      style={[styles.recommendRow, { backgroundColor: colors.muted, borderRadius: radius.lg }]}
+      onPress={() => handleRecipePress(recipe)}
+    >
+      <View style={styles.recommendLeft}>
+        <View style={[styles.emojiContainer, { backgroundColor: colors.card, borderRadius: radius.sm }]}>
+          {renderRecipeImage(recipe.image)}
+        </View>
+        <View>
+          <Text style={[styles.recommendTitle, { color: colors.foreground }]}>{recipe.name}</Text>
+          <Text style={[styles.recommendMeta, { color: colors.mutedForeground }]}>
+            {recipe.time}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.recommendRight}>
+        <Pressable onPress={() => toggleBookmark(recipe.id)}>
+          <AppIcon name="bookmark" size={20} color={recipe.saved ? colors.primary : colors.mutedForeground} style={recipe.saved ? { opacity: 1 } : { opacity: 0.5 }} />
+        </Pressable>
+        <AppIcon name="chevronRight" size={20} color={colors.mutedForeground} />
+      </View>
+    </Pressable>
+  );
+
   const renderForYou = () => (
     <>
-      {/* Preferences */}
+      {/* ... (Preferences Section same) ... */}
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
         <View style={styles.sectionHeader}>
           <AppIcon name="sparkles" size={20} color={colors.primary} style={{ marginRight: 8 }} />
           <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Your Preferences</Text>
         </View>
+
+        {/* ... (Tags/Grocery Note Same) ... */}
         <View style={styles.tagGroup}>
           {preferences.map((tag) => {
             const isActive = activePreferences.includes(tag);
@@ -224,37 +276,13 @@ export const RecipesScreen: React.FC = () => {
       {activePreferences.length > 0 && (
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
           <View style={styles.sectionHeader}>
+            {/* ... */}
             <AppIcon name="star" size={20} color={colors.primary} style={{ marginRight: 8 }} />
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
               Recommended For You
             </Text>
           </View>
-
-          {recommended.length > 0 ? recommended.map((recipe) => (
-            <Pressable
-              key={recipe.id}
-              style={[styles.recommendRow, { backgroundColor: colors.muted, borderRadius: radius.lg }]}
-              onPress={() => handleRecipePress(recipe)}
-            >
-              <View style={styles.recommendLeft}>
-                <View style={[styles.emojiContainer, { backgroundColor: colors.card, borderRadius: radius.sm }]}>
-                  <Text style={styles.recommendEmoji}>{recipe.image}</Text>
-                </View>
-                <View>
-                  <Text style={[styles.recommendTitle, { color: colors.foreground }]}>{recipe.name}</Text>
-                  <Text style={[styles.recommendMeta, { color: colors.mutedForeground }]}>
-                    {recipe.time}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.recommendRight}>
-                <Pressable onPress={() => toggleBookmark(recipe.id)}>
-                  <AppIcon name="bookmark" size={20} color={recipe.saved ? colors.primary : colors.mutedForeground} style={recipe.saved ? { opacity: 1 } : { opacity: 0.5 }} />
-                </Pressable>
-                <AppIcon name="chevronRight" size={20} color={colors.mutedForeground} />
-              </View>
-            </Pressable>
-          )) : (
+          {recommended.length > 0 ? recommended.map(renderRecommendedItem) : (
             <Text style={{ color: colors.mutedForeground, padding: 8 }}>No recipes match these preferences.</Text>
           )}
         </View>
@@ -269,32 +297,7 @@ export const RecipesScreen: React.FC = () => {
               Your Favorites
             </Text>
           </View>
-
-          {favorites.map((recipe) => (
-            <Pressable
-              key={recipe.id}
-              style={[styles.recommendRow, { backgroundColor: colors.muted, borderRadius: radius.lg }]}
-              onPress={() => handleRecipePress(recipe)}
-            >
-              <View style={styles.recommendLeft}>
-                <View style={[styles.emojiContainer, { backgroundColor: colors.card, borderRadius: radius.sm }]}>
-                  <Text style={styles.recommendEmoji}>{recipe.image}</Text>
-                </View>
-                <View>
-                  <Text style={[styles.recommendTitle, { color: colors.foreground }]}>{recipe.name}</Text>
-                  <Text style={[styles.recommendMeta, { color: colors.mutedForeground }]}>
-                    {recipe.time}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.recommendRight}>
-                <Pressable onPress={() => toggleBookmark(recipe.id)}>
-                  <AppIcon name="bookmark" size={20} color={recipe.saved ? colors.primary : colors.mutedForeground} style={recipe.saved ? { opacity: 1 } : { opacity: 0.5 }} />
-                </Pressable>
-                <AppIcon name="chevronRight" size={20} color={colors.mutedForeground} />
-              </View>
-            </Pressable>
-          ))}
+          {favorites.map(renderRecommendedItem)}
         </View>
       )}
 
@@ -312,7 +315,9 @@ export const RecipesScreen: React.FC = () => {
               style={[styles.quickCard, { backgroundColor: colors.muted, borderRadius: radius.lg }]}
               onPress={() => handleRecipePress(recipe)}
             >
-              <Text style={styles.quickEmoji}>{recipe.image}</Text>
+              <View style={{ marginBottom: 12, height: 40, justifyContent: 'center' }}>
+                {renderRecipeImage(recipe.image)}
+              </View>
               <Text style={[styles.quickTitle, { color: colors.foreground }]} numberOfLines={2}>{recipe.name}</Text>
               <Text style={[styles.quickMeta, { color: colors.mutedForeground }]}>{recipe.time}</Text>
             </Pressable>
@@ -344,8 +349,8 @@ export const RecipesScreen: React.FC = () => {
           style={[styles.recipeCard, { backgroundColor: colors.card, borderRadius: radius.lg }]}
           onPress={() => handleRecipePress(recipe)}
         >
-          <View style={[styles.recipeImage, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
-            <Text style={{ fontSize: 32 }}>{recipe.image}</Text>
+          <View style={[styles.recipeImage, { backgroundColor: colors.muted, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' }]}>
+            {renderRecipeImage(recipe.image)}
           </View>
           <View style={styles.recipeInfo}>
             <View style={styles.recipeHeader}>
@@ -546,6 +551,7 @@ export const RecipesScreen: React.FC = () => {
         onClose={() => setShowAudioPlayer(false)}
         audioSrc={selectedRecipe?.audio || ""}
         title={selectedRecipe?.name}
+        duration={selectedRecipe?.duration || 0}
       />
     </>
   );

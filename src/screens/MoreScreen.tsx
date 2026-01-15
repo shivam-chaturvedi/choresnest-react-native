@@ -6,14 +6,14 @@ import {
   ScrollView,
   Pressable,
   Alert,
+  Modal,
 } from "react-native";
 import { useNavigation, NavigationProp } from "@react-navigation/native";
 import { AppLayout } from "../components/layout/AppLayout";
-import { theme } from "../theme";
 import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { useSidebar } from "../contexts/SidebarContext";
 import { AppIcon, AppIconName } from "../components/ui/AppIcon";
-import { useFamily } from "../contexts/FamilyContext";
+import { useFamily, FamilyMember } from "../contexts/FamilyContext";
 import { PROFILE_COLORS } from "../constants/profileColors";
 
 interface MenuItem {
@@ -33,12 +33,17 @@ interface MenuSection {
 
 export const MoreScreen: React.FC = () => {
   const colors = useThemeColors();
-  const radius = useThemeRadius(); // Reactively updated radius
+  const radius = useThemeRadius();
+  // Hooks must be unconditional and in the same order
   const navigation = useNavigation<NavigationProp<Record<string, undefined>>>();
   const { openSidebar } = useSidebar();
-  const { activeMember } = useFamily();
+  const { activeMember, members, setActiveMember } = useFamily();
+  const [showProfileSwitcher, setShowProfileSwitcher] = useState(false);
 
-  const activeProfileColor = PROFILE_COLORS.find(c => c.value === activeMember?.color)?.hex || colors.primary;
+  // Safe access to profile color
+  const activeProfileColor = activeMember?.color
+    ? (PROFILE_COLORS.find(c => c.value === activeMember.color)?.hex || colors.primary)
+    : colors.primary;
 
   const sections: MenuSection[] = [
     {
@@ -95,7 +100,7 @@ export const MoreScreen: React.FC = () => {
           icon: "users",
           color: colors.foreground + '10',
           iconColor: colors.foreground,
-          badge: "4",
+          badge: (members?.length || 0).toString(),
           route: "Family"
         },
       ],
@@ -148,21 +153,35 @@ export const MoreScreen: React.FC = () => {
   ];
 
   const handleLogout = () => {
-    Alert.alert(
-      "Sign Out",
-      "Are you sure you want to sign out?",
-      [
-        {
-          text: "Cancel",
-          style: "cancel"
-        },
-        {
-          text: "Sign Out",
-          style: "destructive",
-          onPress: () => console.log("Sign out confirmed")
-        }
-      ]
-    );
+    try {
+      Alert.alert(
+        "Sign Out",
+        "Are you sure you want to sign out?",
+        [
+          {
+            text: "Cancel",
+            style: "cancel"
+          },
+          {
+            text: "Sign Out",
+            style: "destructive",
+            onPress: () => console.log("Sign out confirmed")
+          }
+        ]
+      );
+    } catch (e) {
+      console.error("Logout Error:", e);
+    }
+  };
+
+  const handleSwitchProfile = (member: FamilyMember) => {
+    try {
+      setActiveMember(member);
+      setShowProfileSwitcher(false);
+    } catch (e) {
+      console.error("Profile Switch Error:", e);
+      Alert.alert("Error", "Could not switch profile");
+    }
   };
 
   return (
@@ -170,14 +189,27 @@ export const MoreScreen: React.FC = () => {
       <AppLayout showNav={false}>
         <ScrollView contentContainerStyle={styles.container}>
           <View style={styles.header}>
-            <Pressable onPress={openSidebar} style={[styles.menuButton, { backgroundColor: colors.card, shadowColor: colors.foreground, borderRadius: radius.md }]}>
-              <AppIcon name="menu" size={20} color={colors.foreground} />
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Pressable onPress={openSidebar} style={[styles.menuButton, { backgroundColor: colors.card, shadowColor: colors.foreground, borderRadius: radius.md }]}>
+                <AppIcon name="menu" size={20} color={colors.foreground} />
+              </Pressable>
+              <Text style={[styles.title, { color: colors.foreground }]}>Settings</Text>
+            </View>
+
+            {/* Top Bar Profile Switcher */}
+            <Pressable
+              style={[styles.topProfileButton, { backgroundColor: activeProfileColor + '20', borderRadius: radius.full }]}
+              onPress={() => setShowProfileSwitcher(true)}
+            >
+              <Text style={{ fontSize: 18 }}>{activeMember?.symbol || "👤"}</Text>
             </Pressable>
-            <Text style={[styles.title, { color: colors.foreground }]}>Settings</Text>
           </View>
 
           {/* Profile Card */}
-          <View style={[styles.profileCard, { backgroundColor: colors.card, shadowColor: colors.foreground, borderRadius: radius.card }]}>
+          <Pressable
+            style={[styles.profileCard, { backgroundColor: colors.card, shadowColor: colors.foreground, borderRadius: radius.card }]}
+            onPress={() => setShowProfileSwitcher(true)}
+          >
             <View style={styles.avatarContainer}>
               <View style={[styles.avatar, { backgroundColor: activeProfileColor + '20', borderRadius: radius.lg }]}>
                 <Text style={{ fontSize: 32 }}>{activeMember?.symbol || "👨"}</Text>
@@ -185,19 +217,25 @@ export const MoreScreen: React.FC = () => {
             </View>
             <View style={styles.profileInfo}>
               <Text style={[styles.profileName, { color: colors.foreground }]}>{activeMember?.name || "Family Member"}</Text>
-              {/* <Text style={[styles.profileEmail, { color: colors.mutedForeground }]}>{activeMember?.name.toLowerCase().replace(/\s/g, '')}@email.com</Text> */}
-              <View style={[styles.roleBadge, { backgroundColor: activeProfileColor + '20', borderRadius: radius.sm }]}>
-                <Text style={[styles.roleText, { color: activeProfileColor }]}>{PROFILE_COLORS.find(c => c.value === activeMember?.color)?.name || "Member"}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                <View style={[styles.roleBadge, { backgroundColor: activeProfileColor + '20', borderRadius: radius.sm, marginRight: 8 }]}>
+                  <Text style={[styles.roleText, { color: activeProfileColor }]}>
+                    {activeMember?.color ? (PROFILE_COLORS.find(c => c.value === activeMember.color)?.name || "Member") : "Member"}
+                  </Text>
+                </View>
+                <AppIcon name="chevronDown" size={14} color={colors.mutedForeground} />
               </View>
             </View>
-          </View>
+            {/* Fixed Icon Name: refreshCw -> rotateCw */}
+            <AppIcon name="rotateCw" size={20} color={colors.mutedForeground} />
+          </Pressable>
 
           {sections.map((section) => (
             <View key={section.title} style={styles.sectionContainer}>
               <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>{section.title}</Text>
               <View style={[styles.sectionCard, { backgroundColor: colors.card, shadowColor: colors.foreground, borderRadius: radius.card }]}>
                 {section.items.map((item, index) => {
-                  if (item.label === "Nutrition & Health") return null; // Hide Nutrition button as requested
+                  if (item.label === "Nutrition & Health") return null;
 
                   return (
                     <Pressable
@@ -239,6 +277,47 @@ export const MoreScreen: React.FC = () => {
           <Text style={[styles.version, { color: colors.mutedForeground }]}>Family Chores v1.0.0 · Made with ❤️ for families</Text>
         </ScrollView>
       </AppLayout>
+
+      {/* Profile Switcher Modal */}
+      <Modal visible={showProfileSwitcher} animationType="fade" transparent onRequestClose={() => setShowProfileSwitcher(false)}>
+        <View style={styles.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowProfileSwitcher(false)} />
+          <View style={[styles.modalContent, { backgroundColor: colors.card, borderRadius: radius.xl }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.foreground }]}>Switch Profile</Text>
+              <Pressable onPress={() => setShowProfileSwitcher(false)}>
+                <AppIcon name="x" size={24} color={colors.mutedForeground} />
+              </Pressable>
+            </View>
+            <ScrollView contentContainerStyle={{ gap: 12 }}>
+              {members?.map(member => {
+                const isActive = member.id === activeMember?.id;
+                const memColor = PROFILE_COLORS.find(c => c.value === member.color)?.hex || colors.primary;
+
+                return (
+                  <Pressable
+                    key={member.id}
+                    style={[
+                      styles.memberOption,
+                      { backgroundColor: isActive ? memColor + '10' : colors.muted, borderRadius: radius.lg, borderColor: isActive ? memColor : 'transparent', borderWidth: 1 }
+                    ]}
+                    onPress={() => handleSwitchProfile(member)}
+                  >
+                    <View style={[styles.optionAvatar, { backgroundColor: memColor + '20', borderRadius: radius.full }]}>
+                      <Text style={{ fontSize: 24 }}>{member.symbol}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.optionName, { color: colors.foreground, fontWeight: isActive ? '700' : '500' }]}>{member.name}</Text>
+                      <Text style={{ fontSize: 12, color: colors.mutedForeground }}>{PROFILE_COLORS.find(c => c.value === member.color)?.name}</Text>
+                    </View>
+                    {isActive && <AppIcon name="check" size={20} color={memColor} />}
+                  </Pressable>
+                )
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 };
@@ -247,11 +326,11 @@ const styles = StyleSheet.create({
   container: {
     padding: 20,
     paddingBottom: 120,
-    // Background handled by AppLayout
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: 'space-between',
     marginBottom: 24,
   },
   menuButton: {
@@ -268,6 +347,12 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "700",
     marginLeft: 16,
+  },
+  topProfileButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   profileCard: {
     flexDirection: "row",
@@ -289,29 +374,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  cameraBadge: {
-    position: "absolute",
-    bottom: -4,
-    right: -4,
-    width: 24,
-    height: 24,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
   profileInfo: {
     flex: 1,
   },
   profileName: {
     fontSize: 18,
     fontWeight: "700",
-  },
-  profileEmail: {
-    fontSize: 14,
-    marginBottom: 4,
   },
   roleBadge: {
     alignSelf: "flex-start",
@@ -393,5 +461,41 @@ const styles = StyleSheet.create({
     textAlign: "center",
     opacity: 0.7,
     fontSize: 12,
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 20
+  },
+  modalContent: {
+    padding: 24,
+    maxHeight: '60%'
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700'
+  },
+  memberOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    gap: 16
+  },
+  optionAvatar: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  optionName: {
+    fontSize: 16
   }
 });

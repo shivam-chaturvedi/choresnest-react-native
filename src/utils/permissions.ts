@@ -26,7 +26,12 @@ const getPermissionType = (type: PermissionType): Permission | null => {
             case 'camera': return PERMISSIONS.ANDROID.CAMERA;
             case 'photo': return androidVersion >= 33 ? PERMISSIONS.ANDROID.READ_MEDIA_IMAGES : PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE;
             case 'audio': return PERMISSIONS.ANDROID.RECORD_AUDIO;
-            case 'notification': return PERMISSIONS.ANDROID.POST_NOTIFICATIONS as Permission;
+            case 'notification':
+                // POST_NOTIFICATIONS is only available on Android 13+ (API 33)
+                // We cast to any to avoid TS errors if the type definition is outdated
+                return androidVersion >= 33
+                    ? (PERMISSIONS.ANDROID as any).POST_NOTIFICATIONS
+                    : null;
             case 'storage': return androidVersion >= 33 ? PERMISSIONS.ANDROID.READ_MEDIA_IMAGES : PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE;
             default: return null;
         }
