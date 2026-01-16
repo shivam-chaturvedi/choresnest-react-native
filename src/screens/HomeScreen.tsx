@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { setupNotifications, displayImmediateNotification, scheduleDailyNotification } from "../utils/notifications";
 import {
   View,
   Text,
@@ -82,6 +83,8 @@ export const HomeScreen: React.FC = () => {
     }
   };
 
+
+
   useEffect(() => {
     const checkTutorial = async () => {
       try {
@@ -95,6 +98,22 @@ export const HomeScreen: React.FC = () => {
       }
     };
     checkTutorial();
+
+    // Setup Notifications
+    const initNotifications = async () => {
+      try {
+        await setupNotifications();
+        // Immediate notification removed as per user request to stop spam
+        // await displayImmediateNotification("Welcome Back! 👋", "Notifications are working correctly. Daily reminder set for 10 PM.");
+
+        // Schedule Daily Notification
+        await scheduleDailyNotification();
+      } catch (e) {
+        console.error("Notification setup failed", e);
+      }
+    };
+    initNotifications();
+
   }, []);
 
   const handleTutorialClose = async () => {

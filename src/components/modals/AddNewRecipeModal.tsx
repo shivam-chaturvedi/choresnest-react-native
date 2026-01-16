@@ -14,25 +14,43 @@ import { AppIcon } from "../ui/AppIcon";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { useRecipes } from "../../contexts/RecipeContext";
 import { useToast } from "../ui/Toast";
+import AudioRecorderPlayer, {
+    AVEncoderAudioQualityIOSType,
+    AVEncodingOption,
+    AudioEncoderAndroidType,
+    AudioSet,
+    AudioSourceAndroidType,
+    PlayBackType,
+    RecordBackType,
+} from 'react-native-audio-recorder-player';
+
+
+
+
+
+
 
 
 import { requestPermission } from "../../utils/permissions";
 import { Platform } from "react-native";
 
+
+import { launchImageLibrary } from 'react-native-image-picker';
+import { Recipe } from "../../data/recipes";
+
 interface AddNewRecipeModalProps {
     open: boolean;
     onClose: () => void;
+    recipe?: Recipe; // Added prop for editing
 }
 
 type TabType = "Text" | "Image" | "Link" | "Audio";
 
-export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
-    open,
-    onClose,
-}) => {
+export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
+    const { open, onClose } = props;
     const colors = useThemeColors();
     const radius = useThemeRadius();
-    const { addRecipe } = useRecipes();
+    const { addRecipe, updateRecipe } = useRecipes();
     const { showToast } = useToast();
 
     const [activeTab, setActiveTab] = useState<TabType>("Text");
@@ -59,16 +77,60 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
     const [isRecording, setIsRecording] = useState(false);
     const [isPaused, setIsPaused] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
-    const [recordingTime, setRecordingTime] = useState(0);
-    const [imagePath, setImagePath] = useState<string | null>(null);
-    const [images, setImages] = useState<string[]>([]); // Added for multiple images
-    const [audioPath, setAudioPath] = useState<string | null>(null);
+    const [recordingTime, setRecordingTime] = useState(0); // in seconds
+    const [playbackTime, setPlaybackTime] = useState(0); // in seconds
+    const [imagePath, setImagePath] = useState<string | null>(props.recipe?.image || null);
+    const [images, setImages] = useState<string[]>(props.recipe?.images || []);
+    const [audioPath, setAudioPath] = useState<string | null>(props.recipe?.audio || null);
+
+    // Audio Recorder Ref
+    const audioRecorderPlayer = React.useRef(new (AudioRecorderPlayer as any)()).current;
+
+    // Initial load for editing
+    React.useEffect(() => {
+        if (props.recipe) {
+            setName(props.recipe.name);
+            // Parse time string '45 min' -> 45
+            const totalMin = parseInt(props.recipe.time) || 15;
+            setPrepTime((totalMin > 15 ? 15 : 5).toString());
+            setCookTime((totalMin > 15 ? totalMin - 15 : totalMin - 5).toString());
+
+            setServings(props.recipe.servings.toString());
+            setIngredients(props.recipe.ingredients.map(i => i.name));
+            setTags(props.recipe.tags);
+            if (props.recipe.url) setLinkUrl(props.recipe.url);
+
+            if (props.recipe.nutrition) {
+                setKcal(props.recipe.nutrition.kcal);
+                setProtein(props.recipe.nutrition.protein);
+                setCarbs(props.recipe.nutrition.carbs);
+                setFats(props.recipe.nutrition.fats);
+            }
+            // Logic to set active tab based on content
+            if (props.recipe.images && props.recipe.images.length > 0) setActiveTab('Image');
+            else if (props.recipe.url) setActiveTab('Link');
+            else if (props.recipe.audio) setActiveTab('Audio');
+        }
+
+        // Cleanup on unmount
+        return () => {
+            if (isRecording) {
+                audioRecorderPlayer.stopRecorder();
+                audioRecorderPlayer.removeRecordBackListener();
+            }
+            if (isPlaying) {
+                audioRecorderPlayer.stopPlayer();
+                audioRecorderPlayer.removePlayBackListener();
+            }
+        };
+    }, [props.recipe]);
+
 
     // Helpers
     const formatTime = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins < 10 ? '0' : ''}${mins} : ${secs < 10 ? '0' : ''}${secs}`;
+        const secs = Math.floor(seconds % 60);
+        return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
     };
 
     const handleStartRecording = async () => {
@@ -76,7 +138,20 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
             const hasPermission = await requestPermission('audio');
             if (!hasPermission) return;
 
-            // Placeholder for actual recording logic
+            // Ensure previous recording is stopped
+            if (isRecording) {
+                await audioRecorderPlayer.stopRecorder();
+                audioRecorderPlayer.removeRecordBackListener();
+            }
+
+            // Start Recorder
+            const result = await audioRecorderPlayer.startRecorder();
+            audioRecorderPlayer.addRecordBackListener((e: RecordBackType) => {
+                setRecordingTime(e.currentPosition / 1000); // Convert ms to seconds
+                return;
+            });
+
+            console.log("Recording started at: ", result);
             setIsRecording(true);
             setIsPaused(false);
             showToast({ title: "Recording", description: "Recording started...", type: "success" });
@@ -86,31 +161,39 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
         }
     };
 
-    const handlePauseRecording = () => {
+    const handlePauseRecording = async () => {
         try {
+            // Note: Pause isn't fully supported across all platforms/versions in r-n-audio-recorder-player uniformly without issues, 
+            // but we can simulate or use built-ins if available. 
+            // Checking library: supports pauseRecorder() on Android/iOS.
+            await audioRecorderPlayer.pauseRecorder();
             setIsPaused(true);
-            // Placeholder for pause logic
         } catch (error) {
             console.error("Error pausing recording:", error);
             showToast({ title: "Error", description: "Failed to pause recording", type: "warning" });
         }
     };
 
-    const handleResumeRecording = () => {
+    const handleResumeRecording = async () => {
         try {
+            await audioRecorderPlayer.resumeRecorder();
             setIsPaused(false);
-            // Placeholder for resume logic
         } catch (error) {
             console.error("Error resuming recording:", error);
             showToast({ title: "Error", description: "Failed to resume recording", type: "warning" });
         }
     };
 
-    const handleStopRecording = () => {
+    const handleStopRecording = async () => {
         try {
+            const result = await audioRecorderPlayer.stopRecorder();
+            audioRecorderPlayer.removeRecordBackListener();
+
+            setAudioPath(result);
             setIsRecording(false);
             setIsPaused(false);
-            setAudioPath("dummy_path.mp3"); // Simulate saved file
+
+            console.log("Recording stopped, saved at: ", result);
             showToast({ title: "Success", description: "Audio saved!", type: "success" });
         } catch (error) {
             console.error("Error stopping recording:", error);
@@ -118,10 +201,39 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
         }
     };
 
-    const handleDeleteRecording = () => {
+    // Playback Handlers
+    const handleTogglePlayback = async () => {
+        if (!audioPath) return;
+
+        if (isPlaying) {
+            await audioRecorderPlayer.pausePlayer();
+            setIsPlaying(false);
+        } else {
+            // Start or Resume
+            const msg = await audioRecorderPlayer.startPlayer(audioPath);
+            audioRecorderPlayer.addPlayBackListener((e: PlayBackType) => {
+                setPlaybackTime(e.currentPosition / 1000);
+                if (e.currentPosition === e.duration) {
+                    audioRecorderPlayer.stopPlayer();
+                    setIsPlaying(false);
+                    setPlaybackTime(0);
+                }
+                return;
+            });
+            setIsPlaying(true);
+        }
+    };
+
+    const handleDeleteRecording = async () => {
         try {
+            if (isPlaying) {
+                await audioRecorderPlayer.stopPlayer();
+                audioRecorderPlayer.removePlayBackListener();
+            }
             setAudioPath(null);
             setRecordingTime(0);
+            setPlaybackTime(0);
+            setIsPlaying(false);
             showToast({ title: "Deleted", description: "Recording deleted", type: "success" });
         } catch (error) {
             console.error("Error deleting recording:", error);
@@ -132,15 +244,22 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
     const handleImageUpload = async () => {
         try {
             const hasPermission = await requestPermission('photo');
-            if (!hasPermission) return;
+            if (hasPermission) {
+                const result = await launchImageLibrary({
+                    mediaType: 'photo',
+                    selectionLimit: 5, // Allow multiple
+                    quality: 0.8,
+                });
 
-            // Placeholder for image picker logic
-            // In a real app, use react-native-image-picker here
-            // Simulate adding multiple images
-            const newImage = "dummy_image_" + (images.length + 1) + ".jpg";
-            setImages([...images, newImage]);
+                if (result.assets) {
+                    const newUris = result.assets
+                        .map(asset => asset.uri)
+                        .filter((uri): uri is string => !!uri);
 
-            showToast({ title: "Success", description: "Image added", type: "success" });
+                    setImages(prev => [...prev, ...newUris]);
+                    showToast({ title: "Success", description: `${newUris.length} image(s) added`, type: "success" });
+                }
+            }
         } catch (error) {
             console.error("Error selecting image:", error);
             showToast({ title: "Error", description: "Failed to select image", type: "warning" });
@@ -203,6 +322,8 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
         setIsRecording(false);
         setIsPaused(false);
         setRecordingTime(0);
+        setPlaybackTime(0);
+        setIsPlaying(false);
     };
 
     const handleSave = () => {
@@ -270,10 +391,10 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
                 formattedUrl = `https://${formattedUrl}`;
             }
 
-            addRecipe({
+            const recipeData = {
                 name: name.trim(),
                 image: images.length > 0 ? images[0] : (activeTab === "Link" ? "LINK_ICON" : activeTab === "Audio" ? "AUDIO_ICON" : "🍲"),
-                time: (parsedPrepTime + parsedCookTime) > 0 ? `${parsedPrepTime + parsedCookTime} min` : "15 min", // Default for quick add
+                time: (parsedPrepTime + parsedCookTime) > 0 ? `${parsedPrepTime + parsedCookTime} min` : "15 min",
                 servings: parsedServings > 0 ? parsedServings : 4,
                 tags,
                 ingredients: finalIngredients,
@@ -287,9 +408,16 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
                 duration: recordingTime > 0 ? recordingTime : undefined,
                 url: formattedUrl,
                 images: images.length > 0 ? images : undefined,
-            });
+            };
 
-            showToast({ title: "Recipe Added", description: `${name} has been added to your cookbook`, type: "success" });
+            if (props.recipe) {
+                updateRecipe(props.recipe.id, recipeData);
+                showToast({ title: "Recipe Updated", description: `${name} has been updated`, type: "success" });
+            } else {
+                addRecipe(recipeData);
+                showToast({ title: "Recipe Added", description: `${name} has been added to your cookbook`, type: "success" });
+            }
+
             handleClear();
             onClose();
         } catch (error) {
@@ -712,7 +840,7 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
                             </View>
                             <View style={{ flex: 1 }}>
                                 <Text style={{ color: colors.foreground, fontWeight: '600', fontSize: 16 }}>Voice Recording</Text>
-                                <Text style={{ color: colors.mutedForeground, fontSize: 13 }}>{formatTime(recordingTime)}</Text>
+                                <Text style={{ color: colors.mutedForeground, fontSize: 13 }}>{formatTime(isPlaying || playbackTime > 0 ? playbackTime : recordingTime)}</Text>
                             </View>
                             <TouchableOpacity onPress={handleDeleteRecording}>
                                 <AppIcon name="trash" size={20} color={colors.danger} />
@@ -721,7 +849,7 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = ({
 
                         {/* Player Controls */}
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                            <TouchableOpacity onPress={() => setIsPlaying(!isPlaying)}>
+                            <TouchableOpacity onPress={handleTogglePlayback}>
                                 <AppIcon name={isPlaying ? "pause" : "play"} size={24} color={colors.foreground} />
                             </TouchableOpacity>
                             <View style={{ flex: 1, height: 4, backgroundColor: colors.border, borderRadius: 2 }}>

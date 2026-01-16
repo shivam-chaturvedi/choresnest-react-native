@@ -55,16 +55,30 @@ export interface GroceryItem {
   completed: boolean;
 }
 
+export interface Task {
+  id: string;
+  icon: string;
+  name: string;
+  status: "pending" | "done";
+  priority: "high" | "medium" | "low";
+  due: string; // Display string like "Today"
+  date: string; // ISO Date YYYY-MM-DD for Calendar
+  assignee: string; // memberId
+  tab: string; // "My Tasks" | "Family Tasks"
+}
+
+// ... existing interfaces ...
+
 interface FamilyContextType {
   familyName: string;
   setFamilyName: (name: string) => void;
   members: FamilyMember[];
   activeMember: FamilyMember | null;
   setActiveMember: (member: FamilyMember) => void;
-  addMember: (member: Omit<FamilyMember, "id" | "isActive">) => void;
+  addMember: (member: Omit<FamilyMember, "id">) => void;
   removeMember: (id: string) => void;
-  updateMemberColor: (memberId: string, colorValue: string) => void;
-  updateMember: (id: string, updates: Partial<Omit<FamilyMember, "id" | "isActive">>) => void;
+  updateMemberColor: (id: string, color: string) => void;
+  updateMember: (id: string, updates: Partial<FamilyMember>) => void;
   globalVault: VaultDocument[];
   memberVaults: Record<string, VaultDocument[]>;
   addDocument: (doc: Omit<VaultDocument, "id">) => void;
@@ -75,12 +89,16 @@ interface FamilyContextType {
   deleteEvent: (id: string) => void;
   categories: GroceryCategory[];
   addCategory: (category: Omit<GroceryCategory, "id">) => void;
-  removeCategory: (id: string) => void;
+  removeCategory: (id: string) => void; // Fixed: was removeGroceryCategory in some versions? No, checking implementation.
   updateCategory: (id: string, updates: Partial<Omit<GroceryCategory, "id">>) => void;
   groceryList: GroceryItem[];
   addGroceryItem: (item: Omit<GroceryItem, "id">) => void;
   toggleGroceryItem: (id: string) => void;
   removeGroceryItem: (id: string) => void;
+  tasks: Task[];
+  addTask: (task: Omit<Task, "id">) => void;
+  updateTask: (id: string, updates: Partial<Omit<Task, "id">>) => void;
+  deleteTask: (id: string) => void;
 }
 
 const defaultMembers: FamilyMember[] = [
@@ -202,6 +220,11 @@ const defaultGroceryList: GroceryItem[] = [
   { id: "gr4", name: "Rice", quantity: 5, unit: "kg", categoryId: "cat5", addedBy: "1", completed: false },
 ];
 
+const defaultTasks: Task[] = [
+  { id: "t1", icon: "📝", name: "Complete project report", status: "pending", priority: "high", due: "Today", date: new Date().toISOString().split('T')[0], assignee: "1", tab: "My Tasks" },
+  { id: "t2", icon: "📞", name: "Call insurance company", status: "pending", priority: "medium", due: "Today", date: new Date().toISOString().split('T')[0], assignee: "1", tab: "My Tasks" },
+];
+
 const FamilyContext = createContext<FamilyContextType | undefined>(undefined);
 
 export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -212,8 +235,26 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [events, setEvents] = useState<CalendarEvent[]>(defaultEvents);
   const [groceryList, setGroceryList] = useState<GroceryItem[]>(defaultGroceryList);
   const [categories, setCategories] = useState<GroceryCategory[]>(defaultCategories);
+  const [tasks, setTasks] = useState<Task[]>(defaultTasks);
 
   const activeMember = members.find((m) => m.isActive) || null;
+
+  // ... useEffect ...
+
+  // ... other functions ...
+
+  const addTask = (task: Omit<Task, "id">) => {
+    const newTask = { ...task, id: Date.now().toString() };
+    setTasks(prev => [...prev, newTask]);
+  };
+
+  const updateTask = (id: string, updates: Partial<Omit<Task, "id">>) => {
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+  };
+
+  const deleteTask = (id: string) => {
+    setTasks(prev => prev.filter(t => t.id !== id));
+  };
 
   useEffect(() => {
     const loadActiveMember = async () => {
@@ -463,6 +504,10 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         addGroceryItem,
         toggleGroceryItem,
         removeGroceryItem,
+        tasks,
+        addTask,
+        updateTask,
+        deleteTask,
       }}
     >
       {children}

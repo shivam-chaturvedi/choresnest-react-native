@@ -10,6 +10,7 @@
     "test": "jest"
   },
   "dependencies": {
+    "@notifee/react-native": "^9.1.8",
     "@radix-ui/react-dialog": "^1.1.15",
     "@react-native-async-storage/async-storage": "^1.21.0",
     "@react-native-community/datetimepicker": "^8.6.0",
@@ -22,7 +23,10 @@
     "react": "19.2.0",
     "react-dom": "^19.2.0",
     "react-native": "0.83.1",
+    "react-native-audio-recorder-player": "^3.5.3",
     "react-native-gesture-handler": "^2.30.0",
+    "react-native-image-picker": "^8.2.1",
+    "react-native-nitro-modules": "^0.33.1",
     "react-native-permissions": "^5.4.4",
     "react-native-reanimated": "^4.2.1",
     "react-native-safe-area-context": "^5.6.2",

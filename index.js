@@ -37,4 +37,14 @@ ErrorUtils.setGlobalHandler((error, isFatal) => {
 
 
 
+
+import notifee from '@notifee/react-native';
+
+// Register background handler
+notifee.onBackgroundEvent(async ({ type, detail }) => {
+    // This handler creates a background process that keeps the app alive briefly
+    // It's required for background actions to work reliably on Android
+    console.log('Background Event:', type, detail);
+});
+
 AppRegistry.registerComponent(appName, () => App);

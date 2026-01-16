@@ -14,6 +14,7 @@ import { useSidebar } from "../contexts/SidebarContext";
 import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { AppIcon } from "../components/ui/AppIcon";
 import { ChoreRotationSystem } from "../components/chores/ChoreRotationSystem";
+import { useFamily, Task } from "../contexts/FamilyContext";
 
 interface Task {
   id: string;
@@ -26,7 +27,7 @@ interface Task {
   tab: string;
 }
 
-const tabs = ["My Tasks", "Family Tasks", "Kids Chores"];
+const tabs = ["My Tasks", "Family Tasks"];
 
 const initialTasks: Task[] = [
   { id: "t1", icon: "📝", name: "Complete project report", status: "pending", priority: "high", due: "Today", assignee: "You", tab: "My Tasks" },
@@ -54,15 +55,16 @@ export const TasksScreen: React.FC = () => {
   const [activeTab, setActiveTab] = useState("My Tasks");
   const [showAddTask, setShowAddTask] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | undefined>(undefined);
+
   const { openSidebar } = useSidebar();
   const colors = useThemeColors();
   const radius = useThemeRadius();
-
-  const [taskEntries, setTaskEntries] = useState<Task[]>(initialTasks);
+  const { tasks, addTask, updateTask, members } = useFamily();
 
   const filteredTasks = useMemo(
-    () => taskEntries.filter((task) => task.tab === activeTab),
-    [activeTab, taskEntries]
+    () => tasks.filter((task) => task.tab === activeTab),
+    [activeTab, tasks]
   );
 
   const completedCount = filteredTasks.filter((task) => task.status === "done").length;
@@ -72,16 +74,44 @@ export const TasksScreen: React.FC = () => {
   const toggleTask = (taskId: string) => {
     try {
       if (!taskId) return;
-      setTaskEntries((prev) =>
-        prev.map((task) =>
-          task.id === taskId
-            ? { ...task, status: task.status === "done" ? "pending" : "done" }
-            : task
-        )
-      );
+      const task = tasks.find(t => t.id === taskId);
+      if (task) {
+        updateTask(taskId, { status: task.status === "done" ? "pending" : "done" });
+      }
     } catch (error) {
       console.error("Error toggling task:", error);
     }
+  };
+
+  const handleEditTask = (task: Task) => {
+    setEditingTask(task);
+    setShowAddTask(true);
+  };
+
+  const handleSaveTask = (taskData: any) => {
+    if (editingTask) {
+      updateTask(editingTask.id, {
+        name: taskData.name,
+        icon: taskData.icon,
+        priority: taskData.priority,
+        date: taskData.dueDate.toISOString().split('T')[0],
+        due: "Today", // Ideally calculate relative time, keeping simple for now
+        assignee: taskData.person,
+        tab: activeTab
+      });
+    } else {
+      addTask({
+        name: taskData.name,
+        icon: taskData.icon,
+        priority: taskData.priority,
+        date: taskData.dueDate.toISOString().split('T')[0],
+        due: "Today",
+        assignee: taskData.person,
+        tab: activeTab,
+        status: 'pending'
+      });
+    }
+    setEditingTask(undefined);
   };
 
   return (
@@ -89,7 +119,10 @@ export const TasksScreen: React.FC = () => {
       <AppLayout
         showAddButton={true}
         showNav={false}
-        onAddPress={() => setShowAddTask(true)}
+        onAddPress={() => {
+          setEditingTask(undefined);
+          setShowAddTask(true);
+        }}
       >
         <ScrollView contentContainerStyle={styles.container}>
           <View style={styles.header}>
@@ -102,7 +135,10 @@ export const TasksScreen: React.FC = () => {
                 <AppIcon source="🔍" size={18} color={colors.foreground} />
               </Pressable>
 
-              <Pressable style={[styles.plusAction, { backgroundColor: colors.primary, borderRadius: radius.lg }]} onPress={() => setShowAddTask(true)}>
+              <Pressable style={[styles.plusAction, { backgroundColor: colors.primary, borderRadius: radius.lg }]} onPress={() => {
+                setEditingTask(undefined);
+                setShowAddTask(true);
+              }}>
                 <AppIcon name="plus" size={18} color={colors.primaryForeground} />
               </Pressable>
             </View>
@@ -144,9 +180,12 @@ export const TasksScreen: React.FC = () => {
               <View style={styles.taskList}>
                 {filteredTasks.map((task) => {
                   const priorityStyle = getPriorityStyle(task.priority, colors);
+                  const assignee = members.find(m => m.id === task.assignee)?.name || "Unassigned";
+
                   return (
-                    <View
+                    <Pressable
                       key={task.id}
+                      onPress={() => handleEditTask(task)}
                       style={[
                         styles.taskCard,
                         { backgroundColor: colors.card, shadowColor: colors.border, borderRadius: radius.card },
@@ -182,16 +221,19 @@ export const TasksScreen: React.FC = () => {
                           </View>
                           <View style={styles.metaItem}>
                             <AppIcon name="user" size={14} color={colors.mutedForeground} style={styles.metaIcon} />
-                            <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{task.assignee}</Text>
+                            <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{assignee}</Text>
                           </View>
                         </View>
                       </View>
-                    </View>
+                    </Pressable>
                   );
                 })}
               </View>
 
-              <Pressable style={[styles.addNewRow]} onPress={() => setShowAddTask(true)}>
+              <Pressable style={[styles.addNewRow]} onPress={() => {
+                setEditingTask(undefined);
+                setShowAddTask(true);
+              }}>
                 <AppIcon name="plus" size={16} color={colors.primary} style={styles.addNewIcon} />
                 <Text style={[styles.addNewText, { color: colors.primary }]}>Add new task</Text>
               </Pressable>
@@ -200,7 +242,12 @@ export const TasksScreen: React.FC = () => {
         </ScrollView>
       </AppLayout>
       <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} />
-      <AddTaskModal open={showAddTask} onClose={() => setShowAddTask(false)} />
+      <AddTaskModal
+        open={showAddTask}
+        onClose={() => setShowAddTask(false)}
+        initialTask={editingTask}
+        onSave={handleSaveTask}
+      />
     </>
   );
 };

@@ -15,6 +15,7 @@ import { useSidebar } from "../contexts/SidebarContext";
 import { AppIcon, AppIconName } from "../components/ui/AppIcon";
 import { useFamily, FamilyMember } from "../contexts/FamilyContext";
 import { PROFILE_COLORS } from "../constants/profileColors";
+import { useAuth } from "../contexts/AuthContext";
 
 interface MenuItem {
   label: string;
@@ -34,9 +35,9 @@ interface MenuSection {
 export const MoreScreen: React.FC = () => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
-  // Hooks must be unconditional and in the same order
   const navigation = useNavigation<NavigationProp<Record<string, undefined>>>();
   const { openSidebar } = useSidebar();
+  const { logout } = useAuth();
   const { activeMember, members, setActiveMember } = useFamily();
   const [showProfileSwitcher, setShowProfileSwitcher] = useState(false);
 
@@ -91,20 +92,7 @@ export const MoreScreen: React.FC = () => {
         },
       ],
     },
-    {
-      title: "FAMILY",
-      items: [
-        {
-          label: "Family Members",
-          description: "Manage family profiles",
-          icon: "users",
-          color: colors.foreground + '10',
-          iconColor: colors.foreground,
-          badge: (members?.length || 0).toString(),
-          route: "Family"
-        },
-      ],
-    },
+
     {
       title: "SETTINGS",
       items: [
@@ -152,7 +140,10 @@ export const MoreScreen: React.FC = () => {
     },
   ];
 
-  const handleLogout = () => {
+  // Add useAuth import at top if not present (handled by prev step or assumes knowledge, but I will do it purely here if I can, wait I need to add import line)
+  // Since I can't check imports with this tool easily in one go for existing files without overwriting, I will assume I need to add the import too.
+  // Actually, I'll use multi_replace to be safe.
+  const handleLogout = async () => {
     try {
       Alert.alert(
         "Sign Out",
@@ -165,7 +156,15 @@ export const MoreScreen: React.FC = () => {
           {
             text: "Sign Out",
             style: "destructive",
-            onPress: () => console.log("Sign out confirmed")
+            onPress: async () => {
+              try {
+                await logout();
+                // Navigation will automatically handle the switch to Auth stack due to AppNavigator logic
+              } catch (e) {
+                console.error("Logout execution error:", e);
+                Alert.alert("Error", "Failed to sign out. Please try again.");
+              }
+            }
           }
         ]
       );

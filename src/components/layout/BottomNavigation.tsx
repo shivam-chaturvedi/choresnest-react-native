@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import { View, Text, Pressable, StyleSheet, Platform } from "react-native";
 import { theme } from "../../theme";
 import { AppIcon, AppIconName } from "../ui/AppIcon";
 import { useTheme } from "../../contexts/ThemeContext";
@@ -72,26 +72,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-around",
     borderTopWidth: 1,
-    paddingVertical: 10,
+    paddingVertical: 8,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.05,
     shadowRadius: 10,
     elevation: 6,
-    paddingBottom: 24, // Safety padding for bottom
+    paddingBottom: Platform.OS === 'ios' ? 24 : 5, // Reduced height but kept safe area for iOS
   },
   navItem: {
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 16,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
   navItemActive: {
     // backgroundColor handled dynamically
   },
   label: {
-    fontSize: 12,
+    fontSize: 11,
     marginTop: 2,
+    fontWeight: "600",
   },
   labelActive: {
     fontWeight: "800",

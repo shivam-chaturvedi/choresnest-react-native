@@ -79,8 +79,13 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   initialTime,
   eventToEdit,
 }) => {
-  const { members, activeMember, addEvent, updateEvent, deleteEvent } = useFamily();
+  /* Hook and State Setup */
+  const { members, activeMember, addEvent, updateEvent, deleteEvent, addTask } = useFamily();
   const colors = useThemeColors();
+
+  const [activeTab, setActiveTab] = useState<'event' | 'task'>('event');
+
+  /* Event State */
 
   const isEditing = !!eventToEdit;
   const isOwner = !eventToEdit || activeMember?.id === eventToEdit.memberId;
@@ -100,6 +105,11 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   const [repeatType, setRepeatType] = useState("never");
   const [repeatEndDate, setRepeatEndDate] = useState<Date | null>(null);
   const [showRepeatOptions, setShowRepeatOptions] = useState(false);
+
+  /* Task State */
+  const [taskPriority, setTaskPriority] = useState("medium");
+  const [taskIcon, setTaskIcon] = useState("📝");
+
 
   const [reminder, setReminder] = useState(true);
   const [reminderTime, setReminderTime] = useState("15");
@@ -159,6 +169,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
     } else {
       // Reset form for new event
+      setActiveTab('event');
       setName("");
       setDescription("");
 
@@ -245,30 +256,43 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         minute: "2-digit",
       });
 
-      if (isEditing && eventToEdit) {
-        updateEvent(eventToEdit.id, {
-          title: name.trim(),
+      if (activeTab === 'task') {
+        addTask({
+          name: name.trim(),
+          icon: taskIcon,
+          priority: taskPriority as any,
           date: formattedDate,
-          time: formattedTime,
-          endTime: formattedEndTime,
-          icon: selectedIcon,
-          memberId,
-          location,
-          visibility: visibility as any,
-          timeZone,
+          due: formattedTime, // Simple due string for now
+          assignee: memberId,
+          tab: "My Tasks", // Default tab
+          status: 'pending'
         });
       } else {
-        addEvent({
-          title: name.trim(),
-          date: formattedDate,
-          time: formattedTime,
-          endTime: formattedEndTime,
-          icon: selectedIcon,
-          memberId,
-          location,
-          visibility: visibility as any,
-          timeZone,
-        });
+        if (isEditing && eventToEdit) {
+          updateEvent(eventToEdit.id, {
+            title: name.trim(),
+            date: formattedDate,
+            time: formattedTime,
+            endTime: formattedEndTime,
+            icon: selectedIcon,
+            memberId,
+            location,
+            visibility: visibility as any,
+            timeZone,
+          });
+        } else {
+          addEvent({
+            title: name.trim(),
+            date: formattedDate,
+            time: formattedTime,
+            endTime: formattedEndTime,
+            icon: selectedIcon,
+            memberId,
+            location,
+            visibility: visibility as any,
+            timeZone,
+          });
+        }
       }
 
       onOpenChange(false);
@@ -309,6 +333,24 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             </Pressable>
           </View>
 
+          {/* Tab Switcher */}
+          {!isEditing && (
+            <View style={[styles.tabContainer, { backgroundColor: colors.muted }]}>
+              <Pressable
+                style={[styles.tabButton, activeTab === 'event' && { backgroundColor: colors.card, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 2 }]}
+                onPress={() => setActiveTab('event')}
+              >
+                <Text style={[styles.tabText, { color: activeTab === 'event' ? colors.primary : colors.mutedForeground }]}>Event</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.tabButton, activeTab === 'task' && { backgroundColor: colors.card, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 2 }]}
+                onPress={() => setActiveTab('task')}
+              >
+                <Text style={[styles.tabText, { color: activeTab === 'task' ? colors.primary : colors.mutedForeground }]}>Task</Text>
+              </Pressable>
+            </View>
+          )}
+
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
             {/* Ownership Notice */}
             {!isOwner && eventToEdit && (
@@ -320,7 +362,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
               </View>
             )}
 
-            {/* Event Name */}
+            {/* Event/Task Name */}
             <TextInput
               style={[
                 styles.nameInput,
@@ -330,74 +372,131 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                   borderBottomColor: colors.primary
                 }
               ]}
-              placeholder="Event name"
+              placeholder={activeTab === 'event' ? "Event name" : "Task name"}
               placeholderTextColor={colors.mutedForeground}
               value={name}
               onChangeText={setName}
               autoFocus={!isEditing}
-              editable={isOwner}
+              editable={activeTab === 'task' || isOwner}
             />
 
-            {/* Description */}
-            <View style={styles.fieldGroup}>
-              <View style={styles.labelRow}>
-                <AppIcon name="file" size={14} color={colors.mutedForeground} />
-                <Text style={[styles.label, { color: colors.mutedForeground }]}>Description</Text>
-              </View>
-              <TextInput
-                style={[styles.textArea, { backgroundColor: colors.card, color: colors.foreground }]}
-                placeholder="Add description..."
-                placeholderTextColor={colors.mutedForeground}
-                multiline
-                value={description}
-                onChangeText={setDescription}
-                editable={isOwner}
-              />
-            </View>
-
-            {/* Icon Selection */}
-            <View style={styles.fieldGroup}>
-              <View style={styles.labelRow}>
-                <AppIcon name="tag" size={14} color={colors.mutedForeground} />
-                <Text style={[styles.label, { color: colors.mutedForeground }]}>Icon</Text>
-              </View>
-              <View style={styles.iconGrid}>
-                {eventIcons.map((icon) => (
-                  <Pressable
-                    key={icon}
-                    onPress={() => isOwner && setSelectedIcon(icon)}
-                    style={[
-                      styles.iconButton,
-                      { backgroundColor: colors.card },
-                      selectedIcon === icon && { backgroundColor: colors.primary, transform: [{ scale: 1.1 }] },
-                      !isOwner && { opacity: 0.6 }
-                    ]}
-                  >
-                    <Text style={styles.iconText}>{icon}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-
-            {/* All Day Toggle */}
-            <View style={[styles.toggleRow, { backgroundColor: colors.card }]}>
-              <View style={styles.toggleLabelContainer}>
-                <View style={[styles.iconBox, { backgroundColor: "#f973161A" }]}>
-                  <AppIcon name="clock" size={18} color="#f97316" />
+            {/* Task Specific Fields */}
+            {activeTab === 'task' && (
+              <>
+                {/* Icon Selection - TASK ONLY */}
+                <View style={styles.fieldGroup}>
+                  <View style={styles.labelRow}>
+                    <AppIcon name="tag" size={14} color={colors.mutedForeground} />
+                    <Text style={[styles.label, { color: colors.mutedForeground }]}>Icon</Text>
+                  </View>
+                  <View style={styles.iconGrid}>
+                    {["📝", "📞", "💊", "📧", "🏫", "🔧", "📦", "🧹", "🧺", "🍽️", "🛏️", "🐕"].map((icon) => (
+                      <Pressable
+                        key={icon}
+                        onPress={() => setTaskIcon(icon)}
+                        style={[
+                          styles.iconButton,
+                          { backgroundColor: colors.card },
+                          taskIcon === icon && { backgroundColor: colors.success, transform: [{ scale: 1.1 }] },
+                        ]}
+                      >
+                        <Text style={styles.iconText}>{icon}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
                 </View>
-                <Text style={[styles.toggleLabel, { color: colors.foreground }]}>All-day event</Text>
-              </View>
-              <Switch
-                value={allDay}
-                onValueChange={setAllDay}
-                trackColor={{ false: colors.muted, true: colors.primary }}
-                disabled={!isOwner}
-              />
-            </View>
+
+                {/* Priority - TASK ONLY */}
+                <View style={styles.fieldGroup}>
+                  <View style={styles.labelRow}>
+                    <AppIcon name="alertCircle" size={14} color={colors.mutedForeground} />
+                    <Text style={[styles.label, { color: colors.mutedForeground }]}>Priority</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {[
+                      { label: "High", value: "high", color: colors.danger, bg: colors.danger + "20" },
+                      { label: "Medium", value: "medium", color: colors.warning, bg: colors.warning + "20" },
+                      { label: "Low", value: "low", color: colors.mutedForeground, bg: colors.muted }
+                    ].map((p) => (
+                      <Pressable
+                        key={p.value}
+                        onPress={() => setTaskPriority(p.value)}
+                        style={[
+                          { flex: 1, backgroundColor: taskPriority === p.value ? p.bg : colors.card, borderColor: taskPriority === p.value ? p.color : colors.border, borderWidth: 1, borderRadius: 8, paddingVertical: 10, alignItems: 'center' }
+                        ]}
+                      >
+                        <Text style={{ color: taskPriority === p.value ? p.color : colors.mutedForeground, fontWeight: "600" }}>{p.label}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              </>
+            )}
+
+            {activeTab === 'event' && (
+              <>
+                {/* Icon Selection - EVENT ONLY */}
+                <View style={styles.fieldGroup}>
+                  <View style={styles.labelRow}>
+                    <AppIcon name="tag" size={14} color={colors.mutedForeground} />
+                    <Text style={[styles.label, { color: colors.mutedForeground }]}>Icon</Text>
+                  </View>
+                  <View style={styles.iconGrid}>
+                    {eventIcons.map((icon) => (
+                      <Pressable
+                        key={icon}
+                        onPress={() => isOwner && setSelectedIcon(icon)}
+                        style={[
+                          styles.iconButton,
+                          { backgroundColor: colors.card },
+                          selectedIcon === icon && { backgroundColor: colors.primary, transform: [{ scale: 1.1 }] },
+                          !isOwner && { opacity: 0.6 }
+                        ]}
+                      >
+                        <Text style={styles.iconText}>{icon}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+
+                {/* Description - EVENT ONLY */}
+                <View style={styles.fieldGroup}>
+                  <View style={styles.labelRow}>
+                    <AppIcon name="file" size={14} color={colors.mutedForeground} />
+                    <Text style={[styles.label, { color: colors.mutedForeground }]}>Description</Text>
+                  </View>
+                  <TextInput
+                    style={[styles.textArea, { backgroundColor: colors.card, color: colors.foreground }]}
+                    placeholder="Add description..."
+                    placeholderTextColor={colors.mutedForeground}
+                    multiline
+                    value={description}
+                    onChangeText={setDescription}
+                    editable={isOwner}
+                  />
+                </View>
+
+                {/* All Day Toggle - EVENT ONLY */}
+                <View style={[styles.toggleRow, { backgroundColor: colors.card }]}>
+                  <View style={styles.toggleLabelContainer}>
+                    <View style={[styles.iconBox, { backgroundColor: "#f973161A" }]}>
+                      <AppIcon name="clock" size={18} color="#f97316" />
+                    </View>
+                    <Text style={[styles.toggleLabel, { color: colors.foreground }]}>All-day event</Text>
+                  </View>
+                  <Switch
+                    value={allDay}
+                    onValueChange={setAllDay}
+                    trackColor={{ false: colors.muted, true: colors.primary }}
+                    disabled={!isOwner}
+                  />
+                </View>
+              </>
+            )}
 
             {/* Schedule */}
             <View style={styles.fieldGroup}>
-              <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>Schedule</Text>
+              <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>{activeTab === 'task' ? 'Due Date' : 'Schedule'}</Text>
               <View style={styles.row}>
                 <View style={styles.halfField}>
                   <CustomDateTimePicker
@@ -405,101 +504,40 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                     value={startDate}
                     onChange={setStartDate}
                     label="Start Date"
-                    disabled={!isOwner}
+                    disabled={activeTab === 'event' && !isOwner}
                   />
                 </View>
-                {!allDay && (
+                {!allDay && ( // Show time for events (if not all day) AND tasks
                   <View style={styles.halfField}>
                     <CustomDateTimePicker
                       mode="time"
                       value={startTime}
                       onChange={setStartTime}
-                      label="Start Time"
+                      label={activeTab === 'task' ? "Due Time" : "Start Time"}
                       disabled={!isOwner}
                     />
                   </View>
                 )}
               </View>
 
-              <View style={styles.row}>
-                <View style={styles.halfField}>
-                  <CustomDateTimePicker
-                    mode="date"
-                    value={endDate || new Date()}
-                    onChange={setEndDate}
-                    label="End Date (Optional)"
-                    disabled={!isOwner}
-                  />
-                </View>
-                {!allDay && (
+              {activeTab === 'event' && (
+                <View style={styles.row}>
                   <View style={styles.halfField}>
                     <CustomDateTimePicker
-                      mode="time"
-                      value={endTime || new Date()}
-                      onChange={setEndTime}
-                      label="End Time"
+                      mode="date"
+                      value={endDate || new Date()}
+                      onChange={setEndDate}
+                      label="End Date (Optional)"
                       disabled={!isOwner}
                     />
                   </View>
-                )}
-              </View>
-            </View>
-
-            {/* Repeat Options */}
-            <View style={styles.fieldGroup}>
-              <Pressable
-                style={[styles.expandableHeader, { backgroundColor: colors.card }]}
-                onPress={() => isOwner && setShowRepeatOptions(!showRepeatOptions)}
-              >
-                <View style={styles.toggleLabelContainer}>
-                  <View style={[styles.iconBox, { backgroundColor: "#3b82f61A" }]}>
-                    <AppIcon name="repeat" size={18} color="#3b82f6" />
-                  </View>
-                  <View>
-                    <Text style={[styles.toggleLabel, { color: colors.foreground }]}>Repeat</Text>
-                    <Text style={[styles.valueLabel, { color: colors.mutedForeground }]}>{getRepeatLabel()}</Text>
-                  </View>
-                </View>
-                <AppIcon
-                  name="chevronDown"
-                  size={20}
-                  color={colors.mutedForeground}
-                  style={{ transform: [{ rotate: showRepeatOptions ? '180deg' : '0deg' }] }}
-                />
-              </Pressable>
-
-              {showRepeatOptions && (
-                <View style={[styles.expandableContent, { backgroundColor: colors.card }]}>
-                  <View style={styles.chipsContainer}>
-                    {repeatOptions.map((option) => (
-                      <Pressable
-                        key={option.value}
-                        onPress={() => isOwner && setRepeatType(option.value)}
-                        style={[
-                          styles.chip,
-                          { backgroundColor: colors.background },
-                          repeatType === option.value && { backgroundColor: colors.primary },
-                          !isOwner && { opacity: 0.6 }
-                        ]}
-                      >
-                        <Text style={[
-                          styles.chipText,
-                          { color: colors.foreground },
-                          repeatType === option.value && { color: colors.primaryForeground, fontWeight: "600" }
-                        ]}>
-                          {option.label}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                  {repeatType !== 'never' && (
-                    <View style={{ marginTop: 12 }}>
+                  {!allDay && (
+                    <View style={styles.halfField}>
                       <CustomDateTimePicker
-                        mode="date"
-                        value={repeatEndDate || new Date()}
-                        onChange={setRepeatEndDate}
-                        label="End repeat (Optional)"
-                        placeholder="Never"
+                        mode="time"
+                        value={endTime || new Date()}
+                        onChange={setEndTime}
+                        label="End Time"
                         disabled={!isOwner}
                       />
                     </View>
@@ -508,64 +546,131 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
               )}
             </View>
 
-            {/* Reminder Options */}
-            <View style={styles.fieldGroup}>
-              <Pressable
-                style={[styles.expandableHeader, { backgroundColor: colors.card }]}
-                onPress={() => isOwner && setShowReminderOptions(!showReminderOptions)}
-              >
-                <View style={styles.toggleLabelContainer}>
-                  <View style={[styles.iconBox, { backgroundColor: reminder ? "#22c55e1A" : colors.muted }]}>
-                    <AppIcon name="bell" size={18} color={reminder ? "#22c55e" : colors.mutedForeground} />
+            {/* Repeat Options - EVENT ONLY */}
+            {activeTab === 'event' && (
+              <View style={styles.fieldGroup}>
+                <Pressable
+                  style={[styles.expandableHeader, { backgroundColor: colors.card }]}
+                  onPress={() => isOwner && setShowRepeatOptions(!showRepeatOptions)}
+                >
+                  <View style={styles.toggleLabelContainer}>
+                    <View style={[styles.iconBox, { backgroundColor: "#3b82f61A" }]}>
+                      <AppIcon name="repeat" size={18} color="#3b82f6" />
+                    </View>
+                    <View>
+                      <Text style={[styles.toggleLabel, { color: colors.foreground }]}>Repeat</Text>
+                      <Text style={[styles.valueLabel, { color: colors.mutedForeground }]}>{getRepeatLabel()}</Text>
+                    </View>
                   </View>
-                  <View>
-                    <Text style={[styles.toggleLabel, { color: colors.foreground }]}>Reminder</Text>
-                    <Text style={[styles.valueLabel, { color: colors.mutedForeground }]}>{getReminderLabel()}</Text>
-                  </View>
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Switch
-                    value={reminder}
-                    onValueChange={setReminder}
-                    trackColor={{ false: colors.muted, true: colors.primary }}
-                    disabled={!isOwner}
-                  />
                   <AppIcon
                     name="chevronDown"
                     size={20}
                     color={colors.mutedForeground}
-                    style={{ transform: [{ rotate: showReminderOptions ? '180deg' : '0deg' }] }}
+                    style={{ transform: [{ rotate: showRepeatOptions ? '180deg' : '0deg' }] }}
                   />
-                </View>
-              </Pressable>
+                </Pressable>
 
-              {showReminderOptions && reminder && (
-                <View style={[styles.expandableContent, { backgroundColor: colors.card }]}>
-                  <View style={styles.chipsContainer}>
-                    {reminderOptions.map((option) => (
-                      <Pressable
-                        key={option.value}
-                        onPress={() => isOwner && setReminderTime(option.value)}
-                        style={[
-                          styles.chip,
-                          { backgroundColor: colors.background },
-                          reminderTime === option.value && { backgroundColor: colors.primary },
-                          !isOwner && { opacity: 0.6 }
-                        ]}
-                      >
-                        <Text style={[
-                          styles.chipText,
-                          { color: colors.foreground },
-                          reminderTime === option.value && { color: colors.primaryForeground, fontWeight: "600" }
-                        ]}>
-                          {option.label}
-                        </Text>
-                      </Pressable>
-                    ))}
+                {showRepeatOptions && (
+                  <View style={[styles.expandableContent, { backgroundColor: colors.card }]}>
+                    <View style={styles.chipsContainer}>
+                      {repeatOptions.map((option) => (
+                        <Pressable
+                          key={option.value}
+                          onPress={() => isOwner && setRepeatType(option.value)}
+                          style={[
+                            styles.chip,
+                            { backgroundColor: colors.background },
+                            repeatType === option.value && { backgroundColor: colors.primary },
+                            !isOwner && { opacity: 0.6 }
+                          ]}
+                        >
+                          <Text style={[
+                            styles.chipText,
+                            { color: colors.foreground },
+                            repeatType === option.value && { color: colors.primaryForeground, fontWeight: "600" }
+                          ]}>
+                            {option.label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                    {repeatType !== 'never' && (
+                      <View style={{ marginTop: 12 }}>
+                        <CustomDateTimePicker
+                          mode="date"
+                          value={repeatEndDate || new Date()}
+                          onChange={setRepeatEndDate}
+                          label="End repeat (Optional)"
+                          placeholder="Never"
+                          disabled={!isOwner}
+                        />
+                      </View>
+                    )}
                   </View>
-                </View>
-              )}
-            </View>
+                )}
+              </View>
+            )}
+
+            {/* Reminder Options - EVENT ONLY */}
+            {activeTab === 'event' && (
+              <View style={styles.fieldGroup}>
+                <Pressable
+                  style={[styles.expandableHeader, { backgroundColor: colors.card }]}
+                  onPress={() => isOwner && setShowReminderOptions(!showReminderOptions)}
+                >
+                  <View style={styles.toggleLabelContainer}>
+                    <View style={[styles.iconBox, { backgroundColor: reminder ? "#22c55e1A" : colors.muted }]}>
+                      <AppIcon name="bell" size={18} color={reminder ? "#22c55e" : colors.mutedForeground} />
+                    </View>
+                    <View>
+                      <Text style={[styles.toggleLabel, { color: colors.foreground }]}>Reminder</Text>
+                      <Text style={[styles.valueLabel, { color: colors.mutedForeground }]}>{getReminderLabel()}</Text>
+                    </View>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Switch
+                      value={reminder}
+                      onValueChange={setReminder}
+                      trackColor={{ false: colors.muted, true: colors.primary }}
+                      disabled={!isOwner}
+                    />
+                    <AppIcon
+                      name="chevronDown"
+                      size={20}
+                      color={colors.mutedForeground}
+                      style={{ transform: [{ rotate: showReminderOptions ? '180deg' : '0deg' }] }}
+                    />
+                  </View>
+                </Pressable>
+
+                {showReminderOptions && reminder && (
+                  <View style={[styles.expandableContent, { backgroundColor: colors.card }]}>
+                    <View style={styles.chipsContainer}>
+                      {reminderOptions.map((option) => (
+                        <Pressable
+                          key={option.value}
+                          onPress={() => isOwner && setReminderTime(option.value)}
+                          style={[
+                            styles.chip,
+                            { backgroundColor: colors.background },
+                            reminderTime === option.value && { backgroundColor: colors.primary },
+                            !isOwner && { opacity: 0.6 }
+                          ]}
+                        >
+                          <Text style={[
+                            styles.chipText,
+                            { color: colors.foreground },
+                            reminderTime === option.value && { color: colors.primaryForeground, fontWeight: "600" }
+                          ]}>
+                            {option.label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+                )}
+              </View>
+            )}
 
             {/* Color Selection - Hidden as it is auto-assigned */}
             {/* 
@@ -595,21 +700,23 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             </View> 
             */}
 
-            {/* Location */}
-            <View style={styles.fieldGroup}>
-              <View style={styles.labelRow}>
-                <AppIcon name="pin" size={14} color={colors.mutedForeground} />
-                <Text style={[styles.label, { color: colors.mutedForeground }]}>Location</Text>
+            {/* Location - EVENT ONLY */}
+            {activeTab === 'event' && (
+              <View style={styles.fieldGroup}>
+                <View style={styles.labelRow}>
+                  <AppIcon name="pin" size={14} color={colors.mutedForeground} />
+                  <Text style={[styles.label, { color: colors.mutedForeground }]}>Location</Text>
+                </View>
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.card, color: colors.foreground }]}
+                  value={location}
+                  onChangeText={setLocation}
+                  placeholder="Add location..."
+                  placeholderTextColor={colors.mutedForeground}
+                  editable={isOwner}
+                />
               </View>
-              <TextInput
-                style={[styles.input, { backgroundColor: colors.card, color: colors.foreground }]}
-                value={location}
-                onChangeText={setLocation}
-                placeholder="Add location..."
-                placeholderTextColor={colors.mutedForeground}
-                editable={isOwner}
-              />
-            </View>
+            )}
 
             {/* Assign To */}
             <View style={styles.fieldGroup}>
@@ -644,99 +751,105 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
               </View>
             </View>
 
-            {/* Notes */}
-            <View style={styles.fieldGroup}>
-              <Text style={[styles.label, { color: colors.mutedForeground }]}>Notes</Text>
-              <TextInput
-                style={[styles.textArea, { backgroundColor: colors.card, color: colors.foreground }]}
-                placeholder="Add any additional notes..."
-                placeholderTextColor={colors.mutedForeground}
-                multiline
-                value={notes}
-                onChangeText={setNotes}
-                editable={isOwner}
-              />
-            </View>
-
-            {/* Visibility */}
-            <View style={styles.fieldGroup}>
-              <Pressable
-                style={[styles.expandableHeader, { backgroundColor: colors.card }]}
-                onPress={() => isOwner && setShowVisibilityOptions(!showVisibilityOptions)}
-              >
-                <View style={styles.toggleLabelContainer}>
-                  <View style={[styles.iconBox, { backgroundColor: "#8b5cf61A" }]}>
-                    <AppIcon name="lock" size={18} color="#8b5cf6" />
-                  </View>
-                  <View>
-                    <Text style={[styles.toggleLabel, { color: colors.foreground }]}>Visibility</Text>
-                    <Text style={[styles.valueLabel, { color: colors.mutedForeground }]}>
-                      {visibilityOptions.find(o => o.value === visibility)?.label}
-                    </Text>
-                  </View>
-                </View>
-                <AppIcon
-                  name="chevronDown"
-                  size={20}
-                  color={colors.mutedForeground}
-                  style={{ transform: [{ rotate: showVisibilityOptions ? '180deg' : '0deg' }] }}
+            {/* Notes - EVENT ONLY */}
+            {activeTab === 'event' && (
+              <View style={styles.fieldGroup}>
+                <Text style={[styles.label, { color: colors.mutedForeground }]}>Notes</Text>
+                <TextInput
+                  style={[styles.textArea, { backgroundColor: colors.card, color: colors.foreground }]}
+                  placeholder="Add any additional notes..."
+                  placeholderTextColor={colors.mutedForeground}
+                  multiline
+                  value={notes}
+                  onChangeText={setNotes}
+                  editable={isOwner}
                 />
-              </Pressable>
-              {showVisibilityOptions && (
-                <View style={[styles.expandableContent, { backgroundColor: colors.card }]}>
-                  {visibilityOptions.map((option) => (
-                    <Pressable
-                      key={option.value}
-                      onPress={() => isOwner && setVisibility(option.value)}
-                      style={[styles.optionRow, visibility === option.value && { backgroundColor: colors.primary + "1A" }]}
-                    >
-                      <Text style={[styles.optionText, { color: colors.foreground }]}>{option.label}</Text>
-                      {visibility === option.value && <AppIcon name="check" size={16} color={colors.primary} />}
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-            </View>
+              </View>
+            )}
 
-            {/* Time Zone */}
-            <View style={styles.fieldGroup}>
-              <Pressable
-                style={[styles.expandableHeader, { backgroundColor: colors.card }]}
-                onPress={() => isOwner && setShowTimeZoneOptions(!showTimeZoneOptions)}
-              >
-                <View style={styles.toggleLabelContainer}>
-                  <View style={[styles.iconBox, { backgroundColor: "#06b6d41A" }]}>
-                    <AppIcon name="globe" size={18} color="#06b6d4" />
+            {/* Visibility - EVENT ONLY */}
+            {activeTab === 'event' && (
+              <View style={styles.fieldGroup}>
+                <Pressable
+                  style={[styles.expandableHeader, { backgroundColor: colors.card }]}
+                  onPress={() => isOwner && setShowVisibilityOptions(!showVisibilityOptions)}
+                >
+                  <View style={styles.toggleLabelContainer}>
+                    <View style={[styles.iconBox, { backgroundColor: "#8b5cf61A" }]}>
+                      <AppIcon name="lock" size={18} color="#8b5cf6" />
+                    </View>
+                    <View>
+                      <Text style={[styles.toggleLabel, { color: colors.foreground }]}>Visibility</Text>
+                      <Text style={[styles.valueLabel, { color: colors.mutedForeground }]}>
+                        {visibilityOptions.find(o => o.value === visibility)?.label}
+                      </Text>
+                    </View>
                   </View>
-                  <View>
-                    <Text style={[styles.toggleLabel, { color: colors.foreground }]}>Time Zone</Text>
-                    <Text style={[styles.valueLabel, { color: colors.mutedForeground }]}>
-                      {timeZoneOptions.find(o => o.value === timeZone)?.label}
-                    </Text>
+                  <AppIcon
+                    name="chevronDown"
+                    size={20}
+                    color={colors.mutedForeground}
+                    style={{ transform: [{ rotate: showVisibilityOptions ? '180deg' : '0deg' }] }}
+                  />
+                </Pressable>
+                {showVisibilityOptions && (
+                  <View style={[styles.expandableContent, { backgroundColor: colors.card }]}>
+                    {visibilityOptions.map((option) => (
+                      <Pressable
+                        key={option.value}
+                        onPress={() => isOwner && setVisibility(option.value)}
+                        style={[styles.optionRow, visibility === option.value && { backgroundColor: colors.primary + "1A" }]}
+                      >
+                        <Text style={[styles.optionText, { color: colors.foreground }]}>{option.label}</Text>
+                        {visibility === option.value && <AppIcon name="check" size={16} color={colors.primary} />}
+                      </Pressable>
+                    ))}
                   </View>
-                </View>
-                <AppIcon
-                  name="chevronDown"
-                  size={20}
-                  color={colors.mutedForeground}
-                  style={{ transform: [{ rotate: showTimeZoneOptions ? '180deg' : '0deg' }] }}
-                />
-              </Pressable>
-              {showTimeZoneOptions && (
-                <View style={[styles.expandableContent, { backgroundColor: colors.card }]}>
-                  {timeZoneOptions.map((option) => (
-                    <Pressable
-                      key={option.value}
-                      onPress={() => isOwner && setTimeZone(option.value)}
-                      style={[styles.optionRow, timeZone === option.value && { backgroundColor: colors.primary + "1A" }]}
-                    >
-                      <Text style={[styles.optionText, { color: colors.foreground }]}>{option.label}</Text>
-                      {timeZone === option.value && <AppIcon name="check" size={16} color={colors.primary} />}
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-            </View>
+                )}
+              </View>
+            )}
+
+            {/* Time Zone - EVENT ONLY */}
+            {activeTab === 'event' && (
+              <View style={styles.fieldGroup}>
+                <Pressable
+                  style={[styles.expandableHeader, { backgroundColor: colors.card }]}
+                  onPress={() => isOwner && setShowTimeZoneOptions(!showTimeZoneOptions)}
+                >
+                  <View style={styles.toggleLabelContainer}>
+                    <View style={[styles.iconBox, { backgroundColor: "#06b6d41A" }]}>
+                      <AppIcon name="globe" size={18} color="#06b6d4" />
+                    </View>
+                    <View>
+                      <Text style={[styles.toggleLabel, { color: colors.foreground }]}>Time Zone</Text>
+                      <Text style={[styles.valueLabel, { color: colors.mutedForeground }]}>
+                        {timeZoneOptions.find(o => o.value === timeZone)?.label}
+                      </Text>
+                    </View>
+                  </View>
+                  <AppIcon
+                    name="chevronDown"
+                    size={20}
+                    color={colors.mutedForeground}
+                    style={{ transform: [{ rotate: showTimeZoneOptions ? '180deg' : '0deg' }] }}
+                  />
+                </Pressable>
+                {showTimeZoneOptions && (
+                  <View style={[styles.expandableContent, { backgroundColor: colors.card }]}>
+                    {timeZoneOptions.map((option) => (
+                      <Pressable
+                        key={option.value}
+                        onPress={() => isOwner && setTimeZone(option.value)}
+                        style={[styles.optionRow, timeZone === option.value && { backgroundColor: colors.primary + "1A" }]}
+                      >
+                        <Text style={[styles.optionText, { color: colors.foreground }]}>{option.label}</Text>
+                        {timeZone === option.value && <AppIcon name="check" size={16} color={colors.primary} />}
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
 
             <View style={{ height: 40 }} />
           </ScrollView>
@@ -779,14 +892,14 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                 onPress={handleSave}
               >
                 <Text style={[styles.saveButtonText, { color: colors.primaryForeground }]}>
-                  {isEditing ? "Save Changes" : "Add Event"}
+                  {isEditing ? "Save Changes" : (activeTab === 'event' ? "Add Event" : "Add Task")}
                 </Text>
               </Pressable>
             )}
           </View>
         </Pressable>
       </Pressable>
-    </Modal>
+    </Modal >
   );
 };
 
@@ -794,18 +907,43 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "flex-end",
+    justifyContent: "flex-start",
+    paddingTop: 180, // Leave space for calendar header
   },
   container: {
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    height: "92%",
-    width: "100%",
+    padding: 20,
+    flex: 1,
+    maxHeight: "100%",
     ...Platform.select({
-      ios: { shadowColor: "#000", shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.1, shadowRadius: 10 },
-      android: { elevation: 10 },
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: -10 },
+        shadowOpacity: 0.1,
+        shadowRadius: 20,
+      },
+      android: {
+        elevation: 10,
+      },
     }),
   },
+  tabContainer: {
+    flexDirection: 'row',
+    padding: 4,
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  tabText: {
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  priorityButton: {},
+
   header: {
     flexDirection: "row",
     alignItems: "center",

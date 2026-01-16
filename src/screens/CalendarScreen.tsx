@@ -210,6 +210,9 @@ const DraggableEvent: React.FC<{
             onPress={() => onPress(event)}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text style={{ fontSize: 14, fontWeight: '900', color: event.type === 'task' ? '#ef4444' : '#8b5cf6' }}>
+                {event.type === 'task' ? 'T' : 'E'}
+              </Text>
               <Text style={{ fontSize: 10 }}>{event.icon}</Text>
               <Text numberOfLines={1} style={{ fontSize: 10, fontWeight: '700', color: colors.foreground, flex: 1 }}>
                 {event.title}
@@ -251,7 +254,7 @@ const DraggableEvent: React.FC<{
 };
 
 export const CalendarScreen: React.FC = () => {
-  const { members, activeMember, events, addEvent, updateEvent } = useFamily();
+  const { members, activeMember, events, tasks, addEvent, updateEvent, updateTask } = useFamily();
   const { openSidebar } = useSidebar();
   const navigation = useNavigation();
   const colors = useThemeColors();
@@ -260,7 +263,7 @@ export const CalendarScreen: React.FC = () => {
   const [activeView, setActiveView] = useState("Day");
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showAddEventModal, setShowAddEventModal] = useState(false);
-  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | undefined>(undefined);
+  const [selectedEvent, setSelectedEvent] = useState<any | undefined>(undefined);
   const [selectedTime, setSelectedTime] = useState<string | undefined>(undefined);
   const [filterMember, setFilterMember] = useState<string | null>(null);
   const [showSearch, setShowSearch] = useState(false);
@@ -276,76 +279,54 @@ export const CalendarScreen: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  useEffect(() => {
-    if ((activeView === "Day" || activeView === "Week") && scrollViewRef.current) {
-      const currentHour = new Date().getHours();
-      // Scroll to current time - 1 hour for context
-      const scrollY = Math.max(0, (currentHour - 1) * HOUR_HEIGHT);
-      setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: scrollY, animated: true });
-      }, 500);
-    }
-  }, [activeView]);
-
-  // Auto-scroll when screen comes into focus
-  // Auto-scroll when screen comes into focus and reset to today
   useFocusEffect(
     React.useCallback(() => {
-      // Ensure we have the latest system time
-      const currentNow = new Date();
-      setNow(currentNow);
-
-      // User request: Always show current date ("system time and date current") when viewing
-      // This fixes the issue where the calendar shows an old date (e.g. Jan 11) if kept open.
-      setSelectedDate(currentNow);
-
-      if ((activeView === "Day" || activeView === "Week") && scrollViewRef.current) {
-        const currentHour = currentNow.getHours();
-        const scrollY = Math.max(0, (currentHour - 1) * HOUR_HEIGHT);
-        setTimeout(() => {
-          scrollViewRef.current?.scrollTo({ y: scrollY, animated: true });
+      if ((activeView === "Day" || activeView === "Week") && isSameDay(selectedDate, new Date())) {
+        // Wait for layout to be ready
+        const timer = setTimeout(() => {
+          const current = new Date();
+          const minutes = (current.getHours() * 60) + current.getMinutes();
+          const y = (minutes / 60) * HOUR_HEIGHT;
+          // Scroll to 2 hours before current time to show context
+          const twoHoursInPx = 2 * HOUR_HEIGHT;
+          scrollViewRef.current?.scrollTo({
+            y: Math.max(0, y - twoHoursInPx),
+            animated: true
+          });
         }, 500);
+
+        return () => clearTimeout(timer);
       }
-    }, [activeView])
+    }, [activeView, selectedDate])
   );
-
-  // Auto-scroll header to selected date
-  useEffect(() => {
-    if (activeView === "Week" && headerScrollRef.current) {
-      // Find index of selected date in our generated window
-      // Our window starts at: subDays(startOfWeek(selectedDate), 7)
-      // But wait, if selectedDate changes, the window shifts, so selectedDate is always at index 7 relative to start?
-      // Let's re-verify the generateWeekDays logic.
-      // start = subDays(startOfWeek(selectedDate), 7).
-      // selectedDate is within startOfWeek(selectedDate)...endOfWeek.
-      // So selectedDate index depends on day of week.
-      // Start of window is (StartOfWeek - 7).
-      // Index of StartOfWeek is 7.
-      // Index of selectedDate is 7 + (dayOfWeekIndex).
-      // e.g. Sunday=0 -> Index 7. Saturday=6 -> Index 13.
-      // DATE_CELL_WIDTH = 60 + 8 = 68.
-      // We want to center it? Or just scroll to it.
-      // Let's scroll to center: (Index * 68) - (ScreenWith / 2) + (CellWidth / 2)
-
-      const dayOfWeek = selectedDate.getDay(); // 0-6
-      const index = 7 + dayOfWeek;
-      const ITEM_WIDTH = 68;
-      const screenWidth = Dimensions.get('window').width;
-
-      const scrollX = (index * ITEM_WIDTH) - (screenWidth / 2) + (ITEM_WIDTH / 2);
-
-      setTimeout(() => {
-        headerScrollRef.current?.scrollTo({ x: Math.max(0, scrollX), animated: true });
-      }, 100);
-    }
-  }, [selectedDate, activeView]);
 
   const today = new Date();
 
-  const currentEvents = useMemo(() =>
-    filteredEvents(events, filterMember),
-    [events, filterMember]
-  );
+  // Unified items (Events + Tasks)
+  const unifiedItems = useMemo(() => {
+    const eventItems = events.map(e => ({ ...e, type: 'event' }));
+    const taskItems = tasks
+      .filter(t => t.status !== 'done') // Only show pending tasks ? Or all? User said "show thata task for thata date"
+      .map(t => ({
+        id: t.id,
+        title: t.name,
+        icon: t.icon,
+        date: t.date,
+        time: "All Day", // Tasks usually are all day unless specific time added. For now default to top or all day.
+        // If we want tasks to have time, we need to add time to Task interface properly.
+        // Assuming tasks are "All Day" or just appear in list.
+        // But user said "show thata task for thata date... just small diffeence way to represent task and event".
+        // Let's assume tasks are treated effectively as All Day events for now in Day view, or specific if we add time.
+        memberId: t.assignee,
+        type: 'task',
+        priority: t.priority
+      }));
+
+    const all = [...eventItems, ...taskItems];
+    return filteredEvents(all, filterMember);
+  }, [events, tasks, filterMember]);
+
+  const currentEvents = useMemo(() => unifiedItems, [unifiedItems]);
 
   const navigateDate = (direction: number) => {
     if (activeView === "Month") {

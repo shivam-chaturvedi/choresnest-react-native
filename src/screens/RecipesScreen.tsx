@@ -27,6 +27,9 @@ import { Linking } from "react-native";
 import { ImageGalleryModal } from "../components/modals/ImageGalleryModal";
 import { AudioPlayerModal } from "../components/modals/AudioPlayerModal";
 
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { runOnJS } from 'react-native-reanimated';
+
 const preferences = [
   "Vegetarian",
   "High Protein",
@@ -50,6 +53,7 @@ export const RecipesScreen: React.FC = () => {
   const [activeTab, setActiveTab] = useState("For You");
   const [query, setQuery] = useState("");
 
+  // ... (Keep existing state)
   // Recipe Modal State
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
   const [showRecipeDetail, setShowRecipeDetail] = useState(false);
@@ -58,6 +62,8 @@ export const RecipesScreen: React.FC = () => {
   const [selectedCollection, setSelectedCollection] = useState<any | null>(null);
 
   const [activePreferences, setActivePreferences] = useState<string[]>([]);
+
+  // ... (Keep existing logic: togglePreference, filteredRecipes, quickMeals, favorites, recommended)
 
   const togglePreference = (pref: string) => {
     setActivePreferences(prev =>
@@ -74,7 +80,6 @@ export const RecipesScreen: React.FC = () => {
     );
   }, [query, recipes]);
 
-  // For "Quick Meals" (under 25 mins, sorted)
   const quickMeals = useMemo(() => {
     return recipes
       .filter((r) => {
@@ -88,14 +93,10 @@ export const RecipesScreen: React.FC = () => {
       });
   }, [recipes]);
 
-  // Favorites - Show ALL saved
   const favorites = recipes.filter(r => r.saved);
 
-  // Recommended - Based on active preferences or show random
   const recommended = useMemo(() => {
     if (activePreferences.length === 0) {
-      // If no preferences, show generic mix (excluding saved to avoid dupe if we want, or just random)
-      // For now, let's just show top 4
       return recipes.slice(0, 4);
     }
     return recipes.filter(r =>
@@ -116,11 +117,12 @@ export const RecipesScreen: React.FC = () => {
   const [showImageGallery, setShowImageGallery] = useState(false);
   const [showAudioPlayer, setShowAudioPlayer] = useState(false);
 
+  // ... (handleRecipePress, toast, handleAddToGroceryList, handleAddCollectionToGrocery, render helpers)
+
   const handleRecipePress = (recipe: Recipe) => {
     setSelectedRecipe(recipe);
 
     if (recipe.url) {
-      // Link Recipe -> Open URL
       let targetUrl = recipe.url;
       if (!/^https?:\/\//i.test(targetUrl)) {
         targetUrl = `https://${targetUrl}`;
@@ -139,13 +141,10 @@ export const RecipesScreen: React.FC = () => {
       }).catch(err => console.error("An error occurred", err));
 
     } else if (recipe.audio) {
-      // Audio Recipe -> Open Audio Player
       setShowAudioPlayer(true);
     } else if (recipe.images && recipe.images.length > 0) {
-      // Image Recipe -> Open Gallery
       setShowImageGallery(true);
     } else {
-      // Standard Text Recipe -> Open Detail Modal
       setShowRecipeDetail(true);
     }
   };
@@ -172,10 +171,6 @@ export const RecipesScreen: React.FC = () => {
   };
 
   const handleAddCollectionToGrocery = (collectionId: number) => {
-    // Logic to add all recipes in collection to grocery list
-    // For now, since collections don't have explicit recipe mapping in the UI, we'll skipping this or mocking it.
-    // But the context update allows mapping.
-    // If collection.recipeIds exists:
     const collection = collections.find(c => c.id === collectionId);
     if (collection && collection.recipeIds) {
       const recipesInCollection = recipes.filter(r => collection.recipeIds?.includes(r.id));
@@ -186,7 +181,6 @@ export const RecipesScreen: React.FC = () => {
     }
   };
 
-  // Helper to render recipe image or icon
   const renderRecipeImage = (imageString: string) => {
     if (imageString === "AUDIO_ICON") {
       return <AppIcon name="mic" size={24} color={theme.colors.primary} />;
@@ -224,15 +218,14 @@ export const RecipesScreen: React.FC = () => {
   );
 
   const renderForYou = () => (
+    // ... kept same
     <>
-      {/* ... (Preferences Section same) ... */}
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
         <View style={styles.sectionHeader}>
           <AppIcon name="sparkles" size={20} color={colors.primary} style={{ marginRight: 8 }} />
           <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Your Preferences</Text>
         </View>
 
-        {/* ... (Tags/Grocery Note Same) ... */}
         <View style={styles.tagGroup}>
           {preferences.map((tag) => {
             const isActive = activePreferences.includes(tag);
@@ -272,11 +265,10 @@ export const RecipesScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* Recommended for Preference (Dynamic) */}
+      {/* ... keeping other sections ... */}
       {activePreferences.length > 0 && (
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
           <View style={styles.sectionHeader}>
-            {/* ... */}
             <AppIcon name="star" size={20} color={colors.primary} style={{ marginRight: 8 }} />
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
               Recommended For You
@@ -325,7 +317,6 @@ export const RecipesScreen: React.FC = () => {
         </ScrollView>
       </View>
 
-      {/* Meal Plan CTA */}
       <View style={[styles.planBanner, { backgroundColor: colors.card, borderRadius: radius.card }]}>
         <View style={styles.planContent}>
           <Text style={[styles.planTitle, { color: colors.foreground }]}>Plan your week's meals</Text>
@@ -341,6 +332,7 @@ export const RecipesScreen: React.FC = () => {
     </>
   );
 
+  // ... (renderAllRecipes and renderCollections same)
   const renderAllRecipes = () => (
     <View style={styles.listContainer}>
       {filteredRecipes.map((recipe) => (
@@ -432,6 +424,33 @@ export const RecipesScreen: React.FC = () => {
     </>
   );
 
+  // GESTURE LOGIC
+  const handleSwipe = (direction: 'left' | 'right') => {
+    const currentIndex = tabs.indexOf(activeTab);
+    if (direction === 'left') {
+      // Swiping Left -> Next Tab
+      if (currentIndex < tabs.length - 1) {
+        setActiveTab(tabs[currentIndex + 1]);
+      }
+    } else {
+      // Swiping Right -> Prev Tab
+      if (currentIndex > 0) {
+        setActiveTab(tabs[currentIndex - 1]);
+      }
+    }
+  };
+
+  const panGesture = Gesture.Pan()
+    .failOffsetY([-20, 20]) // Allow vertical scrolling to take precedence
+    .activeOffsetX([-50, 50]) // Only trigger horizontal if moved enough
+    .onEnd((e) => {
+      if (e.translationX < -50) {
+        runOnJS(handleSwipe)('left');
+      } else if (e.translationX > 50) {
+        runOnJS(handleSwipe)('right');
+      }
+    });
+
   return (
     <>
       <AppLayout showNav={false} onAddPress={() => {
@@ -441,76 +460,78 @@ export const RecipesScreen: React.FC = () => {
           setShowAddRecipeModal(true);
         }
       }}>
-        <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}>
-          {/* Header */}
-          <View style={styles.headerRow}>
-            <Pressable onPress={openSidebar} style={[styles.menuButton, { backgroundColor: colors.card, borderRadius: radius.md }]}>
-              <AppIcon name="menu" size={20} color={colors.foreground} />
-            </Pressable>
-            <Text style={[styles.title, { color: colors.foreground }]}>Recipes</Text>
-
-            <View style={styles.headerActions}>
-              <Pressable
-                style={[styles.pillButton, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.md }]}
-                onPress={() => navigation.navigate("MealPlan" as any)}
-              >
-                <AppIcon name="calendar" size={16} color={colors.foreground} style={{ marginRight: 6 }} />
-                <Text style={[styles.pillText, { color: colors.foreground }]}>Meal Plan</Text>
+        <GestureDetector gesture={panGesture}>
+          <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}>
+            {/* Header */}
+            <View style={styles.headerRow}>
+              <Pressable onPress={openSidebar} style={[styles.menuButton, { backgroundColor: colors.card, borderRadius: radius.md }]}>
+                <AppIcon name="menu" size={20} color={colors.foreground} />
               </Pressable>
-              <Pressable
-                style={[styles.iconButton, { backgroundColor: colors.primary, borderRadius: radius.md }]}
-                onPress={() => {
-                  if (activeTab === "Collections") {
-                    setShowCreateCollectionModal(true);
-                  } else {
-                    setShowAddRecipeModal(true);
-                  }
-                }}
-              >
-                <AppIcon name="plus" size={20} color="#fff" />
-              </Pressable>
-            </View>
-          </View>
+              <Text style={[styles.title, { color: colors.foreground }]}>Recipes</Text>
 
-          {/* Search */}
-          <View style={[styles.searchContainer, { backgroundColor: colors.muted, borderRadius: radius.lg }]}>
-            <AppIcon name="search" size={20} color={colors.mutedForeground} style={styles.searchIcon} />
-            <TextInput
-              style={[styles.searchInput, { color: colors.foreground }]}
-              placeholder="Search recipes..."
-              placeholderTextColor={colors.mutedForeground}
-              value={query}
-              onChangeText={setQuery}
-            />
-          </View>
-
-          {/* Tabs */}
-          <View style={[styles.tabRow, { backgroundColor: colors.muted, borderRadius: radius.lg }]}>
-            {tabs.map((tab) => {
-              const active = tab === activeTab;
-              return (
+              <View style={styles.headerActions}>
                 <Pressable
-                  key={tab}
-                  style={[
-                    styles.tabPill,
-                    { borderRadius: radius.md },
-                    active && { backgroundColor: colors.card, shadowColor: '#000' }
-                  ]}
-                  onPress={() => setActiveTab(tab)}
+                  style={[styles.pillButton, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.md }]}
+                  onPress={() => navigation.navigate("MealPlan" as any)}
                 >
-                  {tab === "For You" && <AppIcon name="sparkles" size={14} color={active ? colors.foreground : colors.mutedForeground} style={{ marginRight: 6 }} />}
-                  <Text style={[styles.tabText, { color: active ? colors.foreground : colors.mutedForeground }]}>{tab}</Text>
+                  <AppIcon name="calendar" size={16} color={colors.foreground} style={{ marginRight: 6 }} />
+                  <Text style={[styles.pillText, { color: colors.foreground }]}>Meal Plan</Text>
                 </Pressable>
-              );
-            })}
-          </View>
+                <Pressable
+                  style={[styles.iconButton, { backgroundColor: colors.primary, borderRadius: radius.md }]}
+                  onPress={() => {
+                    if (activeTab === "Collections") {
+                      setShowCreateCollectionModal(true);
+                    } else {
+                      setShowAddRecipeModal(true);
+                    }
+                  }}
+                >
+                  <AppIcon name="plus" size={20} color="#fff" />
+                </Pressable>
+              </View>
+            </View>
 
-          {/* Content */}
-          {activeTab === "For You" && renderForYou()}
-          {activeTab === "All Recipes" && renderAllRecipes()}
-          {activeTab === "Collections" && renderCollections()}
+            {/* Search */}
+            <View style={[styles.searchContainer, { backgroundColor: colors.muted, borderRadius: radius.lg }]}>
+              <AppIcon name="search" size={20} color={colors.mutedForeground} style={styles.searchIcon} />
+              <TextInput
+                style={[styles.searchInput, { color: colors.foreground }]}
+                placeholder="Search recipes..."
+                placeholderTextColor={colors.mutedForeground}
+                value={query}
+                onChangeText={setQuery}
+              />
+            </View>
 
-        </ScrollView>
+            {/* Tabs */}
+            <View style={[styles.tabRow, { backgroundColor: colors.muted, borderRadius: radius.lg }]}>
+              {tabs.map((tab) => {
+                const active = tab === activeTab;
+                return (
+                  <Pressable
+                    key={tab}
+                    style={[
+                      styles.tabPill,
+                      { borderRadius: radius.md },
+                      active && { backgroundColor: colors.card, shadowColor: '#000' }
+                    ]}
+                    onPress={() => setActiveTab(tab)}
+                  >
+                    {tab === "For You" && <AppIcon name="sparkles" size={14} color={active ? colors.foreground : colors.mutedForeground} style={{ marginRight: 6 }} />}
+                    <Text style={[styles.tabText, { color: active ? colors.foreground : colors.mutedForeground }]}>{tab}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* Content */}
+            {activeTab === "For You" && renderForYou()}
+            {activeTab === "All Recipes" && renderAllRecipes()}
+            {activeTab === "Collections" && renderCollections()}
+
+          </ScrollView>
+        </GestureDetector>
       </AppLayout>
       <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} />
 
