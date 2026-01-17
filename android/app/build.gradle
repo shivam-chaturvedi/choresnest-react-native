@@ -105,6 +105,15 @@ android {
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
     }
+    
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    
+    kotlinOptions {
+        jvmTarget = '17'
+    }
 }
 
 dependencies {
@@ -115,5 +124,33 @@ dependencies {
         implementation("com.facebook.react:hermes-android")
     } else {
         implementation jscFlavor
+    }
+}
+
+// Permanent fix for CMake missing JNI directories during New Architecture autolinking
+tasks.whenTaskAdded { task ->
+    if (task.name.contains('configureCMake') || task.name.contains('preBuild')) {
+        task.dependsOn(ensureJniDirsExist)
+    }
+}
+
+task ensureJniDirsExist {
+    doLast {
+        def jniDirs = [
+            "node_modules/@react-native-async-storage/async-storage/android/build/generated/source/codegen/jni/",
+            "node_modules/@react-native-community/datetimepicker/android/build/generated/source/codegen/jni/",
+            "node_modules/react-native-gesture-handler/android/build/generated/source/codegen/jni/",
+            "node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/",
+            "node_modules/react-native-nitro-modules/android/build/generated/source/codegen/jni/",
+            "node_modules/react-native-permissions/android/build/generated/source/codegen/jni/",
+            "node_modules/react-native-reanimated/android/build/generated/source/codegen/jni/",
+            "node_modules/react-native-worklets/android/build/generated/source/codegen/jni/"
+        ]
+        jniDirs.each { dir ->
+            def f = file("../../" + dir)
+            if (!f.exists()) {
+                f.mkdirs()
+            }
+        }
     }
 }

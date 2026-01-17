@@ -183,6 +183,39 @@ export const MoreScreen: React.FC = () => {
     }
   };
 
+  const handleNavigate = (route: string) => {
+    // Helper to handle nested navigation
+    const navigateToNested = (tabName: string, stackScreenName?: string) => {
+      (navigation as any).navigate(tabName, {
+        screen: stackScreenName,
+      });
+    };
+
+    switch (route) {
+      // Home Stack
+      case 'Recipes':
+      case 'MealPlan':
+      case 'Notes':
+      case 'Expenses':
+      case 'Nutrition':
+        navigateToNested('home', route);
+        break;
+
+      // More Stack (current stack)
+      case 'Notifications':
+      case 'Privacy':
+      case 'Theme':
+      case 'DataExport':
+      case 'Help':
+      case 'Tasks':
+        navigation.navigate(route as any);
+        break;
+
+      default:
+        navigation.navigate(route as any);
+    }
+  };
+
   return (
     <>
       <AppLayout showNav={false}>
@@ -244,7 +277,7 @@ export const MoreScreen: React.FC = () => {
                         { borderRadius: radius.md },
                         index !== section.items.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }
                       ]}
-                      onPress={() => navigation.navigate(item.route)}
+                      onPress={() => handleNavigate(item.route)}
                     >
                       <View style={[styles.itemIcon, { backgroundColor: item.color, borderRadius: radius.md }]}>
                         <AppIcon name={item.icon} size={20} color={item.iconColor} />

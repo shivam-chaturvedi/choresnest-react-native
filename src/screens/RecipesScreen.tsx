@@ -324,7 +324,7 @@ export const RecipesScreen: React.FC = () => {
         </View>
         <Pressable
           style={[styles.planButton, { backgroundColor: colors.primary, borderRadius: radius.md }]}
-          onPress={() => navigation.navigate("MealPlan" as any)}
+          onPress={() => (navigation as any).navigate("home", { screen: "MealPlan" })}
         >
           <Text style={[styles.planButtonText, { color: colors.primaryForeground }]}>Plan Now</Text>
         </Pressable>
@@ -472,7 +472,7 @@ export const RecipesScreen: React.FC = () => {
               <View style={styles.headerActions}>
                 <Pressable
                   style={[styles.pillButton, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.md }]}
-                  onPress={() => navigation.navigate("MealPlan" as any)}
+                  onPress={() => (navigation as any).navigate("MealPlan")}
                 >
                   <AppIcon name="calendar" size={16} color={colors.foreground} style={{ marginRight: 6 }} />
                   <Text style={[styles.pillText, { color: colors.foreground }]}>Meal Plan</Text>
@@ -543,10 +543,12 @@ export const RecipesScreen: React.FC = () => {
         onAddToGroceryList={handleAddToGroceryList}
       />
 
-      <AddNewRecipeModal
-        open={showAddRecipeModal}
-        onClose={() => setShowAddRecipeModal(false)}
-      />
+      {showAddRecipeModal && (
+        <AddNewRecipeModal
+          open={showAddRecipeModal}
+          onClose={() => setShowAddRecipeModal(false)}
+        />
+      )}
 
       <CreateCollectionModal
         open={showCreateCollectionModal}

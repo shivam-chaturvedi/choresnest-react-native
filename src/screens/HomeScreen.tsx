@@ -203,7 +203,7 @@ export const HomeScreen: React.FC = () => {
     { label: "Event", iconName: "calendar", action: () => setShowAddEvent(true), color: colors.info, bg: colors.info + '25' },
     { label: "Task", iconName: "checkSquare", action: () => setShowAddTask(true), color: colors.success, bg: colors.success + '25' },
     { label: "Item", iconName: "shoppingCart", action: () => setShowAddItem(true), color: colors.warning, bg: colors.warning + '25' },
-    { label: "Recipe", iconName: "utensils", action: () => navigation.navigate("Recipes" as never), color: colors.primary, bg: colors.muted },
+    { label: "Recipe", iconName: "utensils", action: () => (navigation as any).navigate("home", { screen: "Recipes" }), color: colors.primary, bg: colors.muted },
   ];
 
   const todayKey = new Date().toISOString().split("T")[0];
@@ -412,7 +412,7 @@ export const HomeScreen: React.FC = () => {
                 <AppIcon name="utensils" size={18} color={colors.primary} style={{ marginRight: 8 }} />
                 <Text style={{ fontSize: 18, fontWeight: "700", color: colors.foreground }}>Meals Today</Text>
               </View>
-              <Pressable onPress={() => (navigation as any).navigate('MealPlan')}>
+              <Pressable onPress={() => (navigation as any).navigate("MealPlan")}>
                 <Text style={{ color: colors.primary, fontWeight: "600", fontSize: 14 }}>Meal Plan ›</Text>
               </Pressable>
             </View>
@@ -459,7 +459,7 @@ export const HomeScreen: React.FC = () => {
           <View style={styles.statsGrid}>
             <Pressable
               style={[styles.statCard, { marginRight: 12, backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.foreground, borderRadius: radius.card }]}
-              onPress={() => (navigation as any).navigate("MainTabs", { screen: "lists" })}
+              onPress={() => (navigation as any).navigate("Recipes")}
             >
               <View style={[styles.statIconCircle, { backgroundColor: colors.info + '25' }]}>
                 <AppIcon name="shoppingCart" size={20} color={colors.info} />
@@ -470,7 +470,7 @@ export const HomeScreen: React.FC = () => {
             </Pressable>
             <Pressable
               style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.foreground, borderRadius: radius.card }]}
-              onPress={() => navigation.navigate("Vault" as never)}
+              onPress={() => (navigation as any).navigate("Vault")}
             >
               <View style={[styles.statIconCircle, { backgroundColor: colors.primary + '25' }]}>
                 <AppIcon name="shield" size={20} color={colors.primary} />

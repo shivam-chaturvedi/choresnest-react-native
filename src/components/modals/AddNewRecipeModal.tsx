@@ -14,29 +14,14 @@ import { AppIcon } from "../ui/AppIcon";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { useRecipes } from "../../contexts/RecipeContext";
 import { useToast } from "../ui/Toast";
-import AudioRecorderPlayer, {
-    AVEncoderAudioQualityIOSType,
-    AVEncodingOption,
-    AudioEncoderAndroidType,
-    AudioSet,
-    AudioSourceAndroidType,
-    PlayBackType,
-    RecordBackType,
-} from 'react-native-audio-recorder-player';
-
-
-
-
-
-
-
-
-import { requestPermission } from "../../utils/permissions";
 import { Platform } from "react-native";
 
 
 import { launchImageLibrary } from 'react-native-image-picker';
 import { Recipe } from "../../data/recipes";
+import { requestPermission } from "../../utils/permissions";
+import { getAudioRecorder, SafeAudioRecorderType } from "../../utils/AudioRecorder";
+import { RecordBackType, PlayBackType } from 'react-native-nitro-sound';
 
 interface AddNewRecipeModalProps {
     open: boolean;
@@ -73,7 +58,7 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
 
     const handleAddIngredient = () => setIngredients([...ingredients, ""]);
 
-    // Audio Recorder State
+    // Audio UI State (Logic removed)
     const [isRecording, setIsRecording] = useState(false);
     const [isPaused, setIsPaused] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -82,9 +67,11 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
     const [imagePath, setImagePath] = useState<string | null>(props.recipe?.image || null);
     const [images, setImages] = useState<string[]>(props.recipe?.images || []);
     const [audioPath, setAudioPath] = useState<string | null>(props.recipe?.audio || null);
+    const [isLoadingAudio, setIsLoadingAudio] = useState(false);
 
-    // Audio Recorder Ref
-    const audioRecorderPlayer = React.useRef(new (AudioRecorderPlayer as any)()).current;
+    // Audio Recorder Ref - Initialize safely to prevent crash
+    const audioRecorderPlayerRef = React.useRef<SafeAudioRecorderType | null>(null);
+    const getRecorder = () => getAudioRecorder(audioRecorderPlayerRef);
 
     // Initial load for editing
     React.useEffect(() => {
@@ -114,13 +101,17 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
 
         // Cleanup on unmount
         return () => {
+            const recorder = audioRecorderPlayerRef.current;
+            if (!recorder) return;
+
             if (isRecording) {
-                audioRecorderPlayer.stopRecorder();
-                audioRecorderPlayer.removeRecordBackListener();
+                recorder.stopRecorder();
+                recorder.removeRecordBackListener();
             }
             if (isPlaying) {
-                audioRecorderPlayer.stopPlayer();
-                audioRecorderPlayer.removePlayBackListener();
+                recorder.stopPlayer();
+                recorder.removePlayBackListener();
+                recorder.removePlaybackEndListener();
             }
         };
     }, [props.recipe]);
@@ -134,19 +125,30 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
     };
 
     const handleStartRecording = async () => {
+        setIsLoadingAudio(true);
         try {
+            const recorder = getRecorder();
+            if (!recorder) {
+                showToast({ title: "Feature Unavailable", description: "Audio recording is not supported on this device or session.", type: "warning" });
+                return;
+            }
+
             const hasPermission = await requestPermission('audio');
             if (!hasPermission) return;
 
             // Ensure previous recording is stopped
             if (isRecording) {
-                await audioRecorderPlayer.stopRecorder();
-                audioRecorderPlayer.removeRecordBackListener();
+                await recorder.stopRecorder();
+                recorder.removeRecordBackListener();
             }
 
             // Start Recorder
-            const result = await audioRecorderPlayer.startRecorder();
-            audioRecorderPlayer.addRecordBackListener((e: RecordBackType) => {
+            const result = await recorder.startRecorder();
+
+            // Set update interval (50ms as recommended)
+            recorder.setSubscriptionDuration(50);
+
+            recorder.addRecordBackListener((e: RecordBackType) => {
                 setRecordingTime(e.currentPosition / 1000); // Convert ms to seconds
                 return;
             });
@@ -158,16 +160,18 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
         } catch (error) {
             console.error("Error starting recording:", error);
             showToast({ title: "Error", description: "Failed to start recording", type: "warning" });
+        } finally {
+            setIsLoadingAudio(false);
         }
     };
 
     const handlePauseRecording = async () => {
         try {
-            // Note: Pause isn't fully supported across all platforms/versions in r-n-audio-recorder-player uniformly without issues, 
-            // but we can simulate or use built-ins if available. 
-            // Checking library: supports pauseRecorder() on Android/iOS.
-            await audioRecorderPlayer.pauseRecorder();
-            setIsPaused(true);
+            const recorder = getRecorder();
+            if (recorder) {
+                await recorder.pauseRecorder();
+                setIsPaused(true);
+            }
         } catch (error) {
             console.error("Error pausing recording:", error);
             showToast({ title: "Error", description: "Failed to pause recording", type: "warning" });
@@ -176,8 +180,11 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
 
     const handleResumeRecording = async () => {
         try {
-            await audioRecorderPlayer.resumeRecorder();
-            setIsPaused(false);
+            const recorder = getRecorder();
+            if (recorder) {
+                await recorder.resumeRecorder();
+                setIsPaused(false);
+            }
         } catch (error) {
             console.error("Error resuming recording:", error);
             showToast({ title: "Error", description: "Failed to resume recording", type: "warning" });
@@ -185,9 +192,13 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
     };
 
     const handleStopRecording = async () => {
+        setIsLoadingAudio(true);
         try {
-            const result = await audioRecorderPlayer.stopRecorder();
-            audioRecorderPlayer.removeRecordBackListener();
+            const recorder = getRecorder();
+            if (!recorder) return;
+
+            const result = await recorder.stopRecorder();
+            recorder.removeRecordBackListener();
 
             setAudioPath(result);
             setIsRecording(false);
@@ -198,6 +209,8 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
         } catch (error) {
             console.error("Error stopping recording:", error);
             showToast({ title: "Error", description: "Failed to stop recording", type: "warning" });
+        } finally {
+            setIsLoadingAudio(false);
         }
     };
 
@@ -205,30 +218,48 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
     const handleTogglePlayback = async () => {
         if (!audioPath) return;
 
-        if (isPlaying) {
-            await audioRecorderPlayer.pausePlayer();
-            setIsPlaying(false);
-        } else {
-            // Start or Resume
-            const msg = await audioRecorderPlayer.startPlayer(audioPath);
-            audioRecorderPlayer.addPlayBackListener((e: PlayBackType) => {
-                setPlaybackTime(e.currentPosition / 1000);
-                if (e.currentPosition === e.duration) {
-                    audioRecorderPlayer.stopPlayer();
+        const recorder = getRecorder();
+        if (!recorder) {
+            showToast({ title: "Feature Unavailable", description: "Audio playback is not supported.", type: "warning" });
+            return;
+        }
+
+        setIsLoadingAudio(true);
+        try {
+            if (isPlaying) {
+                await recorder.pausePlayer();
+                setIsPlaying(false);
+            } else {
+                // Start or Resume
+                await recorder.startPlayer(audioPath);
+
+                recorder.addPlayBackListener((e: PlayBackType) => {
+                    setPlaybackTime(e.currentPosition / 1000);
+                });
+
+                recorder.addPlaybackEndListener(() => {
                     setIsPlaying(false);
                     setPlaybackTime(0);
-                }
-                return;
-            });
-            setIsPlaying(true);
+                    recorder.removePlayBackListener();
+                    recorder.removePlaybackEndListener();
+                });
+
+                setIsPlaying(true);
+            }
+        } catch (error) {
+            console.error("Error toggling playback:", error);
+            showToast({ title: "Error", description: "Failed to play audio", type: "warning" });
+        } finally {
+            setIsLoadingAudio(false);
         }
     };
 
     const handleDeleteRecording = async () => {
         try {
-            if (isPlaying) {
-                await audioRecorderPlayer.stopPlayer();
-                audioRecorderPlayer.removePlayBackListener();
+            const recorder = getRecorder();
+            if (recorder && isPlaying) {
+                await recorder.stopPlayer();
+                recorder.removePlayBackListener();
             }
             setAudioPath(null);
             setRecordingTime(0);
@@ -849,11 +880,11 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
 
                         {/* Player Controls */}
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                            <TouchableOpacity onPress={handleTogglePlayback}>
-                                <AppIcon name={isPlaying ? "pause" : "play"} size={24} color={colors.foreground} />
+                            <TouchableOpacity onPress={handleTogglePlayback} disabled={isLoadingAudio}>
+                                <AppIcon name={isPlaying ? "pause" : "play"} size={24} color={isLoadingAudio ? colors.mutedForeground : colors.foreground} />
                             </TouchableOpacity>
                             <View style={{ flex: 1, height: 4, backgroundColor: colors.border, borderRadius: 2 }}>
-                                <View style={{ width: '40%', height: '100%', backgroundColor: colors.foreground, borderRadius: 2 }} />
+                                <View style={{ width: `${Math.min(100, (playbackTime / recordingTime) * 100)}%`, height: '100%', backgroundColor: colors.foreground, borderRadius: 2 }} />
                             </View>
                             <View style={{ flexDirection: 'row', gap: 8 }}>
                                 <AppIcon name="moreVertical" size={20} color={colors.mutedForeground} />

@@ -2,6 +2,7 @@ import { Platform, Alert, Linking } from 'react-native';
 import {
     check,
     request,
+    requestMultiple,
     PERMISSIONS,
     RESULTS,
     Permission,
@@ -52,11 +53,25 @@ export const checkPermission = async (type: PermissionType): Promise<boolean> =>
     }
 };
 
+
 export const requestPermission = async (type: PermissionType): Promise<boolean> => {
     const permission = getPermissionType(type);
     if (!permission) return true;
 
     try {
+        // Special handling for audio on Android to include storage for older versions
+        if (Platform.OS === 'android' && type === 'audio') {
+            const androidVersion = typeof Platform.Version === 'string' ? parseInt(Platform.Version, 10) : Platform.Version;
+            if (androidVersion < 33) {
+                const results = await requestMultiple([
+                    PERMISSIONS.ANDROID.RECORD_AUDIO,
+                    PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE,
+                    PERMISSIONS.ANDROID.WRITE_EXTERNAL_STORAGE
+                ]);
+                return results[PERMISSIONS.ANDROID.RECORD_AUDIO] === RESULTS.GRANTED;
+            }
+        }
+
         const result = await request(permission);
         if (result === RESULTS.GRANTED || result === RESULTS.LIMITED) return true;
 
