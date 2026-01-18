@@ -37,11 +37,18 @@ export const ImageGalleryModal: React.FC<ImageGalleryModalProps> = ({ open, onCl
                 >
                     {images.map((img, index) => (
                         <View key={index} style={[styles.imageContainer, { width }]}>
-                            {/* In real app, use Image component. For now, referencing local files or dummy */}
-                            <View style={[styles.placeholder, { backgroundColor: colors.card }]}>
-                                <AppIcon name="image" size={64} color={colors.primary} />
-                                <Text style={{ color: colors.foreground, marginTop: 16 }}>{img}</Text>
-                            </View>
+                            {img.startsWith('http') || img.startsWith('file:') || img.startsWith('content:') ? (
+                                <Image
+                                    source={{ uri: img }}
+                                    style={styles.image}
+                                    resizeMode="contain"
+                                />
+                            ) : (
+                                <View style={[styles.placeholder, { backgroundColor: colors.card }]}>
+                                    <AppIcon name="image" size={64} color={colors.primary} />
+                                    <Text style={{ color: colors.foreground, marginTop: 16 }}>{img}</Text>
+                                </View>
+                            )}
                         </View>
                     ))}
                 </ScrollView>
@@ -88,6 +95,10 @@ const styles = StyleSheet.create({
         height: '100%',
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    image: {
+        width: '100%',
+        height: '100%',
     },
     placeholder: {
         width: '100%',

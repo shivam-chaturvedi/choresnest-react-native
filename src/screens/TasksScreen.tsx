@@ -16,28 +16,17 @@ import { AppIcon } from "../components/ui/AppIcon";
 import { ChoreRotationSystem } from "../components/chores/ChoreRotationSystem";
 import { useFamily, Task } from "../contexts/FamilyContext";
 
-interface Task {
-  id: string;
-  icon: string;
-  name: string;
-  status: "pending" | "done";
-  priority: "high" | "medium" | "low";
-  due: string;
-  assignee: string;
-  tab: string;
-}
-
 const tabs = ["My Tasks", "Family Tasks"];
 
 const initialTasks: Task[] = [
-  { id: "t1", icon: "📝", name: "Complete project report", status: "pending", priority: "high", due: "Today", assignee: "You", tab: "My Tasks" },
-  { id: "t2", icon: "📞", name: "Call insurance company", status: "pending", priority: "medium", due: "Today", assignee: "You", tab: "My Tasks" },
-  { id: "t3", icon: "💊", name: "Pick up medications", status: "done", priority: "high", due: "Done", assignee: "You", tab: "My Tasks" },
-  { id: "t4", icon: "📧", name: "Reply to emails", status: "done", priority: "low", due: "Done", assignee: "You", tab: "My Tasks" },
+  { id: "t1", icon: "📝", name: "Complete project report", status: "pending", priority: "high", due: "Today", assignee: "You", tab: "My Tasks", date: new Date().toISOString().split('T')[0] },
+  { id: "t2", icon: "📞", name: "Call insurance company", status: "pending", priority: "medium", due: "Today", assignee: "You", tab: "My Tasks", date: new Date().toISOString().split('T')[0] },
+  { id: "t3", icon: "💊", name: "Pick up medications", status: "done", priority: "high", due: "Done", assignee: "You", tab: "My Tasks", date: new Date().toISOString().split('T')[0] },
+  { id: "t4", icon: "📧", name: "Reply to emails", status: "done", priority: "low", due: "Done", assignee: "You", tab: "My Tasks", date: new Date().toISOString().split('T')[0] },
 
-  { id: "t5", icon: "🏫", name: "Sign permission slip", status: "done", priority: "high", due: "Tomorrow", assignee: "Mom", tab: "Family Tasks" },
-  { id: "t6", icon: "🛠️", name: "Fix leaky faucet", status: "pending", priority: "medium", due: "This week", assignee: "Dad", tab: "Family Tasks" },
-  { id: "t7", icon: "📦", name: "Order birthday cake", status: "pending", priority: "high", due: "In 2 days", assignee: "You", tab: "Family Tasks" },
+  { id: "t5", icon: "🏫", name: "Sign permission slip", status: "done", priority: "high", due: "Tomorrow", assignee: "Mom", tab: "Family Tasks", date: new Date().toISOString().split('T')[0] },
+  { id: "t6", icon: "🛠️", name: "Fix leaky faucet", status: "pending", priority: "medium", due: "This week", assignee: "Dad", tab: "Family Tasks", date: new Date().toISOString().split('T')[0] },
+  { id: "t7", icon: "📦", name: "Order birthday cake", status: "pending", priority: "high", due: "In 2 days", assignee: "You", tab: "Family Tasks", date: new Date().toISOString().split('T')[0] },
 ];
 
 const getPriorityStyle = (priority: Task["priority"], colors: any) => {
@@ -89,29 +78,42 @@ export const TasksScreen: React.FC = () => {
   };
 
   const handleSaveTask = (taskData: any) => {
-    if (editingTask) {
-      updateTask(editingTask.id, {
-        name: taskData.name,
-        icon: taskData.icon,
-        priority: taskData.priority,
-        date: taskData.dueDate.toISOString().split('T')[0],
-        due: "Today", // Ideally calculate relative time, keeping simple for now
-        assignee: taskData.person,
-        tab: activeTab
+    try {
+      // Format date as YYYY-MM-DD using local time
+      const formattedDate = taskData.dueDate.toISOString().split('T')[0];
+
+      // Format time as HH:MM AM/PM
+      const formattedTime = taskData.dueDate.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
       });
-    } else {
-      addTask({
-        name: taskData.name,
-        icon: taskData.icon,
-        priority: taskData.priority,
-        date: taskData.dueDate.toISOString().split('T')[0],
-        due: "Today",
-        assignee: taskData.person,
-        tab: activeTab,
-        status: 'pending'
-      });
+
+      if (editingTask) {
+        updateTask(editingTask.id, {
+          name: taskData.name,
+          icon: taskData.icon,
+          priority: taskData.priority,
+          date: formattedDate,
+          due: formattedTime,
+          assignee: taskData.person,
+          tab: activeTab
+        });
+      } else {
+        addTask({
+          name: taskData.name,
+          icon: taskData.icon,
+          priority: taskData.priority,
+          date: formattedDate,
+          due: formattedTime,
+          assignee: taskData.person,
+          tab: activeTab,
+          status: 'pending'
+        });
+      }
+      setEditingTask(undefined);
+    } catch (error) {
+      console.error("Error saving task:", error);
     }
-    setEditingTask(undefined);
   };
 
   return (
@@ -245,7 +247,6 @@ export const TasksScreen: React.FC = () => {
       <AddTaskModal
         open={showAddTask}
         onClose={() => setShowAddTask(false)}
-        initialTask={editingTask}
         onSave={handleSaveTask}
       />
     </>

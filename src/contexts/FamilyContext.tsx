@@ -32,6 +32,8 @@ export interface CalendarEvent {
   endTime?: string;
   memberId: string;
   location?: string;
+  description?: string;
+  notes?: string;
   visibility?: "default" | "public" | "private";
   timeZone?: string;
   isRecurring?: boolean;
@@ -53,6 +55,7 @@ export interface GroceryItem {
   categoryId: string;
   addedBy: string;
   completed: boolean;
+  purchasedAt?: string; // ISO string for history tracking
 }
 
 export interface Task {
@@ -424,7 +427,17 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const toggleGroceryItem = (id: string) => {
     try {
       if (!id) return;
-      setGroceryList((prev) => prev.map((item) => (item.id === id ? { ...item, completed: !item.completed } : item)));
+      setGroceryList((prev) => prev.map((item) => {
+        if (item.id === id) {
+          const isCompleting = !item.completed;
+          return {
+            ...item,
+            completed: isCompleting,
+            purchasedAt: isCompleting ? new Date().toISOString() : undefined
+          };
+        }
+        return item;
+      }));
     } catch (error) {
       console.error("Error in toggleGroceryItem:", error);
     }

@@ -210,8 +210,8 @@ const DraggableEvent: React.FC<{
             onPress={() => onPress(event)}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Text style={{ fontSize: 14, fontWeight: '900', color: event.type === 'task' ? '#ef4444' : '#8b5cf6' }}>
-                {event.type === 'task' ? 'T' : 'E'}
+              <Text style={{ fontSize: 10, fontWeight: '900', color: event.type === 'task' ? '#ef4444' : '#8b5cf6' }}>
+                {event.type === 'task' ? 'TASK' : 'EVENT'}
               </Text>
               <Text style={{ fontSize: 10 }}>{event.icon}</Text>
               <Text numberOfLines={1} style={{ fontSize: 10, fontWeight: '700', color: colors.foreground, flex: 1 }}>
@@ -306,17 +306,13 @@ export const CalendarScreen: React.FC = () => {
   const unifiedItems = useMemo(() => {
     const eventItems = events.map(e => ({ ...e, type: 'event' }));
     const taskItems = tasks
-      .filter(t => t.status !== 'done') // Only show pending tasks ? Or all? User said "show thata task for thata date"
+      .filter(t => t.status !== 'done')
       .map(t => ({
         id: t.id,
         title: t.name,
         icon: t.icon,
         date: t.date,
-        time: "All Day", // Tasks usually are all day unless specific time added. For now default to top or all day.
-        // If we want tasks to have time, we need to add time to Task interface properly.
-        // Assuming tasks are "All Day" or just appear in list.
-        // But user said "show thata task for thata date... just small diffeence way to represent task and event".
-        // Let's assume tasks are treated effectively as All Day events for now in Day view, or specific if we add time.
+        time: t.due && t.due.match(/\d+:\d+\s*(AM|PM)/i) ? t.due : "All Day",
         memberId: t.assignee,
         type: 'task',
         priority: t.priority
@@ -332,14 +328,11 @@ export const CalendarScreen: React.FC = () => {
     if (activeView === "Month") {
       setSelectedDate(prev => direction > 0 ? addMonths(prev, 1) : subMonths(prev, 1));
     } else if (activeView === "Week") {
-      // User requested "next week starting from sunday view"
-      // So when navigating week, snap to the start of the next/prev week
       setSelectedDate(prev => {
         const nextWeek = direction > 0 ? addDays(prev, 7) : subDays(prev, 7);
         return startOfWeek(nextWeek);
       });
     } else {
-      // Day view
       setSelectedDate(prev => addDays(prev, direction));
     }
   };
@@ -350,12 +343,8 @@ export const CalendarScreen: React.FC = () => {
     return eachDayOfInterval({ start, end });
   };
 
-  // User requested "scroll through dates" in Week view. 
-  // Instead of just 7 days, we generate a larger sliding window around the selected date.
   const generateWeekDays = () => {
-    // Start 7 days before the selected date's week start
     const start = subDays(startOfWeek(selectedDate), 7);
-    // Generate 30 days (approx 1 month sliding window)
     return Array.from({ length: 30 }).map((_, i) => addDays(start, i));
   };
 
@@ -364,7 +353,6 @@ export const CalendarScreen: React.FC = () => {
 
   const renderMonthView = () => (
     <View style={[styles.card, { backgroundColor: colors.card, borderRadius: radius.card }]}>
-      {/* Day Headers */}
       <View style={styles.gridHeader}>
         {daysOfWeek.map((day, i) => (
           <Text key={i} style={[styles.gridHeaderLabel, { color: colors.mutedForeground }, i === 0 && styles.textDanger]}>
@@ -373,7 +361,6 @@ export const CalendarScreen: React.FC = () => {
         ))}
       </View>
 
-      {/* Grid */}
       <View style={styles.grid}>
         {monthDays.map((day, i) => {
           const isCurrentMonth = isSameMonth(day, selectedDate);
@@ -386,7 +373,6 @@ export const CalendarScreen: React.FC = () => {
               key={i}
               onPress={() => {
                 setSelectedDate(day);
-                // User requested: "when user lcisk on a dayte then also oepn add event modal form"
                 setShowAddEventModal(true);
               }}
               style={[
@@ -442,7 +428,6 @@ export const CalendarScreen: React.FC = () => {
     try {
       if (!quickAddText.trim()) return;
 
-      // Simple parsing logic
       let title = quickAddText.trim();
       let timeString = format(new Date(), "h:mm aa");
 
@@ -450,7 +435,7 @@ export const CalendarScreen: React.FC = () => {
       if (timeMatch) {
         timeString = timeMatch[1].toUpperCase();
         if (!timeString.includes("AM") && !timeString.includes("PM")) {
-          timeString += " PM"; // Default to PM if not specified
+          timeString += " PM";
         }
         title = title.replace(timeMatch[0], "").trim();
       }
@@ -470,13 +455,7 @@ export const CalendarScreen: React.FC = () => {
   };
 
   const renderTimeline = (days: Date[]) => {
-    const isTodayInView = days.some(d => isSameDay(d, now));
-
-    // For Week view, we now show only the selected date in the body (Full Width), 
-    // effectively acting like Day view but with a week header.
     const dayColumnWidthPercent = 100;
-
-    // Used for the body grid rendering
     const daysToRender = activeView === "Week" ? [selectedDate] : days;
 
     return (
@@ -486,9 +465,8 @@ export const CalendarScreen: React.FC = () => {
             horizontal
             showsHorizontalScrollIndicator={false}
             ref={headerScrollRef}
-            // User requested scrolling through dates, so we must enable this.
             scrollEnabled={true}
-            contentContainerStyle={{ paddingLeft: 16, paddingRight: 16 }} // Reduced padding
+            contentContainerStyle={{ paddingLeft: 16, paddingRight: 16 }}
           >
             <View style={styles.weekHeaderRow}>
               {days.map((day, i) => {
@@ -500,10 +478,8 @@ export const CalendarScreen: React.FC = () => {
                     onPress={() => setSelectedDate(day)}
                     style={[
                       styles.weekHeaderCell,
-                      // Reduced width from 112 to something smaller like 50-60 to fit more
                       { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.md, width: 60, marginRight: 8 },
                       isSelected && { backgroundColor: colors.primary, borderColor: colors.primary },
-                      // If today is not selected, show a subtle indicator
                       isToday && !isSelected && { backgroundColor: colors.primary + '10', borderColor: colors.primary, borderWidth: 1 }
                     ]}
                   >
@@ -548,9 +524,7 @@ export const CalendarScreen: React.FC = () => {
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                // We don't need to sync header anymore as Week header uses different scroll
                 scrollEventThrottle={16}
-                // Width is now always window width for single day display
                 contentContainerStyle={{ width: (Dimensions.get('window').width - 50) }}
               >
                 <View style={{ flex: 1, position: 'relative' }}>
@@ -573,7 +547,6 @@ export const CalendarScreen: React.FC = () => {
                     const dateStr = format(day, "yyyy-MM-dd");
                     const dayEvents = currentEvents.filter(e => e.date === dateStr);
 
-                    // Helper to parse time string to minutes from midnight
                     const parseTimeToMinutes = (timeStr: string | undefined): number | null => {
                       if (!timeStr || timeStr === "All Day") return null;
                       const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
@@ -586,35 +559,28 @@ export const CalendarScreen: React.FC = () => {
                       return (hours * 60) + minutes;
                     };
 
-                    // 1. Prepare events with positions
                     const processedEvents = dayEvents.map(event => {
                       const startMins = parseTimeToMinutes(event.time);
-                      if (startMins === null) return null;
+                      const top = startMins !== null ? (startMins / 60) * HOUR_HEIGHT : undefined;
+                      const endMins = startMins !== null ? (parseTimeToMinutes(event.endTime) || (startMins + 60)) : undefined;
+                      let durationMins = (startMins !== null && endMins !== undefined) ? endMins - startMins : undefined;
 
-                      const endMins = parseTimeToMinutes(event.endTime) || (startMins + 60);
-
-                      const top = (startMins / 60) * HOUR_HEIGHT;
-                      let durationMins = endMins - startMins;
-
-                      // Handle events that cross midnight (unlikely in this UI but good to be safe)
-                      if (durationMins <= 0) durationMins = 60;
-
-                      // Minimum height of 25px for readability of tiny events
-                      const height = Math.max(25, (durationMins / 60) * HOUR_HEIGHT);
-                      const bottom = top + height;
+                      if (durationMins !== undefined && durationMins <= 0) durationMins = 60;
+                      const height = durationMins !== undefined ? Math.max(25, (durationMins / 60) * HOUR_HEIGHT) : undefined;
+                      const bottom = (top !== undefined && height !== undefined) ? top + height : undefined;
 
                       return { ...event, top, height, bottom };
-                    }).filter(Boolean) as any[];
+                    });
 
-                    // 2. Sort by start time
-                    processedEvents.sort((a, b) => a.top - b.top);
+                    const alldayItems = processedEvents.filter(e => e.top === undefined || e.time === "All Day");
+                    const timedEvents = processedEvents.filter(e => e.top !== undefined && e.time !== "All Day") as any[];
 
-                    // 3. Group overlapping events and assign columns
+                    timedEvents.sort((a, b) => (a.top || 0) - (b.top || 0));
+
                     const columns: any[][] = [];
-                    processedEvents.forEach(event => {
+                    timedEvents.forEach(event => {
                       let placed = false;
                       for (let i = 0; i < columns.length; i++) {
-                        // Check if this event overlaps with the last event in this column
                         const lastEventInColumn = columns[i][columns[i].length - 1];
                         if (event.top >= lastEventInColumn.bottom) {
                           columns[i].push(event);
@@ -629,42 +595,84 @@ export const CalendarScreen: React.FC = () => {
                       }
                     });
 
-                    // 4. Calculate total columns for overlapping groups (simplified)
-                    // For each event, we need to know how many columns are in its "cluster"
-                    // A simpler way is to just use columns.length if they are truly overlapping
-                    // but clusters can be complex. Let's use a simpler approach: 
-                    // total columns for the whole group.
-                    processedEvents.forEach(event => {
+                    timedEvents.forEach(event => {
                       event.totalCols = columns.length;
                     });
 
-                    return processedEvents.map(event => {
-                      const eventWidth = dayColumnWidthPercent / event.totalCols;
-                      const eventLeft = (dayIndex * dayColumnWidthPercent) + (event.colIndex * eventWidth);
+                    return (
+                      <React.Fragment key={dateStr}>
+                        {alldayItems.length > 0 && (
+                          <View style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: `${dayIndex * dayColumnWidthPercent}%`,
+                            width: `${dayColumnWidthPercent}%`,
+                            backgroundColor: colors.primary + '08',
+                            borderBottomWidth: 1,
+                            borderBottomColor: colors.border,
+                            zIndex: 30,
+                            padding: 4,
+                            gap: 2
+                          }}>
+                            {alldayItems.map(item => (
+                              <Pressable
+                                key={item.id}
+                                onPress={() => {
+                                  setSelectedEvent(item);
+                                  setShowAddEventModal(true);
+                                }}
+                                style={{
+                                  backgroundColor: colors.card,
+                                  borderRadius: 4,
+                                  padding: 4,
+                                  borderLeftWidth: 3,
+                                  borderLeftColor: item.type === 'task' ? '#ef4444' : '#8b5cf6',
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  borderWidth: 1,
+                                  borderColor: colors.border
+                                }}
+                              >
+                                <Text style={{ fontSize: 8, fontWeight: '900', color: item.type === 'task' ? '#ef4444' : '#8b5cf6' }}>
+                                  {item.type === 'task' ? 'TASK' : 'EVENT'}
+                                </Text>
+                                <Text style={{ fontSize: 10 }}>{item.icon}</Text>
+                                <Text numberOfLines={1} style={{ fontSize: 10, fontWeight: '600', color: colors.foreground, flex: 1 }}>
+                                  {item.title}
+                                </Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        )}
 
-                      return (
-                        <DraggableEvent
-                          key={event.id}
-                          event={event}
-                          dayIndex={dayIndex}
-                          dayColumnWidth={dayColumnWidthPercent}
-                          HOUR_HEIGHT={HOUR_HEIGHT}
-                          isOwner={!activeMember || activeMember.id === event.memberId}
-                          colors={colors}
-                          members={members}
-                          activeView={activeView}
-                          onUpdate={(id, updates) => updateEvent(id, updates)}
-                          onPress={(e) => {
-                            setSelectedEvent(e);
-                            setShowAddEventModal(true);
-                          }}
-                        />
-                      );
-                    });
+                        {timedEvents.map(event => {
+                          const eventWidth = dayColumnWidthPercent / event.totalCols;
+                          const eventLeft = (dayIndex * dayColumnWidthPercent) + (event.colIndex * eventWidth);
+
+                          return (
+                            <DraggableEvent
+                              key={event.id}
+                              event={event}
+                              dayIndex={dayIndex}
+                              dayColumnWidth={dayColumnWidthPercent}
+                              HOUR_HEIGHT={HOUR_HEIGHT}
+                              isOwner={!activeMember || activeMember.id === event.memberId}
+                              colors={colors}
+                              members={members}
+                              activeView={activeView}
+                              onUpdate={(id, updates) => updateEvent(id, updates)}
+                              onPress={(e) => {
+                                setSelectedEvent(e);
+                                setShowAddEventModal(true);
+                              }}
+                            />
+                          );
+                        })}
+                      </React.Fragment>
+                    );
                   })}
 
-
-                  {/* Current Time Red Line - Unified for Day/Week since we show single day */}
                   {(activeView === "Day" || activeView === "Week") && isSameDay(selectedDate, now) && (
                     <View
                       style={{
@@ -715,7 +723,6 @@ export const CalendarScreen: React.FC = () => {
       setShowAddEventModal(true);
     }}>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        {/* Header Section */}
         <View style={[styles.header, { backgroundColor: colors.primary }]}>
           <View style={styles.headerTop}>
             <View style={styles.headerLeft}>
@@ -763,10 +770,7 @@ export const CalendarScreen: React.FC = () => {
 
                   <Pressable
                     style={[styles.addBtn, { backgroundColor: "#fff", borderRadius: radius.sm }]}
-                    onPress={() => {
-                      console.log("Opening Add Event Modal");
-                      setShowAddEventModal(true);
-                    }}
+                    onPress={() => setShowAddEventModal(true)}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
                     <AppIcon name="plus" size={20} color={colors.primary} />
@@ -776,7 +780,6 @@ export const CalendarScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* View Segmented Control */}
           <View style={[styles.segmentContainer, { borderRadius: radius.md }]}>
             {views.map(view => (
               <Pressable
@@ -795,10 +798,9 @@ export const CalendarScreen: React.FC = () => {
               </Pressable>
             ))}
           </View>
-        </View>
+        </View >
 
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          {/* Member Filters */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
             <Pressable
               onPress={() => setFilterMember(null)}
@@ -835,7 +837,6 @@ export const CalendarScreen: React.FC = () => {
             ))}
           </ScrollView>
 
-          {/* Date Navigation */}
           <View style={styles.dateNav}>
             <Pressable onPress={() => navigateDate(-1)} style={[styles.navArrow, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.sm }]}>
               <AppIcon name="chevronLeft" size={20} color={colors.foreground} />
@@ -851,7 +852,6 @@ export const CalendarScreen: React.FC = () => {
           {activeView === "Month" && renderMonthView()}
           {(activeView === "Week" || activeView === "Day") && renderTimeline(activeView === "Week" ? weekDays : [selectedDate])}
 
-          {/* Upcoming Events (Simplified Logic) */}
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>📋 Upcoming Events</Text>
             {currentEvents.slice(0, 3).map(event => (
@@ -892,7 +892,7 @@ export const CalendarScreen: React.FC = () => {
         />
         <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} />
       </View>
-    </AppLayout>
+    </AppLayout >
   );
 };
 

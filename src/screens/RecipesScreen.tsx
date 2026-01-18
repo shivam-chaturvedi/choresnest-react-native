@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TextInput,
   Pressable,
   Dimensions,
+  Image,
 } from "react-native";
 import { useNavigation, NavigationProp } from "@react-navigation/native";
 import { AppLayout } from "../components/layout/AppLayout";
@@ -17,6 +18,7 @@ import { useFamily } from "../contexts/FamilyContext";
 import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { AppIcon } from "../components/ui/AppIcon";
 import { useRecipes } from "../contexts/RecipeContext";
+import { RecipeImage } from "../components/recipes/RecipeImage";
 import { Recipe } from "../data/recipes";
 import { RecipeDetailModal } from "../components/modals/RecipeDetailModal";
 import { AddNewRecipeModal } from "../components/modals/AddNewRecipeModal";
@@ -52,6 +54,20 @@ export const RecipesScreen: React.FC = () => {
   const [showSearch, setShowSearch] = useState(false);
   const [activeTab, setActiveTab] = useState("For You");
   const [query, setQuery] = useState("");
+
+  // Auto-switch to "All Recipes" when searching
+  useEffect(() => {
+    if (query.trim().length > 0 && activeTab !== "All Recipes") {
+      setActiveTab("All Recipes");
+    }
+  }, [query]);
+
+  // Clear search for better UX when switching tabs manually
+  useEffect(() => {
+    if (activeTab !== "All Recipes" && query.trim().length > 0) {
+      setQuery("");
+    }
+  }, [activeTab]);
 
   // ... (Keep existing state)
   // Recipe Modal State
@@ -182,13 +198,7 @@ export const RecipesScreen: React.FC = () => {
   };
 
   const renderRecipeImage = (imageString: string) => {
-    if (imageString === "AUDIO_ICON") {
-      return <AppIcon name="mic" size={24} color={theme.colors.primary} />;
-    }
-    if (imageString === "LINK_ICON") {
-      return <AppIcon name="link" size={24} color={theme.colors.primary} />;
-    }
-    return <Text style={{ fontSize: 32 }}>{imageString}</Text>;
+    return <RecipeImage image={imageString} size={48} />;
   };
 
   const renderRecommendedItem = (recipe: Recipe) => (
@@ -203,9 +213,11 @@ export const RecipesScreen: React.FC = () => {
         </View>
         <View>
           <Text style={[styles.recommendTitle, { color: colors.foreground }]}>{recipe.name}</Text>
-          <Text style={[styles.recommendMeta, { color: colors.mutedForeground }]}>
-            {recipe.time}
-          </Text>
+          {recipe.time ? (
+            <Text style={[styles.recommendMeta, { color: colors.mutedForeground }]}>
+              {recipe.time}
+            </Text>
+          ) : null}
         </View>
       </View>
       <View style={styles.recommendRight}>
@@ -361,15 +373,21 @@ export const RecipesScreen: React.FC = () => {
             </View>
 
             <View style={styles.recipeMetaRow}>
-              <View style={styles.metaItem}>
-                <AppIcon name="clock" size={14} color={colors.mutedForeground} />
-                <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.time}</Text>
-              </View>
-              <View style={styles.metaItem}>
-                <AppIcon name="users" size={14} color={colors.mutedForeground} />
-                <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.servings}</Text>
-              </View>
-              <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.ingredients.length} items</Text>
+              {recipe.time ? (
+                <View style={styles.metaItem}>
+                  <AppIcon name="clock" size={14} color={colors.mutedForeground} />
+                  <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.time}</Text>
+                </View>
+              ) : null}
+              {recipe.image !== "AUDIO_ICON" && recipe.image !== "mic" && (
+                <>
+                  <View style={styles.metaItem}>
+                    <AppIcon name="users" size={14} color={colors.mutedForeground} />
+                    <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.servings}</Text>
+                  </View>
+                  <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.ingredients.length} items</Text>
+                </>
+              )}
             </View>
 
             <View style={styles.tagsRow}>
@@ -501,6 +519,11 @@ export const RecipesScreen: React.FC = () => {
                 placeholderTextColor={colors.mutedForeground}
                 value={query}
                 onChangeText={setQuery}
+                onFocus={() => {
+                  if (activeTab !== "All Recipes") {
+                    setActiveTab("All Recipes");
+                  }
+                }}
               />
             </View>
 
@@ -727,7 +750,7 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 16,
   },
   recommendEmoji: {
     fontSize: 22,

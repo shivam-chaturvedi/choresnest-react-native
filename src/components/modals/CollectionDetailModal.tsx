@@ -8,8 +8,10 @@ import {
     TextInput,
     ScrollView,
     Pressable,
+    Image,
 } from "react-native";
 import { AppIcon } from "../ui/AppIcon";
+import { RecipeImage } from "../recipes/RecipeImage";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { useRecipes } from "../../contexts/RecipeContext";
 import { Recipe } from "../../data/recipes";
@@ -181,8 +183,8 @@ export const CollectionDetailModal: React.FC<CollectionDetailModalProps> = ({ op
                                         ]}
                                         onPress={() => isEditing && toggleRecipe(recipe.id)}
                                     >
-                                        <Text style={{ fontSize: 24, marginRight: 12 }}>{recipe.image}</Text>
-                                        <View style={{ flex: 1 }}>
+                                        <RecipeImage image={recipe.image} size={44} />
+                                        <View style={{ flex: 1, marginLeft: 12 }}>
                                             <Text style={[styles.recipeName, { color: colors.foreground }]}>{recipe.name}</Text>
                                             <Text style={[styles.recipeMeta, { color: colors.mutedForeground }]}>{recipe.time} • {recipe.ingredients.length} items</Text>
                                         </View>

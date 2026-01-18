@@ -78,124 +78,156 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
           style={[styles.container, { backgroundColor: colors.card, borderRadius: radius.xl }]}
           onPress={(e) => e.stopPropagation()}
         >
-          <View style={styles.header}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <AppIcon name="checkSquare" size={20} color={colors.success} style={{ marginRight: 8 }} />
-              <Text style={[styles.title, { color: colors.foreground }]}>Add New Task</Text>
-            </View>
-          </View>
-
-          <ScrollView showsVerticalScrollIndicator={false}>
-            {/* Task Name */}
-            <Text style={[styles.label, { color: colors.foreground }]}>Task Name</Text>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+            {/* Task Name - Underline Style */}
             <TextInput
               value={formData.name}
               onChangeText={(text) => setFormData({ ...formData, name: text })}
-              placeholder="Enter task name"
+              placeholder="Task name"
               placeholderTextColor={colors.mutedForeground}
-              style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.md }]}
+              style={[
+                styles.nameInput,
+                { color: colors.foreground, borderBottomColor: colors.primary }
+              ]}
+              autoFocus
             />
 
             {/* Icon Selection */}
-            <Text style={[styles.label, { color: colors.foreground }]}>Choose Icon</Text>
-            <View style={styles.iconRow}>
-              {taskIcons.map((icon) => (
-                <Pressable
-                  key={icon}
-                  onPress={() => setFormData({ ...formData, icon })}
-                  style={[
-                    styles.iconButton,
-                    { backgroundColor: colors.muted, borderRadius: radius.md },
-                    formData.icon === icon && { backgroundColor: colors.success, transform: [{ scale: 1.1 }] },
-                  ]}
-                >
-                  <Text style={styles.iconText}>{icon}</Text>
-                </Pressable>
-              ))}
+            <View style={styles.section}>
+              <View style={styles.labelRow}>
+                <AppIcon name="tag" size={16} color={colors.mutedForeground} />
+                <Text style={[styles.label, { color: colors.mutedForeground }]}>Icon</Text>
+              </View>
+              <View style={styles.iconGrid}>
+                {taskIcons.map((icon) => (
+                  <Pressable
+                    key={icon}
+                    onPress={() => setFormData({ ...formData, icon })}
+                    style={[
+                      styles.iconButton,
+                      { backgroundColor: colors.muted, borderRadius: radius.md },
+                      formData.icon === icon && { backgroundColor: colors.success, transform: [{ scale: 1.1 }] },
+                    ]}
+                  >
+                    <Text style={styles.iconText}>{icon}</Text>
+                  </Pressable>
+                ))}
+              </View>
             </View>
 
             {/* Priority */}
-            <Text style={[styles.label, { color: colors.foreground }]}>Priority</Text>
-            <View style={styles.priorityRow}>
-              {priorities.map((p) => {
-                const isSelected = formData.priority === p.value;
-                return (
-                  <Pressable
-                    key={p.value}
-                    onPress={() => setFormData({ ...formData, priority: p.value })}
-                    style={[
-                      styles.priorityButton,
-                      { backgroundColor: colors.muted, borderRadius: radius.md },
-                      isSelected && { backgroundColor: p.bgColor, borderColor: p.textColor, borderWidth: 1 }
-                    ]}
-                  >
-                    <Text style={[
-                      styles.priorityText,
-                      { color: isSelected ? p.textColor : colors.mutedForeground }
-                    ]}>{p.label}</Text>
-                  </Pressable>
-                )
-              })}
+            <View style={styles.section}>
+              <View style={styles.labelRow}>
+                <AppIcon name="alertCircle" size={16} color={colors.mutedForeground} />
+                <Text style={[styles.label, { color: colors.mutedForeground }]}>Priority</Text>
+              </View>
+              <View style={styles.priorityRow}>
+                {priorities.map((p) => {
+                  const isSelected = formData.priority === p.value;
+                  return (
+                    <Pressable
+                      key={p.value}
+                      onPress={() => setFormData({ ...formData, priority: p.value })}
+                      style={[
+                        styles.priorityButton,
+                        { backgroundColor: colors.muted, borderRadius: radius.md },
+                        isSelected && {
+                          backgroundColor: p.bgColor,
+                          borderColor: p.textColor,
+                          borderWidth: 1
+                        }
+                      ]}
+                    >
+                      <Text style={[
+                        styles.priorityText,
+                        { color: isSelected ? p.textColor : colors.mutedForeground }
+                      ]}>{p.label}</Text>
+                    </Pressable>
+                  )
+                })}
+              </View>
             </View>
 
-            {/* Due Date */}
-            <CustomDateTimePicker
-              mode="date"
-              value={formData.dueDate}
-              onChange={(date) => setFormData({ ...formData, dueDate: date })}
-              label="Due Date"
-            />
+            {/* Due Date & Time */}
+            <View style={styles.section}>
+              <Text style={[styles.label, { color: colors.mutedForeground, marginVertical: 8 }]}>Due Date</Text>
+              <View style={styles.dateTimeRow}>
+                <View style={{ flex: 1.5 }}>
+                  <CustomDateTimePicker
+                    mode="date"
+                    value={formData.dueDate}
+                    onChange={(date) => setFormData({ ...formData, dueDate: date })}
+                    label=""
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <CustomDateTimePicker
+                    mode="time"
+                    value={formData.dueDate}
+                    onChange={(date) => setFormData({ ...formData, dueDate: date })}
+                    label=""
+                  />
+                </View>
+              </View>
+            </View>
 
             {/* Assign To */}
-            <Text style={[styles.label, { color: colors.foreground }]}>Assign To</Text>
-            <View style={styles.assigneeRow}>
-              {members.map((member) => {
-                const profileColor = PROFILE_COLORS.find(c => c.value === member.color)?.hex || colors.primary;
-                const isSelected = formData.person === member.id;
-                return (
-                  <Pressable
-                    key={member.id}
-                    onPress={() => setFormData({ ...formData, person: member.id })}
-                    style={[
-                      styles.assigneeButton,
-                      { backgroundColor: colors.muted, borderRadius: radius.md },
-                      isSelected && { backgroundColor: profileColor },
-                    ]}
-                  >
-                    <Text style={[
-                      styles.assigneeText,
-                      { color: colors.mutedForeground },
-                      isSelected && { color: "#fff" }
-                    ]}>
-                      {member.symbol} {member.name}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+            <View style={styles.section}>
+              <View style={styles.labelRow}>
+                <AppIcon name="user" size={16} color={colors.mutedForeground} />
+                <Text style={[styles.label, { color: colors.mutedForeground }]}>Assign to</Text>
+              </View>
+              <View style={styles.assigneeRow}>
+                {members.map((member) => {
+                  const profileColor = PROFILE_COLORS.find(c => c.value === member.color)?.hex || colors.primary;
+                  const isSelected = formData.person === member.id;
+                  return (
+                    <Pressable
+                      key={member.id}
+                      onPress={() => setFormData({ ...formData, person: member.id })}
+                      style={[
+                        styles.assigneeButton,
+                        { backgroundColor: colors.muted, borderRadius: radius.full },
+                        isSelected && { backgroundColor: profileColor },
+                      ]}
+                    >
+                      <Text style={styles.assigneeEmoji}>{member.symbol}</Text>
+                      <Text style={[
+                        styles.assigneeText,
+                        { color: colors.mutedForeground },
+                        isSelected && { color: "#fff" }
+                      ]}>
+                        {member.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Footer Buttons */}
+            <View style={styles.footer}>
+              <Pressable
+                style={[
+                  styles.cancelButton,
+                  { borderColor: colors.border, borderRadius: radius.md }
+                ]}
+                onPress={onClose}
+              >
+                <Text style={[styles.cancelButtonText, { color: colors.foreground }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.saveButton,
+                  { backgroundColor: colors.success, borderRadius: radius.md }
+                ]}
+                onPress={handleSave}
+              >
+                <Text style={[styles.saveButtonText, { color: colors.primaryForeground }]}>Add Task</Text>
+              </Pressable>
             </View>
 
           </ScrollView>
-
-          <View style={styles.footer}>
-            <Pressable
-              style={[
-                styles.cancelButton,
-                { borderColor: colors.border, borderRadius: radius.md }
-              ]}
-              onPress={onClose}
-            >
-              <Text style={[styles.cancelButtonText, { color: colors.foreground }]}>Cancel</Text>
-            </Pressable>
-            <Pressable
-              style={[
-                styles.saveButton,
-                { backgroundColor: colors.success, borderRadius: radius.md }
-              ]}
-              onPress={handleSave}
-            >
-              <Text style={[styles.saveButtonText, { color: colors.primaryForeground }]}>Add Task</Text>
-            </Pressable>
-          </View>
         </Pressable>
       </Pressable>
     </Modal>
@@ -206,49 +238,44 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: "rgba(15, 23, 42, 0.6)",
-    justifyContent: "center",
-    padding: 16,
+    justifyContent: "flex-end", // Bottom-aligned
   },
   container: {
-    padding: 20,
-    maxHeight: "85%",
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.2,
-        shadowRadius: 20,
-      },
-      android: {
-        elevation: 5,
-      },
-    }),
+    padding: 24,
+    backgroundColor: 'white',
+    maxHeight: "90%",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
   },
-  header: {
+  section: {
     marginBottom: 20,
   },
-  title: {
-    fontSize: 20,
+  nameInput: {
+    fontSize: 24,
     fontWeight: "700",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    marginBottom: 24,
+  },
+  labelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+    gap: 8,
   },
   label: {
     fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 8,
-    marginTop: 12,
+    fontWeight: "700",
   },
-  input: {
-    padding: 12,
-    fontSize: 16,
-  },
-  iconRow: {
+  iconGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 12,
   },
   iconButton: {
-    width: 44,
-    height: 44,
+    width: 48,
+    height: 48,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -257,32 +284,45 @@ const styles = StyleSheet.create({
   },
   priorityRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: 12,
   },
   priorityButton: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 12,
     alignItems: "center",
   },
   priorityText: {
-    fontWeight: "600",
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  dateTimeRow: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
   },
   assigneeRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 12,
   },
   assigneeButton: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  assigneeEmoji: {
+    fontSize: 16,
   },
   assigneeText: {
     fontWeight: "600",
+    fontSize: 14,
   },
   footer: {
     flexDirection: "row",
     gap: 12,
-    marginTop: 24,
+    marginTop: 12,
   },
   cancelButton: {
     flex: 1,

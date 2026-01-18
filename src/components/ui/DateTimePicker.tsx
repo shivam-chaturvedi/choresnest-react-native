@@ -61,7 +61,6 @@ export const CustomDateTimePicker: React.FC<DateTimePickerProps> = ({
 
     return (
         <View style={styles.container}>
-            {label && <Text style={styles.label}>{label}</Text>}
             <Pressable
                 style={[styles.button, disabled && { opacity: 0.5 }]}
                 onPress={() => !disabled && onPress()}

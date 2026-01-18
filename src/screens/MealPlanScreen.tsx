@@ -19,6 +19,7 @@ import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import { AddMealModal } from '../components/modals/AddMealModal';
 import { RecipeDetailModal } from '../components/modals/RecipeDetailModal';
 import { WeeklyGroceryListModal } from '../components/modals/WeeklyGroceryListModal';
+import { RecipeImage } from '../components/recipes/RecipeImage';
 import { format, addDays, subDays, isToday, isTomorrow, parse, subMinutes, isAfter, startOfDay } from 'date-fns';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -121,117 +122,124 @@ export const MealPlanScreen: React.FC = () => {
     }
   };
 
-  const renderPlanTab = () => (
-    <View style={styles.tabContent}>
-      {/* Week Navigator */}
-      <View style={[styles.weekNavigator, { backgroundColor: colors.muted, borderRadius: radius.lg }]}>
-        <Pressable onPress={() => handleNavigateWeek('prev')} style={styles.navArrow}>
-          <AppIcon name="chevronLeft" size={20} color={colors.foreground} />
-        </Pressable>
-        <View style={{ alignItems: 'center' }}>
-          <Text style={[styles.weekDateRange, { color: colors.foreground }]}>
-            {format(currentWeekStart, 'MMM d')} - {format(addDays(currentWeekStart, 6), 'MMM d')}
-          </Text>
-          <Text style={[styles.weekYear, { color: colors.mutedForeground }]}>{format(currentWeekStart, 'yyyy')}</Text>
+  const renderPlanTab = () => {
+    const displayDays = [...weekDays].sort((a, b) => {
+      if (isToday(a)) return -1;
+      if (isToday(b)) return 1;
+      return 0;
+    });
+
+    return (
+      <View style={styles.tabContent}>
+        {/* Week Navigator */}
+        <View style={[styles.weekNavigator, { backgroundColor: colors.muted, borderRadius: radius.lg }]}>
+          <Pressable onPress={() => handleNavigateWeek('prev')} style={styles.navArrow}>
+            <AppIcon name="chevronLeft" size={20} color={colors.foreground} />
+          </Pressable>
+          <View style={{ alignItems: 'center' }}>
+            <Text style={[styles.weekDateRange, { color: colors.foreground }]}>
+              {format(currentWeekStart, 'MMM d')} - {format(addDays(currentWeekStart, 6), 'MMM d')}
+            </Text>
+            <Text style={[styles.weekYear, { color: colors.mutedForeground }]}>{format(currentWeekStart, 'yyyy')}</Text>
+          </View>
+          <Pressable onPress={() => handleNavigateWeek('next')} style={styles.navArrow}>
+            <AppIcon name="chevronRight" size={20} color={colors.foreground} />
+          </Pressable>
         </View>
-        <Pressable onPress={() => handleNavigateWeek('next')} style={styles.navArrow}>
-          <AppIcon name="chevronRight" size={20} color={colors.foreground} />
-        </Pressable>
-      </View>
 
-      {/* Days List */}
-      <View style={{ gap: 16 }}>
-        {weekDays.map((day) => {
-          const dateStr = format(day, 'yyyy-MM-dd');
-          const dayMeals = getMealsForDay(dateStr);
-          const isTodayDate = isToday(day);
+        {/* Days List */}
+        <View style={{ gap: 16 }}>
+          {displayDays.map((day) => {
+            const dateStr = format(day, 'yyyy-MM-dd');
+            const dayMeals = getMealsForDay(dateStr);
+            const isTodayDate = isToday(day);
 
-          return (
-            <View key={dateStr} style={[
-              styles.dayCard,
-              { backgroundColor: colors.card, borderRadius: radius.card },
-              isTodayDate && { borderWidth: 2, borderColor: colors.primary }
-            ]}>
-              {/* Day Header */}
-              <View style={[styles.dayHeader, { borderColor: colors.border }]}>
-                <View style={styles.dayDateGroup}>
-                  <View style={[
-                    styles.dateBadge,
-                    { backgroundColor: colors.muted, borderRadius: radius.md },
-                    isTodayDate && { backgroundColor: colors.primary }
-                  ]}>
-                    <Text style={[
-                      styles.dateNumber,
-                      { color: colors.foreground },
-                      isTodayDate && { color: '#fff' }
-                    ]}>{getDayNumber(day)}</Text>
-                  </View>
-                  <View>
-                    <Text style={[styles.dayName, { color: colors.foreground }]}>{getDayName(day)}</Text>
-                    <Text style={[styles.monthName, { color: colors.mutedForeground }]}>{format(day, 'MMM yyyy')}</Text>
+            return (
+              <View key={dateStr} style={[
+                styles.dayCard,
+                { backgroundColor: colors.card, borderRadius: radius.card },
+                isTodayDate && { borderWidth: 2, borderColor: colors.primary }
+              ]}>
+                {/* Day Header */}
+                <View style={[styles.dayHeader, { borderColor: colors.border }]}>
+                  <View style={styles.dayDateGroup}>
+                    <View style={[
+                      styles.dateBadge,
+                      { backgroundColor: colors.muted, borderRadius: radius.md },
+                      isTodayDate && { backgroundColor: colors.primary }
+                    ]}>
+                      <Text style={[
+                        styles.dateNumber,
+                        { color: colors.foreground },
+                        isTodayDate && { color: '#fff' }
+                      ]}>{getDayNumber(day)}</Text>
+                    </View>
+                    <View>
+                      <Text style={[styles.dayName, { color: colors.foreground }]}>{getDayName(day)}</Text>
+                      <Text style={[styles.monthName, { color: colors.mutedForeground }]}>{format(day, 'MMM yyyy')}</Text>
+                    </View>
                   </View>
                 </View>
-              </View>
 
-              {/* Meal Slots */}
-              <View style={styles.mealGrid}>
-                {(['breakfast', 'lunch', 'dinner', 'snack'] as MealType[]).map((mealType) => {
-                  const meal = dayMeals.find((m) => m.mealType === mealType);
-                  const recipe = meal ? getRecipeById(meal.recipeId) : null;
+                {/* Meal Slots */}
+                <View style={styles.mealGrid}>
+                  {(['breakfast', 'lunch', 'dinner', 'snack'] as MealType[]).map((mealType) => {
+                    const meal = dayMeals.find((m) => m.mealType === mealType);
+                    const recipe = meal ? getRecipeById(meal.recipeId) : null;
 
-                  const typeConfig = {
-                    breakfast: { label: 'Breakfast', icon: 'coffee' },
-                    lunch: { label: 'Lunch', icon: 'sun' },
-                    dinner: { label: 'Dinner', icon: 'moon' },
-                    snack: { label: 'Snack', icon: 'cookie' },
-                  };
-                  const config = typeConfig[mealType];
+                    const typeConfig = {
+                      breakfast: { label: 'Breakfast', icon: 'coffee' },
+                      lunch: { label: 'Lunch', icon: 'sun' },
+                      dinner: { label: 'Dinner', icon: 'moon' },
+                      snack: { label: 'Snack', icon: 'cookie' },
+                    };
+                    const config = typeConfig[mealType];
 
-                  return (
-                    <View key={mealType} style={[
-                      styles.mealSlot,
-                      { backgroundColor: colors.background, borderColor: colors.border, borderWidth: 1, borderRadius: radius.md }
-                    ]}>
-                      {/* Slot Header */}
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                          <AppIcon name={config.icon as any} size={14} color={colors.primary} />
-                          <Text style={[styles.slotLabel, { color: colors.primary }]}>{config.label}</Text>
+                    return (
+                      <View key={mealType} style={[
+                        styles.mealSlot,
+                        { backgroundColor: colors.background, borderColor: colors.border, borderWidth: 1, borderRadius: radius.md }
+                      ]}>
+                        {/* Slot Header */}
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <AppIcon name={config.icon as any} size={14} color={colors.primary} />
+                            <Text style={[styles.slotLabel, { color: colors.primary }]}>{config.label}</Text>
+                          </View>
+                          {meal && (
+                            <Pressable onPress={() => handleRemoveMeal(meal.id)} hitSlop={8}>
+                              <AppIcon name="x" size={14} color={colors.mutedForeground} />
+                            </Pressable>
+                          )}
                         </View>
-                        {meal && (
-                          <Pressable onPress={() => handleRemoveMeal(meal.id)} hitSlop={8}>
-                            <AppIcon name="x" size={14} color={colors.mutedForeground} />
+                        {meal && recipe ? (
+                          <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+                            <RecipeImage image={recipe.image} size={32} />
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styles.slotRecipeName, { color: colors.foreground }]} numberOfLines={1}>{recipe.name}</Text>
+                              <Text style={[styles.slotRecipeTime, { color: colors.mutedForeground }]}>{recipe.time}</Text>
+                            </View>
+                          </View>
+                        ) : (
+                          <Pressable
+                            style={styles.addSlotButton}
+                            onPress={() => handleOpenAddMeal(dateStr, mealType)}
+                          >
+                            <AppIcon name="plus" size={16} color={colors.mutedForeground} />
+                            <Text style={[styles.addSlotText, { color: colors.mutedForeground }]}>Add</Text>
                           </Pressable>
                         )}
                       </View>
-
-                      {meal && recipe ? (
-                        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-                          <Text style={{ fontSize: 20 }}>{recipe.image}</Text>
-                          <View style={{ flex: 1 }}>
-                            <Text style={[styles.slotRecipeName, { color: colors.foreground }]} numberOfLines={1}>{recipe.name}</Text>
-                            <Text style={[styles.slotRecipeTime, { color: colors.mutedForeground }]}>{recipe.time}</Text>
-                          </View>
-                        </View>
-                      ) : (
-                        <Pressable
-                          style={styles.addSlotButton}
-                          onPress={() => handleOpenAddMeal(dateStr, mealType)}
-                        >
-                          <AppIcon name="plus" size={16} color={colors.mutedForeground} />
-                          <Text style={[styles.addSlotText, { color: colors.mutedForeground }]}>Add</Text>
-                        </Pressable>
-                      )}
-                    </View>
-                  );
-                })}
+                    );
+                  })}
+                </View>
               </View>
-            </View>
-          );
-        })}
+            );
+          })}
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   const getPrepItems = (date: Date) => {
     const meals = getMealsForDay(format(date, 'yyyy-MM-dd'));
@@ -266,8 +274,8 @@ export const MealPlanScreen: React.FC = () => {
         style={[styles.prepItemCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}
         onPress={() => handleOpenRecipe(item.recipe.id)}
       >
-        <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
-          <Text style={{ fontSize: 24, marginTop: 4 }}>{item.recipe.image}</Text>
+        <View style={{ flexDirection: 'row', gap: 16, alignItems: 'flex-start' }}>
+          <RecipeImage image={item.recipe.image} size={44} />
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
               {/* Meal Icon */}
@@ -302,9 +310,6 @@ export const MealPlanScreen: React.FC = () => {
             </Text>
           </View>
 
-          <Pressable style={[styles.notifyIcon, { backgroundColor: colors.muted, borderRadius: radius.full }]}>
-            <AppIcon name="bellOff" size={16} color={colors.mutedForeground} />
-          </Pressable>
         </View>
       </Pressable>
     );
@@ -328,39 +333,6 @@ export const MealPlanScreen: React.FC = () => {
 
     return (
       <View style={styles.tabContent}>
-        {/* Header Widget */}
-        <View style={[styles.prepHeaderCard, { backgroundColor: colors.card, borderRadius: radius.lg }]}>
-          <View style={styles.prepHeaderTop}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <AppIcon name="chefHat" size={20} color={colors.primary} />
-              <View>
-                <Text style={[styles.prepHeaderTitle, { color: colors.foreground }]}>Meal Prep Schedule</Text>
-              </View>
-            </View>
-            <Pressable style={[styles.setReminderBtn, { borderColor: colors.border, borderRadius: radius.sm }]}>
-              <AppIcon name="bell" size={14} color={colors.foreground} style={{ marginRight: 6 }} />
-              <Text style={[styles.setReminderText, { color: colors.foreground }]}>Set All Reminders</Text>
-            </Pressable>
-          </View>
-          <View style={[styles.autoScheduleRow, { backgroundColor: colors.muted }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <AppIcon name="bell" size={16} color={colors.primary} />
-              <Text style={{ fontSize: 13, fontWeight: '500', color: colors.foreground }}>Auto-schedule reminders</Text>
-            </View>
-            {/* Mock Toggle */}
-            <View style={{ width: 36, height: 20, borderRadius: 12, backgroundColor: colors.border, alignItems: 'flex-start', padding: 2, justifyContent: 'center' }}>
-              <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: '#fff' }} />
-            </View>
-          </View>
-          <View style={[styles.enableNotifRow, { backgroundColor: colors.warning + '15' }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
-              <AppIcon name="alertCircle" size={16} color={colors.warning} />
-              <Text style={{ fontSize: 12, color: colors.warning, flex: 1 }}>Enable notifications to receive prep reminders</Text>
-            </View>
-            <Text style={{ fontSize: 12, fontWeight: '700', color: colors.foreground }}>Enable</Text>
-          </View>
-        </View>
-
         {/* Today's Prep */}
         <View>
           <View style={styles.sectionHeader}>
@@ -410,8 +382,8 @@ export const MealPlanScreen: React.FC = () => {
                   style={[styles.prepItemCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}
                   onPress={() => handleOpenRecipe(item.recipe.id)}
                 >
-                  <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-                    <Text style={{ fontSize: 24 }}>{item.recipe.image}</Text>
+                  <View style={{ flexDirection: 'row', gap: 16, alignItems: 'center' }}>
+                    <RecipeImage image={item.recipe.image} size={40} />
                     <View style={{ flex: 1 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
                         <View style={{ backgroundColor: colors.success, paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.xs, marginRight: 8 }}>
@@ -453,9 +425,6 @@ export const MealPlanScreen: React.FC = () => {
               <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{totalMeals} meals planned this week</Text>
             </View>
             <View style={{ flexDirection: 'row', gap: 8 }}>
-              <Pressable style={[styles.actionButton, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.md }]} onPress={clearWeekPlan}>
-                <AppIcon name="trash" size={18} color={colors.foreground} />
-              </Pressable>
               <Pressable
                 style={[styles.actionButton, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.md }]}
                 onPress={() => setShowGroceryModal(true)}
@@ -465,8 +434,6 @@ export const MealPlanScreen: React.FC = () => {
               </Pressable>
             </View>
           </View>
-
-
 
           {/* Tabs */}
           <View style={[styles.tabBar, { backgroundColor: colors.muted, borderRadius: radius.lg }]}>
@@ -680,48 +647,6 @@ const styles = StyleSheet.create({
   },
   slotRecipeTime: {
     fontSize: 11,
-  },
-  // Prep Tab Styles
-  prepHeaderCard: {
-    marginBottom: 8,
-    overflow: 'hidden',
-  },
-  prepHeaderTop: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.05)',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  prepHeaderTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  setReminderBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  setReminderText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  autoScheduleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  enableNotifRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
   },
   sectionHeader: {
     flexDirection: 'row',

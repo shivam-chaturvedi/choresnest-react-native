@@ -222,6 +222,7 @@ const ICON_COMPONENTS = {
   pause: Pause,
   stop: Square,
   moreVertical: MoreVertical,
+  filter: ListFilter,
 } as const;
 
 export type AppIconName = keyof typeof ICON_COMPONENTS;

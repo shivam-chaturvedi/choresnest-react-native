@@ -17,7 +17,7 @@ import {
 } from 'lucide-react-native';
 import { AddExpenseModal, ExpenseData } from '../components/modals/AddExpenseModal';
 import { useSidebar } from '../contexts/SidebarContext';
-import Svg, { Path, Defs, LinearGradient, Stop, G, Text as SvgText } from 'react-native-svg';
+import Svg, { Path, Defs, LinearGradient, Stop, G, Circle, Text as SvgText } from 'react-native-svg';
 import { AppIcon } from '../components/ui/AppIcon';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
@@ -33,9 +33,31 @@ export const ExpensesScreen: React.FC = () => {
   const radius = useThemeRadius();
   const [activeTab, setActiveTab] = useState('Overview');
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
+  const [viewDate, setViewDate] = useState(new Date()); // For month navigation in trend chart
   const { openSidebar } = useSidebar();
 
   const { transactions, addTransaction, budgets, categoryColors, categoryIcons } = useFinance();
+
+  const handlePrevMonth = () => {
+    setViewDate(prev => {
+      const d = new Date(prev);
+      d.setMonth(d.getMonth() - 1);
+      return d;
+    });
+  };
+
+  const handleNextMonth = () => {
+    setViewDate(prev => {
+      const d = new Date(prev);
+      d.setMonth(d.getMonth() + 1);
+      return d;
+    });
+  };
+
+  const formatViewDate = (date: Date) => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${months[date.getMonth()]}, ${date.getFullYear()}`;
+  };
 
   // --- Dynamic Data Calculation ---
 
@@ -74,37 +96,53 @@ export const ExpensesScreen: React.FC = () => {
     })).sort((a, b) => b.numAmount - a.numAmount);
   }, [categorySpending, totalExpenses, budgets, categoryIcons, categoryColors]);
 
-  // Monthly Data for Area Chart (Last 6 Months)
-  const monthlyData = useMemo(() => {
-    const today = new Date();
-    const last6Months = [];
-    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  // Daily Data for Area Chart (Current Month)
+  const dailyData = useMemo(() => {
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-      const monthIndex = d.getMonth();
-      const year = d.getFullYear();
-      const monthLabel = monthNames[monthIndex];
+    const stats = [];
+    for (let day = 1; day <= daysInMonth; day++) {
+      // Filter transactions for this specific day
+      const dayTransactions = transactions.filter(t => {
+        if (!t.date) return false;
 
-      // Calculate stats for this month
-      const monthlyTransactions = transactions.filter(t => {
-        const tDate = new Date(t.date === 'Today' ? new Date() : t.date);
-        return tDate.getMonth() === monthIndex && tDate.getFullYear() === year;
+        let txYear, txMonth, txDay;
+        if (t.date === 'Today') {
+          const now = new Date();
+          txYear = now.getFullYear();
+          txMonth = now.getMonth();
+          txDay = now.getDate();
+        } else {
+          const parts = t.date.split('-').map(Number);
+          if (parts.length === 3) {
+            txYear = parts[0];
+            txMonth = parts[1] - 1;
+            txDay = parts[2];
+          } else {
+            const dt = new Date(t.date);
+            txYear = dt.getFullYear();
+            txMonth = dt.getMonth();
+            txDay = dt.getDate();
+          }
+        }
+        return txYear === year && txMonth === month && txDay === day;
       });
 
-      const income = monthlyTransactions
+      const income = dayTransactions
         .filter(t => t.type === 'income')
         .reduce((sum, t) => sum + t.amount, 0);
 
-      const expenses = monthlyTransactions
+      const expenses = dayTransactions
         .filter(t => t.type === 'expense')
         .reduce((sum, t) => sum + t.amount, 0);
 
-      last6Months.push({ month: monthLabel, income, expenses });
+      stats.push({ day, income, expenses });
     }
 
-    return last6Months;
-  }, [transactions]);
+    return stats;
+  }, [transactions, viewDate]);
 
 
   // AI Insights Generation
@@ -173,23 +211,68 @@ export const ExpensesScreen: React.FC = () => {
   const AreaChart = () => {
     const height = 180;
     const width = SCREEN_WIDTH - 64;
-    const maxValue = Math.max(...monthlyData.map(d => Math.max(d.income, d.expenses))) * 1.2 || 10000;
+
+    const maxDataVal = Math.max(...dailyData.map(d => Math.max(d.income, d.expenses)));
+    const maxValue = maxDataVal > 0 ? maxDataVal * 1.2 : 1000;
 
     const getY = (val: number) => height - (val / maxValue) * height;
-    const getX = (index: number) => (index / (monthlyData.length - 1)) * width;
+    const getX = (index: number) => (index / (dailyData.length - 1)) * (width - 20) + 10;
 
     const createPath = (key: 'income' | 'expenses') => {
-      const points = monthlyData.map((d, i) => `${getX(i)},${getY(d[key])}`);
-      return `M0,${height} L${points.join(' L')} L${width},${height} Z`;
+      if (dailyData.length === 0) return '';
+      const points = dailyData.map((d, i) => `${getX(i)},${getY(d[key])}`);
+      return `M${getX(0)},${height} L${points.join(' L')} L${getX(dailyData.length - 1)},${height} Z`;
     };
 
     const createLinePath = (key: 'income' | 'expenses') => {
-      const points = monthlyData.map((d, i) => `${getX(i)},${getY(d[key])}`);
+      if (dailyData.length === 0) return '';
+      const points = dailyData.map((d, i) => `${getX(i)},${getY(d[key])}`);
       return `M${points.join(' L')}`;
     };
 
+    const getOrdinalSuffix = (day: number) => {
+      if (day > 3 && day < 21) return 'th';
+      switch (day % 10) {
+        case 1: return "st";
+        case 2: return "nd";
+        case 3: return "rd";
+        default: return "th";
+      }
+    };
+
+    const currentMonthLabel = formatViewDate(viewDate);
+
     return (
-      <View style={{ height: 220, marginTop: 16 }}>
+      <View style={{ marginTop: 8 }}>
+        {/* Month Navigator & Legend at Top */}
+        <View style={{ marginBottom: 16, gap: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <TouchableOpacity onPress={handlePrevMonth} style={[styles.iconButton, { backgroundColor: colors.muted, borderRadius: radius.sm, padding: 6 }]}>
+                <AppIcon name="chevronLeft" size={18} color={colors.foreground} />
+              </TouchableOpacity>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: colors.foreground, minWidth: 100, textAlign: 'center' }}>
+                {currentMonthLabel}
+              </Text>
+              <TouchableOpacity onPress={handleNextMonth} style={[styles.iconButton, { backgroundColor: colors.muted, borderRadius: radius.sm, padding: 6 }]}>
+                <AppIcon name="chevronRight" size={18} color={colors.foreground} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Legend Tucked to Side */}
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#10b981', borderRadius: 2 }]} />
+                <Text style={{ fontSize: 11, color: colors.mutedForeground }}>Inc</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#ef4444', borderRadius: 2 }]} />
+                <Text style={{ fontSize: 11, color: colors.mutedForeground }}>Exp</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
         <Svg height={height + 30} width={width}>
           <Defs>
             <LinearGradient id="incomeGradient" x1="0" y1="0" x2="0" y2="1">
@@ -202,45 +285,60 @@ export const ExpensesScreen: React.FC = () => {
             </LinearGradient>
           </Defs>
 
-          {[0.25, 0.5, 0.75, 1].map((t, i) => (
+          {/* Grid Lines */}
+          {[0, 0.25, 0.5, 0.75, 1].map((t, i) => (
             <Path
               key={i}
               d={`M0,${height * t} L${width},${height * t}`}
               stroke={colors.border}
               strokeDasharray="4,4"
+              opacity={0.3}
             />
           ))}
 
-          <Path d={createPath('income')} fill="url(#incomeGradient)" />
-          <Path d={createPath('expenses')} fill="url(#expenseGradient)" />
+          {dailyData.length > 0 && (
+            <>
+              <Path d={createPath('income')} fill="url(#incomeGradient)" />
+              <Path d={createPath('expenses')} fill="url(#expenseGradient)" />
 
-          <Path d={createLinePath('income')} stroke="#10b981" strokeWidth={2} fill="none" />
-          <Path d={createLinePath('expenses')} stroke="#ef4444" strokeWidth={2} fill="none" />
+              <Path d={createLinePath('income')} stroke="#10b981" strokeWidth={2.5} fill="none" />
+              <Path d={createLinePath('expenses')} stroke="#ef4444" strokeWidth={2.5} fill="none" />
+            </>
+          )}
 
-          {monthlyData.map((d, i) => (
-            <SvgText
-              key={i}
-              x={getX(i)}
-              y={height + 20}
-              fontSize="10"
-              fill={colors.mutedForeground}
-              textAnchor="middle"
-            >
-              {d.month}
-            </SvgText>
-          ))}
+          {/* X Axis Labels - Higher density (every 5 days) */}
+          {(() => {
+            if (dailyData.length === 0) return null;
+            const labelDays = [];
+            for (let d = 1; d <= dailyData.length; d += 6) {
+              labelDays.push(d);
+            }
+            if (labelDays[labelDays.length - 1] < dailyData.length - 2) {
+              labelDays.push(dailyData.length);
+            }
+
+            return labelDays.map((dayNum, i) => {
+              const idx = dayNum - 1;
+              const xPos = getX(idx);
+              const isBoundary = dayNum === 1 || dayNum === dailyData.length;
+              const labelText = `${dayNum}${isBoundary ? getOrdinalSuffix(dayNum) : ''}`;
+
+              return (
+                <SvgText
+                  key={i}
+                  x={xPos}
+                  y={height + 20}
+                  fontSize="9"
+                  fill={colors.mutedForeground}
+                  textAnchor="middle"
+                  fontWeight={isBoundary ? "bold" : "normal"}
+                >
+                  {labelText}
+                </SvgText>
+              );
+            });
+          })()}
         </Svg>
-
-        <View style={styles.legendContainer}>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#10b981', borderRadius: radius.xs }]} />
-            <Text style={[styles.legendText, { color: colors.mutedForeground }]}>Income</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#ef4444', borderRadius: radius.xs }]} />
-            <Text style={[styles.legendText, { color: colors.mutedForeground }]}>Expenses</Text>
-          </View>
-        </View>
       </View>
     );
   };
@@ -260,36 +358,53 @@ export const ExpensesScreen: React.FC = () => {
         <View style={{ alignItems: 'center', marginVertical: 16 }}>
           <Text style={{ color: colors.mutedForeground }}>No expenses yet</Text>
         </View>
-      )
+      );
     }
 
     return (
       <View style={{ alignItems: 'center', marginVertical: 16 }}>
         <Svg height={size} width={size}>
           <G rotation="-90" origin={`${center}, ${center}`}>
-            {categories.map((cat, index) => {
+            {categories.map((cat) => {
               const percentage = cat.numAmount / total;
               const angle = percentage * 360;
 
-              // Prevent rendering tiny slices that break math
               if (angle <= 0) return null;
 
-              const x1 = center + innerRadius * Math.cos(Math.PI * startAngle / 180);
-              const y1 = center + innerRadius * Math.sin(Math.PI * startAngle / 180);
-              const x2 = center + chartRadius * Math.cos(Math.PI * startAngle / 180);
-              const y2 = center + chartRadius * Math.sin(Math.PI * startAngle / 180);
-              const x3 = center + chartRadius * Math.cos(Math.PI * (startAngle + angle) / 180);
-              const y3 = center + chartRadius * Math.sin(Math.PI * (startAngle + angle) / 180);
-              const x4 = center + innerRadius * Math.cos(Math.PI * (startAngle + angle) / 180);
-              const y4 = center + innerRadius * Math.sin(Math.PI * (startAngle + angle) / 180);
+              // SVG arc doesn't handle 360 degrees in one go (start and end points are the same)
+              // If it's 100%, render a simple Circle/Path that's a full ring
+              if (percentage >= 0.999) {
+                return (
+                  <Circle
+                    key={cat.id}
+                    cx={center}
+                    cy={center}
+                    r={(chartRadius + innerRadius) / 2}
+                    fill="none"
+                    stroke={cat.color}
+                    strokeWidth={strokeWidth}
+                  />
+                );
+              }
+
+              const largeArcFlag = angle > 180 ? 1 : 0;
+
+              const x1 = center + chartRadius * Math.cos(Math.PI * startAngle / 180);
+              const y1 = center + chartRadius * Math.sin(Math.PI * startAngle / 180);
+              const x2 = center + chartRadius * Math.cos(Math.PI * (startAngle + angle) / 180);
+              const y2 = center + chartRadius * Math.sin(Math.PI * (startAngle + angle) / 180);
+
+              const x3 = center + innerRadius * Math.cos(Math.PI * (startAngle + angle) / 180);
+              const y3 = center + innerRadius * Math.sin(Math.PI * (startAngle + angle) / 180);
+              const x4 = center + innerRadius * Math.cos(Math.PI * startAngle / 180);
+              const y4 = center + innerRadius * Math.sin(Math.PI * startAngle / 180);
 
               const d = `
-                    M ${x1} ${y1}
-                    L ${x2} ${y2}
-                    A ${chartRadius} ${chartRadius} 0 ${angle > 180 ? 1 : 0} 1 ${x3} ${y3}
-                    L ${x4} ${y4}
-                    A ${innerRadius} ${innerRadius} 0 ${angle > 180 ? 1 : 0} 0 ${x1} ${y1}
-                    Z
+                M ${x1} ${y1}
+                A ${chartRadius} ${chartRadius} 0 ${largeArcFlag} 1 ${x2} ${y2}
+                L ${x3} ${y3}
+                A ${innerRadius} ${innerRadius} 0 ${largeArcFlag} 0 ${x4} ${y4}
+                Z
               `;
 
               startAngle += angle;
@@ -300,11 +415,31 @@ export const ExpensesScreen: React.FC = () => {
                   d={d}
                   fill={cat.color}
                   stroke={colors.card}
-                  strokeWidth={2}
+                  strokeWidth={1}
                 />
               );
             })}
           </G>
+          <SvgText
+            x={center}
+            y={center - 10}
+            fontSize="12"
+            fill={colors.mutedForeground}
+            textAnchor="middle"
+            fontWeight="500"
+          >
+            Total
+          </SvgText>
+          <SvgText
+            x={center}
+            y={center + 15}
+            fontSize="16"
+            fill={colors.foreground}
+            textAnchor="middle"
+            fontWeight="bold"
+          >
+            ₹{total.toLocaleString()}
+          </SvgText>
         </Svg>
       </View>
     );
@@ -481,6 +616,32 @@ export const ExpensesScreen: React.FC = () => {
                   <Text style={[styles.chartTitle, { color: colors.foreground }]}>Spending Breakdown</Text>
                 </View>
                 <DonutChart />
+
+                {/* Legend List */}
+                <View style={{ marginTop: 24, gap: 12, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 16 }}>
+                  {categories.map((cat) => (
+                    <View key={cat.id} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                        <View style={{ width: 32, height: 32, backgroundColor: cat.color + '20', borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' }}>
+                          <Text style={{ fontSize: 16 }}>{cat.icon}</Text>
+                        </View>
+                        <View>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <Text style={{ fontSize: 14, fontWeight: '600', color: colors.foreground }}>{cat.name}</Text>
+                            <View style={{ width: 8, height: 8, backgroundColor: cat.color, borderRadius: 10 }} />
+                          </View>
+                          <Text style={{ fontSize: 12, color: colors.mutedForeground }}>{cat.percent}% of total</Text>
+                        </View>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={{ fontSize: 14, fontWeight: '700', color: colors.foreground }}>{cat.amount}</Text>
+                      </View>
+                    </View>
+                  ))}
+                  {categories.length === 0 && (
+                    <Text style={{ color: colors.mutedForeground, textAlign: 'center' }}>No categorized expenses.</Text>
+                  )}
+                </View>
               </View>
 
               {/* Budget vs Actual */}
@@ -529,7 +690,6 @@ export const ExpensesScreen: React.FC = () => {
                       </View>
                     );
                   })}
-                  {categories.length === 0 && <Text style={{ color: colors.mutedForeground }}>No categorized expenses.</Text>}
                 </View>
               </View>
             </View>
@@ -612,7 +772,7 @@ export const ExpensesScreen: React.FC = () => {
         currentSpending={categorySpending} // Now dynamic
       />
 
-    </AppLayout>
+    </AppLayout >
   );
 };
 

@@ -44,7 +44,14 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     const [name, setName] = useState('');
     const [amount, setAmount] = useState('');
     const [category, setCategory] = useState('groceries');
-    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const getLocalYYYYMMDD = (d: Date) => {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    const [date, setDate] = useState(getLocalYYYYMMDD(new Date()));
     const [notes, setNotes] = useState('');
     const [type, setType] = useState<'expense' | 'income'>('expense');
     const [showDatePicker, setShowDatePicker] = useState(false);
@@ -72,7 +79,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
         setName('');
         setAmount('');
         setCategory('groceries');
-        setDate(new Date().toISOString().split('T')[0]);
+        setDate(getLocalYYYYMMDD(new Date()));
         setNotes('');
         onClose();
     };
@@ -83,7 +90,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
         }
 
         if (selectedDate) {
-            setDate(selectedDate.toISOString().split('T')[0]);
+            setDate(getLocalYYYYMMDD(selectedDate));
         }
     };
 

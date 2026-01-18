@@ -9,6 +9,7 @@ import {
     TextInput,
     Pressable,
     Alert,
+    Image,
 } from "react-native";
 import { AppIcon } from "../ui/AppIcon";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
@@ -22,6 +23,7 @@ import { Recipe } from "../../data/recipes";
 import { requestPermission } from "../../utils/permissions";
 import { getAudioRecorder, SafeAudioRecorderType } from "../../utils/AudioRecorder";
 import { RecordBackType, PlayBackType } from 'react-native-nitro-sound';
+import { RecipeImage } from "../recipes/RecipeImage";
 
 interface AddNewRecipeModalProps {
     open: boolean;
@@ -49,6 +51,7 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
     const [tags, setTags] = useState<string[]>([]);
     const [tagInput, setTagInput] = useState("");
     const [linkUrl, setLinkUrl] = useState("");
+    const [manualTime, setManualTime] = useState("");
 
     // Nutrition State
     const [kcal, setKcal] = useState("");
@@ -71,7 +74,7 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
 
     // Audio Recorder Ref - Initialize safely to prevent crash
     const audioRecorderPlayerRef = React.useRef<SafeAudioRecorderType | null>(null);
-    const getRecorder = () => getAudioRecorder(audioRecorderPlayerRef);
+    const getLocalRecorder = () => getAudioRecorder(audioRecorderPlayerRef);
 
     // Initial load for editing
     React.useEffect(() => {
@@ -124,10 +127,20 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
         return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
     };
 
+    const setupAudioListener = (recorder: SafeAudioRecorderType) => {
+        // High-frequency updates
+        recorder.setSubscriptionDuration(50);
+
+        recorder.addRecordBackListener((e: RecordBackType) => {
+            // Force update recording time
+            setRecordingTime(e.currentPosition / 1000);
+        });
+    };
+
     const handleStartRecording = async () => {
         setIsLoadingAudio(true);
         try {
-            const recorder = getRecorder();
+            const recorder = getLocalRecorder();
             if (!recorder) {
                 showToast({ title: "Feature Unavailable", description: "Audio recording is not supported on this device or session.", type: "warning" });
                 return;
@@ -145,13 +158,8 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
             // Start Recorder
             const result = await recorder.startRecorder();
 
-            // Set update interval (50ms as recommended)
-            recorder.setSubscriptionDuration(50);
-
-            recorder.addRecordBackListener((e: RecordBackType) => {
-                setRecordingTime(e.currentPosition / 1000); // Convert ms to seconds
-                return;
-            });
+            // Setup listener immediately
+            setupAudioListener(recorder);
 
             console.log("Recording started at: ", result);
             setIsRecording(true);
@@ -167,7 +175,7 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
 
     const handlePauseRecording = async () => {
         try {
-            const recorder = getRecorder();
+            const recorder = getLocalRecorder();
             if (recorder) {
                 await recorder.pauseRecorder();
                 setIsPaused(true);
@@ -180,10 +188,20 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
 
     const handleResumeRecording = async () => {
         try {
-            const recorder = getRecorder();
+            const recorder = getLocalRecorder();
             if (recorder) {
+                // Set duration BEFORE resume
+                recorder.setSubscriptionDuration(50);
                 await recorder.resumeRecorder();
+
+                // Keep UI in sync
                 setIsPaused(false);
+
+                // Re-setup listener after a slightly longer delay to ensure native stream is flowing
+                setTimeout(() => {
+                    const r = getLocalRecorder();
+                    if (r) setupAudioListener(r);
+                }, 100);
             }
         } catch (error) {
             console.error("Error resuming recording:", error);
@@ -194,7 +212,7 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
     const handleStopRecording = async () => {
         setIsLoadingAudio(true);
         try {
-            const recorder = getRecorder();
+            const recorder = getLocalRecorder();
             if (!recorder) return;
 
             const result = await recorder.stopRecorder();
@@ -218,7 +236,7 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
     const handleTogglePlayback = async () => {
         if (!audioPath) return;
 
-        const recorder = getRecorder();
+        const recorder = getLocalRecorder();
         if (!recorder) {
             showToast({ title: "Feature Unavailable", description: "Audio playback is not supported.", type: "warning" });
             return;
@@ -256,7 +274,7 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
 
     const handleDeleteRecording = async () => {
         try {
-            const recorder = getRecorder();
+            const recorder = getLocalRecorder();
             if (recorder && isPlaying) {
                 await recorder.stopPlayer();
                 recorder.removePlayBackListener();
@@ -355,6 +373,7 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
         setRecordingTime(0);
         setPlaybackTime(0);
         setIsPlaying(false);
+        setManualTime("");
     };
 
     const handleSave = () => {
@@ -425,8 +444,10 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
             const recipeData = {
                 name: name.trim(),
                 image: images.length > 0 ? images[0] : (activeTab === "Link" ? "LINK_ICON" : activeTab === "Audio" ? "AUDIO_ICON" : "🍲"),
-                time: (parsedPrepTime + parsedCookTime) > 0 ? `${parsedPrepTime + parsedCookTime} min` : "15 min",
-                servings: parsedServings > 0 ? parsedServings : 4,
+                time: activeTab === "Audio" ? (manualTime ? `${manualTime} min` : formatTime(recordingTime)) :
+                    (activeTab === "Text" ? ((parsedPrepTime + parsedCookTime) > 0 ? `${parsedPrepTime + parsedCookTime} min` : "") :
+                        (manualTime ? `${manualTime} min` : "")),
+                servings: activeTab === "Audio" ? 1 : (parsedServings > 0 ? parsedServings : 4),
                 tags,
                 ingredients: finalIngredients,
                 nutrition: {
@@ -764,6 +785,15 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
                 value={name}
                 onChangeText={setName}
             />
+            <Text style={[styles.label, { marginTop: 16, color: colors.foreground }]}>Time to make (min)</Text>
+            <TextInput
+                style={[styles.input, { backgroundColor: colors.muted, borderColor: colors.border, color: colors.foreground, borderRadius: radius.md }]}
+                placeholder="e.g., 30"
+                placeholderTextColor={colors.mutedForeground}
+                value={manualTime}
+                onChangeText={setManualTime}
+                keyboardType="numeric"
+            />
             <Text style={[styles.label, { marginTop: 16, color: colors.foreground }]}>Upload Recipe Images</Text>
 
             <TouchableOpacity
@@ -782,13 +812,13 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
                         {images.map((img, index) => (
-                            <View key={index} style={{ width: 60, height: 60, borderRadius: 8, backgroundColor: colors.muted, alignItems: 'center', justifyContent: 'center' }}>
-                                <AppIcon name="image" size={24} color={colors.mutedForeground} />
+                            <View key={index} style={{ position: 'relative' }}>
+                                <RecipeImage image={img} size={80} borderRadius={12} />
                                 <TouchableOpacity
-                                    style={{ position: 'absolute', top: -5, right: -5, backgroundColor: colors.danger, borderRadius: 10, padding: 2 }}
+                                    style={{ position: 'absolute', top: 4, right: 4, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 12, width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}
                                     onPress={() => setImages(images.filter((_, i) => i !== index))}
                                 >
-                                    <AppIcon name="x" size={12} color="#fff" />
+                                    <AppIcon name="x" size={14} color="#fff" />
                                 </TouchableOpacity>
                             </View>
                         ))}
@@ -813,6 +843,15 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
                 value={name}
                 onChangeText={setName}
             />
+            <Text style={[styles.label, { marginTop: 16, color: colors.foreground }]}>Time to make (min)</Text>
+            <TextInput
+                style={[styles.input, { backgroundColor: colors.muted, borderColor: colors.border, color: colors.foreground, borderRadius: radius.md }]}
+                placeholder="e.g., 30"
+                placeholderTextColor={colors.mutedForeground}
+                value={manualTime}
+                onChangeText={setManualTime}
+                keyboardType="numeric"
+            />
             <Text style={[styles.label, { marginTop: 16, color: colors.foreground }]}>Record Your Recipe</Text>
 
             <View style={[styles.audioArea, { backgroundColor: colors.muted, borderRadius: radius.xl }]}>
@@ -828,6 +867,12 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
                                 </Text>
                             </View>
                         )}
+
+                        <Text style={[styles.recordHint, { color: colors.mutedForeground, marginBottom: 24 }]}>
+                            {isRecording
+                                ? "Tap stop to finish recording"
+                                : "Tap the mic to start recording your recipe"}
+                        </Text>
 
                         {!isRecording ? (
                             <TouchableOpacity
@@ -855,12 +900,6 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
                                 </TouchableOpacity>
                             </View>
                         )}
-
-                        <Text style={[styles.recordHint, { color: colors.mutedForeground, marginTop: 24 }]}>
-                            {isRecording
-                                ? "Tap stop to finish recording"
-                                : "Tap the mic to start recording your recipe"}
-                        </Text>
                     </>
                 ) : (
                     // Saved State - Player UI
@@ -910,6 +949,15 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
                 placeholderTextColor={colors.mutedForeground}
                 value={name}
                 onChangeText={setName}
+            />
+            <Text style={[styles.label, { marginTop: 16, color: colors.foreground }]}>Time to make (min)</Text>
+            <TextInput
+                style={[styles.input, { backgroundColor: colors.muted, borderColor: colors.border, color: colors.foreground, borderRadius: radius.md }]}
+                placeholder="e.g., 30"
+                placeholderTextColor={colors.mutedForeground}
+                value={manualTime}
+                onChangeText={setManualTime}
+                keyboardType="numeric"
             />
             <Text style={[styles.label, { marginTop: 16, color: colors.foreground }]}>Paste Recipe URL</Text>
             <TextInput

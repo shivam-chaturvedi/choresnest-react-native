@@ -59,18 +59,7 @@ const reminderOptions = [
   { value: "10080", label: "1 week before" },
 ];
 
-const visibilityOptions = [
-  { value: "default", label: "Default visibility" },
-  { value: "public", label: "Public" },
-  { value: "private", label: "Private" },
-];
-
-const timeZoneOptions = [
-  { value: "UTC", label: "(UTC-00:00) Universal Coordinated Time" },
-  { value: "EST", label: "(UTC-05:00) Eastern Standard Time" },
-  { value: "PST", label: "(UTC-08:00) Pacific Standard Time" },
-  { value: "IST", label: "(UTC+05:30) Indian Standard Time" },
-];
+// Removed visibility and time zone options as requested
 
 export const AddEventModal: React.FC<AddEventModalProps> = ({
   open,
@@ -80,7 +69,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   eventToEdit,
 }) => {
   /* Hook and State Setup */
-  const { members, activeMember, addEvent, updateEvent, deleteEvent, addTask } = useFamily();
+  const { members, activeMember, addEvent, updateEvent, deleteEvent, addTask, updateTask } = useFamily();
   const colors = useThemeColors();
 
   const [activeTab, setActiveTab] = useState<'event' | 'task'>('event');
@@ -116,16 +105,14 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   const [showReminderOptions, setShowReminderOptions] = useState(false);
 
   const [notes, setNotes] = useState("");
-  const [visibility, setVisibility] = useState("default");
-  const [timeZone, setTimeZone] = useState("UTC");
-  const [showVisibilityOptions, setShowVisibilityOptions] = useState(false);
-  const [showTimeZoneOptions, setShowTimeZoneOptions] = useState(false);
+  // Removed visibility and time zone states as requested
 
   useEffect(() => {
     if (eventToEdit) {
       // Initialize with existing event data
       setName(eventToEdit.title);
-      setDescription(""); // Description not in CalendarEvent interface currently
+      setDescription(eventToEdit.description || "");
+      setNotes(eventToEdit.notes || "");
       setStartDate(new Date(eventToEdit.date));
 
       // Parse time
@@ -160,9 +147,18 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         }
       }
 
-      setSelectedIcon(eventToEdit.icon);
-      setLocation(eventToEdit.location || "");
       setMemberId(eventToEdit.memberId);
+
+      // Handle Task vs Event type if provided from CalendarScreen
+      const anyEvent = eventToEdit as any;
+      if (anyEvent.type === 'task') {
+        setActiveTab('task');
+        setTaskPriority(anyEvent.priority || "medium");
+        setTaskIcon(anyEvent.icon || "📝");
+      } else {
+        setActiveTab('event');
+        setSelectedIcon(eventToEdit.icon);
+      }
 
       const member = members.find(m => m.id === eventToEdit.memberId);
       if (member) setColor(member.color);
@@ -236,61 +232,78 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   const handleSave = () => {
     try {
       if (!name.trim()) {
-        Alert.alert("Missing Information", "Please enter an event name.");
+        Alert.alert("Missing Information", `Please enter a ${activeTab === 'event' ? 'event' : 'task'} name.`);
         return;
       }
-      // Optional: if user really wants description required
-      // if (!description.trim()) { Alert.alert("Missing Information", "Please enter a description."); return; }
 
       // Format date as YYYY-MM-DD using local time
       const formattedDate = format(startDate, "yyyy-MM-dd");
 
       // Format time as HH:MM AM/PM
-      const formattedTime = allDay ? "All Day" : startTime.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      // For all-day events, set start time to 12:00 AM and end time to 11:59 PM
+      let formattedTime: string;
+      let formattedEndTime: string | undefined;
 
-      const formattedEndTime = (allDay || !endTime) ? undefined : endTime.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      if (allDay) {
+        formattedTime = "12:00 AM";
+        formattedEndTime = "11:59 PM";
+      } else {
+        formattedTime = startTime.toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        formattedEndTime = endTime ? endTime.toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }) : undefined;
+      }
 
       if (activeTab === 'task') {
-        addTask({
-          name: name.trim(),
-          icon: taskIcon,
-          priority: taskPriority as any,
-          date: formattedDate,
-          due: formattedTime, // Simple due string for now
-          assignee: memberId,
-          tab: "My Tasks", // Default tab
-          status: 'pending'
-        });
+        if (isEditing && eventToEdit) {
+          updateTask(eventToEdit.id, {
+            name: name.trim(),
+            icon: taskIcon,
+            priority: taskPriority as any,
+            date: formattedDate,
+            due: formattedTime,
+            assignee: memberId,
+          });
+        } else {
+          addTask({
+            name: name.trim(),
+            icon: taskIcon,
+            priority: taskPriority as any,
+            date: formattedDate,
+            due: formattedTime,
+            assignee: memberId,
+            tab: "My Tasks",
+            status: 'pending'
+          });
+        }
       } else {
         if (isEditing && eventToEdit) {
           updateEvent(eventToEdit.id, {
             title: name.trim(),
+            description: description.trim(),
+            notes: notes.trim(),
             date: formattedDate,
             time: formattedTime,
             endTime: formattedEndTime,
             icon: selectedIcon,
             memberId,
             location,
-            visibility: visibility as any,
-            timeZone,
           });
         } else {
           addEvent({
             title: name.trim(),
+            description: description.trim(),
+            notes: notes.trim(),
             date: formattedDate,
             time: formattedTime,
             endTime: formattedEndTime,
             icon: selectedIcon,
             memberId,
             location,
-            visibility: visibility as any,
-            timeZone,
           });
         }
       }
@@ -325,7 +338,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                 <AppIcon name="calendar" size={20} color={colors.primary} />
               </View>
               <Text style={[styles.headerTitle, { color: colors.foreground }]}>
-                {isEditing ? "Edit Event" : "New Event"}
+                {isEditing ? (activeTab === 'task' ? "Edit Task" : "Edit Event") : (activeTab === 'task' ? "New Task" : "New Event")}
               </Text>
             </View>
             <Pressable onPress={() => onOpenChange(false)} style={[styles.closeButton, { backgroundColor: colors.muted }]}>
@@ -767,90 +780,6 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
               </View>
             )}
 
-            {/* Visibility - EVENT ONLY */}
-            {activeTab === 'event' && (
-              <View style={styles.fieldGroup}>
-                <Pressable
-                  style={[styles.expandableHeader, { backgroundColor: colors.card }]}
-                  onPress={() => isOwner && setShowVisibilityOptions(!showVisibilityOptions)}
-                >
-                  <View style={styles.toggleLabelContainer}>
-                    <View style={[styles.iconBox, { backgroundColor: "#8b5cf61A" }]}>
-                      <AppIcon name="lock" size={18} color="#8b5cf6" />
-                    </View>
-                    <View>
-                      <Text style={[styles.toggleLabel, { color: colors.foreground }]}>Visibility</Text>
-                      <Text style={[styles.valueLabel, { color: colors.mutedForeground }]}>
-                        {visibilityOptions.find(o => o.value === visibility)?.label}
-                      </Text>
-                    </View>
-                  </View>
-                  <AppIcon
-                    name="chevronDown"
-                    size={20}
-                    color={colors.mutedForeground}
-                    style={{ transform: [{ rotate: showVisibilityOptions ? '180deg' : '0deg' }] }}
-                  />
-                </Pressable>
-                {showVisibilityOptions && (
-                  <View style={[styles.expandableContent, { backgroundColor: colors.card }]}>
-                    {visibilityOptions.map((option) => (
-                      <Pressable
-                        key={option.value}
-                        onPress={() => isOwner && setVisibility(option.value)}
-                        style={[styles.optionRow, visibility === option.value && { backgroundColor: colors.primary + "1A" }]}
-                      >
-                        <Text style={[styles.optionText, { color: colors.foreground }]}>{option.label}</Text>
-                        {visibility === option.value && <AppIcon name="check" size={16} color={colors.primary} />}
-                      </Pressable>
-                    ))}
-                  </View>
-                )}
-              </View>
-            )}
-
-            {/* Time Zone - EVENT ONLY */}
-            {activeTab === 'event' && (
-              <View style={styles.fieldGroup}>
-                <Pressable
-                  style={[styles.expandableHeader, { backgroundColor: colors.card }]}
-                  onPress={() => isOwner && setShowTimeZoneOptions(!showTimeZoneOptions)}
-                >
-                  <View style={styles.toggleLabelContainer}>
-                    <View style={[styles.iconBox, { backgroundColor: "#06b6d41A" }]}>
-                      <AppIcon name="globe" size={18} color="#06b6d4" />
-                    </View>
-                    <View>
-                      <Text style={[styles.toggleLabel, { color: colors.foreground }]}>Time Zone</Text>
-                      <Text style={[styles.valueLabel, { color: colors.mutedForeground }]}>
-                        {timeZoneOptions.find(o => o.value === timeZone)?.label}
-                      </Text>
-                    </View>
-                  </View>
-                  <AppIcon
-                    name="chevronDown"
-                    size={20}
-                    color={colors.mutedForeground}
-                    style={{ transform: [{ rotate: showTimeZoneOptions ? '180deg' : '0deg' }] }}
-                  />
-                </Pressable>
-                {showTimeZoneOptions && (
-                  <View style={[styles.expandableContent, { backgroundColor: colors.card }]}>
-                    {timeZoneOptions.map((option) => (
-                      <Pressable
-                        key={option.value}
-                        onPress={() => isOwner && setTimeZone(option.value)}
-                        style={[styles.optionRow, timeZone === option.value && { backgroundColor: colors.primary + "1A" }]}
-                      >
-                        <Text style={[styles.optionText, { color: colors.foreground }]}>{option.label}</Text>
-                        {timeZone === option.value && <AppIcon name="check" size={16} color={colors.primary} />}
-                      </Pressable>
-                    ))}
-                  </View>
-                )}
-              </View>
-            )}
-
             <View style={{ height: 40 }} />
           </ScrollView>
 
@@ -907,22 +836,22 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "flex-start",
-    paddingTop: 180, // Leave space for calendar header
+    justifyContent: "flex-start", // Changed back to top-aligned
   },
   container: {
-    padding: 20,
-    flex: 1,
-    maxHeight: "100%",
+    padding: 0,
+    backgroundColor: 'white',
+    flex: 1, // Full height
+    maxHeight: "100%", // Cover entire screen
     ...Platform.select({
       ios: {
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: -10 },
+        shadowOffset: { width: 0, height: 0 },
         shadowOpacity: 0.1,
-        shadowRadius: 20,
+        shadowRadius: 10,
       },
       android: {
-        elevation: 10,
+        elevation: 0,
       },
     }),
   },
@@ -949,6 +878,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     padding: 20,
+    paddingTop: Platform.OS === 'ios' ? 60 : 20, // Account for status bar
     borderBottomWidth: 1,
   },
   titleContainer: {
@@ -973,22 +903,23 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 10,
   },
   nameInput: {
-    fontSize: 24,
-    fontWeight: "600",
-    marginBottom: 24,
-    paddingVertical: 8,
+    fontSize: 22, // Reduced from 24
+    fontWeight: "700",
+    marginBottom: 16, // Reduced from 24
+    paddingVertical: 4, // Reduced from 8
   },
   fieldGroup: {
-    marginBottom: 24,
+    marginBottom: 16, // Reduced from 24
   },
   labelRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 8,
+    gap: 6,
+    marginBottom: 6, // Reduced from 8
   },
   label: {
     fontSize: 14,
@@ -1004,25 +935,25 @@ const styles = StyleSheet.create({
   iconGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 10,
+    gap: 8, // Reduced from 10
   },
   iconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 40, // Reduced from 44
+    height: 40, // Reduced from 44
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
   },
   iconText: {
-    fontSize: 20,
+    fontSize: 18, // Reduced from 20
   },
   toggleRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: 16,
-    borderRadius: 16,
-    marginBottom: 24,
+    padding: 12, // Reduced from 16
+    borderRadius: 12, // Reduced from 16
+    marginBottom: 16, // Reduced from 24
   },
   toggleLabelContainer: {
     flexDirection: "row",
@@ -1062,16 +993,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: 16,
-    borderRadius: 16,
+    padding: 12, // Reduced from 16
+    borderRadius: 12, // Reduced from 16
   },
   valueLabel: {
-    fontSize: 13,
+    fontSize: 12, // Reduced from 13
   },
   expandableContent: {
-    marginTop: 12,
-    padding: 12,
-    borderRadius: 16,
+    marginTop: 8, // Reduced from 12
+    padding: 8, // Reduced from 12
+    borderRadius: 12, // Reduced from 16
   },
   chipsContainer: {
     flexDirection: "row",
@@ -1112,29 +1043,30 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   footer: {
-    padding: 20,
+    padding: 16, // Reduced from 20
     borderTopWidth: 1,
     flexDirection: "row",
-    gap: 16,
+    gap: 12, // Reduced from 16
+    paddingBottom: Platform.OS === 'ios' ? 34 : 16, // Safe area
   },
   cancelButton: {
     flex: 1,
-    padding: 16,
-    borderRadius: 16,
+    padding: 14, // Reduced from 16
+    borderRadius: 12, // Reduced from 16
     alignItems: "center",
   },
   cancelButtonText: {
-    fontSize: 16,
+    fontSize: 14, // Reduced from 16
     fontWeight: "600",
   },
   saveButton: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 16,
+    flex: 2, // Give more space to save button
+    padding: 14, // Reduced from 16
+    borderRadius: 12, // Reduced from 16
     alignItems: "center",
   },
   saveButtonText: {
-    fontSize: 16,
+    fontSize: 14, // Reduced from 16
     fontWeight: "600",
   },
   deleteButton: {
