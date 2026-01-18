@@ -69,7 +69,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   eventToEdit,
 }) => {
   /* Hook and State Setup */
-  const { members, activeMember, addEvent, updateEvent, deleteEvent, addTask, updateTask } = useFamily();
+  const { members, activeMember, addEvent, updateEvent, deleteEvent, addTask, updateTask, deleteTask } = useFamily();
   const colors = useThemeColors();
 
   const [activeTab, setActiveTab] = useState<'event' | 'task'>('event');
@@ -795,16 +795,23 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
               <Pressable
                 style={[styles.deleteButton, { backgroundColor: colors.muted }]}
                 onPress={() => {
+                  const itemType = (eventToEdit as any).type === 'task' ? 'task' : 'event';
+                  const itemName = itemType === 'task' ? 'Task' : 'Event';
+
                   Alert.alert(
-                    "Delete Event",
-                    "Are you sure you want to delete this event?",
+                    `Delete ${itemName}`,
+                    `Are you sure you want to delete this ${itemName.toLowerCase()}?`,
                     [
                       { text: "Cancel", style: "cancel" },
                       {
                         text: "Delete",
                         style: "destructive",
                         onPress: () => {
-                          deleteEvent(eventToEdit.id);
+                          if (itemType === 'task') {
+                            deleteTask(eventToEdit.id);
+                          } else {
+                            deleteEvent(eventToEdit.id);
+                          }
                           onOpenChange(false);
                         }
                       }

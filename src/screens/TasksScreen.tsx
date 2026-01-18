@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
+  Alert,
 } from "react-native";
 import { AppLayout } from "../components/layout/AppLayout";
 
@@ -109,6 +110,7 @@ export const TasksScreen: React.FC = () => {
           tab: activeTab,
           status: 'pending'
         });
+        Alert.alert("Success", `Task "${taskData.name}" created successfully!\nDate: ${formattedDate}\nTime: ${formattedTime}`);
       }
       setEditingTask(undefined);
     } catch (error) {

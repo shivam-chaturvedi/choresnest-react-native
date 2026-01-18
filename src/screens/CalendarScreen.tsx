@@ -344,8 +344,8 @@ export const CalendarScreen: React.FC = () => {
   };
 
   const generateWeekDays = () => {
-    const start = subDays(startOfWeek(selectedDate), 7);
-    return Array.from({ length: 30 }).map((_, i) => addDays(start, i));
+    const start = startOfWeek(selectedDate);
+    return Array.from({ length: 7 }).map((_, i) => addDays(start, i));
   };
 
   const monthDays = useMemo(() => generateMonthDays(), [selectedDate]);
