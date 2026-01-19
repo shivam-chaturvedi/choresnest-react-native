@@ -30,6 +30,7 @@ const filteredEvents = (events: any[], filterMember: string | null) => {
 
 const views = ["Day", "Week", "Month"];
 const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const DAY_VIEW_OFFSET = 84;
 
 const DraggableEvent: React.FC<{
   event: any;
@@ -172,6 +173,8 @@ const DraggableEvent: React.FC<{
     }
   };
 
+  const isRightMost = event.colIndex === event.totalCols - 1;
+
   return (
     <View style={{
       position: 'absolute',
@@ -180,6 +183,8 @@ const DraggableEvent: React.FC<{
       width: `${eventWidth}%`,
       height: event.height,
       zIndex: 10,
+      paddingHorizontal: 1,
+      paddingRight: isRightMost ? 1 : 1, // Only apply large gutter to the rightmost event
     }}>
       <PanGestureHandler
         enabled={isOwner}
@@ -522,7 +527,7 @@ export const CalendarScreen: React.FC = () => {
               </View>
 
               <View
-                style={{ width: (Dimensions.get('window').width - 50) }}
+                style={{ width: (Dimensions.get('window').width - DAY_VIEW_OFFSET) }}
               >
                 <View style={{ flex: 1, position: 'relative' }}>
                   {Array.from({ length: 24 }).map((_, hour) => (
@@ -574,26 +579,55 @@ export const CalendarScreen: React.FC = () => {
 
                     timedEvents.sort((a, b) => (a.top || 0) - (b.top || 0));
 
-                    const columns: any[][] = [];
-                    timedEvents.forEach(event => {
-                      let placed = false;
-                      for (let i = 0; i < columns.length; i++) {
-                        const lastEventInColumn = columns[i][columns[i].length - 1];
-                        if (event.top >= lastEventInColumn.bottom) {
-                          columns[i].push(event);
-                          event.colIndex = i;
-                          placed = true;
-                          break;
-                        }
-                      }
-                      if (!placed) {
-                        event.colIndex = columns.length;
-                        columns.push([event]);
-                      }
-                    });
+                    // Group events into clusters of conflicting events
+                    const clusters: any[][] = [];
+                    let currentCluster: any[] = [];
+                    let clusterEnd = -1;
 
                     timedEvents.forEach(event => {
-                      event.totalCols = columns.length;
+                      if (currentCluster.length === 0) {
+                        currentCluster.push(event);
+                        clusterEnd = event.bottom;
+                      } else {
+                        // Check if event overlaps with the current cluster's bounds
+                        if (event.top < clusterEnd - 0.1) { // 0.1 buffer for floating point
+                          currentCluster.push(event);
+                          clusterEnd = Math.max(clusterEnd, event.bottom);
+                        } else {
+                          // Start new cluster
+                          clusters.push(currentCluster);
+                          currentCluster = [event];
+                          clusterEnd = event.bottom;
+                        }
+                      }
+                    });
+                    if (currentCluster.length > 0) clusters.push(currentCluster);
+
+                    // Process each cluster independently
+                    clusters.forEach(cluster => {
+                      const columns: any[][] = [];
+                      cluster.forEach(event => {
+                        let placed = false;
+                        for (let i = 0; i < columns.length; i++) {
+                          const lastEventInColumn = columns[i][columns[i].length - 1];
+                          if (event.top >= lastEventInColumn.bottom - 0.1) {
+                            columns[i].push(event);
+                            event.colIndex = i;
+                            placed = true;
+                            break;
+                          }
+                        }
+                        if (!placed) {
+                          event.colIndex = columns.length;
+                          columns.push([event]);
+                        }
+                      });
+
+                      // Assign totalCols based on THIS cluster's max columns
+                      const maxCols = columns.length;
+                      cluster.forEach(event => {
+                        event.totalCols = maxCols;
+                      });
                     });
 
                     return (
@@ -654,7 +688,7 @@ export const CalendarScreen: React.FC = () => {
                               dayIndex={dayIndex}
                               dayColumnWidth={dayColumnWidthPercent}
                               HOUR_HEIGHT={HOUR_HEIGHT}
-                              isOwner={!activeMember || activeMember.id === event.memberId}
+                              isOwner={activeMember?.id === event.memberId || (!activeMember && members.length > 0)}
                               colors={colors}
                               members={members}
                               activeView={activeView}
