@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
     Modal,
     View,
@@ -6,14 +6,17 @@ import {
     StyleSheet,
     Pressable,
     TouchableWithoutFeedback,
+    ActivityIndicator,
 } from "react-native";
 import { Camera, Upload, FileText, X } from "lucide-react-native";
-import { theme } from "../../theme";
+import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
+import { captureImage, pickDocument, SavedDocument } from "../../utils/DocumentUtils";
+import { useToast } from "../ui/Toast";
 
 interface DocumentScannerProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onDocumentSaved?: (doc: any) => void;
+    onDocumentSaved?: (doc: SavedDocument) => void;
 }
 
 export const DocumentScanner: React.FC<DocumentScannerProps> = ({
@@ -21,7 +24,46 @@ export const DocumentScanner: React.FC<DocumentScannerProps> = ({
     onOpenChange,
     onDocumentSaved,
 }) => {
+    const colors = useThemeColors();
+    const radius = useThemeRadius();
+    const { showToast } = useToast();
+    const [loading, setLoading] = useState(false);
+
     if (!open) return null;
+
+    const handleCamera = async () => {
+        setLoading(true);
+        try {
+            const doc = await captureImage();
+            if (doc) {
+                showToast({ title: "Success", description: "Image captured and saved successfully.", type: "success" });
+                onDocumentSaved?.(doc);
+                onOpenChange(false);
+            }
+        } catch (error) {
+            console.error(error);
+            showToast({ title: "Error", description: "Failed to capture image.", type: "warning" });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleUpload = async () => {
+        setLoading(true);
+        try {
+            const doc = await pickDocument();
+            if (doc) {
+                showToast({ title: "Success", description: "Document uploaded and saved successfully.", type: "success" });
+                onDocumentSaved?.(doc);
+                onOpenChange(false);
+            }
+        } catch (error) {
+            console.error(error);
+            showToast({ title: "Error", description: "Failed to upload document.", type: "warning" });
+        } finally {
+            setLoading(false);
+        }
+    };
 
     return (
         <Modal
@@ -35,60 +77,51 @@ export const DocumentScanner: React.FC<DocumentScannerProps> = ({
                     <View style={styles.overlay} />
                 </TouchableWithoutFeedback>
 
-                <View style={styles.contentContainer}>
+                <View style={[styles.contentContainer, { backgroundColor: colors.card, borderRadius: radius.card }]}>
                     <View style={styles.header}>
                         <View style={styles.headerTitleRow}>
-                            <Camera size={20} color={theme.colors.primary} style={{ marginRight: 8 }} />
-                            <Text style={styles.headerTitle}>Scan Document</Text>
+                            <Camera size={20} color={colors.primary} style={{ marginRight: 8 }} />
+                            <Text style={[styles.headerTitle, { color: colors.foreground }]}>Scan Document</Text>
                         </View>
                         <Pressable onPress={() => onOpenChange(false)} hitSlop={8}>
-                            <X size={20} color={theme.colors.mutedForeground} />
+                            <X size={20} color={colors.mutedForeground} />
                         </Pressable>
                     </View>
 
-                    <View style={styles.dashedContainer}>
-                        <View style={styles.iconCircle}>
-                            <Camera size={32} color={theme.colors.primary} />
-                        </View>
-                        <Text style={styles.captureTitle}>Capture or Upload</Text>
-                        <Text style={styles.captureDesc}>
+                    <View style={[styles.dashedContainer, { borderColor: colors.border, backgroundColor: colors.muted }]}>
+
+                        <Text style={[styles.captureTitle, { color: colors.foreground }]}>Capture or Upload</Text>
+                        <Text style={[styles.captureDesc, { color: colors.mutedForeground }]}>
                             Take a photo of your document or upload an existing image
                         </Text>
 
-                        <View style={styles.buttonsRow}>
-                            <Pressable
-                                style={styles.actionButton}
-                                onPress={() => {
-                                    // Handle Camera
-                                    onOpenChange(false);
-                                }}
-                            >
-                                <Camera size={24} color={theme.colors.foreground} style={{ marginBottom: 8 }} />
-                                <Text style={styles.actionBtnText}>Camera</Text>
-                            </Pressable>
+                        {loading ? (
+                            <View style={{ padding: 20 }}>
+                                <ActivityIndicator size="large" color={colors.primary} />
+                                <Text style={{ textAlign: 'center', marginTop: 10, color: colors.mutedForeground }}>Processing...</Text>
+                            </View>
+                        ) : (
+                            <View style={styles.buttonsRow}>
+                                <Pressable
+                                    style={[styles.actionButton, { backgroundColor: colors.background, borderColor: colors.border, borderRadius: radius.md }]}
+                                    onPress={handleCamera}
+                                >
+                                    <Camera size={24} color={colors.foreground} style={{ marginBottom: 8 }} />
+                                    <Text style={[styles.actionBtnText, { color: colors.foreground }]}>Camera</Text>
+                                </Pressable>
 
-                            <Pressable
-                                style={styles.actionButton}
-                                onPress={() => {
-                                    // Handle Upload
-                                    onOpenChange(false);
-                                }}
-                            >
-                                <Upload size={24} color={theme.colors.foreground} style={{ marginBottom: 8 }} />
-                                <Text style={styles.actionBtnText}>Upload</Text>
-                            </Pressable>
-                        </View>
+                                <Pressable
+                                    style={[styles.actionButton, { backgroundColor: colors.background, borderColor: colors.border, borderRadius: radius.md }]}
+                                    onPress={handleUpload}
+                                >
+                                    <Upload size={24} color={colors.foreground} style={{ marginBottom: 8 }} />
+                                    <Text style={[styles.actionBtnText, { color: colors.foreground }]}>Upload</Text>
+                                </Pressable>
+                            </View>
+                        )}
                     </View>
 
-                    <View style={styles.ocrInfoBox}>
-                        <FileText size={20} color="#3b82f6" style={{ marginRight: 12, marginTop: 2 }} />
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.ocrTitle}>OCR Powered Scanning</Text>
-                            <Text style={styles.ocrDesc}>
-                                Automatically extracts warranty dates, bill amounts, and expiry information from your documents.
-                            </Text>
-                        </View>
-                    </View>
+                    {/* OCR Info removed */}
 
                 </View>
             </View>
@@ -110,8 +143,6 @@ const styles = StyleSheet.create({
     contentContainer: {
         width: "100%",
         maxWidth: 400,
-        backgroundColor: theme.colors.card,
-        borderRadius: 20,
         padding: 24,
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 10 },
@@ -132,23 +163,19 @@ const styles = StyleSheet.create({
     headerTitle: {
         fontSize: 18,
         fontWeight: "700",
-        color: theme.colors.foreground,
     },
     dashedContainer: {
         borderWidth: 2,
-        borderColor: "#cbd5e1", // slate-300
         borderStyle: "dashed",
         borderRadius: 20,
         padding: 24,
         alignItems: "center",
-        backgroundColor: "#f0f9ff", // light blue background
         marginBottom: 20,
     },
     iconCircle: {
         width: 64,
         height: 64,
         borderRadius: 32,
-        backgroundColor: "#dbeafe",
         alignItems: "center",
         justifyContent: "center",
         marginBottom: 16,
@@ -156,13 +183,11 @@ const styles = StyleSheet.create({
     captureTitle: {
         fontSize: 18,
         fontWeight: "700",
-        color: theme.colors.foreground,
         marginBottom: 8,
         textAlign: 'center',
     },
     captureDesc: {
         textAlign: "center",
-        color: theme.colors.mutedForeground,
         fontSize: 14,
         lineHeight: 20,
         marginBottom: 24,
@@ -175,13 +200,10 @@ const styles = StyleSheet.create({
     },
     actionButton: {
         flex: 1,
-        backgroundColor: "#fff",
-        borderRadius: 16,
         paddingVertical: 20,
         alignItems: "center",
         justifyContent: "center",
         borderWidth: 1,
-        borderColor: theme.colors.border,
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.05,
@@ -190,26 +212,20 @@ const styles = StyleSheet.create({
     },
     actionBtnText: {
         fontWeight: "600",
-        color: theme.colors.foreground,
         fontSize: 14,
     },
     ocrInfoBox: {
         flexDirection: "row",
-        backgroundColor: "#eff6ff", // blue-50
-        borderRadius: 12,
         padding: 16,
         borderWidth: 1,
-        borderColor: "#dbeafe",
     },
     ocrTitle: {
         fontSize: 14,
         fontWeight: "600",
-        color: "#1e3a8a", // blue-900
         marginBottom: 4,
     },
     ocrDesc: {
         fontSize: 12,
-        color: "#64748b", // slate-500
         lineHeight: 18,
     },
 });

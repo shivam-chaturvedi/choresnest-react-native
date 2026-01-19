@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Modal, View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { AppIcon } from "../ui/AppIcon";
-import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
+import { useThemeColors } from "../../contexts/ThemeContext";
+import { getAudioRecorder, SafeAudioRecorderType } from "../../utils/AudioRecorder";
+import { PlayBackType } from "react-native-nitro-sound";
 
 interface AudioPlayerModalProps {
     open: boolean;
@@ -13,32 +15,111 @@ interface AudioPlayerModalProps {
 
 export const AudioPlayerModal: React.FC<AudioPlayerModalProps> = ({ open, onClose, audioSrc, title, duration }) => {
     const colors = useThemeColors();
-    const radius = useThemeRadius();
 
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
+    const audioRecorderPlayerRef = useRef<SafeAudioRecorderType | null>(null);
 
-    // Simulated Playback Interval
+    // Get safe recorder instance
+    const getLocalRecorder = () => getAudioRecorder(audioRecorderPlayerRef);
+
     useEffect(() => {
-        let interval: any;
-        if (isPlaying) {
-            interval = setInterval(() => {
-                setCurrentTime(prev => {
-                    if (prev >= duration) {
-                        setIsPlaying(false);
-                        return 0;
-                    }
-                    return prev + 1; // 1 second update
-                });
-            }, 1000); // Real-time seconds
+        if (!open) {
+            stopPlayback();
         }
-        return () => clearInterval(interval);
-    }, [isPlaying, duration]);
+    }, [open]);
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            stopPlayback();
+        };
+    }, []);
+
+    const stopPlayback = async () => {
+        const recorder = getLocalRecorder();
+        if (recorder) {
+            try {
+                await recorder.stopPlayer();
+                recorder.removePlayBackListener();
+                recorder.removePlaybackEndListener();
+            } catch (error) {
+                console.log("Error stopping player:", error);
+            }
+        }
+        setIsPlaying(false);
+        setCurrentTime(0);
+    };
+
+    const handleTogglePlayback = async () => {
+        const recorder = getLocalRecorder();
+        if (!recorder) return; // Handle missing native module gracefully
+
+        try {
+            if (isPlaying) {
+                await recorder.pausePlayer();
+                setIsPlaying(false);
+            } else {
+                // Determine if we are resuming or starting fresh
+                // Note: The simple strategy is to just startPlayer with the path. 
+                // However, react-native-nitro-sound's startPlayer typically restarts if called with path.
+                // If we want resume behavior, we might need check if we are paused. 
+                // But typically startPlayer(url) works. 
+                // Let's try simple start logic first as per AddNewRecipeModal reference.
+
+                // If we are essentially "paused" (currentTime > 0) but not playing, we might want resume.
+                // But AddNewRecipeModal uses startPlayer(path) to start/resume? 
+                // Wait, AddNewRecipeModal logic:
+                // if (isPlaying) { pause } else { startPlayer(path) ... }
+                // Let's stick to that pattern.
+
+                if (currentTime > 0 && currentTime < duration) {
+                    await recorder.resumePlayer();
+                } else {
+                    await recorder.startPlayer(audioSrc);
+                }
+
+                recorder.addPlayBackListener((e: PlayBackType) => {
+                    // Convert ms to seconds
+                    setCurrentTime(e.currentPosition / 1000);
+                });
+
+                recorder.addPlaybackEndListener(() => {
+                    setIsPlaying(false);
+                    setCurrentTime(0);
+                    recorder.removePlayBackListener();
+                });
+
+                setIsPlaying(true);
+            }
+        } catch (error) {
+            console.error("Playback error:", error);
+            // Fallback for UI if real playback fails hard
+            setIsPlaying(false);
+        }
+    };
+
+    // Seek handling (Basic skip)
+    const handleSkip = async (seconds: number) => {
+        // Note: react-native-nitro-sound might not support seekToPlayer easily or it relies on ms.
+        // checking AudioRecorder.ts interface: seekToPlayer: (ms: number) => Promise<string>;
+        const recorder = getLocalRecorder();
+        if (!recorder) return;
+
+        const newTime = Math.max(0, Math.min(duration, currentTime + seconds));
+        setCurrentTime(newTime); // Optimistic UI update
+
+        try {
+            await recorder.seekToPlayer(newTime * 1000);
+        } catch (error) {
+            console.log("Seek error:", error);
+        }
+    };
 
     // Format seconds to MM:SS
     const formatTime = (totalSeconds: number) => {
         const mins = Math.floor(totalSeconds / 60);
-        const secs = totalSeconds % 60;
+        const secs = Math.floor(totalSeconds % 60);
         return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
     };
 
@@ -73,18 +154,18 @@ export const AudioPlayerModal: React.FC<AudioPlayerModalProps> = ({ open, onClos
 
                         {/* Controls */}
                         <View style={styles.controls}>
-                            <TouchableOpacity onPress={() => setCurrentTime(Math.max(0, currentTime - 10))}>
+                            <TouchableOpacity onPress={() => handleSkip(-10)}>
                                 <AppIcon name="chevronLeft" size={28} color={colors.foreground} />
                             </TouchableOpacity>
 
                             <TouchableOpacity
                                 style={[styles.playBtn, { backgroundColor: colors.primary }]}
-                                onPress={() => setIsPlaying(!isPlaying)}
+                                onPress={handleTogglePlayback}
                             >
                                 <AppIcon name={isPlaying ? "pause" : "play"} size={32} color="#fff" />
                             </TouchableOpacity>
 
-                            <TouchableOpacity onPress={() => setCurrentTime(Math.min(duration, currentTime + 10))}>
+                            <TouchableOpacity onPress={() => handleSkip(10)}>
                                 <AppIcon name="chevronRight" size={28} color={colors.foreground} />
                             </TouchableOpacity>
                         </View>

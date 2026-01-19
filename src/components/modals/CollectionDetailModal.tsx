@@ -29,9 +29,10 @@ interface CollectionDetailModalProps {
     open: boolean;
     onClose: () => void;
     collection: Collection | null;
+    onRecipePress?: (recipe: Recipe) => void;
 }
 
-export const CollectionDetailModal: React.FC<CollectionDetailModalProps> = ({ open, onClose, collection }) => {
+export const CollectionDetailModal: React.FC<CollectionDetailModalProps> = ({ open, onClose, collection, onRecipePress }) => {
     const colors = useThemeColors();
     const radius = useThemeRadius();
     const { recipes, updateCollection } = useRecipes();
@@ -181,7 +182,7 @@ export const CollectionDetailModal: React.FC<CollectionDetailModalProps> = ({ op
                                                 backgroundColor: colors.primary + '10'
                                             }
                                         ]}
-                                        onPress={() => isEditing && toggleRecipe(recipe.id)}
+                                        onPress={() => isEditing ? toggleRecipe(recipe.id) : onRecipePress?.(recipe)}
                                     >
                                         <RecipeImage image={recipe.image} size={44} />
                                         <View style={{ flex: 1, marginLeft: 12 }}>

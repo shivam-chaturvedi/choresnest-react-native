@@ -438,7 +438,7 @@ export const ExpensesScreen: React.FC = () => {
             textAnchor="middle"
             fontWeight="bold"
           >
-            ₹{total.toLocaleString()}
+            {total.toLocaleString()}
           </SvgText>
         </Svg>
       </View>

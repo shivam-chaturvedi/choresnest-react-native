@@ -21,6 +21,7 @@ export interface VaultDocument {
   expiryDate?: string;
   memberId: string;
   sharedWith: string[];
+  uri?: string;
 }
 
 export interface CalendarEvent {

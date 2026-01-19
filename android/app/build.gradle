@@ -143,8 +143,7 @@ task ensureJniDirsExist {
             "node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/",
             "node_modules/react-native-nitro-modules/android/build/generated/source/codegen/jni/",
             "node_modules/react-native-permissions/android/build/generated/source/codegen/jni/",
-            "node_modules/react-native-reanimated/android/build/generated/source/codegen/jni/",
-            "node_modules/react-native-worklets/android/build/generated/source/codegen/jni/"
+            "node_modules/react-native-reanimated/android/build/generated/source/codegen/jni/"
         ]
         jniDirs.each { dir ->
             def f = file("../../" + dir)

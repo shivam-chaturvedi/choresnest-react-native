@@ -14,6 +14,7 @@ import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import { useSidebar } from "../contexts/SidebarContext";
 import { useToast } from "../components/ui/Toast";
 import { DocumentScanner } from "../components/vault/DocumentScanner";
+import { DocumentViewerModal } from "../components/modals/DocumentViewerModal";
 import {
   Menu,
   Camera,
@@ -27,8 +28,10 @@ import {
   AlertTriangle
 } from "lucide-react-native";
 
+import { pickDocument, SavedDocument } from "../utils/DocumentUtils";
+
 export const VaultScreen: React.FC = () => {
-  const { globalVault, memberVaults, activeMember } = useFamily();
+  const { globalVault, memberVaults, activeMember, addDocument } = useFamily();
   const { openSidebar } = useSidebar();
   const { showToast } = useToast();
   const colors = useThemeColors();
@@ -37,6 +40,10 @@ export const VaultScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [showScanner, setShowScanner] = useState(false);
+  const [selectedDoc, setSelectedDoc] = useState<any>(null); // Using any temporarily to match VaultDocument, usually imported from context
+  const [showViewer, setShowViewer] = useState(false);
+
+  // ... (categories and initialAlerts array - no changes) ...
 
   const categories = [
     { id: 'warranty', name: 'Warranties', icon: '🛡️', count: 8, color: colors.info + '30' },
@@ -52,7 +59,7 @@ export const VaultScreen: React.FC = () => {
     { id: 2, icon: '🚗', name: 'Car Service', message: 'Due in 15 days', type: 'info' },
   ];
 
-  // Combine global and active member docs for display (simplified logic)
+  // Combine global and active member docs for display
   const allDocs = [...globalVault, ...(activeMember ? (memberVaults[activeMember.id] || []) : [])];
 
   const filteredDocs = allDocs.filter(doc => {
@@ -61,12 +68,26 @@ export const VaultScreen: React.FC = () => {
     return matchesSearch && matchesCategory;
   });
 
+  const handleDocumentSaved = (doc: SavedDocument) => {
+    // Add to family context
+    addDocument({
+      name: doc.name,
+      type: 'other', // Default type, could be refined
+      icon: '📄',
+      date: new Date().toISOString().split('T')[0],
+      memberId: activeMember?.id || 'global',
+      sharedWith: [],
+      uri: doc.uri,
+    });
+    // showToast handled in DocumentScanner or below
+  };
+
   const handleScan = () => {
     setShowScanner(true);
   };
 
   const handleUpload = () => {
-    showToast({ title: "Upload File", description: "File picker opening...", type: "default" });
+    setShowScanner(true);
   };
 
   return (
@@ -84,9 +105,7 @@ export const VaultScreen: React.FC = () => {
             </View>
           </View>
           <View style={styles.headerRight}>
-            <Pressable style={[styles.iconBtn, { borderColor: colors.border, borderRadius: radius.sm }]} onPress={handleScan}>
-              <Camera size={20} color={colors.foreground} />
-            </Pressable>
+
             <Pressable style={[styles.iconBtn, { borderColor: colors.border, borderRadius: radius.sm }]} onPress={handleUpload}>
               <Upload size={20} color={colors.foreground} />
             </Pressable>
@@ -191,7 +210,14 @@ export const VaultScreen: React.FC = () => {
 
             {filteredDocs.length > 0 ? (
               filteredDocs.map(doc => (
-                <Pressable key={doc.id} style={[styles.docRow, { backgroundColor: colors.card, borderRadius: radius.md }]}>
+                <Pressable
+                  key={doc.id}
+                  style={[styles.docRow, { backgroundColor: colors.card, borderRadius: radius.md }]}
+                  onPress={() => {
+                    setSelectedDoc(doc);
+                    setShowViewer(true);
+                  }}
+                >
                   <View style={[styles.docIconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
                     <Text style={{ fontSize: 20 }}>{doc.icon}</Text>
                   </View>
@@ -214,15 +240,7 @@ export const VaultScreen: React.FC = () => {
 
           {/* Quick Actions */}
           <View style={styles.actionsGrid}>
-            <Pressable style={[styles.actionCard, { backgroundColor: colors.card, borderRadius: radius.md }]} onPress={handleScan}>
-              <View style={[styles.actionIcon, { backgroundColor: colors.info + '30', borderRadius: radius.sm }]}>
-                <Camera size={20} color={colors.info} />
-              </View>
-              <View>
-                <Text style={[styles.actionTitle, { color: colors.foreground }]}>Scan</Text>
-                <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>With OCR</Text>
-              </View>
-            </Pressable>
+
             <Pressable style={[styles.actionCard, { backgroundColor: colors.card, borderRadius: radius.md }]} onPress={handleUpload}>
               <View style={[styles.actionIcon, { backgroundColor: colors.success + '30', borderRadius: radius.sm }]}>
                 <Upload size={20} color={colors.success} />
@@ -257,6 +275,13 @@ export const VaultScreen: React.FC = () => {
         <DocumentScanner
           open={showScanner}
           onOpenChange={setShowScanner}
+          onDocumentSaved={handleDocumentSaved}
+        />
+
+        <DocumentViewerModal
+          visible={showViewer}
+          onClose={() => setShowViewer(false)}
+          document={selectedDoc}
         />
       </View>
     </AppLayout>

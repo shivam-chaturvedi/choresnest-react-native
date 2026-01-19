@@ -582,6 +582,7 @@ export const RecipesScreen: React.FC = () => {
         open={!!selectedCollection}
         onClose={() => setSelectedCollection(null)}
         collection={selectedCollection}
+        onRecipePress={handleRecipePress}
       />
 
       {/* Rich Media Modals */}
