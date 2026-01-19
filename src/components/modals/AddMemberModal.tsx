@@ -6,35 +6,56 @@ import {
   Text,
   TextInput,
   View,
+  Alert,
 } from "react-native";
+import { Check } from "lucide-react-native";
 
-import { useThemeColors } from "../../contexts/ThemeContext";
+import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { useFamily } from "../../contexts/FamilyContext";
+import { PROFILE_COLORS } from "../../constants/profileColors";
 
 interface AddMemberModalProps {
   open: boolean;
   onClose: () => void;
 }
 
+const AVATARS = ["👤", "👩", "👨", "👶", "👧", "👦", "🧒", "👴", "👵", "👱", "👱‍♀️", "🧔", "👩‍🦰", "👨‍🦱", "👨‍🦳", "👩‍🦲"];
+
 export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose }) => {
   const colors = useThemeColors();
-  const { addMember } = useFamily();
+  const radius = useThemeRadius();
+  const { addMember, members } = useFamily();
+
   const [name, setName] = useState("");
-  const [role, setRole] = useState("");
+  const [error, setError] = useState("");
+  const [selectedAvatar, setSelectedAvatar] = useState(AVATARS[0]);
+  const [selectedColor, setSelectedColor] = useState(PROFILE_COLORS[0].value);
 
   const handleSave = () => {
-    if (name.trim()) {
+    try {
+      if (!name.trim()) {
+        setError("Please enter a name");
+        return;
+      }
+
       addMember({
         name: name.trim(),
-        symbol: "👤",
-        color: "", // Will be auto-assigned
+        symbol: selectedAvatar,
+        color: selectedColor,
+        isActive: false, // Default to inactive until switched to
       });
+
+      // Reset
       setName("");
-      setRole("");
+      setError("");
+      setSelectedAvatar(AVATARS[0]);
+      setSelectedColor(PROFILE_COLORS[0].value);
       onClose();
+    } catch (error) {
+      console.error("Failed to add member:", error);
+      Alert.alert("Error", "Failed to add member. Please try again.");
     }
   };
-
 
   return (
     <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
@@ -44,56 +65,97 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose })
             styles.card,
             {
               backgroundColor: colors.card,
-              shadowColor: colors.shadow
+              shadowColor: colors.shadow,
+              borderRadius: radius.xl
             }
           ]}
           onPress={(e) => e.stopPropagation()}
         >
-          <Text style={[styles.heading, { color: colors.foreground }]}>Invite a Family Member</Text>
-          <Text style={[styles.label, { color: colors.mutedForeground }]}>Name</Text>
+          <Text style={[styles.heading, { color: colors.foreground }]}>Add New Member</Text>
+          {error ? <Text style={{ color: colors.danger, marginBottom: 12 }}>{error}</Text> : null}
+
           <TextInput
             value={name}
             onChangeText={setName}
-            placeholder="Alex"
+            placeholder="Member name"
             placeholderTextColor={colors.mutedForeground}
             style={[
               styles.input,
               {
                 borderColor: colors.border,
                 backgroundColor: colors.background,
-                color: colors.foreground
+                color: colors.foreground,
+                borderRadius: radius.md
               }
             ]}
           />
-          <Text style={[styles.label, { color: colors.mutedForeground }]}>Role or Relationship</Text>
-          <TextInput
-            value={role}
-            onChangeText={setRole}
-            placeholder="Parent, Child, Helper, etc."
-            placeholderTextColor={colors.mutedForeground}
-            style={[
-              styles.input,
-              {
-                borderColor: colors.border,
-                backgroundColor: colors.background,
-                color: colors.foreground
-              }
-            ]}
-          />
-          <View style={styles.actions}>
+
+          {/* Avatar Selection */}
+          <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>Avatar</Text>
+          <View style={styles.grid}>
+            {AVATARS.map((avatar) => {
+              const isSelected = selectedAvatar === avatar;
+              return (
+                <Pressable
+                  key={avatar}
+                  onPress={() => setSelectedAvatar(avatar)}
+                  style={[
+                    styles.avatarItem,
+                    {
+                      backgroundColor: isSelected ? colors.primary : colors.muted,
+                      borderRadius: radius.sm
+                    }
+                  ]}
+                >
+                  <Text style={{ fontSize: 24 }}>{avatar}</Text>
+                </Pressable>
+              )
+            })}
+          </View>
+
+          {/* Color Selection */}
+          <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>Profile Color</Text>
+          <View style={styles.grid}>
+            {PROFILE_COLORS.filter(c => !members.some(m => m.color === c.value)).map((color) => {
+              const isSelected = selectedColor === color.value;
+              return (
+                <Pressable
+                  key={color.id}
+                  onPress={() => setSelectedColor(color.value)}
+                  style={[
+                    styles.colorItem,
+                    {
+                      backgroundColor: color.hex,
+                      borderRadius: radius.sm,
+                      borderWidth: isSelected ? 2 : 0,
+                      borderColor: colors.card
+                    }
+                  ]}
+                >
+                  {isSelected && <Check size={16} color="#fff" strokeWidth={3} />}
+                </Pressable>
+              )
+            })}
+          </View>
+
+          {/* Action Button */}
+          <View style={{ marginTop: 24 }}>
             <Pressable
-              style={[styles.secondaryButton, { backgroundColor: 'transparent' }]} // Could be improved
-              onPress={onClose}
-            >
-              <Text style={[styles.secondaryText, { color: colors.mutedForeground }]}>Cancel</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.primaryButton, { backgroundColor: colors.primary }]}
+              style={[
+                styles.addButton,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  borderWidth: 1,
+                  borderRadius: radius.md
+                }
+              ]}
               onPress={handleSave}
             >
-              <Text style={[styles.primaryText, { color: colors.primaryForeground }]}>Invite</Text>
+              <Text style={[styles.addButtonText, { color: colors.foreground }]}>Add Member</Text>
             </Pressable>
           </View>
+
         </Pressable>
       </Pressable>
     </Modal>
@@ -110,8 +172,7 @@ const styles = StyleSheet.create({
   },
   card: {
     width: "100%",
-    maxWidth: 420,
-    borderRadius: 20,
+    maxWidth: 380,
     padding: 24,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.2,
@@ -119,41 +180,48 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   heading: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "700",
     marginBottom: 16,
   },
-  label: {
-    fontSize: 13,
+  sectionLabel: {
+    fontSize: 14,
     fontWeight: "600",
-    marginBottom: 4,
+    marginTop: 16,
+    marginBottom: 8,
+    opacity: 0.8
   },
   input: {
-    borderRadius: 12,
     borderWidth: 1,
-    paddingVertical: 8,
+    paddingVertical: 12,
     paddingHorizontal: 16,
-    marginBottom: 16,
+    fontSize: 16,
   },
-  actions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  secondaryButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    marginRight: 8,
+  avatarItem: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  secondaryText: {
-    fontWeight: "600",
+  colorItem: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  primaryButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 12,
+  addButton: {
+    width: '100%',
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  primaryText: {
-    fontWeight: "600",
-  },
+  addButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  }
 });

@@ -90,6 +90,14 @@ export const MoreScreen: React.FC = () => {
           iconColor: colors.primary,
           route: "Tasks"
         },
+        {
+          label: "Vault",
+          description: "Secure Personal Storage",
+          icon: "lock",
+          color: colors.primary + '25',
+          iconColor: colors.primary,
+          route: "Vault"
+        },
       ],
     },
 
@@ -197,6 +205,7 @@ export const MoreScreen: React.FC = () => {
       case 'MealPlan':
       case 'Notes':
       case 'Expenses':
+      case 'Vault':
       case 'Nutrition':
         navigateToNested('home', route);
         break;

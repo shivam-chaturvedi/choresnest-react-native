@@ -8,6 +8,7 @@ import { SplashScreen } from "../screens/SplashScreen";
 import { OnboardingScreen } from "../screens/OnboardingScreen";
 import { AuthScreen } from "../screens/AuthScreen";
 import { ForgotPasswordScreen } from "../screens/ForgotPasswordScreen";
+import { PrivacyScreen } from "../screens/PrivacyScreen";
 import { TabNavigator } from "./TabNavigator";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { useSidebar } from "../contexts/SidebarContext";
@@ -58,7 +59,7 @@ export const AppNavigator = () => {
 
 const AppNavigatorInner = () => {
   const { isSidebarOpen, closeSidebar } = useSidebar();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, hasCompletedOnboarding, completeOnboarding } = useAuth();
   const [showSplash, setShowSplash] = React.useState(true);
 
   if (isLoading || showSplash) {
@@ -76,20 +77,27 @@ const AppNavigatorInner = () => {
           <Stack.Screen name="MainTabs" component={TabNavigator} />
         ) : (
           <>
-            <Stack.Screen name="Onboarding">
-              {({ navigation }) => (
-                <OnboardingScreen
-                  onSkip={() => navigation.replace("Auth")}
-                  onComplete={() => navigation.replace("Auth")}
-                />
-              )}
-            </Stack.Screen>
+            {!hasCompletedOnboarding ? (
+              <Stack.Screen name="Onboarding">
+                {({ navigation }) => (
+                  <OnboardingScreen
+                    onSkip={() => {
+                      completeOnboarding();
+                      navigation.replace("Auth");
+                    }}
+                    onComplete={() => {
+                      completeOnboarding();
+                      navigation.replace("Auth");
+                    }}
+                  />
+                )}
+              </Stack.Screen>
+            ) : null}
             <Stack.Screen name="Auth">
               {({ navigation }) => (
                 <AuthScreen
                   onAuthenticated={() => {
-                    // MainTabs will render automatically due to state change,
-                    // but explicitly replacing can be safer if navigation state allows
+                    // MainTabs will render automatically due to state change
                   }}
                   onForgotPassword={() => navigation.navigate("ForgotPassword")}
                   onPrivacy={() => navigation.navigate("Privacy")}
@@ -97,6 +105,7 @@ const AppNavigatorInner = () => {
               )}
             </Stack.Screen>
             <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+            <Stack.Screen name="Privacy" component={PrivacyScreen} />
           </>
         )}
       </Stack.Navigator>

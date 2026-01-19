@@ -5,11 +5,11 @@ import { useFamily } from "../../contexts/FamilyContext";
 import { AppIcon } from "../ui/AppIcon";
 
 export const FamilyDashboard: React.FC = () => {
-    const { events, groceryList, familyName } = useFamily();
+    const { events, groceryList, familyName, tasks } = useFamily();
     // Assuming we have mealPlan context mapped similarly or we can mock for now as we port
     const totalEvents = events.length;
-    const pendingTasks = 3; // Mocked until TaskContext is fully ported
-    const totalMealsPlanned = 5; // Mocked
+    const pendingTasks = tasks.filter(t => t.status === 'pending').length;
+    const totalMealsPlanned = 0; // Set to 0 until MealPlanContext is fully integrated here
     const pendingGroceries = groceryList.filter(i => !i.completed).length;
 
     return (

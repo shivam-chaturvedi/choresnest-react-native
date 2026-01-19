@@ -106,106 +106,15 @@ interface FamilyContextType {
 
 const defaultMembers: FamilyMember[] = [
   { id: "1", name: "Me", symbol: "👤", color: "member-blue", isActive: true },
-  { id: "2", name: "Partner", symbol: "💑", color: "member-green", isActive: false },
-  { id: "3", name: "Kids", symbol: "👶", color: "member-orange", isActive: false },
 ];
 
-const defaultGlobalVault: VaultDocument[] = [
-  {
-    id: "g1",
-    name: "Home Insurance",
-    type: "certificate",
-    icon: "🏠",
-    date: "2025-01-15",
-    expiryDate: "2026-01-15",
-    memberId: "global",
-    sharedWith: [],
-  },
-  {
-    id: "g2",
-    name: "Property Documents",
-    type: "certificate",
-    icon: "📜",
-    date: "2024-06-20",
-    memberId: "global",
-    sharedWith: [],
-  },
-];
+const defaultGlobalVault: VaultDocument[] = [];
 
 const defaultMemberVaults: Record<string, VaultDocument[]> = {
-  "1": [
-    {
-      id: "m1",
-      name: "Laptop Warranty",
-      type: "warranty",
-      icon: "💻",
-      date: "2024-03-15",
-      expiryDate: "2027-03-15",
-      memberId: "1",
-      sharedWith: [],
-    },
-    {
-      id: "m2",
-      name: "Phone Bill",
-      type: "bill",
-      icon: "📱",
-      date: "2025-12-01",
-      memberId: "1",
-      sharedWith: [],
-    },
-  ],
-  "2": [
-    {
-      id: "m3",
-      name: "Medical Certificate",
-      type: "certificate",
-      icon: "🏥",
-      date: "2025-11-20",
-      memberId: "2",
-      sharedWith: [],
-    },
-  ],
-  "3": [
-    {
-      id: "m4",
-      name: "School Fee Receipt",
-      type: "invoice",
-      icon: "🎓",
-      date: "2025-12-15",
-      memberId: "3",
-      sharedWith: [],
-    },
-  ],
+  "1": [],
 };
 
-const defaultEvents: CalendarEvent[] = [
-  {
-    id: "e1",
-    title: "Team Meeting",
-    icon: "💼",
-    date: "2026-01-02",
-    time: "10:00 AM",
-    memberId: "1",
-    location: "Office",
-  },
-  {
-    id: "e2",
-    title: "School Event",
-    icon: "🏫",
-    date: "2026-01-03",
-    time: "2:00 PM",
-    memberId: "3",
-    location: "School",
-  },
-  {
-    id: "e3",
-    title: "Grocery Shopping",
-    icon: "🛒",
-    date: "2026-01-04",
-    time: "6:00 PM",
-    memberId: "2",
-  },
-];
+const defaultEvents: CalendarEvent[] = [];
 
 const defaultCategories: GroceryCategory[] = [
   { id: "cat1", name: "Dairy", icon: "🥛", color: "#FFE5B4" },
@@ -216,17 +125,9 @@ const defaultCategories: GroceryCategory[] = [
   { id: "cat6", name: "Other", icon: "📦", color: "#D3D3D3" },
 ];
 
-const defaultGroceryList: GroceryItem[] = [
-  { id: "gr1", name: "Milk", quantity: 2, unit: "L", categoryId: "cat1", addedBy: "2", completed: false },
-  { id: "gr2", name: "Bread", quantity: 1, unit: "loaf", categoryId: "cat2", addedBy: "1", completed: true },
-  { id: "gr3", name: "Eggs", quantity: 12, unit: "pcs", categoryId: "cat4", addedBy: "2", completed: false },
-  { id: "gr4", name: "Rice", quantity: 5, unit: "kg", categoryId: "cat5", addedBy: "1", completed: false },
-];
+const defaultGroceryList: GroceryItem[] = [];
 
-const defaultTasks: Task[] = [
-  { id: "t1", icon: "📝", name: "Complete project report", status: "pending", priority: "high", due: "Today", date: new Date().toISOString().split('T')[0], assignee: "1", tab: "My Tasks" },
-  { id: "t2", icon: "📞", name: "Call insurance company", status: "pending", priority: "medium", due: "Today", date: new Date().toISOString().split('T')[0], assignee: "1", tab: "My Tasks" },
-];
+const defaultTasks: Task[] = [];
 
 const FamilyContext = createContext<FamilyContextType | undefined>(undefined);
 

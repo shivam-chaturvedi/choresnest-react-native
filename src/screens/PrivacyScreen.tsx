@@ -6,11 +6,13 @@ import {
     ScrollView,
     Pressable,
     Switch,
+    Alert,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { AppLayout } from "../components/layout/AppLayout";
 import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import { useSidebar } from "../contexts/SidebarContext";
+import { useAuth } from "../contexts/AuthContext";
 import {
     ChevronLeft,
     Shield,
@@ -32,6 +34,7 @@ const securitySettings = [
 export const PrivacyScreen: React.FC = () => {
     const navigation = useNavigation();
     const { openSidebar } = useSidebar();
+    const { deleteAccount } = useAuth();
     const colors = useThemeColors();
     const radius = useThemeRadius();
 
@@ -145,7 +148,33 @@ export const PrivacyScreen: React.FC = () => {
                 {/* Danger Zone */}
                 <View style={[styles.dangerCard, { backgroundColor: colors.card, borderColor: '#fee2e2', borderRadius: radius.card }]}>
                     <Text style={[styles.dangerTitle, { color: '#ef4444' }]}>Danger Zone</Text>
-                    <Pressable style={[styles.deleteButton, { borderColor: '#fca5a5', backgroundColor: '#fff', borderRadius: radius.sm }]}>
+                    <Pressable
+                        style={[styles.deleteButton, { borderColor: '#fca5a5', backgroundColor: '#fff', borderRadius: radius.sm }]}
+                        onPress={() => {
+                            Alert.alert(
+                                "Delete Account",
+                                "Are you sure you want to delete your account? This action cannot be undone and all your family data will be permanently lost.",
+                                [
+                                    {
+                                        text: "Cancel",
+                                        style: "cancel"
+                                    },
+                                    {
+                                        text: "Delete",
+                                        style: "destructive",
+                                        onPress: async () => {
+                                            try {
+                                                await deleteAccount();
+                                            } catch (error) {
+                                                console.error("Delete account failed", error);
+                                                Alert.alert("Error", "Failed to delete account. Please try again.");
+                                            }
+                                        }
+                                    }
+                                ]
+                            );
+                        }}
+                    >
                         <Trash2 size={16} color="#ef4444" />
                         <Text style={[styles.deleteText, { color: "#ef4444" }]}>Delete Account</Text>
                     </Pressable>

@@ -72,31 +72,64 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
     const [audioPath, setAudioPath] = useState<string | null>(props.recipe?.audio || null);
     const [isLoadingAudio, setIsLoadingAudio] = useState(false);
 
-    // Audio Recorder Ref - Initialize safely to prevent crash
+    // Audio Recorder Ref
     const audioRecorderPlayerRef = React.useRef<SafeAudioRecorderType | null>(null);
     const getLocalRecorder = () => getAudioRecorder(audioRecorderPlayerRef);
+
+    // Local Timer Refs
+    const startTimeRef = React.useRef<number>(0);
+    const accumulatedTimeRef = React.useRef<number>(0);
+    const timerIntervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+
+    const startTimer = () => {
+        startTimeRef.current = Date.now();
+        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+
+        timerIntervalRef.current = setInterval(() => {
+            const now = Date.now();
+            const elapsed = (now - startTimeRef.current) / 1000;
+            setRecordingTime(accumulatedTimeRef.current + elapsed);
+        }, 100); // 100ms update frequency
+    };
+
+    const pauseTimer = () => {
+        if (timerIntervalRef.current) {
+            clearInterval(timerIntervalRef.current);
+            timerIntervalRef.current = null;
+        }
+        const now = Date.now();
+        accumulatedTimeRef.current += (now - startTimeRef.current) / 1000;
+    };
+
+    const resetTimer = () => {
+        if (timerIntervalRef.current) {
+            clearInterval(timerIntervalRef.current);
+            timerIntervalRef.current = null;
+        }
+        startTimeRef.current = 0;
+        accumulatedTimeRef.current = 0;
+        setRecordingTime(0);
+    };
 
     // Initial load for editing
     React.useEffect(() => {
         if (props.recipe) {
+            // ... existing code ...
+            // ... skipping strictly unchanged lines, just structure ... 
             setName(props.recipe.name);
-            // Parse time string '45 min' -> 45
             const totalMin = parseInt(props.recipe.time) || 15;
             setPrepTime((totalMin > 15 ? 15 : 5).toString());
             setCookTime((totalMin > 15 ? totalMin - 15 : totalMin - 5).toString());
-
             setServings(props.recipe.servings.toString());
             setIngredients(props.recipe.ingredients.map(i => i.name));
             setTags(props.recipe.tags);
             if (props.recipe.url) setLinkUrl(props.recipe.url);
-
             if (props.recipe.nutrition) {
                 setKcal(props.recipe.nutrition.kcal);
                 setProtein(props.recipe.nutrition.protein);
                 setCarbs(props.recipe.nutrition.carbs);
                 setFats(props.recipe.nutrition.fats);
             }
-            // Logic to set active tab based on content
             if (props.recipe.images && props.recipe.images.length > 0) setActiveTab('Image');
             else if (props.recipe.url) setActiveTab('Link');
             else if (props.recipe.audio) setActiveTab('Audio');
@@ -104,6 +137,8 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
 
         // Cleanup on unmount
         return () => {
+            resetTimer(); // Ensure timer is cleared
+
             const recorder = audioRecorderPlayerRef.current;
             if (!recorder) return;
 
@@ -119,7 +154,6 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
         };
     }, [props.recipe]);
 
-
     // Helpers
     const formatTime = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
@@ -127,15 +161,8 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
         return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
     };
 
-    const setupAudioListener = (recorder: SafeAudioRecorderType) => {
-        // High-frequency updates
-        recorder.setSubscriptionDuration(50);
+    // setupAudioListener removed as we use local timer now for reliability
 
-        recorder.addRecordBackListener((e: RecordBackType) => {
-            // Force update recording time
-            setRecordingTime(e.currentPosition / 1000);
-        });
-    };
 
     const handleStartRecording = async () => {
         setIsLoadingAudio(true);
@@ -149,19 +176,19 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
             const hasPermission = await requestPermission('audio');
             if (!hasPermission) return;
 
-            // Ensure previous recording is stopped
             if (isRecording) {
                 await recorder.stopRecorder();
                 recorder.removeRecordBackListener();
+                resetTimer();
             }
 
-            // Start Recorder
+            // Start Recorder (Native)
             const result = await recorder.startRecorder();
-
-            // Setup listener immediately
-            setupAudioListener(recorder);
-
             console.log("Recording started at: ", result);
+
+            // Start Local Timer
+            startTimer();
+
             setIsRecording(true);
             setIsPaused(false);
             showToast({ title: "Recording", description: "Recording started...", type: "success" });
@@ -178,6 +205,7 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
             const recorder = getLocalRecorder();
             if (recorder) {
                 await recorder.pauseRecorder();
+                pauseTimer();
                 setIsPaused(true);
             }
         } catch (error) {
@@ -190,18 +218,12 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
         try {
             const recorder = getLocalRecorder();
             if (recorder) {
-                // Set duration BEFORE resume
-                recorder.setSubscriptionDuration(50);
                 await recorder.resumeRecorder();
 
-                // Keep UI in sync
-                setIsPaused(false);
+                // Resume Local Timer
+                startTimer();
 
-                // Re-setup listener after a slightly longer delay to ensure native stream is flowing
-                setTimeout(() => {
-                    const r = getLocalRecorder();
-                    if (r) setupAudioListener(r);
-                }, 100);
+                setIsPaused(false);
             }
         } catch (error) {
             console.error("Error resuming recording:", error);
@@ -217,6 +239,8 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
 
             const result = await recorder.stopRecorder();
             recorder.removeRecordBackListener();
+
+            pauseTimer();
 
             setAudioPath(result);
             setIsRecording(false);
@@ -279,8 +303,15 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
                 await recorder.stopPlayer();
                 recorder.removePlayBackListener();
             }
+            // Stop recording if active
+            if (isRecording) {
+                await recorder?.stopRecorder();
+            }
+
+            resetTimer(); // Reset local timer
+
             setAudioPath(null);
-            setRecordingTime(0);
+            setIsRecording(false);
             setPlaybackTime(0);
             setIsPlaying(false);
             showToast({ title: "Deleted", description: "Recording deleted", type: "success" });
@@ -290,6 +321,15 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
         }
     };
 
+    // ... handleImageUpload (unchanged) ...
+    // we need to make sure we don't accidentally cut out handleImageUpload if it was in the middle. The user instruction said "Update handleClear and handleDeleteRecording". 
+    // I need to be careful with range. 
+    // handleDelete is at 275. handleClear is at 353. I should probably do them separately. 
+    // Let me target handleDelete separately. 
+
+    // OK, wait, I will split these.
+
+    // ... handleImageUpload ...
     const handleImageUpload = async () => {
         try {
             const hasPermission = await requestPermission('photo');
@@ -368,12 +408,15 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
         setAudioPath(null);
         setImagePath(null);
         setImages([]);
+
         setIsRecording(false);
         setIsPaused(false);
+        setIsPlaying(false);
         setRecordingTime(0);
         setPlaybackTime(0);
-        setIsPlaying(false);
         setManualTime("");
+
+        resetTimer(); // Reset local timer refs
     };
 
     const handleSave = () => {

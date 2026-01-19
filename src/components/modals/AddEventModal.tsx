@@ -23,6 +23,7 @@ interface AddEventModalProps {
   initialDate?: string;
   initialTime?: string;
   eventToEdit?: CalendarEvent;
+  onSelectEvent?: (event: CalendarEvent | any) => void;
 }
 
 const eventIcons: string[] = [
@@ -67,12 +68,13 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   initialDate,
   initialTime,
   eventToEdit,
+  onSelectEvent,
 }) => {
   /* Hook and State Setup */
-  const { members, activeMember, addEvent, updateEvent, deleteEvent, addTask, updateTask, deleteTask } = useFamily();
+  const { members, activeMember, events, tasks, addEvent, updateEvent, deleteEvent, addTask, updateTask, deleteTask } = useFamily();
   const colors = useThemeColors();
 
-  const [activeTab, setActiveTab] = useState<'event' | 'task'>('event');
+  const [activeTab, setActiveTab] = useState<'event' | 'task' | 'existing'>('event');
 
   /* Event State */
 
@@ -221,6 +223,44 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
     }
   }, [open, initialDate, initialTime, members, eventToEdit]);
 
+
+
+  // Helper to format time range
+  const formatTimeRange = (start?: string, end?: string) => {
+    if (!start) return "All Day";
+    if (!end) return start;
+    return `${start} - ${end}`;
+  };
+
+  // Helper to get events for the selected start date
+  const getExistingItems = () => {
+    const targetDateStr = format(startDate, "yyyy-MM-dd");
+
+    // Using events and tasks from context (now destructured)
+    const allEvents = events || [];
+    const allTasks = tasks || [];
+
+    const relevantEvents = allEvents.filter(e => e.date === targetDateStr).map(e => ({ ...e, type: 'event' }));
+    const relevantTasks = allTasks.filter(t => t.date === targetDateStr && t.status !== 'done').map(t => ({
+      id: t.id,
+      title: t.name,
+      icon: t.icon,
+      date: t.date,
+      time: t.due,
+      endTime: undefined, // tasks usually don't have end time displayed same way
+      startTime: t.due,
+      memberId: t.assignee,
+      type: 'task',
+      priority: t.priority
+    }));
+
+    return [...relevantEvents, ...relevantTasks].sort((a, b) => {
+      const timeA = a.time || "00:00";
+      const timeB = b.time || "00:00";
+      return timeA.localeCompare(timeB);
+    });
+  };
+
   // Update color when member selection changes
   useEffect(() => {
     const selectedMember = members.find(m => m.id === memberId);
@@ -361,332 +401,430 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
               >
                 <Text style={[styles.tabText, { color: activeTab === 'task' ? colors.primary : colors.mutedForeground }]}>Task</Text>
               </Pressable>
+              <Pressable
+                style={[styles.tabButton, activeTab === 'existing' && { backgroundColor: colors.card, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 2 }]}
+                onPress={() => setActiveTab('existing')}
+              >
+                <Text style={[styles.tabText, { color: activeTab === 'existing' ? colors.primary : colors.mutedForeground }]}>Existing</Text>
+              </Pressable>
             </View>
           )}
 
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            {/* Ownership Notice */}
-            {!isOwner && eventToEdit && (
-              <View style={[styles.ownerNotice, { backgroundColor: colors.primary + "1A" }]}>
-                <AppIcon name="info" size={16} color={colors.primary} />
-                <Text style={[styles.ownerNoticeText, { color: colors.primary }]}>
-                  Only {members.find(m => m.id === eventToEdit.memberId)?.name || "the owner"} can update this event
-                </Text>
-              </View>
-            )}
+            {activeTab === 'existing' ? (
+              <View style={{ gap: 12 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <Text style={{ fontSize: 16, fontWeight: '600', color: colors.foreground }}>
+                    {format(startDate, "MMMM d, yyyy")}
+                  </Text>
+                  <Pressable
+                    onPress={() => setActiveTab('event')}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                  >
+                    <AppIcon name="plus" size={16} color={colors.primary} />
+                    <Text style={{ color: colors.primary, fontWeight: '500' }}>Add New</Text>
+                  </Pressable>
+                </View>
 
-            {/* Event/Task Name */}
-            <TextInput
-              style={[
-                styles.nameInput,
-                {
-                  color: colors.foreground,
-                  borderBottomWidth: 2,
-                  borderBottomColor: colors.primary
-                }
-              ]}
-              placeholder={activeTab === 'event' ? "Event name" : "Task name"}
-              placeholderTextColor={colors.mutedForeground}
-              value={name}
-              onChangeText={setName}
-              autoFocus={!isEditing}
-              editable={activeTab === 'task' || isOwner}
-            />
-
-            {/* Task Specific Fields */}
-            {activeTab === 'task' && (
-              <>
-                {/* Icon Selection - TASK ONLY */}
-                <View style={styles.fieldGroup}>
-                  <View style={styles.labelRow}>
-                    <AppIcon name="tag" size={14} color={colors.mutedForeground} />
-                    <Text style={[styles.label, { color: colors.mutedForeground }]}>Icon</Text>
+                {getExistingItems().length === 0 ? (
+                  <View style={{ alignItems: 'center', padding: 24, gap: 12 }}>
+                    <Text style={{ fontSize: 40 }}>📅</Text>
+                    <Text style={{ color: colors.mutedForeground, textAlign: 'center' }}>No events or tasks for this day.</Text>
+                    <Pressable
+                      onPress={() => setActiveTab('event')}
+                      style={{ marginTop: 8, paddingVertical: 8, paddingHorizontal: 16, backgroundColor: colors.primary, borderRadius: 8 }}
+                    >
+                      <Text style={{ color: '#fff', fontWeight: '600' }}>Create Event</Text>
+                    </Pressable>
                   </View>
-                  <View style={styles.iconGrid}>
-                    {["📝", "📞", "💊", "📧", "🏫", "🔧", "📦", "🧹", "🧺", "🍽️", "🛏️", "🐕"].map((icon) => (
+                ) : (
+                  getExistingItems().map((item: any, index) => {
+                    const member = members.find(m => m.id === item.memberId);
+                    const profileColor = PROFILE_COLORS.find(c => c.value === member?.color)?.hex || colors.primary;
+
+                    return (
                       <Pressable
-                        key={icon}
-                        onPress={() => setTaskIcon(icon)}
-                        style={[
-                          styles.iconButton,
-                          { backgroundColor: colors.card },
-                          taskIcon === icon && { backgroundColor: colors.success, transform: [{ scale: 1.1 }] },
-                        ]}
+                        key={`${item.type}-${item.id}`}
+                        onPress={() => {
+                          if (onSelectEvent) {
+                            onSelectEvent(item);
+                          }
+                        }}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          padding: 12,
+                          backgroundColor: colors.card,
+                          borderRadius: 12,
+                          borderWidth: 1,
+                          borderColor: colors.border,
+                          gap: 12
+                        }}
                       >
-                        <Text style={styles.iconText}>{icon}</Text>
+                        <View style={{
+                          width: 4,
+                          height: 32,
+                          borderRadius: 2,
+                          backgroundColor: item.type === 'task' ? colors.danger : profileColor
+                        }} />
+
+                        <View style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: 20,
+                          backgroundColor: item.type === 'task' ? colors.danger + '10' : profileColor + '10',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}>
+                          <Text style={{ fontSize: 18 }}>{item.icon}</Text>
+                        </View>
+
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 16, fontWeight: '600', color: colors.foreground }}>{item.title}</Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={{ fontSize: 12, color: colors.mutedForeground }}>
+                              {item.time}
+                            </Text>
+                            <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: colors.mutedForeground }} />
+                            <Text style={{ fontSize: 12, color: colors.mutedForeground }}>
+                              {member?.name}
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View style={{ padding: 4 }}>
+                          <AppIcon name="chevronRight" size={16} color={colors.mutedForeground} />
+                        </View>
                       </Pressable>
-                    ))}
-                  </View>
-                </View>
-
-                {/* Priority - TASK ONLY */}
-                <View style={styles.fieldGroup}>
-                  <View style={styles.labelRow}>
-                    <AppIcon name="alertCircle" size={14} color={colors.mutedForeground} />
-                    <Text style={[styles.label, { color: colors.mutedForeground }]}>Priority</Text>
-                  </View>
-                  <View style={{ flexDirection: 'row', gap: 8 }}>
-                    {[
-                      { label: "High", value: "high", color: colors.danger, bg: colors.danger + "20" },
-                      { label: "Medium", value: "medium", color: colors.warning, bg: colors.warning + "20" },
-                      { label: "Low", value: "low", color: colors.mutedForeground, bg: colors.muted }
-                    ].map((p) => (
-                      <Pressable
-                        key={p.value}
-                        onPress={() => setTaskPriority(p.value)}
-                        style={[
-                          { flex: 1, backgroundColor: taskPriority === p.value ? p.bg : colors.card, borderColor: taskPriority === p.value ? p.color : colors.border, borderWidth: 1, borderRadius: 8, paddingVertical: 10, alignItems: 'center' }
-                        ]}
-                      >
-                        <Text style={{ color: taskPriority === p.value ? p.color : colors.mutedForeground, fontWeight: "600" }}>{p.label}</Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                </View>
-              </>
-            )}
-
-            {activeTab === 'event' && (
-              <>
-                {/* Icon Selection - EVENT ONLY */}
-                <View style={styles.fieldGroup}>
-                  <View style={styles.labelRow}>
-                    <AppIcon name="tag" size={14} color={colors.mutedForeground} />
-                    <Text style={[styles.label, { color: colors.mutedForeground }]}>Icon</Text>
-                  </View>
-                  <View style={styles.iconGrid}>
-                    {eventIcons.map((icon) => (
-                      <Pressable
-                        key={icon}
-                        onPress={() => isOwner && setSelectedIcon(icon)}
-                        style={[
-                          styles.iconButton,
-                          { backgroundColor: colors.card },
-                          selectedIcon === icon && { backgroundColor: colors.primary, transform: [{ scale: 1.1 }] },
-                          !isOwner && { opacity: 0.6 }
-                        ]}
-                      >
-                        <Text style={styles.iconText}>{icon}</Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                </View>
-
-                {/* Description - EVENT ONLY */}
-                <View style={styles.fieldGroup}>
-                  <View style={styles.labelRow}>
-                    <AppIcon name="file" size={14} color={colors.mutedForeground} />
-                    <Text style={[styles.label, { color: colors.mutedForeground }]}>Description</Text>
-                  </View>
-                  <TextInput
-                    style={[styles.textArea, { backgroundColor: colors.card, color: colors.foreground }]}
-                    placeholder="Add description..."
-                    placeholderTextColor={colors.mutedForeground}
-                    multiline
-                    value={description}
-                    onChangeText={setDescription}
-                    editable={isOwner}
-                  />
-                </View>
-
-                {/* All Day Toggle - EVENT ONLY */}
-                <View style={[styles.toggleRow, { backgroundColor: colors.card }]}>
-                  <View style={styles.toggleLabelContainer}>
-                    <View style={[styles.iconBox, { backgroundColor: "#f973161A" }]}>
-                      <AppIcon name="clock" size={18} color="#f97316" />
-                    </View>
-                    <Text style={[styles.toggleLabel, { color: colors.foreground }]}>All-day event</Text>
-                  </View>
-                  <Switch
-                    value={allDay}
-                    onValueChange={setAllDay}
-                    trackColor={{ false: colors.muted, true: colors.primary }}
-                    disabled={!isOwner}
-                  />
-                </View>
-              </>
-            )}
-
-            {/* Schedule */}
-            <View style={styles.fieldGroup}>
-              <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>{activeTab === 'task' ? 'Due Date' : 'Schedule'}</Text>
-              <View style={styles.row}>
-                <View style={styles.halfField}>
-                  <CustomDateTimePicker
-                    mode="date"
-                    value={startDate}
-                    onChange={setStartDate}
-                    label="Start Date"
-                    disabled={activeTab === 'event' && !isOwner}
-                  />
-                </View>
-                {!allDay && ( // Show time for events (if not all day) AND tasks
-                  <View style={styles.halfField}>
-                    <CustomDateTimePicker
-                      mode="time"
-                      value={startTime}
-                      onChange={setStartTime}
-                      label={activeTab === 'task' ? "Due Time" : "Start Time"}
-                      disabled={!isOwner}
-                    />
-                  </View>
+                    );
+                  })
                 )}
               </View>
-
-              {activeTab === 'event' && (
-                <View style={styles.row}>
-                  <View style={styles.halfField}>
-                    <CustomDateTimePicker
-                      mode="date"
-                      value={endDate || new Date()}
-                      onChange={setEndDate}
-                      label="End Date (Optional)"
-                      disabled={!isOwner}
-                    />
+            ) : (
+              // Original Form Content
+              <>
+                {/* Ownership Notice */}
+                {!isOwner && eventToEdit && (
+                  <View style={[styles.ownerNotice, { backgroundColor: colors.primary + "1A" }]}>
+                    <AppIcon name="info" size={16} color={colors.primary} />
+                    <Text style={[styles.ownerNoticeText, { color: colors.primary }]}>
+                      Only {members.find(m => m.id === eventToEdit.memberId)?.name || "the owner"} can update this event
+                    </Text>
                   </View>
-                  {!allDay && (
-                    <View style={styles.halfField}>
-                      <CustomDateTimePicker
-                        mode="time"
-                        value={endTime || new Date()}
-                        onChange={setEndTime}
-                        label="End Time"
+                )}
+
+                {/* Event/Task Name */}
+                <TextInput
+                  style={[
+                    styles.nameInput,
+                    {
+                      color: colors.foreground,
+                      borderBottomWidth: 2,
+                      borderBottomColor: colors.primary
+                    }
+                  ]}
+                  placeholder={activeTab === 'event' ? "Event name" : "Task name"}
+                  placeholderTextColor={colors.mutedForeground}
+                  value={name}
+                  onChangeText={setName}
+                  autoFocus={!isEditing}
+                  editable={activeTab === 'task' || isOwner}
+                />
+
+                {/* Task Specific Fields */}
+                {activeTab === 'task' && (
+                  <>
+                    {/* Icon Selection - TASK ONLY */}
+                    <View style={styles.fieldGroup}>
+                      <View style={styles.labelRow}>
+                        <AppIcon name="tag" size={14} color={colors.mutedForeground} />
+                        <Text style={[styles.label, { color: colors.mutedForeground }]}>Icon</Text>
+                      </View>
+                      <View style={styles.iconGrid}>
+                        {["📝", "📞", "💊", "📧", "🏫", "🔧", "📦", "🧹", "🧺", "🍽️", "🛏️", "🐕"].map((icon) => (
+                          <Pressable
+                            key={icon}
+                            onPress={() => setTaskIcon(icon)}
+                            style={[
+                              styles.iconButton,
+                              { backgroundColor: colors.card },
+                              taskIcon === icon && { backgroundColor: colors.success, transform: [{ scale: 1.1 }] },
+                            ]}
+                          >
+                            <Text style={styles.iconText}>{icon}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
+
+                    {/* Priority - TASK ONLY */}
+                    <View style={styles.fieldGroup}>
+                      <View style={styles.labelRow}>
+                        <AppIcon name="alertCircle" size={14} color={colors.mutedForeground} />
+                        <Text style={[styles.label, { color: colors.mutedForeground }]}>Priority</Text>
+                      </View>
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        {[
+                          { label: "High", value: "high", color: colors.danger, bg: colors.danger + "20" },
+                          { label: "Medium", value: "medium", color: colors.warning, bg: colors.warning + "20" },
+                          { label: "Low", value: "low", color: colors.mutedForeground, bg: colors.muted }
+                        ].map((p) => (
+                          <Pressable
+                            key={p.value}
+                            onPress={() => setTaskPriority(p.value)}
+                            style={[
+                              { flex: 1, backgroundColor: taskPriority === p.value ? p.bg : colors.card, borderColor: taskPriority === p.value ? p.color : colors.border, borderWidth: 1, borderRadius: 8, paddingVertical: 10, alignItems: 'center' }
+                            ]}
+                          >
+                            <Text style={{ color: taskPriority === p.value ? p.color : colors.mutedForeground, fontWeight: "600" }}>{p.label}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
+                  </>
+                )}
+
+                {activeTab === 'event' && (
+                  <>
+                    {/* Icon Selection - EVENT ONLY */}
+                    <View style={styles.fieldGroup}>
+                      <View style={styles.labelRow}>
+                        <AppIcon name="tag" size={14} color={colors.mutedForeground} />
+                        <Text style={[styles.label, { color: colors.mutedForeground }]}>Icon</Text>
+                      </View>
+                      <View style={styles.iconGrid}>
+                        {eventIcons.map((icon) => (
+                          <Pressable
+                            key={icon}
+                            onPress={() => isOwner && setSelectedIcon(icon)}
+                            style={[
+                              styles.iconButton,
+                              { backgroundColor: colors.card },
+                              selectedIcon === icon && { backgroundColor: colors.primary, transform: [{ scale: 1.1 }] },
+                              !isOwner && { opacity: 0.6 }
+                            ]}
+                          >
+                            <Text style={styles.iconText}>{icon}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
+
+                    {/* Description - EVENT ONLY */}
+                    <View style={styles.fieldGroup}>
+                      <View style={styles.labelRow}>
+                        <AppIcon name="file" size={14} color={colors.mutedForeground} />
+                        <Text style={[styles.label, { color: colors.mutedForeground }]}>Description</Text>
+                      </View>
+                      <TextInput
+                        style={[styles.textArea, { backgroundColor: colors.card, color: colors.foreground }]}
+                        placeholder="Add description..."
+                        placeholderTextColor={colors.mutedForeground}
+                        multiline
+                        value={description}
+                        onChangeText={setDescription}
+                        editable={isOwner}
+                      />
+                    </View>
+
+                    {/* All Day Toggle - EVENT ONLY */}
+                    <View style={[styles.toggleRow, { backgroundColor: colors.card }]}>
+                      <View style={styles.toggleLabelContainer}>
+                        <View style={[styles.iconBox, { backgroundColor: "#f973161A" }]}>
+                          <AppIcon name="clock" size={18} color="#f97316" />
+                        </View>
+                        <Text style={[styles.toggleLabel, { color: colors.foreground }]}>All-day event</Text>
+                      </View>
+                      <Switch
+                        value={allDay}
+                        onValueChange={setAllDay}
+                        trackColor={{ false: colors.muted, true: colors.primary }}
                         disabled={!isOwner}
                       />
                     </View>
-                  )}
-                </View>
-              )}
-            </View>
+                  </>
+                )}
 
-            {/* Repeat Options - EVENT ONLY */}
-            {activeTab === 'event' && (
-              <View style={styles.fieldGroup}>
-                <Pressable
-                  style={[styles.expandableHeader, { backgroundColor: colors.card }]}
-                  onPress={() => isOwner && setShowRepeatOptions(!showRepeatOptions)}
-                >
-                  <View style={styles.toggleLabelContainer}>
-                    <View style={[styles.iconBox, { backgroundColor: "#3b82f61A" }]}>
-                      <AppIcon name="repeat" size={18} color="#3b82f6" />
+                {/* Schedule */}
+                <View style={styles.fieldGroup}>
+                  <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>{activeTab === 'task' ? 'Due Date' : 'Schedule'}</Text>
+                  <View style={styles.row}>
+                    <View style={styles.halfField}>
+                      <CustomDateTimePicker
+                        mode="date"
+                        value={startDate}
+                        onChange={setStartDate}
+                        label="Start Date"
+                        disabled={activeTab === 'event' && !isOwner}
+                      />
                     </View>
-                    <View>
-                      <Text style={[styles.toggleLabel, { color: colors.foreground }]}>Repeat</Text>
-                      <Text style={[styles.valueLabel, { color: colors.mutedForeground }]}>{getRepeatLabel()}</Text>
-                    </View>
-                  </View>
-                  <AppIcon
-                    name="chevronDown"
-                    size={20}
-                    color={colors.mutedForeground}
-                    style={{ transform: [{ rotate: showRepeatOptions ? '180deg' : '0deg' }] }}
-                  />
-                </Pressable>
-
-                {showRepeatOptions && (
-                  <View style={[styles.expandableContent, { backgroundColor: colors.card }]}>
-                    <View style={styles.chipsContainer}>
-                      {repeatOptions.map((option) => (
-                        <Pressable
-                          key={option.value}
-                          onPress={() => isOwner && setRepeatType(option.value)}
-                          style={[
-                            styles.chip,
-                            { backgroundColor: colors.background },
-                            repeatType === option.value && { backgroundColor: colors.primary },
-                            !isOwner && { opacity: 0.6 }
-                          ]}
-                        >
-                          <Text style={[
-                            styles.chipText,
-                            { color: colors.foreground },
-                            repeatType === option.value && { color: colors.primaryForeground, fontWeight: "600" }
-                          ]}>
-                            {option.label}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                    {repeatType !== 'never' && (
-                      <View style={{ marginTop: 12 }}>
+                    {!allDay && ( // Show time for events (if not all day) AND tasks
+                      <View style={styles.halfField}>
                         <CustomDateTimePicker
-                          mode="date"
-                          value={repeatEndDate || new Date()}
-                          onChange={setRepeatEndDate}
-                          label="End repeat (Optional)"
-                          placeholder="Never"
+                          mode="time"
+                          value={startTime}
+                          onChange={setStartTime}
+                          label={activeTab === 'task' ? "Due Time" : "Start Time"}
                           disabled={!isOwner}
                         />
                       </View>
                     )}
                   </View>
+
+                  {activeTab === 'event' && (
+                    <View style={styles.row}>
+                      <View style={styles.halfField}>
+                        <CustomDateTimePicker
+                          mode="date"
+                          value={endDate || new Date()}
+                          onChange={setEndDate}
+                          label="End Date (Optional)"
+                          disabled={!isOwner}
+                        />
+                      </View>
+                      {!allDay && (
+                        <View style={styles.halfField}>
+                          <CustomDateTimePicker
+                            mode="time"
+                            value={endTime || new Date()}
+                            onChange={setEndTime}
+                            label="End Time"
+                            disabled={!isOwner}
+                          />
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </View>
+
+                {/* Repeat Options - EVENT ONLY */}
+                {activeTab === 'event' && (
+                  <View style={styles.fieldGroup}>
+                    <Pressable
+                      style={[styles.expandableHeader, { backgroundColor: colors.card }]}
+                      onPress={() => isOwner && setShowRepeatOptions(!showRepeatOptions)}
+                    >
+                      <View style={styles.toggleLabelContainer}>
+                        <View style={[styles.iconBox, { backgroundColor: "#3b82f61A" }]}>
+                          <AppIcon name="repeat" size={18} color="#3b82f6" />
+                        </View>
+                        <View>
+                          <Text style={[styles.toggleLabel, { color: colors.foreground }]}>Repeat</Text>
+                          <Text style={[styles.valueLabel, { color: colors.mutedForeground }]}>{getRepeatLabel()}</Text>
+                        </View>
+                      </View>
+                      <AppIcon
+                        name="chevronDown"
+                        size={20}
+                        color={colors.mutedForeground}
+                        style={{ transform: [{ rotate: showRepeatOptions ? '180deg' : '0deg' }] }}
+                      />
+                    </Pressable>
+
+                    {showRepeatOptions && (
+                      <View style={[styles.expandableContent, { backgroundColor: colors.card }]}>
+                        <View style={styles.chipsContainer}>
+                          {repeatOptions.map((option) => (
+                            <Pressable
+                              key={option.value}
+                              onPress={() => isOwner && setRepeatType(option.value)}
+                              style={[
+                                styles.chip,
+                                { backgroundColor: colors.background },
+                                repeatType === option.value && { backgroundColor: colors.primary },
+                                !isOwner && { opacity: 0.6 }
+                              ]}
+                            >
+                              <Text style={[
+                                styles.chipText,
+                                { color: colors.foreground },
+                                repeatType === option.value && { color: colors.primaryForeground, fontWeight: "600" }
+                              ]}>
+                                {option.label}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                        {repeatType !== 'never' && (
+                          <View style={{ marginTop: 12 }}>
+                            <CustomDateTimePicker
+                              mode="date"
+                              value={repeatEndDate || new Date()}
+                              onChange={setRepeatEndDate}
+                              label="End repeat (Optional)"
+                              placeholder="Never"
+                              disabled={!isOwner}
+                            />
+                          </View>
+                        )}
+                      </View>
+                    )}
+                  </View>
                 )}
-              </View>
-            )}
 
-            {/* Reminder Options - EVENT ONLY */}
-            {activeTab === 'event' && (
-              <View style={styles.fieldGroup}>
-                <Pressable
-                  style={[styles.expandableHeader, { backgroundColor: colors.card }]}
-                  onPress={() => isOwner && setShowReminderOptions(!showReminderOptions)}
-                >
-                  <View style={styles.toggleLabelContainer}>
-                    <View style={[styles.iconBox, { backgroundColor: reminder ? "#22c55e1A" : colors.muted }]}>
-                      <AppIcon name="bell" size={18} color={reminder ? "#22c55e" : colors.mutedForeground} />
-                    </View>
-                    <View>
-                      <Text style={[styles.toggleLabel, { color: colors.foreground }]}>Reminder</Text>
-                      <Text style={[styles.valueLabel, { color: colors.mutedForeground }]}>{getReminderLabel()}</Text>
-                    </View>
-                  </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Switch
-                      value={reminder}
-                      onValueChange={setReminder}
-                      trackColor={{ false: colors.muted, true: colors.primary }}
-                      disabled={!isOwner}
-                    />
-                    <AppIcon
-                      name="chevronDown"
-                      size={20}
-                      color={colors.mutedForeground}
-                      style={{ transform: [{ rotate: showReminderOptions ? '180deg' : '0deg' }] }}
-                    />
-                  </View>
-                </Pressable>
+                {/* Reminder Options - EVENT ONLY */}
+                {activeTab === 'event' && (
+                  <View style={styles.fieldGroup}>
+                    <Pressable
+                      style={[styles.expandableHeader, { backgroundColor: colors.card }]}
+                      onPress={() => isOwner && setShowReminderOptions(!showReminderOptions)}
+                    >
+                      <View style={styles.toggleLabelContainer}>
+                        <View style={[styles.iconBox, { backgroundColor: reminder ? "#22c55e1A" : colors.muted }]}>
+                          <AppIcon name="bell" size={18} color={reminder ? "#22c55e" : colors.mutedForeground} />
+                        </View>
+                        <View>
+                          <Text style={[styles.toggleLabel, { color: colors.foreground }]}>Reminder</Text>
+                          <Text style={[styles.valueLabel, { color: colors.mutedForeground }]}>{getReminderLabel()}</Text>
+                        </View>
+                      </View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Switch
+                          value={reminder}
+                          onValueChange={setReminder}
+                          trackColor={{ false: colors.muted, true: colors.primary }}
+                          disabled={!isOwner}
+                        />
+                        <AppIcon
+                          name="chevronDown"
+                          size={20}
+                          color={colors.mutedForeground}
+                          style={{ transform: [{ rotate: showReminderOptions ? '180deg' : '0deg' }] }}
+                        />
+                      </View>
+                    </Pressable>
 
-                {showReminderOptions && reminder && (
-                  <View style={[styles.expandableContent, { backgroundColor: colors.card }]}>
-                    <View style={styles.chipsContainer}>
-                      {reminderOptions.map((option) => (
-                        <Pressable
-                          key={option.value}
-                          onPress={() => isOwner && setReminderTime(option.value)}
-                          style={[
-                            styles.chip,
-                            { backgroundColor: colors.background },
-                            reminderTime === option.value && { backgroundColor: colors.primary },
-                            !isOwner && { opacity: 0.6 }
-                          ]}
-                        >
-                          <Text style={[
-                            styles.chipText,
-                            { color: colors.foreground },
-                            reminderTime === option.value && { color: colors.primaryForeground, fontWeight: "600" }
-                          ]}>
-                            {option.label}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
+                    {showReminderOptions && reminder && (
+                      <View style={[styles.expandableContent, { backgroundColor: colors.card }]}>
+                        <View style={styles.chipsContainer}>
+                          {reminderOptions.map((option) => (
+                            <Pressable
+                              key={option.value}
+                              onPress={() => isOwner && setReminderTime(option.value)}
+                              style={[
+                                styles.chip,
+                                { backgroundColor: colors.background },
+                                reminderTime === option.value && { backgroundColor: colors.primary },
+                                !isOwner && { opacity: 0.6 }
+                              ]}
+                            >
+                              <Text style={[
+                                styles.chipText,
+                                { color: colors.foreground },
+                                reminderTime === option.value && { color: colors.primaryForeground, fontWeight: "600" }
+                              ]}>
+                                {option.label}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                      </View>
+                    )}
                   </View>
                 )}
-              </View>
-            )}
 
-            {/* Color Selection - Hidden as it is auto-assigned */}
-            {/* 
+                {/* Color Selection - Hidden as it is auto-assigned */}
+                {/* 
             <View style={styles.fieldGroup}>
               <Text style={[styles.label, { color: colors.mutedForeground }]}>Color</Text>
               <View style={styles.colorRow}>
@@ -713,126 +851,129 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             </View> 
             */}
 
-            {/* Location - EVENT ONLY */}
-            {activeTab === 'event' && (
-              <View style={styles.fieldGroup}>
-                <View style={styles.labelRow}>
-                  <AppIcon name="pin" size={14} color={colors.mutedForeground} />
-                  <Text style={[styles.label, { color: colors.mutedForeground }]}>Location</Text>
+                {/* Location - EVENT ONLY */}
+                {activeTab === 'event' && (
+                  <View style={styles.fieldGroup}>
+                    <View style={styles.labelRow}>
+                      <AppIcon name="pin" size={14} color={colors.mutedForeground} />
+                      <Text style={[styles.label, { color: colors.mutedForeground }]}>Location</Text>
+                    </View>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: colors.card, color: colors.foreground }]}
+                      value={location}
+                      onChangeText={setLocation}
+                      placeholder="Add location..."
+                      placeholderTextColor={colors.mutedForeground}
+                      editable={isOwner}
+                    />
+                  </View>
+                )}
+
+                {/* Assign To */}
+                <View style={styles.fieldGroup}>
+                  <View style={styles.labelRow}>
+                    <AppIcon name="user" size={14} color={colors.mutedForeground} />
+                    <Text style={[styles.label, { color: colors.mutedForeground }]}>Assign to</Text>
+                  </View>
+                  <View style={styles.chipsContainer}>
+                    {members.map((member) => {
+                      const profileColor = PROFILE_COLORS.find(c => c.value === member.color)?.hex || colors.primary;
+                      return (
+                        <Pressable
+                          key={member.id}
+                          onPress={() => isOwner && setMemberId(member.id)}
+                          style={[
+                            styles.memberChip,
+                            { backgroundColor: colors.card },
+                            memberId === member.id && { backgroundColor: profileColor },
+                            !isOwner && { opacity: 0.6 }
+                          ]}
+                        >
+                          <Text style={styles.memberEmoji}>{member.symbol}</Text>
+                          <Text style={[
+                            styles.memberChipText,
+                            { color: colors.mutedForeground },
+                            memberId === member.id && { color: "#fff" }
+                          ]}>{member.name}</Text>
+                        </Pressable>
+                      );
+                    })}
+
+                  </View>
                 </View>
-                <TextInput
-                  style={[styles.input, { backgroundColor: colors.card, color: colors.foreground }]}
-                  value={location}
-                  onChangeText={setLocation}
-                  placeholder="Add location..."
-                  placeholderTextColor={colors.mutedForeground}
-                  editable={isOwner}
-                />
-              </View>
+
+                {/* Notes - EVENT ONLY */}
+                {activeTab === 'event' && (
+                  <View style={styles.fieldGroup}>
+                    <Text style={[styles.label, { color: colors.mutedForeground }]}>Notes</Text>
+                    <TextInput
+                      style={[styles.textArea, { backgroundColor: colors.card, color: colors.foreground }]}
+                      placeholder="Add any additional notes..."
+                      placeholderTextColor={colors.mutedForeground}
+                      multiline
+                      value={notes}
+                      onChangeText={setNotes}
+                      editable={isOwner}
+                    />
+                  </View>
+                )}
+              </>
             )}
-
-            {/* Assign To */}
-            <View style={styles.fieldGroup}>
-              <View style={styles.labelRow}>
-                <AppIcon name="user" size={14} color={colors.mutedForeground} />
-                <Text style={[styles.label, { color: colors.mutedForeground }]}>Assign to</Text>
-              </View>
-              <View style={styles.chipsContainer}>
-                {members.map((member) => {
-                  const profileColor = PROFILE_COLORS.find(c => c.value === member.color)?.hex || colors.primary;
-                  return (
-                    <Pressable
-                      key={member.id}
-                      onPress={() => isOwner && setMemberId(member.id)}
-                      style={[
-                        styles.memberChip,
-                        { backgroundColor: colors.card },
-                        memberId === member.id && { backgroundColor: profileColor },
-                        !isOwner && { opacity: 0.6 }
-                      ]}
-                    >
-                      <Text style={styles.memberEmoji}>{member.symbol}</Text>
-                      <Text style={[
-                        styles.memberChipText,
-                        { color: colors.mutedForeground },
-                        memberId === member.id && { color: "#fff" }
-                      ]}>{member.name}</Text>
-                    </Pressable>
-                  );
-                })}
-
-              </View>
-            </View>
-
-            {/* Notes - EVENT ONLY */}
-            {activeTab === 'event' && (
-              <View style={styles.fieldGroup}>
-                <Text style={[styles.label, { color: colors.mutedForeground }]}>Notes</Text>
-                <TextInput
-                  style={[styles.textArea, { backgroundColor: colors.card, color: colors.foreground }]}
-                  placeholder="Add any additional notes..."
-                  placeholderTextColor={colors.mutedForeground}
-                  multiline
-                  value={notes}
-                  onChangeText={setNotes}
-                  editable={isOwner}
-                />
-              </View>
-            )}
-
             <View style={{ height: 40 }} />
           </ScrollView>
 
           {/* Footer */}
-          <View style={[styles.footer, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
-            <Pressable
-              style={[styles.cancelButton, { backgroundColor: colors.muted }]}
-              onPress={() => onOpenChange(false)}
-            >
-              <Text style={[styles.cancelButtonText, { color: colors.foreground }]}>Cancel</Text>
-            </Pressable>
-            {isEditing && isOwner && (
+          {activeTab !== 'existing' && (
+            <View style={[styles.footer, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
               <Pressable
-                style={[styles.deleteButton, { backgroundColor: colors.muted }]}
-                onPress={() => {
-                  const itemType = (eventToEdit as any).type === 'task' ? 'task' : 'event';
-                  const itemName = itemType === 'task' ? 'Task' : 'Event';
+                style={[styles.cancelButton, { backgroundColor: colors.muted }]}
+                onPress={() => onOpenChange(false)}
+              >
+                <Text style={[styles.cancelButtonText, { color: colors.foreground }]}>Cancel</Text>
+              </Pressable>
+              {isEditing && isOwner && (
+                <Pressable
+                  style={[styles.deleteButton, { backgroundColor: colors.muted }]}
+                  onPress={() => {
+                    const itemType = (eventToEdit as any).type === 'task' ? 'task' : 'event';
+                    const itemName = itemType === 'task' ? 'Task' : 'Event';
 
-                  Alert.alert(
-                    `Delete ${itemName}`,
-                    `Are you sure you want to delete this ${itemName.toLowerCase()}?`,
-                    [
-                      { text: "Cancel", style: "cancel" },
-                      {
-                        text: "Delete",
-                        style: "destructive",
-                        onPress: () => {
-                          if (itemType === 'task') {
-                            deleteTask(eventToEdit.id);
-                          } else {
-                            deleteEvent(eventToEdit.id);
+                    Alert.alert(
+                      `Delete ${itemName}`,
+                      `Are you sure you want to delete this ${itemType}?`,
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Delete",
+                          style: "destructive",
+                          onPress: () => {
+                            if (itemType === 'task') {
+                              deleteTask(eventToEdit.id);
+                            } else {
+                              deleteEvent(eventToEdit.id);
+                            }
+                            onOpenChange(false);
                           }
-                          onOpenChange(false);
                         }
-                      }
-                    ]
-                  );
-                }}
-              >
-                <AppIcon name="trash" size={20} color={colors.danger} />
-              </Pressable>
-            )}
-            {isOwner && (
-              <Pressable
-                style={[styles.saveButton, { backgroundColor: colors.primary }]}
-                onPress={handleSave}
-              >
-                <Text style={[styles.saveButtonText, { color: colors.primaryForeground }]}>
-                  {isEditing ? "Save Changes" : (activeTab === 'event' ? "Add Event" : "Add Task")}
-                </Text>
-              </Pressable>
-            )}
-          </View>
+                      ]
+                    );
+                  }}
+                >
+                  <Text style={[styles.deleteButtonText, { color: colors.danger }]}>Delete</Text>
+                </Pressable>
+              )}
+              {isOwner && (
+                <Pressable
+                  style={[styles.saveButton, { backgroundColor: colors.primary }]}
+                  onPress={handleSave}
+                >
+                  <Text style={[styles.saveButtonText, { color: colors.primaryForeground }]}>
+                    {isEditing ? "Save Changes" : (activeTab === 'event' ? "Add Event" : "Add Task")}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          )}
         </Pressable>
       </Pressable>
     </Modal >
@@ -1095,6 +1236,9 @@ const styles = StyleSheet.create({
   optionText: {
     fontSize: 14,
   },
+  deleteButtonText: {
+    fontWeight: "600",
+  },
   ownerNotice: {
     flexDirection: "row",
     alignItems: "center",
@@ -1107,5 +1251,42 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "500",
     flex: 1,
+  },
+  existingEventsContainer: {
+    gap: 12,
+    marginTop: 12,
+  },
+  existingEventCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    gap: 12,
+  },
+  existingEventColorBar: {
+    width: 4,
+    height: 40,
+    borderRadius: 2,
+  },
+  existingEventContent: {
+    flex: 1,
+  },
+  existingEventTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  existingEventTime: {
+    fontSize: 13,
+  },
+  noEventsContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    gap: 16,
+  },
+  noEventsText: {
+    fontSize: 16,
+    textAlign: 'center',
   },
 });

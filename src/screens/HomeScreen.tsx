@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { setupNotifications, displayImmediateNotification, scheduleDailyNotification } from "../utils/notifications";
 import {
   View,
@@ -9,6 +9,9 @@ import {
   TouchableOpacity,
   Platform,
   Image,
+  Alert,
+  StatusBar,
+  Dimensions
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppLayout } from "../components/layout/AppLayout";
@@ -20,6 +23,7 @@ import { useThemeColors } from "../contexts/ThemeContext";
 import { AddEventModal } from "../components/modals/AddEventModal";
 import { AddTaskModal } from "../components/modals/AddTaskModal";
 import { AddShoppingItemModal } from "../components/modals/AddShoppingItemModal";
+import { AddMemberModal } from "../components/modals/AddMemberModal";
 import { FamilyOnboarding } from "../components/family/FamilyOnboarding";
 import { FamilyDashboard } from "../components/dashboard/FamilyDashboard";
 import { NotificationPanel } from "../components/notifications/NotificationPanel";
@@ -43,7 +47,7 @@ const MEAL_TYPES: { key: MealType; label: string; icon: string }[] = [
 export const HomeScreen: React.FC = () => {
   const colors = useThemeColors();
   const radius = theme.radius; // Dynamic radius
-  const { members, activeMember, events, groceryList, setActiveMember, addGroceryItem } = useFamily();
+  const { members, activeMember, events, groceryList, setActiveMember, addGroceryItem, tasks } = useFamily();
   const { getMealsForDay, getRecipeById } = useMealPlan();
   const navigation = useNavigation();
   const { openSidebar } = useSidebar();
@@ -55,6 +59,7 @@ export const HomeScreen: React.FC = () => {
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [showAddTask, setShowAddTask] = useState(false);
   const [showAddItem, setShowAddItem] = useState(false);
+  const [showMemberModal, setShowMemberModal] = useState(false);
   const [showFamilyOnboarding, setShowFamilyOnboarding] = useState(false);
 
   // Dashboard Toggle
@@ -127,6 +132,7 @@ export const HomeScreen: React.FC = () => {
     }
   };
 
+  // Dynamic Alerts derived from real data
   const alerts: {
     id: string;
     title: string;
@@ -136,68 +142,57 @@ export const HomeScreen: React.FC = () => {
     icon: AppIconName;
     time: string;
     read: boolean;
-  }[] = [
-      {
-        id: "1",
-        title: "Grocery Running Low",
-        detail: "Milk, Eggs, Bread needed",
-        tone: colors.warning + '20',
-        textColor: colors.warning,
-        icon: "shoppingCart",
-        time: "5 hours ago",
-        read: false,
-      },
-      {
-        id: "2",
-        title: "LPG Refill Due",
-        detail: "Refill before Jan 15",
-        tone: colors.warning + '20',
-        textColor: colors.warning,
-        icon: "bell",
-        time: "2 hours ago",
-        read: false,
-      },
-      {
-        id: "3",
-        title: "Warranty Expiring",
-        detail: "TV warranty expires in 30 days",
-        tone: colors.info + '20',
-        textColor: colors.info,
-        icon: "alert",
-        time: "Yesterday",
-        read: true,
-      },
-      {
-        id: "4",
-        title: "School Event Tomorrow",
-        detail: "Parent-teacher meeting at 10:00 AM",
+  }[] = React.useMemo(() => {
+    const newAlerts: any[] = [];
+    const todayStr = new Date().toISOString().split("T")[0];
+
+    // 1. Events Today
+    const eventsToday = events.filter(e => e.date === todayStr);
+    eventsToday.forEach(e => {
+      newAlerts.push({
+        id: `evt-${e.id}`,
+        title: "Event Today",
+        detail: `${e.title} at ${e.time}`,
         tone: colors.primary + '20',
         textColor: colors.primary,
         icon: "calendar",
-        time: "3 hours ago",
+        time: "Today",
         read: false,
-      },
-      {
-        id: "5",
-        title: "Health Alert",
-        detail: "High sugar intake detected",
+      });
+    });
+
+    // 2. Pending Tasks (High Priority)
+    const highPriorityTasks = tasks.filter(t => t.priority === 'high' && t.status === 'pending');
+    highPriorityTasks.forEach(t => {
+      newAlerts.push({
+        id: `task-${t.id}`,
+        title: "High Priority Task",
+        detail: t.name,
         tone: colors.danger + '20',
         textColor: colors.danger,
-        icon: "heart",
-        time: "2 days ago",
-        read: true,
-      },
-      {
-        id: "6",
-        title: "Task Completed",
-        detail: "Ananya completed 'Clean Room' task",
-        tone: colors.success + '20',
-        textColor: colors.success,
         icon: "checkSquare",
-        time: "Yesterday",
-        read: true,
-      }
-    ];
+        time: t.due, // "Today" or ISO date
+        read: false,
+      })
+    });
+
+    // 3. Pending Grocery Items
+    const pendingItems = groceryList.filter(i => !i.completed);
+    if (pendingItems.length > 0) {
+      newAlerts.push({
+        id: "grocery-pending",
+        title: "Grocery Needed",
+        detail: `${pendingItems.length} items to buy`,
+        tone: colors.warning + '20',
+        textColor: colors.warning,
+        icon: "shoppingCart",
+        time: "Now",
+        read: false,
+      });
+    }
+
+    return newAlerts;
+  }, [events, groceryList, tasks, colors]);
 
   const quickActions: { label: string; iconName: AppIconName; action: () => void; color: string; bg: string }[] = [
     { label: "Event", iconName: "calendar", action: () => setShowAddEvent(true), color: colors.info, bg: colors.info + '25' },
@@ -234,9 +229,9 @@ export const HomeScreen: React.FC = () => {
   });
 
   const glanceMetrics = [
-    { label: "Events", value: (events || []).length },
-    { label: "Tasks", value: (groceryList || []).length }, // Placeholder
-    { label: "Reminders", value: (todayMeals || []).length },
+    { label: "Events", value: (events || []).filter(e => e.date === todayKey).length },
+    { label: "Tasks", value: (tasks || []).filter(t => t.status === 'pending').length },
+    { label: "Shopping", value: (groceryList || []).filter(item => !item.completed).length },
   ];
 
   return (
@@ -298,7 +293,13 @@ export const HomeScreen: React.FC = () => {
                 return (
                   <Pressable
                     key={member?.id || Math.random().toString()}
-                    onPress={() => member && setActiveMember(member)}
+                    onPress={() => {
+                      try {
+                        if (member) setActiveMember(member);
+                      } catch (e) {
+                        console.error("Error switching member:", e);
+                      }
+                    }}
                     style={[styles.memberCard]}
                   >
                     <View style={[styles.memberIconWrapper, {
@@ -316,6 +317,25 @@ export const HomeScreen: React.FC = () => {
                   </Pressable>
                 );
               })}
+
+              {/* Add Member Button */}
+              <Pressable
+                style={[styles.memberCard]}
+                onPress={() => setShowMemberModal(true)}
+              >
+                <View style={[styles.memberIconWrapper, {
+                  borderColor: colors.border,
+                  backgroundColor: colors.card,
+                  borderRadius: radius.card,
+                  borderWidth: 2,
+                  borderStyle: 'dashed'
+                }]}>
+                  <AppIcon name="plus" size={24} color={colors.primary} />
+                </View>
+                <Text style={{ fontSize: 12, fontWeight: "600", color: colors.mutedForeground }}>
+                  Add
+                </Text>
+              </Pressable>
             </View>
 
           </View>
@@ -494,6 +514,7 @@ export const HomeScreen: React.FC = () => {
         onClose={() => setShowAddItem(false)}
         onAdd={handleAddItem}
       />
+      <AddMemberModal open={showMemberModal} onClose={() => setShowMemberModal(false)} />
       <FamilyOnboarding open={showFamilyOnboarding} onClose={() => setShowFamilyOnboarding(false)} />
     </>
   );

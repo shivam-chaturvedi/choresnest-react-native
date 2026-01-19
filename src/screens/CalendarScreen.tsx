@@ -521,11 +521,8 @@ export const CalendarScreen: React.FC = () => {
                 ))}
               </View>
 
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                scrollEventThrottle={16}
-                contentContainerStyle={{ width: (Dimensions.get('window').width - 50) }}
+              <View
+                style={{ width: (Dimensions.get('window').width - 50) }}
               >
                 <View style={{ flex: 1, position: 'relative' }}>
                   {Array.from({ length: 24 }).map((_, hour) => (
@@ -702,7 +699,7 @@ export const CalendarScreen: React.FC = () => {
                     />
                   ))}
                 </View>
-              </ScrollView>
+              </View>
             </View>
           </ScrollView>
         </View>
@@ -888,7 +885,8 @@ export const CalendarScreen: React.FC = () => {
           }}
           initialDate={format(selectedDate, "yyyy-MM-dd")}
           initialTime={selectedTime}
-          eventToEdit={selectedEvent}
+          eventToEdit={selectedEvent as CalendarEvent}
+          onSelectEvent={setSelectedEvent}
         />
         <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} />
       </View>

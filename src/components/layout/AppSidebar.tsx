@@ -159,33 +159,59 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   };
 
   const handleLogout = async () => {
-    try {
-      await logout();
-      onClose();
-      // Navigation replacement happens automatically via AppNavigator auth state
-    } catch (error) {
-      console.error("Logout failed", error);
-    }
+    Alert.alert(
+      "Log Out",
+      "Are you sure you want to log out?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        {
+          text: "Log Out",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await logout();
+              onClose();
+              // Navigation replacement happens automatically via AppNavigator auth state
+            } catch (error) {
+              console.error("Logout failed", error);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const handleSwitchMember = (member: FamilyMember) => {
-    setActiveMember(member);
-    setIsProfilesOpen(false); // Close dropdown after selection
+    try {
+      setActiveMember(member);
+      setIsProfilesOpen(false); // Close dropdown after selection
+    } catch (error) {
+      console.error("Failed to switch member:", error);
+      Alert.alert("Error", "Could not switch profile. Please try again.");
+    }
   };
 
   const handleUpdateColor = (color: ProfileColor) => {
-    if (!editingMemberId) return;
+    try {
+      if (!editingMemberId) return;
 
-    // Check if color is taken by another member
-    const isTaken = members.some(m => m.id !== editingMemberId && m.color === color.value);
+      // Check if color is taken by another member
+      const isTaken = members.some(m => m.id !== editingMemberId && m.color === color.value);
 
-    if (isTaken) {
-      Alert.alert("Color Taken", "This color is already assigned to another family member. Please choose a unique color.");
-      return;
+      if (isTaken) {
+        Alert.alert("Color Taken", "This color is already assigned to another family member. Please choose a unique color.");
+        return;
+      }
+
+      updateMemberColor(editingMemberId, color.value);
+      setEditingMemberId(null);
+    } catch (error) {
+      console.error("Failed to update color:", error);
+      Alert.alert("Error", "Could not update color. Please try again.");
     }
-
-    updateMemberColor(editingMemberId, color.value);
-    setEditingMemberId(null);
   };
 
   if (!mounted) {
@@ -196,7 +222,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     { icon: Utensils, label: 'Recipes', route: 'Recipes' },
     { icon: Calendar, label: 'Meal Plan', route: 'MealPlan' },
     { icon: ClipboardList, label: 'Shopping Lists', route: 'lists' }, // Fixed route name to lowercase 'lists' tab
-    { icon: Users, label: 'Family', route: 'Family' },
     { icon: FileText, label: 'Vault', route: 'Vault' },
     { icon: DollarSign, label: 'Expenses', route: 'Expenses' },
     { icon: StickyNote, label: 'Notes', route: 'Notes' },
@@ -263,7 +288,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                   onPress={() => setIsProfilesOpen(!isProfilesOpen)}
                 >
                   <Text style={styles.familyName} numberOfLines={1}>{activeMember?.name || 'Select Profile'}</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
                     <Text style={styles.memberName}>{isProfilesOpen ? 'Close profiles' : 'Switch profile'}</Text>
                     {isProfilesOpen ? (
                       <ChevronDown size={14} color="rgba(255,255,255,0.7)" style={{ marginLeft: 4 }} />
@@ -507,7 +532,6 @@ const styles = StyleSheet.create({
   memberName: {
     fontSize: 14,
     color: "rgba(255,255,255,0.8)",
-    marginBottom: 16,
   },
   settingsButton: {
     flexDirection: 'row',
