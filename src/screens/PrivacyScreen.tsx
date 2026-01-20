@@ -7,6 +7,8 @@ import {
     Pressable,
     Switch,
     Alert,
+    Modal,
+    TextInput
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { AppLayout } from "../components/layout/AppLayout";
@@ -28,7 +30,6 @@ import {
 const securitySettings = [
     { id: 'bio', icon: Fingerprint, label: 'Biometric Lock', description: 'Use fingerprint or face to unlock', enabled: true },
     { id: 'app', icon: Lock, label: 'App Lock', description: 'Require PIN when opening app', enabled: false },
-    { id: 'hide', icon: Eye, label: 'Hide Sensitive Data', description: 'Blur amounts and personal info', enabled: false },
 ];
 
 export const PrivacyScreen: React.FC = () => {
@@ -45,6 +46,54 @@ export const PrivacyScreen: React.FC = () => {
 
     const toggleSetting = (id: string) => {
         setSettingsState(prev => ({ ...prev, [id]: !prev[id] }));
+    };
+
+    // Modal States
+    const [showPasswordModal, setShowPasswordModal] = useState(false);
+    const [showPinModal, setShowPinModal] = useState(false);
+
+    // Form States
+    const [currentPassword, setCurrentPassword] = useState("");
+    const [newPassword, setNewPassword] = useState("");
+    const [confirmPassword, setConfirmPassword] = useState("");
+    const [pin, setPin] = useState("");
+    const [confirmPin, setConfirmPin] = useState("");
+
+    const handleSavePassword = () => {
+        if (!currentPassword || !newPassword || !confirmPassword) {
+            Alert.alert("Error", "Please fill in all fields");
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            Alert.alert("Error", "New passwords do not match");
+            return;
+        }
+        // Mock save
+        setShowPasswordModal(false);
+        Alert.alert("Success", "Password changed successfully");
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+    };
+
+    const handleSavePin = () => {
+        if (!pin || !confirmPin) {
+            Alert.alert("Error", "Please fill in all fields");
+            return;
+        }
+        if (pin.length !== 4) {
+            Alert.alert("Error", "PIN must be 4 digits");
+            return;
+        }
+        if (pin !== confirmPin) {
+            Alert.alert("Error", "PINs do not match");
+            return;
+        }
+        // Mock save
+        setShowPinModal(false);
+        Alert.alert("Success", "PIN code set successfully");
+        setPin("");
+        setConfirmPin("");
     };
 
     return (
@@ -103,7 +152,7 @@ export const PrivacyScreen: React.FC = () => {
                 <View>
                     <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Access</Text>
                     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
-                        <Pressable style={styles.accessRow}>
+                        <Pressable style={styles.accessRow} onPress={() => setShowPasswordModal(true)}>
                             <View style={[styles.iconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
                                 <Key size={20} color={colors.mutedForeground} />
                             </View>
@@ -114,7 +163,7 @@ export const PrivacyScreen: React.FC = () => {
                             <ChevronRight size={20} color={colors.mutedForeground} />
                         </Pressable>
                         <View style={[styles.divider, { backgroundColor: colors.border }]} />
-                        <Pressable style={styles.accessRow}>
+                        <Pressable style={styles.accessRow} onPress={() => setShowPinModal(true)}>
                             <View style={[styles.iconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
                                 <Lock size={20} color={colors.mutedForeground} />
                             </View>
@@ -126,6 +175,123 @@ export const PrivacyScreen: React.FC = () => {
                         </Pressable>
                     </View>
                 </View>
+
+                {/* Change Password Modal */}
+                <Modal
+                    visible={showPasswordModal}
+                    transparent
+                    animationType="slide"
+                    onRequestClose={() => setShowPasswordModal(false)}
+                >
+                    <View style={styles.modalOverlay}>
+                        <View style={[styles.modalContent, { backgroundColor: colors.card, borderRadius: radius.card }]}>
+                            <View style={styles.modalHeader}>
+                                <Text style={[styles.modalTitle, { color: colors.foreground }]}>Change Password</Text>
+                                <Pressable onPress={() => setShowPasswordModal(false)}>
+                                    <Text style={{ color: colors.mutedForeground, padding: 4 }}>✕</Text>
+                                </Pressable>
+                            </View>
+
+                            <View style={{ gap: 16 }}>
+                                <View>
+                                    <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Current Password</Text>
+                                    <TextInput
+                                        style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.sm }]}
+                                        secureTextEntry
+                                        value={currentPassword}
+                                        onChangeText={setCurrentPassword}
+                                        placeholder="Enter current password"
+                                        placeholderTextColor={colors.mutedForeground}
+                                    />
+                                </View>
+                                <View>
+                                    <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>New Password</Text>
+                                    <TextInput
+                                        style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.sm }]}
+                                        secureTextEntry
+                                        value={newPassword}
+                                        onChangeText={setNewPassword}
+                                        placeholder="Enter new password"
+                                        placeholderTextColor={colors.mutedForeground}
+                                    />
+                                </View>
+                                <View>
+                                    <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Confirm New Password</Text>
+                                    <TextInput
+                                        style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.sm }]}
+                                        secureTextEntry
+                                        value={confirmPassword}
+                                        onChangeText={setConfirmPassword}
+                                        placeholder="Confirm new password"
+                                        placeholderTextColor={colors.mutedForeground}
+                                    />
+                                </View>
+
+                                <Pressable
+                                    onPress={handleSavePassword}
+                                    style={[styles.saveButton, { backgroundColor: colors.primary, borderRadius: radius.sm }]}
+                                >
+                                    <Text style={{ color: colors.primaryForeground, fontWeight: '600' }}>Update Password</Text>
+                                </Pressable>
+                            </View>
+                        </View>
+                    </View>
+                </Modal>
+
+                {/* Set PIN Modal */}
+                <Modal
+                    visible={showPinModal}
+                    transparent
+                    animationType="slide"
+                    onRequestClose={() => setShowPinModal(false)}
+                >
+                    <View style={styles.modalOverlay}>
+                        <View style={[styles.modalContent, { backgroundColor: colors.card, borderRadius: radius.card }]}>
+                            <View style={styles.modalHeader}>
+                                <Text style={[styles.modalTitle, { color: colors.foreground }]}>Set PIN Code</Text>
+                                <Pressable onPress={() => setShowPinModal(false)}>
+                                    <Text style={{ color: colors.mutedForeground, padding: 4 }}>✕</Text>
+                                </Pressable>
+                            </View>
+
+                            <View style={{ gap: 16 }}>
+                                <View>
+                                    <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Enter 4-digit PIN</Text>
+                                    <TextInput
+                                        style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.sm, letterSpacing: 8, fontSize: 20, textAlign: 'center' }]}
+                                        secureTextEntry
+                                        keyboardType="numeric"
+                                        maxLength={4}
+                                        value={pin}
+                                        onChangeText={setPin}
+                                        placeholder="••••"
+                                        placeholderTextColor={colors.mutedForeground}
+                                    />
+                                </View>
+                                <View>
+                                    <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Confirm PIN</Text>
+                                    <TextInput
+                                        style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.sm, letterSpacing: 8, fontSize: 20, textAlign: 'center' }]}
+                                        secureTextEntry
+                                        keyboardType="numeric"
+                                        maxLength={4}
+                                        value={confirmPin}
+                                        onChangeText={setConfirmPin}
+                                        placeholder="••••"
+                                        placeholderTextColor={colors.mutedForeground}
+                                    />
+                                </View>
+
+                                <Pressable
+                                    onPress={handleSavePin}
+                                    style={[styles.saveButton, { backgroundColor: colors.primary, borderRadius: radius.sm }]}
+                                >
+                                    <Text style={{ color: colors.primaryForeground, fontWeight: '600' }}>Set PIN</Text>
+                                </Pressable>
+                            </View>
+                        </View>
+                    </View>
+                </Modal>
 
                 {/* Data Privacy */}
                 <View>
@@ -319,4 +485,44 @@ const styles = StyleSheet.create({
         fontWeight: '500',
         fontSize: 14,
     },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        padding: 20,
+    },
+    modalContent: {
+        padding: 24,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 8,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+    },
+    inputLabel: {
+        fontSize: 13,
+        fontWeight: '500',
+        marginBottom: 8,
+    },
+    input: {
+        paddingHorizontal: 12,
+        paddingVertical: 12,
+        fontSize: 16,
+    },
+    saveButton: {
+        paddingVertical: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 8,
+    }
 });

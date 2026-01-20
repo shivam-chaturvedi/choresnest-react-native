@@ -47,7 +47,6 @@ const repeatOptions = [
   { value: "monthly", label: "Every month" },
   { value: "yearly", label: "Every year" },
   { value: "weekday", label: "Every weekday (Mon-Fri)" },
-  { value: "custom", label: "Custom..." },
 ];
 
 const reminderOptions = [
@@ -165,6 +164,11 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       const member = members.find(m => m.id === eventToEdit.memberId);
       if (member) setColor(member.color);
 
+      // Set explicit additional fields
+      if (eventToEdit.recurrenceRule) setRepeatType(eventToEdit.recurrenceRule);
+      if (eventToEdit.recurrenceEndDate) setRepeatEndDate(new Date(eventToEdit.recurrenceEndDate));
+      if (eventToEdit.endDate) setEndDate(new Date(eventToEdit.endDate));
+
     } else {
       // Reset form for new event
       setActiveTab('event');
@@ -214,6 +218,9 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       const initialColor = activeMemberObj ? activeMemberObj.color : "member-blue";
       setColor(initialColor);
 
+      setRepeatType("never");
+      setRepeatEndDate(null);
+      setReminder(true);
       setRepeatType("never");
       setRepeatEndDate(null);
       setReminder(true);
@@ -332,6 +339,10 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             icon: selectedIcon,
             memberId,
             location,
+            endDate: endDate ? format(endDate, "yyyy-MM-dd") : undefined,
+            isRecurring: repeatType !== 'never',
+            recurrenceRule: repeatType !== 'never' ? repeatType : undefined,
+            recurrenceEndDate: repeatEndDate ? format(repeatEndDate, "yyyy-MM-dd") : undefined,
           });
         } else {
           addEvent({
@@ -344,6 +355,10 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             icon: selectedIcon,
             memberId,
             location,
+            endDate: endDate ? format(endDate, "yyyy-MM-dd") : undefined,
+            isRecurring: repeatType !== 'never',
+            recurrenceRule: repeatType !== 'never' ? repeatType : undefined,
+            recurrenceEndDate: repeatEndDate ? format(repeatEndDate, "yyyy-MM-dd") : undefined,
           });
         }
       }
@@ -366,10 +381,9 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
   return (
     <Modal visible={open} transparent animationType="slide" onRequestClose={() => onOpenChange(false)}>
-      <Pressable style={styles.overlay} onPress={() => onOpenChange(false)}>
-        <Pressable
+      <View style={styles.overlay}>
+        <View
           style={[styles.container, { backgroundColor: colors.background }]}
-          onPress={(e) => e.stopPropagation()}
         >
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
@@ -974,8 +988,8 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
               )}
             </View>
           )}
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal >
   );
 };

@@ -15,13 +15,27 @@ export interface FamilyMember {
 export interface VaultDocument {
   id: string;
   name: string;
-  type: "bill" | "invoice" | "warranty" | "certificate" | "other";
+  type: "bill" | "warranty" | "insurance" | "service" | "certificate" | "receipt" | "other";
   icon: string;
   date: string;
   expiryDate?: string;
   memberId: string;
   sharedWith: string[];
   uri?: string;
+  // Warranty-specific fields
+  purchaseDate?: string;
+  warrantyTillDate?: string;
+  // Bill-specific fields
+  billAmount?: string;
+  billDate?: string;
+  // Insurance-specific fields
+  provider?: string;
+  policyNumber?: string;
+  premiumAmount?: string;
+  // Service-specific fields
+  serviceDate?: string;
+  nextServiceDate?: string;
+  cost?: string;
 }
 
 export interface CalendarEvent {
@@ -38,7 +52,9 @@ export interface CalendarEvent {
   visibility?: "default" | "public" | "private";
   timeZone?: string;
   isRecurring?: boolean;
-  recurrenceRule?: string;
+  recurrenceRule?: string; // "daily", "weekly", etc.
+  recurrenceEndDate?: string; // YYYY-MM-DD
+  endDate?: string; // YYYY-MM-DD for multi-day events
 }
 
 export interface GroceryCategory {
@@ -86,6 +102,7 @@ interface FamilyContextType {
   globalVault: VaultDocument[];
   memberVaults: Record<string, VaultDocument[]>;
   addDocument: (doc: Omit<VaultDocument, "id">) => void;
+  updateDocument: (docId: string, memberId: string, updates: Partial<Omit<VaultDocument, "id">>) => void;
   shareDocument: (docId: string, memberId: string, targetMemberIds: string[]) => void;
   events: CalendarEvent[];
   addEvent: (event: Omit<CalendarEvent, "id">) => void;
@@ -266,6 +283,26 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   };
 
+  const updateDocument = (docId: string, memberId: string, updates: Partial<Omit<VaultDocument, "id">>) => {
+    try {
+      if (!docId || !memberId || !updates) return;
+      if (memberId === "global") {
+        setGlobalVault((prev) =>
+          prev.map((doc) => (doc.id === docId ? { ...doc, ...updates } : doc))
+        );
+      } else {
+        setMemberVaults((prev) => ({
+          ...prev,
+          [memberId]: (prev[memberId] || []).map((doc) =>
+            doc.id === docId ? { ...doc, ...updates } : doc
+          ),
+        }));
+      }
+    } catch (error) {
+      console.error("Error in updateDocument:", error);
+    }
+  };
+
   const shareDocument = (docId: string, memberId: string, targetMemberIds: string[]) => {
     try {
       if (!docId || !memberId || !targetMemberIds) return;
@@ -406,6 +443,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         globalVault,
         memberVaults,
         addDocument,
+        updateDocument,
         shareDocument,
         events,
         addEvent,

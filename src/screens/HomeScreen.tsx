@@ -578,6 +578,8 @@ const styles = StyleSheet.create({
   membersRow: {
     flexDirection: "row",
     gap: 12,
+    flexWrap: "wrap",
+    justifyContent: "flex-start",
   },
   memberCard: {
     alignItems: "center",

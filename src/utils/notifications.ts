@@ -74,7 +74,6 @@ export const scheduleDailyNotification = async () => {
                 alarmManager: true, // Allow executing even if app is in doze mode
             },
         );
-        console.log("Daily notification scheduled for 10 PM");
     } catch (e) {
         console.error("Scheduling daily failed", e);
     }

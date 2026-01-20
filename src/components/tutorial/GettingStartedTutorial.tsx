@@ -18,7 +18,7 @@ const tutorialSteps = [
   {
     id: 'welcome',
     icon: Sparkles,
-    title: 'Welcome to Todo Helpmate!',
+    title: 'Welcome to Family Chores!',
     description: 'Your all-in-one family organizer. Let us show you around in just 30 seconds.',
     highlight: 'Manage your entire family life from one app',
     emoji: '👋'
@@ -79,14 +79,7 @@ const tutorialSteps = [
     highlight: 'Visualize spending patterns',
     emoji: '💰'
   },
-  {
-    id: 'family',
-    icon: Users,
-    title: 'Family Members',
-    description: 'Add all family members with unique colors. Assign tasks and events to specific people.',
-    highlight: 'Each member gets their own color',
-    emoji: '👨‍👩‍👧‍👦'
-  },
+
   {
     id: 'search',
     icon: Search,

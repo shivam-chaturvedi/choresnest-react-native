@@ -36,11 +36,11 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string></string>
 	<key>NSCameraUsageDescription</key>
-	<string>We need access to your camera to take photos of your recipes.</string>
+	<string>We need access to your camera to scan documents and take photos.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>We need access to your photo library to upload recipe images.</string>
+	<string>We need access to your photo library to can upload documents and images.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>We need access to your microphone to record audio recipes.</string>
+	<string>We need access to your microphone to record audio notes.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

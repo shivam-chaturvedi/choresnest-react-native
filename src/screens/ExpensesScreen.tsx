@@ -13,9 +13,11 @@ import {
   Lightbulb,
   Target,
   BarChart3,
-  PieChart as PieChartIcon
+  PieChart as PieChartIcon,
+  Edit2
 } from 'lucide-react-native';
 import { AddExpenseModal, ExpenseData } from '../components/modals/AddExpenseModal';
+import { EditBudgetsModal } from "../components/modals/EditBudgetsModal";
 import { useSidebar } from '../contexts/SidebarContext';
 import Svg, { Path, Defs, LinearGradient, Stop, G, Circle, Text as SvgText } from 'react-native-svg';
 import { AppIcon } from '../components/ui/AppIcon';
@@ -33,6 +35,7 @@ export const ExpensesScreen: React.FC = () => {
   const radius = useThemeRadius();
   const [activeTab, setActiveTab] = useState('Overview');
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
+  const [budgetModalOpen, setBudgetModalOpen] = useState(false);
   const [viewDate, setViewDate] = useState(new Date()); // For month navigation in trend chart
   const { openSidebar } = useSidebar();
 
@@ -649,6 +652,9 @@ export const ExpensesScreen: React.FC = () => {
                 <View style={styles.chartHeader}>
                   <Target size={20} color={colors.primary} />
                   <Text style={[styles.chartTitle, { color: colors.foreground }]}>Budget vs Actual</Text>
+                  <TouchableOpacity onPress={() => setBudgetModalOpen(true)} style={{ marginLeft: 'auto', padding: 4 }}>
+                    <Edit2 size={16} color={colors.mutedForeground} />
+                  </TouchableOpacity>
                 </View>
 
                 <View style={{ gap: 16 }}>
@@ -768,8 +774,13 @@ export const ExpensesScreen: React.FC = () => {
         visible={expenseModalOpen}
         onClose={() => setExpenseModalOpen(false)}
         onAdd={handleAddExpense}
-        budgets={budgets} // Now from Context
+        budgets={budgets}
         currentSpending={categorySpending} // Now dynamic
+      />
+
+      <EditBudgetsModal
+        visible={budgetModalOpen}
+        onClose={() => setBudgetModalOpen(false)}
       />
 
     </AppLayout >

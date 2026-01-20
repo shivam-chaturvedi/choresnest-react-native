@@ -151,7 +151,6 @@ const featureGuides = [
       "Save favorites for quick access",
       "View ingredients and step-by-step instructions",
       "See cooking time and difficulty level",
-      "Check nutritional information",
     ],
     tips: [
       "Filter by dietary restrictions",
@@ -202,27 +201,7 @@ const featureGuides = [
       "Use insights to identify savings opportunities",
     ],
   },
-  {
-    id: "family",
-    icon: Users,
-    title: "Family Members",
-    path: "Family",
-    description: "Manage family profiles, roles, and permissions.",
-    howToUse: [
-      "Tap \"Add Member\" to create new profiles",
-      "Set roles (Parent, Child, Guardian)",
-      "Assign unique colors for calendar events",
-      "Edit member details anytime",
-      "View member-specific tasks and events",
-      "Set permissions for children accounts",
-    ],
-    tips: [
-      "Use distinct colors for easy identification",
-      "Add birthdates for birthday reminders",
-      "Set nicknames for personalization",
-      "Link email for notifications",
-    ],
-  },
+
   {
     id: "notifications",
     icon: Bell,
@@ -312,15 +291,11 @@ const faqItems = [
     questions: [
       {
         q: "How do I set up my family account?",
-        a: "After signing up, you'll go through a quick onboarding where you can add your family name and invite members. You can also do this later from Settings → Family Members.",
+        a: "After signing up, you'll go through a quick onboarding where you can set your family name. You can manage settings from the Settings screen.",
       },
       {
         q: "Can I use the app on multiple devices?",
         a: "Yes! Your data syncs across all devices. Just sign in with the same account on each device.",
-      },
-      {
-        q: "How do I invite family members?",
-        a: "Go to Settings → Family Members → Add Member. Enter their email and they'll receive an invitation to join your family group.",
       },
     ],
   },

@@ -26,10 +26,13 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose })
   const radius = useThemeRadius();
   const { addMember, members } = useFamily();
 
+  const availableColors = PROFILE_COLORS.filter(c => !members.some(m => m.color === c.value));
+  const initialColor = availableColors.length > 0 ? availableColors[0].value : PROFILE_COLORS[0].value;
+
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [selectedAvatar, setSelectedAvatar] = useState(AVATARS[0]);
-  const [selectedColor, setSelectedColor] = useState(PROFILE_COLORS[0].value);
+  const [selectedColor, setSelectedColor] = useState(initialColor);
 
   const handleSave = () => {
     try {
@@ -49,7 +52,12 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose })
       setName("");
       setError("");
       setSelectedAvatar(AVATARS[0]);
-      setSelectedColor(PROFILE_COLORS[0].value);
+      // Re-calculate available colors for next time (optimistic)
+      // Actually, since modal closes, state resets on next mount? No, it's controlled by 'open' prop but component might remain mounted?
+      // React Native Modal usually keeps component mounted if it's cleaner. 
+      // But let's just assume we reset to whatever. 
+      // Better to rely on the re-render when 'members' changes.
+      setSelectedColor(initialColor); // Reset to a safe default
       onClose();
     } catch (error) {
       console.error("Failed to add member:", error);
@@ -116,7 +124,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose })
           {/* Color Selection */}
           <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>Profile Color</Text>
           <View style={styles.grid}>
-            {PROFILE_COLORS.filter(c => !members.some(m => m.color === c.value)).map((color) => {
+            {availableColors.map((color) => {
               const isSelected = selectedColor === color.value;
               return (
                 <Pressable

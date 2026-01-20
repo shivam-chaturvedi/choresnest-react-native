@@ -70,9 +70,9 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       // We want to activate only on Right swipe (positive). 
       // We set left threshold extremely low (-500) effectively ignoring left swipes
       // We set right threshold to 10px for quick activation
-      activeOffsetX={[-500, 10]}
-      activeOffsetY={[-20, 20]} // increased vertical tolerance slightly? No, keeping strict to avoid scrolling confusion
-      failOffsetY={[-20, 20]}
+      activeOffsetX={[-500, 20]}
+      activeOffsetY={[-10, 10]}
+      failOffsetY={[-10, 10]}
     >
       <View style={[styles.container, { backgroundColor: theme.colors.background }, style]}>
         <View style={styles.content}>{children}</View>
@@ -125,7 +125,8 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 24,
     bottom: 20,
-    zIndex: 999,
+    zIndex: 9999, // Super high z-index
+    elevation: 20, // High elevation for Android
     width: 56,
     height: 56,
     borderRadius: 16,

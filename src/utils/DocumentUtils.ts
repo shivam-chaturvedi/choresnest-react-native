@@ -33,6 +33,32 @@ export const requestCameraPermission = async (): Promise<boolean> => {
     return true; // iOS handles permission via Info.plist and OS prompt automatically/gracefully usually
 };
 
+export const requestStoragePermission = async (): Promise<boolean> => {
+    if (Platform.OS !== 'android') return true;
+
+    try {
+        if (Number(Platform.Version) >= 33) {
+            const result = await PermissionsAndroid.requestMultiple([
+                PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES,
+                PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO,
+                // Add other media types if needed
+            ]);
+            return result['android.permission.READ_MEDIA_IMAGES'] === PermissionsAndroid.RESULTS.GRANTED &&
+                result['android.permission.READ_MEDIA_VIDEO'] === PermissionsAndroid.RESULTS.GRANTED;
+        } else {
+            const result = await PermissionsAndroid.requestMultiple([
+                PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
+                PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+            ]);
+            return result['android.permission.READ_EXTERNAL_STORAGE'] === PermissionsAndroid.RESULTS.GRANTED &&
+                result['android.permission.WRITE_EXTERNAL_STORAGE'] === PermissionsAndroid.RESULTS.GRANTED;
+        }
+    } catch (err) {
+        console.warn(err);
+        return false;
+    }
+};
+
 export const saveFileToStorage = async (uri: string, fileName: string): Promise<string> => {
     try {
         // Sanitize filename
@@ -60,6 +86,18 @@ export const saveFileToStorage = async (uri: string, fileName: string): Promise<
 
 export const pickDocument = async (): Promise<SavedDocument | null> => {
     try {
+        const hasPermission = await requestStoragePermission();
+        if (!hasPermission) {
+            Alert.alert("Permission Denied", "Storage permission is required to access documents.");
+            // Proceeding anyway because on some Android versions the picker works without it, 
+            // but alerting might be what the user wants if it fails. 
+            // Actually, let's just warn but proceed or return? 
+            // User wants "asking", so if they deny, we probably shouldn't proceed?
+            // However, scoped storage means we might not NEED it.
+            // Let's just return null if denied to be strict as requested.
+            return null;
+        }
+
         const results = await pick({
             type: [types.allFiles],
             mode: 'open',

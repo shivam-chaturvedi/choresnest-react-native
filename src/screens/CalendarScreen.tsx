@@ -22,6 +22,7 @@ import { PROFILE_COLORS } from "../constants/profileColors";
 import { useSidebar } from "../contexts/SidebarContext";
 import { format, addMonths, subMonths, addDays, subDays, startOfWeek, endOfWeek, isSameMonth, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval } from "date-fns";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { getEventsForDate } from "../utils/EventUtils";
 
 const filteredEvents = (events: any[], filterMember: string | null) => {
   if (!filterMember) return events;
@@ -371,7 +372,10 @@ export const CalendarScreen: React.FC = () => {
           const isCurrentMonth = isSameMonth(day, selectedDate);
           const isSelected = isSameDay(day, selectedDate);
           const isToday = isSameDay(day, today);
-          const dayEvents = currentEvents.filter(e => isSameDay(new Date(e.date), day));
+
+          // Use helper to get proper events including recurring and multi-day
+          // We cast result to any[] because we know we passed normalized unified items
+          const dayEvents = getEventsForDate(day, currentEvents as any[], []) as any[];
 
           return (
             <Pressable
@@ -547,7 +551,8 @@ export const CalendarScreen: React.FC = () => {
 
                   {daysToRender.map((day, dayIndex) => {
                     const dateStr = format(day, "yyyy-MM-dd");
-                    const dayEvents = currentEvents.filter(e => e.date === dateStr);
+                    // Use helper to get proper events including recurring and multi-day
+                    const dayEvents = getEventsForDate(day, currentEvents as any[], []) as any[];
 
                     const parseTimeToMinutes = (timeStr: string | undefined): number | null => {
                       if (!timeStr || timeStr === "All Day") return null;

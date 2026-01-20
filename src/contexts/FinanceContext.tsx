@@ -62,6 +62,9 @@ const defaultBudgets: Budget = {
     healthcare: 3000,
     entertainment: 2000,
     education: 5000,
+    salary: 0,
+    freelance: 0,
+    other: 2000,
 };
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
@@ -87,7 +90,8 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
                 setTransactions(JSON.parse(storedTransactions));
             }
             if (storedBudgets) {
-                setBudgets(JSON.parse(storedBudgets));
+                const parsed = JSON.parse(storedBudgets);
+                setBudgets({ ...defaultBudgets, ...parsed });
             }
         } catch (e) {
             console.error('Failed to load finance data', e);

@@ -31,6 +31,7 @@ const categories = [
     { id: 'healthcare', name: 'Healthcare', icon: '🏥' },
     { id: 'entertainment', name: 'Entertainment', icon: '🎬' },
     { id: 'education', name: 'Education', icon: '📚' },
+    { id: 'other', name: 'Other', icon: '📦' },
 ];
 
 export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({

@@ -36,9 +36,7 @@ import {
 // --- Data & Helpers ---
 
 const notificationSettings = [
-  { id: 'events', icon: Calendar, label: 'Calendar Events', description: 'Get notified about upcoming events', enabled: true },
   { id: 'tasks', icon: CheckSquare, label: 'Task Reminders', description: 'Due dates and assignments', enabled: true },
-  { id: 'grocery', icon: ShoppingCart, label: 'Shopping List Updates', description: 'When items are added or checked', enabled: false },
   { id: 'vault', icon: Bell, label: 'Document Alerts', description: 'Warranty and expiry reminders', enabled: true },
   { id: 'mealprep', icon: ChefHat, label: 'Meal Prep Reminders', description: 'Time to start cooking', enabled: true },
 ];

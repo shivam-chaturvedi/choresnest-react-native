@@ -14,7 +14,13 @@ import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import { useSidebar } from "../contexts/SidebarContext";
 import { useToast } from "../components/ui/Toast";
 import { DocumentScanner } from "../components/vault/DocumentScanner";
-import { DocumentViewerModal } from "../components/modals/DocumentViewerModal";
+import { ImageViewerModal } from "../components/modals/ImageViewerModal";
+import { DocumentDetailsModal } from "../components/modals/DocumentDetailsModal";
+import { FilterModal, FilterOptions } from "../components/modals/FilterModal";
+import { NotificationPanel } from "../components/notifications/NotificationPanel";
+import { calculateTotalStorage, formatStorageSize } from "../utils/StorageUtils";
+import { generateAlerts, getCategoryCounts } from "../utils/VaultUtils";
+import { useEffect } from "react";
 import {
   Menu,
   Camera,
@@ -25,62 +31,453 @@ import {
   Bell,
   ChevronRight,
   Plus,
-  AlertTriangle
+  AlertTriangle,
+  ArrowLeft,
+  FileText,
+  Activity
 } from "lucide-react-native";
 
 import { pickDocument, SavedDocument } from "../utils/DocumentUtils";
+import FileViewer from 'react-native-file-viewer';
+import { Alert } from 'react-native';
+import { useFinance } from "../contexts/FinanceContext";
 
 export const VaultScreen: React.FC = () => {
-  const { globalVault, memberVaults, activeMember, addDocument } = useFamily();
+  const { globalVault, memberVaults, activeMember, addDocument, updateDocument } = useFamily();
   const { openSidebar } = useSidebar();
   const { showToast } = useToast();
+  const { addTransaction, categoryIcons } = useFinance(); // For syncing expenses
   const colors = useThemeColors();
   const radius = useThemeRadius();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [showScanner, setShowScanner] = useState(false);
-  const [selectedDoc, setSelectedDoc] = useState<any>(null); // Using any temporarily to match VaultDocument, usually imported from context
-  const [showViewer, setShowViewer] = useState(false);
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState<any>(null);
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [filters, setFilters] = useState<FilterOptions>({
+    categories: [],
+    dateFrom: '',
+    dateTo: '',
+    expiryStatus: [],
+  });
+  const [storageUsed, setStorageUsed] = useState('0 B');
+  const [currentView, setCurrentView] = useState<'main' | 'category' | 'all'>('main');
+  const [viewCategory, setViewCategory] = useState<string | null>(null);
 
-  // ... (categories and initialAlerts array - no changes) ...
-
-  const categories = [
-    { id: 'warranty', name: 'Warranties', icon: '🛡️', count: 8, color: colors.info + '30' },
-    { id: 'bill', name: 'Bills', icon: '🧾', count: 15, color: colors.warning + '30' },
-    { id: 'insurance', name: 'Insurance', icon: '📋', count: 4, color: colors.success + '30' },
-    { id: 'service', name: 'Service', icon: '🔧', count: 6, color: colors.muted + '50' },
-    { id: 'certificate', name: 'Certificates', icon: '📜', count: 3, color: colors.border },
-    { id: 'receipt', name: 'Receipts', icon: '🧾', count: 22, color: colors.primary + '30' },
-  ];
-
-  const initialAlerts = [
-    { id: 1, icon: '📺', name: 'TV Warranty', message: 'Expires in 30 days', type: 'warning' },
-    { id: 2, icon: '🚗', name: 'Car Service', message: 'Due in 15 days', type: 'info' },
-  ];
-
-  // Combine global and active member docs for display
+  // Combine global and active member docs
   const allDocs = [...globalVault, ...(activeMember ? (memberVaults[activeMember.id] || []) : [])];
 
+  // Calculate dynamic values
+  const categoryCounts = getCategoryCounts(allDocs);
+  const liveAlerts = generateAlerts(allDocs);
+
+  const categories = [
+    { id: 'warranty', name: 'Warranties', icon: '🛡️', count: categoryCounts.warranty, color: colors.info + '30' },
+    { id: 'bill', name: 'Bills', icon: '🧾', count: categoryCounts.bill, color: colors.warning + '30' },
+    { id: 'insurance', name: 'Insurance', icon: '📋', count: categoryCounts.insurance, color: colors.success + '30' },
+    { id: 'service', name: 'Service', icon: '🔧', count: categoryCounts.service, color: colors.muted + '50' },
+    { id: 'certificate', name: 'Certificates', icon: '📜', count: categoryCounts.certificate, color: colors.border },
+    { id: 'receipt', name: 'Receipts', icon: '🧾', count: categoryCounts.receipt, color: colors.primary + '30' },
+  ];
+
+  // Calculate storage on mount and when docs change
+  useEffect(() => {
+    const calcStorage = async () => {
+      const totalBytes = await calculateTotalStorage(allDocs);
+      setStorageUsed(formatStorageSize(totalBytes));
+    };
+    calcStorage();
+  }, [allDocs.length]);
+
+  // Apply all filters
   const filteredDocs = allDocs.filter(doc => {
+    // Search filter
     const matchesSearch = doc.name.toLowerCase().includes(searchQuery.toLowerCase());
+
+    // Category filter (simple + advanced)
     const matchesCategory = !selectedCategory || doc.type === selectedCategory;
-    return matchesSearch && matchesCategory;
+    const matchesAdvancedCategory = filters.categories.length === 0 || filters.categories.includes(doc.type);
+
+    // Date range filter
+    let matchesDateRange = true;
+    if (filters.dateFrom || filters.dateTo) {
+      const docDate = new Date(doc.date);
+      if (filters.dateFrom && docDate < new Date(filters.dateFrom)) matchesDateRange = false;
+      if (filters.dateTo && docDate > new Date(filters.dateTo)) matchesDateRange = false;
+    }
+
+    // Expiry status filter
+    let matchesExpiryStatus = filters.expiryStatus.length === 0;
+    if (!matchesExpiryStatus && (doc.warrantyTillDate || doc.nextServiceDate || doc.expiryDate)) {
+      const now = new Date();
+      const expiryDate = new Date(doc.warrantyTillDate || doc.nextServiceDate || doc.expiryDate || '');
+      const daysUntilExpiry = Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (filters.expiryStatus.includes('expired') && daysUntilExpiry < 0) matchesExpiryStatus = true;
+      if (filters.expiryStatus.includes('expiring_soon') && daysUntilExpiry >= 0 && daysUntilExpiry <= 15) matchesExpiryStatus = true;
+      if (filters.expiryStatus.includes('valid') && daysUntilExpiry > 15) matchesExpiryStatus = true;
+    } else if (filters.expiryStatus.length === 0) {
+      matchesExpiryStatus = true;
+    }
+
+    return matchesSearch && matchesCategory && matchesAdvancedCategory && matchesDateRange && matchesExpiryStatus;
   });
 
-  const handleDocumentSaved = (doc: SavedDocument) => {
-    // Add to family context
+  // Get recent items (last 3 added)
+  const recentDocs = [...filteredDocs]
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 3);
+
+  // Get documents for category view
+  const categoryDocs = viewCategory
+    ? filteredDocs.filter(doc => doc.type === viewCategory)
+    : [];
+
+  // Handlers
+  const handleCategoryClick = (categoryId: string) => {
+    setViewCategory(categoryId);
+    setCurrentView('category');
+  };
+
+  const handleSeeAll = () => {
+    setCurrentView('all');
+  };
+
+  const handleSearchChange = (text: string) => {
+    setSearchQuery(text);
+    if (text.length > 0 && currentView !== 'main') {
+      // If typing, we likely want to see results.
+      // User asked to "open all".
+      if (currentView !== 'all') setCurrentView('all');
+    } else if (text.length > 0 && currentView === 'main') {
+      setCurrentView('all');
+    }
+  };
+
+  useEffect(() => {
+    // If filters are active, switch to all view to show results
+    const isFiltered = filters.dateFrom || filters.dateTo || filters.categories.length > 0 || filters.expiryStatus.length > 0;
+    if (isFiltered && currentView !== 'all') {
+      setCurrentView('all');
+    }
+  }, [filters]);
+
+  const handleBackToMain = () => {
+    setCurrentView('main');
+    setViewCategory(null);
+  };
+
+  const handleDocumentSaved = (doc: SavedDocument & {
+    documentName: string;
+    category: string;
+    purchaseDate?: string;
+    warrantyTillDate?: string;
+    billAmount?: string;
+    billDate?: string;
+    provider?: string;
+    policyNumber?: string;
+    premiumAmount?: string;
+    serviceDate?: string;
+    nextServiceDate?: string;
+    cost?: string;
+  }) => {
+    const categoryIcons: Record<string, string> = {
+      warranty: '🛡️',
+      bill: '🧾',
+      insurance: '📋',
+      service: '🔧',
+      certificate: '📜',
+      receipt: '🧾',
+      other: '📄',
+    };
+
     addDocument({
-      name: doc.name,
-      type: 'other', // Default type, could be refined
-      icon: '📄',
+      name: doc.documentName,
+      type: doc.category as any,
+      icon: categoryIcons[doc.category] || '📄',
       date: new Date().toISOString().split('T')[0],
       memberId: activeMember?.id || 'global',
       sharedWith: [],
       uri: doc.uri,
+      // Warranty fields
+      purchaseDate: doc.purchaseDate,
+      warrantyTillDate: doc.warrantyTillDate,
+      // Bill fields
+      billAmount: doc.billAmount,
+      billDate: doc.billDate,
+      // Insurance fields
+      provider: doc.provider,
+      policyNumber: doc.policyNumber,
+      premiumAmount: doc.premiumAmount,
+      // Service fields
+      serviceDate: doc.serviceDate,
+      nextServiceDate: doc.nextServiceDate,
+      cost: doc.cost,
     });
-    // showToast handled in DocumentScanner or below
+
+    // --- SYNC TO EXPENSES ---
+    // Automatically add transaction if valid amount exists for Bills/Service/Insurance
+    let expenseAmount = 0;
+    const today = new Date().toISOString().split('T')[0];
+    let expenseDate = today;
+    let expenseCategory = '';
+    let expenseName = doc.documentName;
+
+    if (doc.category === 'bill' && doc.billAmount) {
+      expenseAmount = parseFloat(doc.billAmount.replace(/[^0-9.]/g, ''));
+      if (doc.billDate) expenseDate = doc.billDate;
+      expenseCategory = 'Bills';
+    } else if (doc.category === 'service' && doc.cost) {
+      expenseAmount = parseFloat(doc.cost.replace(/[^0-9.]/g, ''));
+      if (doc.serviceDate) expenseDate = doc.serviceDate;
+      expenseCategory = 'Maintenance'; // Or Service
+    } else if (doc.category === 'insurance' && doc.premiumAmount) {
+      expenseAmount = parseFloat(doc.premiumAmount.replace(/[^0-9.]/g, ''));
+      // expenseDate is usually now or purchase date? Use default.
+      expenseCategory = 'Insurance';
+    }
+
+    if (expenseAmount > 0 && expenseCategory) {
+      addTransaction({
+        name: expenseName,
+        amount: expenseAmount,
+        date: expenseDate,
+        type: 'expense',
+        category: expenseCategory,
+        icon: categoryIcons[doc.category] || '🧾'
+      });
+
+      // Optional: Notify user
+      // showToast({ title: "Expense Added", description: `Added ₹${expenseAmount} to Expenses`, type: "success" });
+    }
   };
+
+  /* View Renderers */
+
+  const renderCategoryView = () => {
+    const categoryName = categories.find(c => c.id === viewCategory)?.name || 'Category';
+
+    return (
+      <View style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {categoryDocs.length > 0 ? (
+            categoryDocs.map(doc => (
+              <Pressable
+                key={doc.id}
+                style={[styles.docRow, { backgroundColor: colors.card, borderRadius: radius.md }]}
+                onPress={() => {
+                  setSelectedDocument(doc);
+                  setShowDetailsModal(true);
+                }}
+              >
+                <View style={[styles.docIconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
+                  <Text style={{ fontSize: 20 }}>{doc.icon}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.docName, { color: colors.foreground }]}>{doc.name}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                    <Text style={[styles.docDate, { color: colors.mutedForeground }]}>{doc.date}</Text>
+                  </View>
+                </View>
+                <ChevronRight size={16} color={colors.mutedForeground} />
+              </Pressable>
+            ))
+          ) : (
+            <View style={{ alignItems: 'center', marginTop: 40 }}>
+              <View style={[styles.shieldIcon, { backgroundColor: colors.muted, marginBottom: 16 }]}>
+                <FileText size={32} color={colors.mutedForeground} />
+              </View>
+              <Text style={[styles.emptyText, { color: colors.foreground, fontSize: 16, fontWeight: '600' }]}>
+                No {categoryName.toLowerCase()} found
+              </Text>
+            </View>
+          )}
+        </ScrollView>
+      </View>
+    );
+  };
+
+  const renderAllView = () => (
+    <View style={{ flex: 1 }}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {categories.map(cat => {
+          const docsInCat = filteredDocs.filter(d => d.type === cat.id);
+          if (docsInCat.length === 0) return null;
+
+          return (
+            <View key={cat.id} style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.foreground, marginBottom: 8 }]}>{cat.name}</Text>
+              {docsInCat.map(doc => (
+                <Pressable
+                  key={doc.id}
+                  style={[styles.docRow, { backgroundColor: colors.card, borderRadius: radius.md }]}
+                  onPress={() => {
+                    setSelectedDocument(doc);
+                    setShowDetailsModal(true);
+                  }}
+                >
+                  <View style={[styles.docIconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
+                    <Text style={{ fontSize: 20 }}>{doc.icon}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.docName, { color: colors.foreground }]}>{doc.name}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                      <Text style={[styles.docDate, { color: colors.mutedForeground }]}>{doc.date}</Text>
+                    </View>
+                  </View>
+                  <ChevronRight size={16} color={colors.mutedForeground} />
+                </Pressable>
+              ))}
+            </View>
+          );
+        })}
+
+        {filteredDocs.length === 0 && (
+          <View style={{ alignItems: 'center', marginTop: 40 }}>
+            <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No documents found.</Text>
+          </View>
+        )}
+      </ScrollView>
+    </View>
+  );
+
+  const renderMainView = () => (
+    <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      {/* Search Bar Removed (Moved to Top Level) */}
+
+      {/* Secure Storage Card */}
+      <View style={[styles.storageCard, { backgroundColor: colors.primary, shadowColor: colors.primary, borderRadius: radius.card }]}>
+        <View style={styles.storageContent}>
+          <View style={[styles.shieldIcon, { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: radius.card }]}>
+            <Shield size={28} color={colors.primaryForeground} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.storageTitle, { color: colors.primaryForeground }]}>Secure Storage</Text>
+            <Text style={[styles.storageDesc, { color: colors.primaryForeground, opacity: 0.8 }]}>{allDocs.length} documents • {storageUsed}</Text>
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={[styles.alertCount, { color: colors.primaryForeground }]}>{liveAlerts.length}</Text>
+            <Text style={[styles.alertLabel, { color: colors.primaryForeground, opacity: 0.7 }]}>Alerts</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Alerts */}
+      {liveAlerts.length > 0 && (
+        <View style={styles.alertSection}>
+          <View style={styles.sectionHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Bell size={16} color={colors.warning} />
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Alerts & Reminders</Text>
+            </View>
+            <Pressable onPress={() => setShowNotifications(true)}>
+              <Text style={[styles.viewAll, { color: colors.primary }]}>View All</Text>
+            </Pressable>
+          </View>
+
+          {liveAlerts.map(alert => (
+            <Pressable
+              key={alert.id}
+              style={[
+                styles.alertCard,
+                { backgroundColor: colors.card, borderRadius: radius.md },
+                alert.type === 'warning' ? { borderLeftColor: colors.warning, borderLeftWidth: 4 } : { borderLeftColor: colors.info, borderLeftWidth: 4 }
+              ]}
+            >
+              <Text style={{ fontSize: 24, marginRight: 12 }}>{alert.icon}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.alertName, { color: colors.foreground }]}>{alert.name}</Text>
+                <Text style={[styles.alertMsg, { color: colors.mutedForeground }]}>{alert.message}</Text>
+              </View>
+            </Pressable>
+          ))}
+        </View>
+      )}
+
+      {/* Categories */}
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Categories</Text>
+        <View style={styles.categoryGrid}>
+          {categories.map(cat => (
+            <Pressable
+              key={cat.id}
+              style={[
+                styles.categoryCard,
+                selectedCategory === cat.id && styles.categorySelected
+              ]}
+              onPress={() => handleCategoryClick(cat.id)}
+            >
+              <View style={[styles.catIconBox, { backgroundColor: cat.color, borderRadius: radius.md }]}>
+                <Text style={{ fontSize: 20 }}>{cat.icon}</Text>
+              </View>
+              <Text style={[styles.catName, { color: colors.foreground }]}>{cat.name}</Text>
+              <Text style={[styles.catCount, { color: colors.mutedForeground }]}>{cat.count}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
+      {/* Recent Documents */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+            Recent Vault Items
+          </Text>
+          <Pressable onPress={handleSeeAll}>
+            <Text style={[styles.viewAll, { color: colors.primary }]}>See All</Text>
+          </Pressable>
+        </View>
+
+        {recentDocs.length > 0 ? (
+          recentDocs.map(doc => (
+            <Pressable
+              key={doc.id}
+              style={[styles.docRow, { backgroundColor: colors.card, borderRadius: radius.md }]}
+              onPress={() => {
+                setSelectedDocument(doc);
+                setShowDetailsModal(true);
+              }}
+            >
+              <View style={[styles.docIconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
+                <Text style={{ fontSize: 20 }}>{doc.icon}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.docName, { color: colors.foreground }]}>{doc.name}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                  <View style={[styles.docBadge, { backgroundColor: colors.muted, borderRadius: radius.xs }]}>
+                    <Text style={[styles.docBadgeText, { color: colors.mutedForeground }]}>{doc.type}</Text>
+                  </View>
+                  <Text style={[styles.docDate, { color: colors.mutedForeground }]}>{doc.date}</Text>
+                </View>
+              </View>
+              <ChevronRight size={16} color={colors.mutedForeground} />
+            </Pressable>
+          ))
+        ) : (
+          <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No documents found</Text>
+        )}
+      </View>
+
+      {/* Quick Actions */}
+      <View style={styles.actionsGrid}>
+
+        <Pressable style={[styles.actionCard, { backgroundColor: colors.card, borderRadius: radius.md }]} onPress={handleUpload}>
+          <View style={[styles.actionIcon, { backgroundColor: colors.success + '30', borderRadius: radius.sm }]}>
+            <Upload size={20} color={colors.success} />
+          </View>
+          <View>
+            <Text style={[styles.actionTitle, { color: colors.foreground }]}>Upload</Text>
+            <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>From device</Text>
+          </View>
+        </Pressable>
+      </View>
+    </ScrollView>
+  );
 
   const handleScan = () => {
     setShowScanner(true);
@@ -93,196 +490,132 @@ export const VaultScreen: React.FC = () => {
   return (
     <AppLayout showNav={false} showAddButton={false}>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Pressable onPress={openSidebar} style={[styles.menuBtn, { backgroundColor: colors.card, borderRadius: radius.md }]}>
-              <Menu size={24} color={colors.foreground} />
-            </Pressable>
-            <View>
-              <Text style={[styles.title, { color: colors.foreground }]}>Family Vault</Text>
-              <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Your digital document locker</Text>
+        {currentView === 'main' && (
+          <View style={styles.header}>
+            <View style={styles.headerLeft}>
+              <Pressable onPress={openSidebar} style={[styles.menuBtn, { backgroundColor: colors.card, borderRadius: radius.md }]}>
+                <Menu size={24} color={colors.foreground} />
+              </Pressable>
+              <View>
+                <Text style={[styles.title, { color: colors.foreground }]}>Family Vault</Text>
+                <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Your digital document locker</Text>
+              </View>
+            </View>
+            <View style={styles.headerRight}>
+
+              <Pressable style={[styles.iconBtn, { borderColor: colors.border, borderRadius: radius.sm }]} onPress={handleUpload}>
+                <Upload size={20} color={colors.foreground} />
+              </Pressable>
             </View>
           </View>
-          <View style={styles.headerRight}>
+        )}
 
-            <Pressable style={[styles.iconBtn, { borderColor: colors.border, borderRadius: radius.sm }]} onPress={handleUpload}>
-              <Upload size={20} color={colors.foreground} />
-            </Pressable>
+        {currentView === 'category' && (
+          <View style={styles.header}>
+            <View style={styles.headerLeft}>
+              <Pressable onPress={handleBackToMain} style={[styles.menuBtn, { backgroundColor: colors.card, borderRadius: radius.md }]}>
+                <ArrowLeft size={24} color={colors.foreground} />
+              </Pressable>
+              <View>
+                <Text style={[styles.title, { color: colors.foreground }]}>
+                  {categories.find(c => c.id === viewCategory)?.name || 'Category'}
+                </Text>
+                <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{categoryDocs.length} items</Text>
+              </View>
+            </View>
           </View>
-        </View>
+        )}
 
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {/* Search */}
-          <View style={[styles.searchContainer, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
+        {currentView === 'all' && (
+          <View style={styles.header}>
+            <View style={styles.headerLeft}>
+              <Pressable onPress={handleBackToMain} style={[styles.menuBtn, { backgroundColor: colors.card, borderRadius: radius.md }]}>
+                <ArrowLeft size={24} color={colors.foreground} />
+              </Pressable>
+              <View>
+                <Text style={[styles.title, { color: colors.foreground }]}>All Documents</Text>
+                <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Grouped by category</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Persistent Search Bar */}
+        <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+          <View style={[styles.searchContainer, { backgroundColor: colors.muted, borderRadius: radius.md, marginBottom: 0 }]}>
             <Search size={16} color={colors.mutedForeground} style={styles.searchIcon} />
             <TextInput
               style={[styles.searchInput, { color: colors.foreground }]}
               placeholder="Search vault, warranties..."
               placeholderTextColor={colors.mutedForeground}
               value={searchQuery}
-              onChangeText={setSearchQuery}
+              onChangeText={handleSearchChange}
             />
-            <Pressable style={styles.filterBtn}>
-              <Filter size={16} color={colors.mutedForeground} />
-            </Pressable>
+            <TouchableOpacity
+              style={[styles.filterBtn, { padding: 8, zIndex: 10 }]}
+              onPress={() => setShowFilterModal(true)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              activeOpacity={0.7}
+            >
+              <Filter size={20} color={colors.primary} />
+            </TouchableOpacity>
           </View>
+        </View>
 
-          {/* Secure Storage Card */}
-          <View style={[styles.storageCard, { backgroundColor: colors.primary, shadowColor: colors.primary, borderRadius: radius.card }]}>
-            <View style={styles.storageContent}>
-              <View style={[styles.shieldIcon, { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: radius.card }]}>
-                <Shield size={28} color={colors.primaryForeground} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.storageTitle, { color: colors.primaryForeground }]}>Secure Storage</Text>
-                <Text style={[styles.storageDesc, { color: colors.primaryForeground, opacity: 0.8 }]}>{allDocs.length} documents • 1.2 GB used</Text>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[styles.alertCount, { color: colors.primaryForeground }]}>{initialAlerts.length}</Text>
-                <Text style={[styles.alertLabel, { color: colors.primaryForeground, opacity: 0.7 }]}>Alerts</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Alerts */}
-          {initialAlerts.length > 0 && (
-            <View style={styles.alertSection}>
-              <View style={styles.sectionHeader}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Bell size={16} color={colors.warning} />
-                  <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Alerts & Reminders</Text>
-                </View>
-                <Text style={[styles.viewAll, { color: colors.primary }]}>View All</Text>
-              </View>
-
-              {initialAlerts.map(alert => (
-                <Pressable
-                  key={alert.id}
-                  style={[
-                    styles.alertCard,
-                    { backgroundColor: colors.card, borderRadius: radius.md },
-                    alert.type === 'warning' ? { borderLeftColor: colors.warning, borderLeftWidth: 4 } : { borderLeftColor: colors.info, borderLeftWidth: 4 }
-                  ]}
-                >
-                  <Text style={{ fontSize: 24, marginRight: 12 }}>{alert.icon}</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.alertName, { color: colors.foreground }]}>{alert.name}</Text>
-                    <Text style={[styles.alertMsg, { color: colors.mutedForeground }]}>{alert.message}</Text>
-                  </View>
-                  <ChevronRight size={16} color={colors.mutedForeground} />
-                </Pressable>
-              ))}
-            </View>
-          )}
-
-          {/* Categories */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Categories</Text>
-            <View style={styles.categoryGrid}>
-              {categories.map(cat => (
-                <Pressable
-                  key={cat.id}
-                  style={[
-                    styles.categoryCard,
-                    selectedCategory === cat.id && styles.categorySelected
-                  ]}
-                  onPress={() => setSelectedCategory(selectedCategory === cat.id ? null : cat.id)}
-                >
-                  <View style={[styles.catIconBox, { backgroundColor: cat.color, borderRadius: radius.md }]}>
-                    <Text style={{ fontSize: 20 }}>{cat.icon}</Text>
-                  </View>
-                  <Text style={[styles.catName, { color: colors.foreground }]}>{cat.name}</Text>
-                  <Text style={[styles.catCount, { color: colors.mutedForeground }]}>{cat.count}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-
-          {/* Recent Documents */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-                {selectedCategory ? categories.find(c => c.id === selectedCategory)?.name : 'Recent Vault Items'}
-              </Text>
-              <Text style={[styles.viewAll, { color: colors.primary }]}>See All</Text>
-            </View>
-
-            {filteredDocs.length > 0 ? (
-              filteredDocs.map(doc => (
-                <Pressable
-                  key={doc.id}
-                  style={[styles.docRow, { backgroundColor: colors.card, borderRadius: radius.md }]}
-                  onPress={() => {
-                    setSelectedDoc(doc);
-                    setShowViewer(true);
-                  }}
-                >
-                  <View style={[styles.docIconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
-                    <Text style={{ fontSize: 20 }}>{doc.icon}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.docName, { color: colors.foreground }]}>{doc.name}</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                      <View style={[styles.docBadge, { backgroundColor: colors.muted, borderRadius: radius.xs }]}>
-                        <Text style={[styles.docBadgeText, { color: colors.mutedForeground }]}>{doc.type}</Text>
-                      </View>
-                      <Text style={[styles.docDate, { color: colors.mutedForeground }]}>{doc.date}</Text>
-                    </View>
-                  </View>
-                  <ChevronRight size={16} color={colors.mutedForeground} />
-                </Pressable>
-              ))
-            ) : (
-              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No documents found</Text>
-            )}
-          </View>
-
-          {/* Quick Actions */}
-          <View style={styles.actionsGrid}>
-
-            <Pressable style={[styles.actionCard, { backgroundColor: colors.card, borderRadius: radius.md }]} onPress={handleUpload}>
-              <View style={[styles.actionIcon, { backgroundColor: colors.success + '30', borderRadius: radius.sm }]}>
-                <Upload size={20} color={colors.success} />
-              </View>
-              <View>
-                <Text style={[styles.actionTitle, { color: colors.foreground }]}>Upload</Text>
-                <Text style={[styles.actionSub, { color: colors.mutedForeground }]}>From device</Text>
-              </View>
-            </Pressable>
-          </View>
-
-          {/* Emergency Access */}
-          <Pressable style={[styles.emergencyCard, { backgroundColor: colors.danger + '10', borderColor: colors.danger + '30', borderRadius: radius.card }]}>
-            <View style={[styles.emergencyIcon, { backgroundColor: colors.danger, borderRadius: radius.md }]}>
-              <AlertTriangle size={24} color="#fff" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.emergencyTitle, { color: colors.foreground }]}>Emergency Access</Text>
-              <Text style={[styles.emergencySub, { color: colors.mutedForeground }]}>Quick access to critical docs</Text>
-            </View>
-            <ChevronRight size={20} color={colors.mutedForeground} />
-          </Pressable>
-
-        </ScrollView>
+        {currentView === 'main' ? renderMainView() :
+          currentView === 'category' ? renderCategoryView() :
+            renderAllView()}
 
         {/* Floating Add Button */}
         <Pressable style={[styles.fab, { backgroundColor: colors.primary, borderRadius: radius.full }]} onPress={handleScan}>
           <Plus size={24} color={colors.primaryForeground} />
         </Pressable>
 
-        {/* Document Scanner Modal */}
         <DocumentScanner
           open={showScanner}
           onOpenChange={setShowScanner}
           onDocumentSaved={handleDocumentSaved}
         />
 
-        <DocumentViewerModal
-          visible={showViewer}
-          onClose={() => setShowViewer(false)}
-          document={selectedDoc}
+        <ImageViewerModal
+          visible={showImageModal}
+          onClose={() => setShowImageModal(false)}
+          imageUri={selectedImageUri}
         />
+
+        <DocumentDetailsModal
+          visible={showDetailsModal}
+          onClose={() => setShowDetailsModal(false)}
+          document={selectedDocument}
+          onUpdate={updateDocument}
+          onViewImage={(uri) => {
+            setSelectedImageUri(uri);
+            setShowImageModal(true);
+          }}
+        />
+
+        <FilterModal
+          visible={showFilterModal}
+          onClose={() => setShowFilterModal(false)}
+          onApply={setFilters}
+          currentFilters={filters}
+        />
+
+        <NotificationPanel
+          open={showNotifications}
+          onClose={() => setShowNotifications(false)}
+          notifications={liveAlerts.map(a => ({
+            id: a.id,
+            title: a.name,
+            detail: a.message,
+            tone: a.type === 'warning' ? colors.warning + '20' : colors.info + '20',
+            textColor: a.type === 'warning' ? colors.warning : colors.info,
+            icon: 'bell', // Use a standard icon string here, mapping required if NotificationPanel expects specific strings
+            time: 'Now',
+            read: false
+          })) as any}
+        />
+
       </View>
     </AppLayout>
   );
