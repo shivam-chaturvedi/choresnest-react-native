@@ -24,43 +24,10 @@ interface SearchResult {
   meta?: string;
 }
 
-// Sample data from React JS
-const sampleData: SearchResult[] = [
-  // Events
-  { id: "e1", type: "event", title: "School Meeting", subtitle: "Parent-teacher conference", icon: "🏫", path: "calendar", meta: "Tomorrow 10:00 AM" },
-  { id: "e2", type: "event", title: "Dad's Birthday", subtitle: "Family celebration", icon: "🎂", path: "calendar", meta: "Jan 15" },
-  { id: "e3", type: "event", title: "Doctor Appointment", subtitle: "Annual checkup", icon: "🏥", path: "calendar", meta: "Jan 20" },
-  { id: "e4", type: "event", title: "Team Meeting", subtitle: "Work call with team", icon: "💼", path: "calendar", meta: "Monday 2:00 PM" },
-  { id: "e5", type: "event", title: "Grocery Shopping", subtitle: "Weekly shopping trip", icon: "🛒", path: "calendar", meta: "Saturday" },
+// Live data integration
+import { SearchService } from "../../services/SearchService";
+// sampleData removed
 
-  // Tasks
-  { id: "t1", type: "task", title: "Clean Room", subtitle: "Assigned to Ananya", icon: "🧹", path: "tasks", meta: "High Priority" },
-  { id: "t2", type: "task", title: "Take out Trash", subtitle: "Recurring weekly", icon: "🗑️", path: "tasks", meta: "Due Today" },
-  { id: "t3", type: "task", title: "Water Plants", subtitle: "Assigned to Mom", icon: "🌱", path: "tasks", meta: "Every 3 days" },
-  { id: "t4", type: "task", title: "Pay Electricity Bill", subtitle: "Due this week", icon: "💡", path: "tasks", meta: "Medium Priority" },
-  { id: "t5", type: "task", title: "Homework Help", subtitle: "Assigned to Dad", icon: "📚", path: "tasks", meta: "Daily" },
-
-  // Grocery
-  { id: "g1", type: "grocery", title: "Milk", subtitle: "2 liters - Dairy", icon: "🥛", path: "lists", meta: "Pending" },
-  { id: "g2", type: "grocery", title: "Eggs", subtitle: "1 dozen - Dairy", icon: "🥚", path: "lists", meta: "Pending" },
-  { id: "g3", type: "grocery", title: "Bread", subtitle: "Whole wheat - Bakery", icon: "🍞", path: "lists", meta: "Pending" },
-  { id: "g4", type: "grocery", title: "Apples", subtitle: "1 kg - Fruits", icon: "🍎", path: "lists", meta: "Pending" },
-  { id: "g5", type: "grocery", title: "Chicken", subtitle: "500g - Meat", icon: "🍗", path: "lists", meta: "Pending" },
-
-  // Recipes
-  { id: "r1", type: "recipe", title: "Butter Chicken", subtitle: "Indian Main Course", icon: "🍛", path: "Recipes", meta: "45 mins" },
-  { id: "r2", type: "recipe", title: "Caesar Salad", subtitle: "Healthy Salad", icon: "🥗", path: "Recipes", meta: "15 mins" },
-  { id: "r3", type: "recipe", title: "Pasta Carbonara", subtitle: "Italian Classic", icon: "🍝", path: "Recipes", meta: "30 mins" },
-  { id: "r4", type: "recipe", title: "Chocolate Cake", subtitle: "Dessert", icon: "🎂", path: "Recipes", meta: "60 mins" },
-  { id: "r5", type: "recipe", title: "Veggie Stir Fry", subtitle: "Quick & Healthy", icon: "🥦", path: "Recipes", meta: "20 mins" },
-
-  // Documents
-  { id: "d1", type: "document", title: "Passport - Dad", subtitle: "ID Document", icon: "📘", path: "Vault", meta: "Expires 2026" },
-  { id: "d2", type: "document", title: "Car Insurance", subtitle: "Insurance Policy", icon: "🚗", path: "Vault", meta: "Expires Mar 2025" },
-  { id: "d3", type: "document", title: "TV Warranty", subtitle: "Warranty Card", icon: "📺", path: "Vault", meta: "Expires Feb 2025" },
-  { id: "d4", type: "document", title: "Medical Records", subtitle: "Health Documents", icon: "🏥", path: "Vault", meta: "Updated Jan 2024" },
-  { id: "d5", type: "document", title: "Property Papers", subtitle: "Legal Documents", icon: "🏠", path: "Vault", meta: "Permanent" },
-];
 
 
 interface GlobalSearchProps {
@@ -94,30 +61,48 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
     }
   }, [open]);
 
-  const filteredResults = useMemo(() => {
-    if (!query.trim() && !activeFilter) return [];
+  const [results, setResults] = useState<SearchResult[]>([]);
 
-    return sampleData.filter((item) => {
-      const matchesQuery = !query.trim() ||
-        item.title.toLowerCase().includes(query.toLowerCase()) ||
-        item.subtitle.toLowerCase().includes(query.toLowerCase());
+  useEffect(() => {
+    if (!query.trim()) {
+      setResults([]);
+      return;
+    }
 
-      const matchesFilter = !activeFilter || item.type === activeFilter;
+    const performSearch = async () => {
+      const { tasks, events, recipes, documents } = await SearchService.search(query);
 
-      return matchesQuery && matchesFilter;
-    });
+      const mappedResults: SearchResult[] = [
+        ...events.map(e => ({ id: e.id, type: 'event' as const, title: e.title, subtitle: e.dateString, icon: '📅', path: 'calendar', meta: e.time })),
+        ...tasks.map(t => ({ id: t.id, type: 'task' as const, title: t.name, subtitle: t.status, icon: '✅', path: 'tasks', meta: t.priority })),
+        ...recipes.map(r => ({ id: r.id, type: 'recipe' as const, title: r.name, subtitle: 'Recipe', icon: '🍳', path: 'Recipes', meta: '' })),
+        ...documents.map(d => ({ id: d.id, type: 'document' as const, title: d.name, subtitle: d.type, icon: '📄', path: 'Vault', meta: d.date })),
+      ];
+
+      // Filter by active type if set
+      const finalResults = activeFilter
+        ? mappedResults.filter(r => r.type === activeFilter)
+        : mappedResults;
+
+      setResults(finalResults);
+    };
+
+    // Debounce slightly
+    const timeout = setTimeout(performSearch, 300);
+    return () => clearTimeout(timeout);
   }, [query, activeFilter]);
 
+  // Grouping Logic
   const groupedResults = useMemo(() => {
     const groups: Record<string, SearchResult[]> = {};
-    filteredResults.forEach((result) => {
+    results.forEach((result) => {
       if (!groups[result.type]) {
         groups[result.type] = [];
       }
       groups[result.type].push(result);
     });
     return groups;
-  }, [filteredResults]);
+  }, [results]);
 
   const handleSelect = (result: SearchResult) => {
     onClose();
@@ -206,28 +191,18 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           {!query.trim() && !activeFilter ? (
             <View style={styles.defaultContent}>
-              {/* Recent Searches */}
+              {/* Recent Searches - Removed/Cleared as per request 
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Recent Searches</Text>
-                <View style={styles.recentRow}>
-                  {recentSearches.map((term, i) => (
-                    <Pressable
-                      key={i}
-                      onPress={() => setQuery(term)}
-                      style={styles.recentChip}
-                    >
-                      <Text style={styles.recentText}>{term}</Text>
-                    </Pressable>
-                  ))}
-                </View>
+                 ...
               </View>
+              */}
 
               {/* Quick Access */}
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Quick Access</Text>
                 <View style={styles.grid}>
                   {Object.entries(typeConfig).map(([type, config]) => {
-                    const count = sampleData.filter((d) => d.type === type).length;
+                    const count = 0; // Live counts not pre-fetched in empty state for performance
                     return (
                       <Pressable
                         key={type}
@@ -264,7 +239,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
             </View>
           ) : (
             <View style={styles.resultsContent}>
-              {filteredResults.length > 0 ? (
+              {results.length > 0 ? (
                 Object.entries(groupedResults).map(([type, results]) => {
                   const config = typeConfig[type as keyof typeof typeConfig];
                   if (!config) return null;

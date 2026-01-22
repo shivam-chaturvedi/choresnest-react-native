@@ -47,7 +47,7 @@ const MEAL_TYPES: { key: MealType; label: string; icon: string }[] = [
 export const HomeScreen: React.FC = () => {
   const colors = useThemeColors();
   const radius = theme.radius; // Dynamic radius
-  const { members, activeMember, events, groceryList, setActiveMember, addGroceryItem, tasks } = useFamily();
+  const { members, activeMember, events, groceryList, setActiveMember, addGroceryItem, tasks, globalVault, memberVaults, familyName } = useFamily();
   const { getMealsForDay, getRecipeById } = useMealPlan();
   const navigation = useNavigation();
   const { openSidebar } = useSidebar();
@@ -133,7 +133,7 @@ export const HomeScreen: React.FC = () => {
   };
 
   // Dynamic Alerts derived from real data
-  const alerts: {
+  const [notificationAlerts, setNotificationAlerts] = useState<{
     id: string;
     title: string;
     detail: string;
@@ -142,13 +142,15 @@ export const HomeScreen: React.FC = () => {
     icon: AppIconName;
     time: string;
     read: boolean;
-  }[] = React.useMemo(() => {
+  }[]>([]);
+
+  useEffect(() => {
     const newAlerts: any[] = [];
     const todayStr = new Date().toISOString().split("T")[0];
 
     // 1. Events Today
-    const eventsToday = events.filter(e => e.date === todayStr);
-    eventsToday.forEach(e => {
+    const eventsToday = events.filter((e: any) => e.date === todayStr);
+    eventsToday.forEach((e: any) => {
       newAlerts.push({
         id: `evt-${e.id}`,
         title: "Event Today",
@@ -162,8 +164,8 @@ export const HomeScreen: React.FC = () => {
     });
 
     // 2. Pending Tasks (High Priority)
-    const highPriorityTasks = tasks.filter(t => t.priority === 'high' && t.status === 'pending');
-    highPriorityTasks.forEach(t => {
+    const highPriorityTasks = tasks.filter((t: any) => t.priority === 'high' && t.status === 'pending');
+    highPriorityTasks.forEach((t: any) => {
       newAlerts.push({
         id: `task-${t.id}`,
         title: "High Priority Task",
@@ -177,7 +179,7 @@ export const HomeScreen: React.FC = () => {
     });
 
     // 3. Pending Grocery Items
-    const pendingItems = groceryList.filter(i => !i.completed);
+    const pendingItems = groceryList.filter((i: any) => !i.completed);
     if (pendingItems.length > 0) {
       newAlerts.push({
         id: "grocery-pending",
@@ -191,8 +193,19 @@ export const HomeScreen: React.FC = () => {
       });
     }
 
-    return newAlerts;
+    setNotificationAlerts(newAlerts);
   }, [events, groceryList, tasks, colors]);
+
+  const alerts = notificationAlerts;
+
+  const handleClearAllNotifications = () => {
+    setNotificationAlerts([]);
+    setShowNotifications(false);
+  };
+
+  const handleMarkAllAsRead = () => {
+    setNotificationAlerts(prev => prev.map(alert => ({ ...alert, read: true })));
+  };
 
   const quickActions: { label: string; iconName: AppIconName; action: () => void; color: string; bg: string }[] = [
     { label: "Event", iconName: "calendar", action: () => setShowAddEvent(true), color: colors.info, bg: colors.info + '25' },
@@ -203,8 +216,14 @@ export const HomeScreen: React.FC = () => {
 
   const todayKey = new Date().toISOString().split("T")[0];
   const todayMeals = getMealsForDay(todayKey) || [];
-  const pendingGroceries = (groceryList || []).filter((item) => !item.completed).length;
-  const documentsCount = Math.max(28, (groceryList || []).length * 6 + 18); // Mock dynamic count
+  const pendingGroceries = (groceryList || []).filter((item: any) => !item.completed).length;
+
+  // Calculate actual vault document count dynamically
+  const documentsCount = useMemo(() => {
+    const globalCount = (globalVault || []).length;
+    const memberCount = Object.values(memberVaults || {}).reduce((total: number, docs: any) => total + docs.length, 0);
+    return globalCount + memberCount;
+  }, [globalVault, memberVaults]);
 
   const mealSummary = MEAL_TYPES.map((mealType) => {
     try {
@@ -229,9 +248,9 @@ export const HomeScreen: React.FC = () => {
   });
 
   const glanceMetrics = [
-    { label: "Events", value: (events || []).filter(e => e.date === todayKey).length },
-    { label: "Tasks", value: (tasks || []).filter(t => t.status === 'pending').length },
-    { label: "Shopping", value: (groceryList || []).filter(item => !item.completed).length },
+    { label: "Events", value: (events || []).filter((e: any) => e.date === todayKey).length },
+    { label: "Tasks", value: (tasks || []).filter((t: any) => t.status === 'pending').length },
+    { label: "Shopping", value: (groceryList || []).filter((item: any) => !item.completed).length },
   ];
 
   return (
@@ -278,7 +297,7 @@ export const HomeScreen: React.FC = () => {
             <View style={styles.cardHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <AppIcon name="users" size={20} color={colors.primary} style={{ marginRight: 8 }} />
-                <Text style={{ fontSize: 18, fontWeight: "700", color: colors.foreground }}>Family Chores</Text>
+                <Text style={{ fontSize: 18, fontWeight: "700", color: colors.foreground }}>{familyName}</Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Pressable onPress={() => setShowFamilyOnboarding(true)} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 4 }}>
@@ -288,18 +307,26 @@ export const HomeScreen: React.FC = () => {
               </View>
             </View>
             <View style={styles.membersRow}>
-              {(members || []).map((member) => {
-                const profileColor = PROFILE_COLORS.find(c => c.value === member.color)?.hex || colors.primary;
+              {(members || []).map((member: any) => {
+                const profileColor = PROFILE_COLORS.find((c: any) => c.value === member.color)?.hex || colors.primary;
                 return (
                   <Pressable
                     key={member?.id || Math.random().toString()}
                     onPress={() => {
+                      console.log('=== Profile Pressed ===');
+                      console.log('Member:', member.name, 'ID:', member.id, 'isActive:', member.isActive);
                       try {
-                        if (member) setActiveMember(member);
+                        if (member && member.id) {
+                          console.log('Calling setActiveMember with ID:', member.id);
+                          setActiveMember(member);
+                        } else {
+                          console.error('Invalid member object:', member);
+                        }
                       } catch (e) {
                         console.error("Error switching member:", e);
                       }
                     }}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     style={[styles.memberCard]}
                   >
                     <View style={[styles.memberIconWrapper, {
@@ -404,7 +431,7 @@ export const HomeScreen: React.FC = () => {
             {(!events || events.length === 0) ? (
               <Text style={{ color: colors.mutedForeground, fontStyle: 'italic', marginVertical: 8 }}>No events for today</Text>
             ) : (
-              events.slice(0, 3).map((event) => (
+              events.slice(0, 3).map((event: any) => (
                 <View key={event?.id || Math.random().toString()} style={[styles.scheduleRow, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                     <View style={[styles.scheduleIconBox, { backgroundColor: colors.card, borderRadius: radius.xs }]}>
@@ -439,8 +466,9 @@ export const HomeScreen: React.FC = () => {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 16 }}>
               <View style={{ flexDirection: 'row', gap: 12 }}>
                 {mealSummary.map((meal) => (
-                  <View
+                  <Pressable
                     key={meal.label}
+                    onPress={() => (navigation as any).navigate("MealPlan")}
                     style={[styles.mealItem, { backgroundColor: meal.hasMeal ? colors.success + '20' : colors.muted, borderRadius: radius.md }]}
                   >
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -449,7 +477,7 @@ export const HomeScreen: React.FC = () => {
                     </View>
                     <Text style={{ fontSize: 16, fontWeight: "700", color: colors.foreground, marginTop: "auto" }}>{meal.label}</Text>
                     <Text style={{ fontSize: 12, color: colors.mutedForeground }} numberOfLines={2}>{meal.detail}</Text>
-                  </View>
+                  </Pressable>
                 ))}
               </View>
             </ScrollView>
@@ -503,7 +531,13 @@ export const HomeScreen: React.FC = () => {
         </ScrollView>
       </AppLayout>
 
-      <NotificationPanel open={showNotifications} onClose={() => setShowNotifications(false)} notifications={alerts} />
+      <NotificationPanel
+        open={showNotifications}
+        onClose={() => setShowNotifications(false)}
+        notifications={alerts}
+        onClearAll={handleClearAllNotifications}
+        onMarkAllRead={handleMarkAllAsRead}
+      />
       <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} />
       <GettingStartedTutorial open={showTutorial} onClose={handleTutorialClose} />
 
@@ -584,6 +618,8 @@ const styles = StyleSheet.create({
   memberCard: {
     alignItems: "center",
     justifyContent: "center",
+    padding: 4,
+    minWidth: 64,
   },
   memberIconWrapper: {
     width: 56,

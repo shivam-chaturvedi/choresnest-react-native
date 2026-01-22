@@ -15,8 +15,22 @@ import { ErrorBoundary } from "./src/components/ErrorBoundary";
 import { AppNavigator } from "./src/navigation/AppNavigator";
 import { ThemeProvider } from "./src/contexts/ThemeContext";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { databaseService } from "./src/services/DBService";
+import { NotificationScheduler } from "./src/services/NotificationScheduler";
 
 const App = () => {
+  useEffect(() => {
+    const initDB = async () => {
+      try {
+        await databaseService.init();
+        await NotificationScheduler.initialize();
+      } catch (e) {
+        console.error("Failed to init DB/Notifications on launch", e);
+      }
+    };
+    initDB();
+  }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>

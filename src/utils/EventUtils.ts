@@ -1,4 +1,5 @@
-import { addDays, addMonths, addWeeks, addYears, differenceInDays, format, isAfter, isBefore, isSameDay, parseISO, startOfDay } from "date-fns";
+import { addDays, addMonths, addWeeks, addYears, differenceInDays, isAfter, isBefore, isSameDay, parseISO, startOfDay } from "date-fns";
+import { safeParseDate, safeFormat } from "./SafeDateUtils";
 import { CalendarEvent, Task } from "../contexts/FamilyContext";
 
 export type CalendarItem = (CalendarEvent | Task) & {
@@ -15,7 +16,7 @@ export const getEventsForDate = (
     events: CalendarEvent[],
     tasks: Task[]
 ): CalendarItem[] => {
-    const targetDateStr = format(date, "yyyy-MM-dd");
+    const targetDateStr = safeFormat(date, "yyyy-MM-dd");
     const targetDate = startOfDay(date);
 
     const result: CalendarItem[] = [];
@@ -37,9 +38,12 @@ export const getEventsForDate = (
 
     // Process Events
     events.forEach(event => {
-        const eventStartDate = parseISO(event.date);
-        const eventEndDate = event.endDate ? parseISO(event.endDate) : eventStartDate;
-        const recurrenceEnd = event.recurrenceEndDate ? parseISO(event.recurrenceEndDate) : null;
+        const eventStartDate = safeParseDate(event.date);
+
+        if (!eventStartDate) return;
+
+        const eventEndDate = event.endDate ? safeParseDate(event.endDate) || eventStartDate : eventStartDate;
+        const recurrenceEnd = event.recurrenceEndDate ? safeParseDate(event.recurrenceEndDate) : null;
 
         // 1. Single Instance / Multi-day check (Non-recurring)
         if (!event.isRecurring) {

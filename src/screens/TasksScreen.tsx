@@ -184,7 +184,7 @@ export const TasksScreen: React.FC = () => {
               <View style={styles.taskList}>
                 {filteredTasks.map((task) => {
                   const priorityStyle = getPriorityStyle(task.priority, colors);
-                  const assignee = members.find(m => m.id === task.assignee)?.name || "Unassigned";
+                  const assignee = members.find((m: any) => m.id === task.assignee)?.name || "Unassigned";
 
                   return (
                     <Pressable

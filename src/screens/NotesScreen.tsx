@@ -14,7 +14,7 @@ import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { AppLayout } from "../components/layout/AppLayout";
 import { AppIcon } from "../components/ui/AppIcon";
 import { useSidebar } from "../contexts/SidebarContext";
-import { format } from "date-fns";
+import { safeFormat, ensureDate } from "../utils/SafeDateUtils";
 import { useNotes, Note } from "../contexts/NotesContext";
 
 export const NotesScreen: React.FC = () => {
@@ -114,7 +114,7 @@ export const NotesScreen: React.FC = () => {
                                         </View>
                                         <Text style={[styles.cardTitle, { color: colors.foreground }]} numberOfLines={1}>{note.title || "Untitled"}</Text>
                                         <Text style={[styles.cardPreview, { color: colors.mutedForeground }]} numberOfLines={3}>{note.preview || "No preview"}</Text>
-                                        <Text style={styles.cardDate}>{format(new Date(note.updatedAt), "MMM d")}</Text>
+                                        <Text style={styles.cardDate}>{safeFormat(ensureDate(note.updatedAt), "MMM d")}</Text>
                                     </Pressable>
                                 ))}
                             </View>
@@ -137,7 +137,7 @@ export const NotesScreen: React.FC = () => {
                                     >
                                         <Text style={[styles.cardTitle, { color: colors.foreground }]} numberOfLines={1}>{note.title || "Untitled"}</Text>
                                         <Text style={[styles.cardPreview, { color: colors.mutedForeground }]} numberOfLines={3}>{note.preview || "No preview"}</Text>
-                                        <Text style={styles.cardDate}>{format(new Date(note.updatedAt), "MMM d")}</Text>
+                                        <Text style={styles.cardDate}>{safeFormat(ensureDate(note.updatedAt), "MMM d")}</Text>
                                     </Pressable>
                                 ))}
                             </View>

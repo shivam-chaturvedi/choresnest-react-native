@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { format } from "date-fns";
+import { format } from "date-fns"; // Keeping specific functions if needed, but we'll try to use safeFormat
+import { safeFormat, ensureDate, safeParseDate } from "../../utils/SafeDateUtils";
 import {
   Modal,
   Pressable,
@@ -148,7 +149,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         }
       }
 
-      setMemberId(eventToEdit.memberId);
+      setMemberId(eventToEdit.memberId || "");
 
       // Handle Task vs Event type if provided from CalendarScreen
       const anyEvent = eventToEdit as any;
@@ -158,10 +159,10 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         setTaskIcon(anyEvent.icon || "📝");
       } else {
         setActiveTab('event');
-        setSelectedIcon(eventToEdit.icon);
+        setSelectedIcon(eventToEdit.icon || "📅");
       }
 
-      const member = members.find(m => m.id === eventToEdit.memberId);
+      const member = members.find((m: any) => m.id === eventToEdit.memberId);
       if (member) setColor(member.color);
 
       // Set explicit additional fields
@@ -209,7 +210,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
       // Default to active member if available
       const activeMemberObj = (members && members.length > 0)
-        ? (members.find(m => m.isActive) || members[0])
+        ? (members.find((m: any) => m.isActive) || members[0])
         : null;
 
       setMemberId(activeMemberObj?.id || "1");
@@ -241,14 +242,14 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
   // Helper to get events for the selected start date
   const getExistingItems = () => {
-    const targetDateStr = format(startDate, "yyyy-MM-dd");
+    const targetDateStr = safeFormat(startDate, "yyyy-MM-dd");
 
     // Using events and tasks from context (now destructured)
     const allEvents = events || [];
     const allTasks = tasks || [];
 
-    const relevantEvents = allEvents.filter(e => e.date === targetDateStr).map(e => ({ ...e, type: 'event' }));
-    const relevantTasks = allTasks.filter(t => t.date === targetDateStr && t.status !== 'done').map(t => ({
+    const relevantEvents = allEvents.filter((e: any) => e.date === targetDateStr).map((e: any) => ({ ...e, type: 'event' }));
+    const relevantTasks = allTasks.filter((t: any) => t.date === targetDateStr && t.status !== 'done').map((t: any) => ({
       id: t.id,
       title: t.name,
       icon: t.icon,
@@ -270,7 +271,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
   // Update color when member selection changes
   useEffect(() => {
-    const selectedMember = members.find(m => m.id === memberId);
+    const selectedMember = members.find((m: any) => m.id === memberId);
     if (selectedMember) {
       setColor(selectedMember.color);
     }
@@ -284,7 +285,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       }
 
       // Format date as YYYY-MM-DD using local time
-      const formattedDate = format(startDate, "yyyy-MM-dd");
+      const formattedDate = safeFormat(startDate, "yyyy-MM-dd");
 
       // Format time as HH:MM AM/PM
       // For all-day events, set start time to 12:00 AM and end time to 11:59 PM
@@ -311,18 +312,18 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             name: name.trim(),
             icon: taskIcon,
             priority: taskPriority as any,
-            date: formattedDate,
-            due: formattedTime,
-            assignee: memberId,
+            dateString: formattedDate,
+            dueDisplay: formattedTime,
+            assigneeId: memberId,
           });
         } else {
           addTask({
             name: name.trim(),
             icon: taskIcon,
             priority: taskPriority as any,
-            date: formattedDate,
-            due: formattedTime,
-            assignee: memberId,
+            dateString: formattedDate,
+            dueDisplay: formattedTime,
+            assigneeId: memberId,
             tab: "My Tasks",
             status: 'pending'
           });
@@ -333,32 +334,44 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             title: name.trim(),
             description: description.trim(),
             notes: notes.trim(),
-            date: formattedDate,
+            dateString: formattedDate,
             time: formattedTime,
             endTime: formattedEndTime,
             icon: selectedIcon,
             memberId,
             location,
-            endDate: endDate ? format(endDate, "yyyy-MM-dd") : undefined,
+            endDate: endDate ? safeFormat(endDate, "yyyy-MM-dd") : undefined,
             isRecurring: repeatType !== 'never',
             recurrenceRule: repeatType !== 'never' ? repeatType : undefined,
-            recurrenceEndDate: repeatEndDate ? format(repeatEndDate, "yyyy-MM-dd") : undefined,
+            recurrenceEndDate: repeatEndDate ? safeFormat(repeatEndDate, "yyyy-MM-dd") : undefined,
           });
         } else {
+          // Validation for recurring events
+          if (repeatType !== 'never') {
+            if (!repeatEndDate) {
+              Alert.alert("Missing End Date", "Please select an end date for this recurring event.");
+              return;
+            }
+            if (repeatEndDate <= new Date()) {
+              Alert.alert("Invalid End Date", "End date must be in the future.");
+              return;
+            }
+          }
+
           addEvent({
             title: name.trim(),
             description: description.trim(),
             notes: notes.trim(),
-            date: formattedDate,
+            dateString: formattedDate,
             time: formattedTime,
             endTime: formattedEndTime,
             icon: selectedIcon,
             memberId,
             location,
-            endDate: endDate ? format(endDate, "yyyy-MM-dd") : undefined,
+            endDate: endDate ? safeFormat(endDate, "yyyy-MM-dd") : undefined,
             isRecurring: repeatType !== 'never',
             recurrenceRule: repeatType !== 'never' ? repeatType : undefined,
-            recurrenceEndDate: repeatEndDate ? format(repeatEndDate, "yyyy-MM-dd") : undefined,
+            recurrenceEndDate: repeatEndDate ? safeFormat(repeatEndDate, "yyyy-MM-dd") : undefined,
           });
         }
       }
@@ -429,7 +442,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
               <View style={{ gap: 12 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                   <Text style={{ fontSize: 16, fontWeight: '600', color: colors.foreground }}>
-                    {format(startDate, "MMMM d, yyyy")}
+                    {safeFormat(startDate, "MMMM d, yyyy")}
                   </Text>
                   <Pressable
                     onPress={() => setActiveTab('event')}
@@ -453,7 +466,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                   </View>
                 ) : (
                   getExistingItems().map((item: any, index) => {
-                    const member = members.find(m => m.id === item.memberId);
+                    const member = members.find((m: any) => m.id === item.memberId);
                     const profileColor = PROFILE_COLORS.find(c => c.value === member?.color)?.hex || colors.primary;
 
                     return (
@@ -522,7 +535,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                   <View style={[styles.ownerNotice, { backgroundColor: colors.primary + "1A" }]}>
                     <AppIcon name="info" size={16} color={colors.primary} />
                     <Text style={[styles.ownerNoticeText, { color: colors.primary }]}>
-                      Only {members.find(m => m.id === eventToEdit.memberId)?.name || "the owner"} can update this event
+                      Only {members.find((m: any) => m.id === eventToEdit.memberId)?.name || "the owner"} can update this event
                     </Text>
                   </View>
                 )}
@@ -765,7 +778,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                               mode="date"
                               value={repeatEndDate || new Date()}
                               onChange={setRepeatEndDate}
-                              label="End repeat (Optional)"
+                              label="Select End Date (Mandatory)"
                               placeholder="Never"
                               disabled={!isOwner}
                             />

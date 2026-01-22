@@ -136,12 +136,12 @@ export const ListsScreen: React.FC = () => {
   };
 
   const getMemberIcon = (memberId: string) => {
-    const member = members.find(m => m.id === memberId);
+    const member = members.find((m: any) => m.id === memberId);
     return member ? member.symbol : "👤";
   };
 
   const renderItemCard = (item: GroceryItem, index: number, isPurchased: boolean) => {
-    const category = categories.find(c => c.id === item.categoryId);
+    const category = categories.find((c: any) => c.id === item.categoryId);
 
     const renderRightActions = (progress: any, dragX: any) => {
       return (
@@ -397,7 +397,7 @@ export const ListsScreen: React.FC = () => {
                         >
                           <Text style={[styles.miniChipText, !historyCategoryFilter && { color: colors.primaryForeground }]}>All</Text>
                         </Pressable>
-                        {categories.map(cat => (
+                        {categories.map((cat: any) => (
                           <Pressable
                             key={cat.id}
                             onPress={() => setHistoryCategoryFilter(cat.id)}

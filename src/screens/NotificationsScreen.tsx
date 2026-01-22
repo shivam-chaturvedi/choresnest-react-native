@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import { useSidebar } from "../contexts/SidebarContext";
 import { Button } from "../components/ui/Button";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { NotificationPreferencesService } from "../services/NotificationPreferencesService";
 import {
   Calendar,
   CheckSquare,
@@ -163,8 +164,112 @@ export const NotificationsScreen: React.FC = () => {
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
 
-  const toggleSetting = (id: string) => {
-    setSettings(prev => prev.map(s => s.id === id ? { ...s, enabled: !s.enabled } : s));
+  // Load preferences on mount
+  useEffect(() => {
+    loadPreferences();
+  }, []);
+
+  const loadPreferences = async () => {
+    try {
+      const prefs = await NotificationPreferencesService.getAllPreferences();
+
+      setEventReminders(prefs.eventReminders);
+      setEventReminderTime(prefs.eventReminderTime);
+      setMealPrepReminders(prefs.mealPrepReminders);
+      setMealPrepTime(prefs.mealPrepTime);
+
+      // Update settings array
+      setSettings(prev => prev.map(s => {
+        if (s.id === 'tasks') return { ...s, enabled: prefs.taskReminders };
+        if (s.id === 'vault') return { ...s, enabled: prefs.vaultReminders };
+        if (s.id === 'mealprep') return { ...s, enabled: prefs.mealPrepReminders };
+        return s;
+      }));
+
+      // Load quiet hours
+      if (prefs.quietHours) {
+        setQuietHoursEnabled(prefs.quietHours.enabled);
+        const startHour = prefs.quietHours.startHour.toString().padStart(2, '0');
+        const startMin = prefs.quietHours.startMinute.toString().padStart(2, '0');
+        const endHour = prefs.quietHours.endHour.toString().padStart(2, '0');
+        const endMin = prefs.quietHours.endMinute.toString().padStart(2, '0');
+        setQuietStart(`${startHour}:${startMin}`);
+        setQuietEnd(`${endHour}:${endMin}`);
+      }
+    } catch (error) {
+      console.error('Error loading preferences:', error);
+    }
+  };
+
+  // Save event reminders when changed
+  useEffect(() => {
+    const saveEventPrefs = async () => {
+      try {
+        await NotificationPreferencesService.toggleCategory('events', eventReminders);
+        if (eventReminders) {
+          await NotificationPreferencesService.saveReminderTime('events', eventReminderTime);
+        }
+      } catch (error) {
+        console.error('Error saving event preferences:', error);
+      }
+    };
+    saveEventPrefs();
+  }, [eventReminders, eventReminderTime]);
+
+  // Save meal prep reminders when changed
+  useEffect(() => {
+    const saveMealPrefs = async () => {
+      try {
+        await NotificationPreferencesService.toggleCategory('meals', mealPrepReminders);
+        if (mealPrepReminders) {
+          await NotificationPreferencesService.saveReminderTime('meals', mealPrepTime);
+        }
+      } catch (error) {
+        console.error('Error saving meal preferences:', error);
+      }
+    };
+    saveMealPrefs();
+  }, [mealPrepReminders, mealPrepTime]);
+
+  // Save quiet hours when changed
+  useEffect(() => {
+    const saveQuietHours = async () => {
+      try {
+        const [startHour, startMinute] = quietStart.split(':').map(Number);
+        const [endHour, endMinute] = quietEnd.split(':').map(Number);
+
+        await NotificationPreferencesService.saveQuietHours({
+          enabled: quietHoursEnabled,
+          startHour,
+          startMinute,
+          endHour,
+          endMinute,
+        });
+      } catch (error) {
+        console.error('Error saving quiet hours:', error);
+      }
+    };
+    saveQuietHours();
+  }, [quietHoursEnabled, quietStart, quietEnd]);
+
+  const toggleSetting = async (id: string) => {
+    const newSettings = settings.map(s => s.id === id ? { ...s, enabled: !s.enabled } : s);
+    setSettings(newSettings);
+
+    // Save to database
+    try {
+      const setting = newSettings.find(s => s.id === id);
+      if (setting) {
+        let category: 'tasks' | 'documents' | 'meals' = 'tasks';
+        if (id === 'tasks') category = 'tasks';
+        else if (id === 'vault') category = 'documents';
+        else if (id === 'mealprep') category = 'meals';
+
+        await NotificationPreferencesService.toggleCategory(category, setting.enabled);
+      }
+    } catch (error) {
+      console.error('Error toggling setting:', error);
+    }
   };
 
   // Helper to parse HH:mm string to Date

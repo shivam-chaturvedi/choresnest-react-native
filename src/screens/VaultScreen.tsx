@@ -7,6 +7,7 @@ import {
   Pressable,
   TextInput,
   TouchableOpacity,
+  BackHandler,
 } from "react-native";
 import { AppLayout } from "../components/layout/AppLayout";
 import { useFamily } from "../contexts/FamilyContext";
@@ -74,7 +75,22 @@ export const VaultScreen: React.FC = () => {
 
   // Calculate dynamic values
   const categoryCounts = getCategoryCounts(allDocs);
-  const liveAlerts = generateAlerts(allDocs);
+  const [vaultAlerts, setVaultAlerts] = useState<any[]>([]);
+
+  useEffect(() => {
+    setVaultAlerts(generateAlerts(allDocs));
+  }, [allDocs]);
+
+  const liveAlerts = vaultAlerts;
+
+  const handleClearAllNotifications = () => {
+    setVaultAlerts([]);
+    setShowNotifications(false);
+  };
+
+  const handleMarkAllAsRead = () => {
+    setVaultAlerts(prev => prev.map(alert => ({ ...alert, read: true })));
+  };
 
   const categories = [
     { id: 'warranty', name: 'Warranties', icon: '🛡️', count: categoryCounts.warranty, color: colors.info + '30' },
@@ -166,6 +182,23 @@ export const VaultScreen: React.FC = () => {
       setCurrentView('all');
     }
   }, [filters]);
+
+  useEffect(() => {
+    const backAction = () => {
+      if (currentView !== 'main') {
+        handleBackToMain();
+        return true;
+      }
+      return false;
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      "hardwareBackPress",
+      backAction
+    );
+
+    return () => backHandler.remove();
+  }, [currentView]);
 
   const handleBackToMain = () => {
     setCurrentView('main');
@@ -614,6 +647,8 @@ export const VaultScreen: React.FC = () => {
             time: 'Now',
             read: false
           })) as any}
+          onClearAll={handleClearAllNotifications}
+          onMarkAllRead={handleMarkAllAsRead}
         />
 
       </View>

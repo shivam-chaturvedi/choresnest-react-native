@@ -2,15 +2,17 @@ import React from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { theme } from "../../theme";
 import { useFamily } from "../../contexts/FamilyContext";
+import { useMealPlan } from "../../contexts/MealPlanContext";
 import { AppIcon } from "../ui/AppIcon";
 
 export const FamilyDashboard: React.FC = () => {
     const { events, groceryList, familyName, tasks } = useFamily();
-    // Assuming we have mealPlan context mapped similarly or we can mock for now as we port
+    const { plannedMeals } = useMealPlan();
+
     const totalEvents = events.length;
-    const pendingTasks = tasks.filter(t => t.status === 'pending').length;
-    const totalMealsPlanned = 0; // Set to 0 until MealPlanContext is fully integrated here
-    const pendingGroceries = groceryList.filter(i => !i.completed).length;
+    const pendingTasks = tasks.filter((t: any) => t.status === 'pending').length;
+    const totalMealsPlanned = plannedMeals.length;
+    const pendingGroceries = groceryList.filter((i: any) => !i.completed).length;
 
     return (
         <View style={styles.container}>

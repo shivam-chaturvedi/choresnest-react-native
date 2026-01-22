@@ -199,7 +199,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       if (!editingMemberId) return;
 
       // Check if color is taken by another member
-      const isTaken = members.some(m => m.id !== editingMemberId && m.color === color.value);
+      const isTaken = members.some((m: FamilyMember) => m.id !== editingMemberId && m.color === color.value);
 
       if (isTaken) {
         Alert.alert("Color Taken", "This color is already assigned to another family member. Please choose a unique color.");
@@ -229,12 +229,12 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   ];
 
   const bottomLinks = [
-    { icon: Shield, label: 'Privacy Policy', route: 'Privacy' },
+    { icon: Shield, label: 'Privacy & Security', route: 'Privacy' },
     { icon: HelpCircle, label: 'Help & Support', route: 'Help' },
   ];
 
   // Find current member being edited
-  const editingMember = members.find(m => m.id === editingMemberId);
+  const editingMember = members.find((m: any) => m.id === editingMemberId);
 
   return (
     <Modal visible={mounted} animationType="none" transparent onRequestClose={onClose}>
@@ -323,7 +323,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
 
               {isProfilesOpen && (
                 <View style={{ gap: 8, marginTop: 8 }}>
-                  {members.map((member) => (
+                  {members.map((member: FamilyMember) => (
                     <View
                       key={member.id}
                       style={[
@@ -428,7 +428,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
 
                 <View style={styles.colorGrid}>
                   {PROFILE_COLORS.map(color => {
-                    const isTaken = members.some(m => m.id !== editingMemberId && m.color === color.value);
+                    const isTaken = members.some((m: FamilyMember) => m.id !== editingMemberId && m.color === color.value);
                     const isSelected = editingMember?.color === color.value;
 
                     return (

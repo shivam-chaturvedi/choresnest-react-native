@@ -20,12 +20,13 @@ import { AddMealModal } from '../components/modals/AddMealModal';
 import { RecipeDetailModal } from '../components/modals/RecipeDetailModal';
 import { WeeklyGroceryListModal } from '../components/modals/WeeklyGroceryListModal';
 import { RecipeImage } from '../components/recipes/RecipeImage';
-import { format, addDays, subDays, isToday, isTomorrow, parse, subMinutes, isAfter, startOfDay } from 'date-fns';
+import { addDays, subDays, isToday, isTomorrow, parse, subMinutes, isAfter, startOfDay } from 'date-fns';
+import { safeFormat } from '../utils/SafeDateUtils';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
-const getDayName = (date: Date) => format(date, 'EEEE'); // Monday
-const getDayNumber = (date: Date) => format(date, 'd'); // 5
+const getDayName = (date: Date) => safeFormat(date, 'EEEE'); // Monday
+const getDayNumber = (date: Date) => safeFormat(date, 'd'); // 5
 
 // Helper to parse duration string "15 min" -> 15 (number)
 const parseDuration = (timeStr: string): number => {
@@ -35,7 +36,7 @@ const parseDuration = (timeStr: string): number => {
 
 // Helper to get target meal times
 const getTargetTimeForMeal = (date: Date, type: MealType): Date => {
-  const dateStr = format(date, 'yyyy-MM-dd');
+  const dateStr = safeFormat(date, 'yyyy-MM-dd');
   const d = new Date(dateStr);
 
   switch (type) {
@@ -70,7 +71,7 @@ export const MealPlanScreen: React.FC = () => {
 
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(currentWeekStart, i));
   const totalMeals = weekDays.reduce((acc, day) => {
-    return acc + getMealsForDay(format(day, 'yyyy-MM-dd')).length;
+    return acc + getMealsForDay(safeFormat(day, 'yyyy-MM-dd')).length;
   }, 0);
 
   const { showToast } = useToast();
@@ -138,9 +139,9 @@ export const MealPlanScreen: React.FC = () => {
           </Pressable>
           <View style={{ alignItems: 'center' }}>
             <Text style={[styles.weekDateRange, { color: colors.foreground }]}>
-              {format(currentWeekStart, 'MMM d')} - {format(addDays(currentWeekStart, 6), 'MMM d')}
+              {safeFormat(currentWeekStart, 'MMM d')} - {safeFormat(addDays(currentWeekStart, 6), 'MMM d')}
             </Text>
-            <Text style={[styles.weekYear, { color: colors.mutedForeground }]}>{format(currentWeekStart, 'yyyy')}</Text>
+            <Text style={[styles.weekYear, { color: colors.mutedForeground }]}>{safeFormat(currentWeekStart, 'yyyy')}</Text>
           </View>
           <Pressable onPress={() => handleNavigateWeek('next')} style={styles.navArrow}>
             <AppIcon name="chevronRight" size={20} color={colors.foreground} />
@@ -150,7 +151,7 @@ export const MealPlanScreen: React.FC = () => {
         {/* Days List */}
         <View style={{ gap: 16 }}>
           {displayDays.map((day) => {
-            const dateStr = format(day, 'yyyy-MM-dd');
+            const dateStr = safeFormat(day, 'yyyy-MM-dd');
             const dayMeals = getMealsForDay(dateStr);
             const isTodayDate = isToday(day);
 
@@ -176,7 +177,7 @@ export const MealPlanScreen: React.FC = () => {
                     </View>
                     <View>
                       <Text style={[styles.dayName, { color: colors.foreground }]}>{getDayName(day)}</Text>
-                      <Text style={[styles.monthName, { color: colors.mutedForeground }]}>{format(day, 'MMM yyyy')}</Text>
+                      <Text style={[styles.monthName, { color: colors.mutedForeground }]}>{safeFormat(day, 'MMM yyyy')}</Text>
                     </View>
                   </View>
                 </View>
@@ -242,7 +243,7 @@ export const MealPlanScreen: React.FC = () => {
   };
 
   const getPrepItems = (date: Date) => {
-    const meals = getMealsForDay(format(date, 'yyyy-MM-dd'));
+    const meals = getMealsForDay(safeFormat(date, 'yyyy-MM-dd'));
     return meals.map(meal => {
       const recipe = getRecipeById(meal.recipeId);
       if (!recipe) return null;
@@ -296,12 +297,12 @@ export const MealPlanScreen: React.FC = () => {
               <View style={styles.timeBlock}>
                 <AppIcon name="clock" size={12} color={colors.mutedForeground} style={{ marginRight: 4 }} />
                 <Text style={[styles.timeLabel, { color: colors.mutedForeground }]}>Start: </Text>
-                <Text style={[styles.timeValue, { color: colors.mutedForeground }]}>{format(item.startTime, 'h:mm a')}</Text>
+                <Text style={[styles.timeValue, { color: colors.mutedForeground }]}>{safeFormat(item.startTime, 'h:mm a')}</Text>
               </View>
               <View style={styles.timeBlock}>
                 <AppIcon name="checkCircle" size={12} color={colors.primary} style={{ marginRight: 4 }} />
                 <Text style={[styles.timeLabel, { color: colors.primary }]}>Ready: </Text>
-                <Text style={[styles.timeValue, { color: colors.primary }]}>{format(item.readyTime, 'h:mm a')}</Text>
+                <Text style={[styles.timeValue, { color: colors.primary }]}>{safeFormat(item.readyTime, 'h:mm a')}</Text>
               </View>
             </View>
 
@@ -392,12 +393,12 @@ export const MealPlanScreen: React.FC = () => {
                         <Text style={[styles.prepItemTitle, { fontSize: 15, color: colors.foreground }]}>{item.recipe.name}</Text>
                       </View>
                       <Text style={{ fontSize: 12, color: colors.mutedForeground, marginBottom: 4 }}>
-                        {format(item.startTime, 'EEEE, MMM d')}
+                        {safeFormat(item.startTime, 'EEEE, MMM d')}
                       </Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <AppIcon name="clock" size={12} color={colors.mutedForeground} style={{ marginRight: 4 }} />
-                        <Text style={[styles.timeLabel, { color: colors.mutedForeground, fontSize: 12 }]}>Start: {format(item.startTime, 'h:mm a')}</Text>
-                        <Text style={[styles.timeLabel, { color: colors.primary, fontSize: 12, marginLeft: 8 }]}>Ready: {format(item.readyTime, 'h:mm a')}</Text>
+                        <Text style={[styles.timeLabel, { color: colors.mutedForeground, fontSize: 12 }]}>Start: {safeFormat(item.startTime, 'h:mm a')}</Text>
+                        <Text style={[styles.timeLabel, { color: colors.primary, fontSize: 12, marginLeft: 8 }]}>Ready: {safeFormat(item.readyTime, 'h:mm a')}</Text>
                       </View>
                     </View>
                   </View>

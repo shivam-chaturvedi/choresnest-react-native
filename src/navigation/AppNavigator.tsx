@@ -9,13 +9,14 @@ import { OnboardingScreen } from "../screens/OnboardingScreen";
 import { AuthScreen } from "../screens/AuthScreen";
 import { ForgotPasswordScreen } from "../screens/ForgotPasswordScreen";
 import { PrivacyScreen } from "../screens/PrivacyScreen";
+import { InitialSetupScreen } from "../screens/InitialSetupScreen";
 import { TabNavigator } from "./TabNavigator";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { useSidebar } from "../contexts/SidebarContext";
-import { ErrorBoundary } from "../components/ErrorBoundary";
 import { NotesProvider } from "../contexts/NotesContext";
 import { useTheme } from "../contexts/ThemeContext";
 import { AuthProvider, useAuth } from "../contexts/AuthContext";
+import { database } from "../database";
 
 
 
@@ -41,19 +42,17 @@ export const AppNavigator = () => {
   };
 
   return (
-    <ErrorBoundary>
-      <AuthProvider>
-        <NotesProvider>
-          <NavigationContainer
-            theme={navigationTheme}
-            initialState={navState}
-            onStateChange={(state) => setNavState(state)}
-          >
-            <AppNavigatorInner />
-          </NavigationContainer>
-        </NotesProvider>
-      </AuthProvider>
-    </ErrorBoundary>
+    <AuthProvider>
+      <NotesProvider>
+        <NavigationContainer
+          theme={navigationTheme}
+          initialState={navState}
+          onStateChange={(state) => setNavState(state)}
+        >
+          <AppNavigatorInner />
+        </NavigationContainer>
+      </NotesProvider>
+    </AuthProvider>
   );
 };
 
@@ -61,8 +60,27 @@ const AppNavigatorInner = () => {
   const { isSidebarOpen, closeSidebar } = useSidebar();
   const { isAuthenticated, isLoading, hasCompletedOnboarding, completeOnboarding } = useAuth();
   const [showSplash, setShowSplash] = React.useState(true);
+  const [hasMembersInDB, setHasMembersInDB] = React.useState<boolean | null>(null);
 
-  if (isLoading || showSplash) {
+  // Check if there are members in the database
+  React.useEffect(() => {
+    const checkMembers = async () => {
+      try {
+        const membersCollection = database.get('members');
+        const members = await membersCollection.query().fetch();
+        setHasMembersInDB(members.length > 0);
+      } catch (error) {
+        console.error('Error checking members:', error);
+        setHasMembersInDB(false);
+      }
+    };
+
+    if (isAuthenticated && !isLoading) {
+      checkMembers();
+    }
+  }, [isAuthenticated, isLoading]);
+
+  if (isLoading || showSplash || (isAuthenticated && hasMembersInDB === null)) {
     return (
       <SplashScreen
         onContinue={() => setShowSplash(false)}
@@ -74,12 +92,29 @@ const AppNavigatorInner = () => {
     <>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {isAuthenticated ? (
-          <Stack.Screen name="MainTabs" component={TabNavigator} />
+          <>
+            {!hasMembersInDB ? (
+              <Stack.Screen name="InitialSetup">
+                {() => (
+                  <InitialSetupScreen
+                    onComplete={async () => {
+                      // Refresh member check
+                      const membersCollection = database.get('members');
+                      const members = await membersCollection.query().fetch();
+                      setHasMembersInDB(members.length > 0);
+                    }}
+                  />
+                )}
+              </Stack.Screen>
+            ) : (
+              <Stack.Screen name="MainTabs" component={TabNavigator} />
+            )}
+          </>
         ) : (
           <>
             {!hasCompletedOnboarding ? (
               <Stack.Screen name="Onboarding">
-                {({ navigation }) => (
+                {({ navigation }: any) => (
                   <OnboardingScreen
                     onSkip={() => {
                       completeOnboarding();
@@ -94,10 +129,10 @@ const AppNavigatorInner = () => {
               </Stack.Screen>
             ) : null}
             <Stack.Screen name="Auth">
-              {({ navigation }) => (
+              {({ navigation }: any) => (
                 <AuthScreen
                   onAuthenticated={() => {
-                    // MainTabs will render automatically due to state change
+                    // MainTabs or InitialSetup will render automatically due to state change
                   }}
                   onForgotPassword={() => navigation.navigate("ForgotPassword")}
                   onPrivacy={() => navigation.navigate("Privacy")}

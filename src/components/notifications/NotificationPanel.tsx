@@ -30,12 +30,16 @@ interface NotificationPanelProps {
   open: boolean;
   onClose: () => void;
   notifications: NotificationItem[];
+  onClearAll?: () => void;
+  onMarkAllRead?: () => void;
 }
 
 export const NotificationPanel: React.FC<NotificationPanelProps> = ({
   open,
   onClose,
   notifications,
+  onClearAll,
+  onMarkAllRead,
 }) => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
@@ -77,7 +81,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
                 <Text style={[styles.headerSubtitle, { color: colors.primaryForeground }]}>{unreadCount} new updates</Text>
               </View>
               <View style={styles.headerActions}>
-                <Pressable onPress={() => {/* Clear Logic */ }} style={{ marginRight: 16 }}>
+                <Pressable onPress={onClearAll} style={{ marginRight: 16 }}>
                   <Trash2 size={20} color={colors.primaryForeground} style={{ opacity: 0.8 }} />
                 </Pressable>
                 <Pressable onPress={onClose}>
@@ -179,7 +183,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
 
           {/* Footer - Mark all as read */}
           <View style={[styles.footer, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
-            <Pressable style={styles.markReadBtn}>
+            <Pressable style={styles.markReadBtn} onPress={onMarkAllRead}>
               <Check size={18} color={colors.mutedForeground} style={{ marginRight: 8 }} />
               <Text style={[styles.markReadText, { color: colors.mutedForeground }]}>Mark all as read</Text>
             </Pressable>

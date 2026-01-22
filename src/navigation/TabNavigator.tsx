@@ -65,12 +65,12 @@ export const TabNavigator = () => (
     screenOptions={{
       headerShown: false,
     }}
-    tabBar={(props) => {
+    tabBar={(props: any) => {
       // Get the current route name for the 'home' tab
       // We need to check if we are on the 'home' tab AND specifically on the 'HomeMain' screen
       // If we are deeper in the stack (Recipes, etc), we don't want to show 'active' state
 
-      const homeRoute = props.state.routes.find(r => r.name === 'home');
+      const homeRoute = props.state.routes.find((r: any) => r.name === 'home');
       const focusedRouteName = homeRoute && getFocusedRouteNameFromRoute(homeRoute);
 
       let activeRoute = props.state.routeNames[props.state.index] as BottomNavRoute;
@@ -89,43 +89,43 @@ export const TabNavigator = () => (
         <BottomNavigation
           activeRoute={activeRoute}
           onNavigate={(route) => {
-        if (route === 'more') {
-          const state = props.navigation.getState();
-          const targetIndex = state.routes.findIndex(r => r.name === 'more');
+            if (route === 'more') {
+              const state = props.navigation.getState();
+              const targetIndex = state.routes.findIndex((r: any) => r.name === 'more');
 
-          if (targetIndex !== -1) {
-            const routes = state.routes.map((routeItem) => {
-              if (routeItem.name === 'more') {
-                return {
-                  ...routeItem,
-                  state: {
-                    index: 0,
-                    routes: [{ name: 'MoreMain' }],
-                  },
-                };
+              if (targetIndex !== -1) {
+                const routes = state.routes.map((routeItem: any) => {
+                  if (routeItem.name === 'more') {
+                    return {
+                      ...routeItem,
+                      state: {
+                        index: 0,
+                        routes: [{ name: 'MoreMain' }],
+                      },
+                    };
+                  }
+
+                  return routeItem;
+                });
+
+                props.navigation.dispatch(
+                  CommonActions.reset({
+                    ...state,
+                    routes,
+                    index: targetIndex,
+                  })
+                );
+              } else {
+                props.navigation.navigate(route);
               }
-
-              return routeItem;
-            });
-
-            props.navigation.dispatch(
-              CommonActions.reset({
-                ...state,
-                routes,
-                index: targetIndex,
-              })
-            );
-          } else {
-            props.navigation.navigate(route);
-          }
-        } else if (route === 'home') {
-          props.navigation.reset({
-            index: 0,
-            routes: [{ name: 'home' }],
-          });
-        } else {
-          props.navigation.navigate(route);
-        }
+            } else if (route === 'home') {
+              props.navigation.reset({
+                index: 0,
+                routes: [{ name: 'home' }],
+              });
+            } else {
+              props.navigation.navigate(route);
+            }
           }}
         />
       );

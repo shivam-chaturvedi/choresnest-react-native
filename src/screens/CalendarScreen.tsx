@@ -20,9 +20,10 @@ import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { AppIcon } from "../components/ui/AppIcon";
 import { PROFILE_COLORS } from "../constants/profileColors";
 import { useSidebar } from "../contexts/SidebarContext";
-import { format, addMonths, subMonths, addDays, subDays, startOfWeek, endOfWeek, isSameMonth, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval } from "date-fns";
+import { addMonths, subMonths, addDays, subDays, startOfWeek, endOfWeek, isSameMonth, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval } from "date-fns";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { getEventsForDate } from "../utils/EventUtils";
+import { safeFormat, ensureDate, safeParseDate } from "../utils/SafeDateUtils";
 
 const filteredEvents = (events: any[], filterMember: string | null) => {
   if (!filterMember) return events;
@@ -49,8 +50,8 @@ const DraggableEvent: React.FC<{
   const translateX = useRef(new Animated.Value(0)).current;
   const resizeY = useRef(new Animated.Value(0)).current;
 
-  const member = members.find(m => m.id === event.memberId);
-  const profileColor = PROFILE_COLORS.find(c => c.value === member?.color);
+  const member = members.find((m: any) => m.id === event.memberId);
+  const profileColor = PROFILE_COLORS.find((c: any) => c.value === member?.color);
   const bgColor = profileColor ? profileColor.hex + "40" : colors.primary + "40";
   const borderColor = profileColor ? profileColor.hex : colors.primary;
 
@@ -310,10 +311,10 @@ export const CalendarScreen: React.FC = () => {
 
   // Unified items (Events + Tasks)
   const unifiedItems = useMemo(() => {
-    const eventItems = events.map(e => ({ ...e, type: 'event' }));
+    const eventItems = events.map((e: CalendarEvent) => ({ ...e, type: 'event' }));
     const taskItems = tasks
-      .filter(t => t.status !== 'done')
-      .map(t => ({
+      .filter((t: any) => t.status !== 'done')
+      .map((t: any) => ({
         id: t.id,
         title: t.name,
         icon: t.icon,
@@ -399,13 +400,13 @@ export const CalendarScreen: React.FC = () => {
                 isSelected && { color: "#fff", fontWeight: "700" },
                 isToday && !isSelected && { color: colors.primary, fontWeight: "700" }
               ]}>
-                {format(day, "d")}
+                {safeFormat(day, "d")}
               </Text>
 
               <View style={styles.eventDotRx}>
                 {dayEvents.slice(0, 3).map((e, idx) => {
-                  const member = members.find(m => m.id === e.memberId);
-                  const profileColor = PROFILE_COLORS.find(c => c.value === member?.color);
+                  const member = members.find((m: any) => m.id === e.memberId);
+                  const profileColor = PROFILE_COLORS.find((c: any) => c.value === member?.color);
                   const dotColor = profileColor ? profileColor.hex : colors.primary;
 
                   return (
@@ -438,7 +439,7 @@ export const CalendarScreen: React.FC = () => {
       if (!quickAddText.trim()) return;
 
       let title = quickAddText.trim();
-      let timeString = format(new Date(), "h:mm aa");
+      let timeString = safeFormat(new Date(), "h:mm aa");
 
       const timeMatch = title.match(/at (\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i);
       if (timeMatch) {
@@ -451,7 +452,7 @@ export const CalendarScreen: React.FC = () => {
 
       addEvent({
         title,
-        date: format(selectedDate, "yyyy-MM-dd"),
+        date: safeFormat(selectedDate, "yyyy-MM-dd"),
         time: timeString,
         icon: "📅",
         memberId: activeMember?.id || members[0]?.id,
@@ -492,8 +493,8 @@ export const CalendarScreen: React.FC = () => {
                       isToday && !isSelected && { backgroundColor: colors.primary + '10', borderColor: colors.primary, borderWidth: 1 }
                     ]}
                   >
-                    <Text style={[styles.weekDayLabel, { color: colors.mutedForeground, fontSize: 11 }, isSelected && styles.textWhite]}>{format(day, "EEE")}</Text>
-                    <Text style={[styles.weekDateLabel, { color: colors.foreground, fontSize: 16, fontWeight: '600' }, isSelected && styles.textWhite]}>{format(day, "d")}</Text>
+                    <Text style={[styles.weekDayLabel, { color: colors.mutedForeground, fontSize: 11 }, isSelected && styles.textWhite]}>{safeFormat(day, "EEE")}</Text>
+                    <Text style={[styles.weekDateLabel, { color: colors.foreground, fontSize: 16, fontWeight: '600' }, isSelected && styles.textWhite]}>{safeFormat(day, "d")}</Text>
                   </Pressable>
                 );
               })}
@@ -504,10 +505,10 @@ export const CalendarScreen: React.FC = () => {
         <View style={[styles.card, { backgroundColor: colors.card, borderRadius: radius.card, padding: 0, overflow: 'hidden', flex: 1 }]}>
           {(activeView === "Day" || activeView === "Week") && (
             <View style={styles.dayHeader}>
-              <Text style={[styles.dayHeaderNumber, { color: colors.foreground }]}>{format(selectedDate, "d")}</Text>
+              <Text style={[styles.dayHeaderNumber, { color: colors.foreground }]}>{safeFormat(selectedDate, "d")}</Text>
               <View>
-                <Text style={[styles.dayHeaderMonth, { color: colors.foreground }]}>{format(selectedDate, "MMMM yyyy")}</Text>
-                <Text style={[styles.dayHeaderWeekday, { color: colors.primary }]}>{format(selectedDate, "EEEE")}</Text>
+                <Text style={[styles.dayHeaderMonth, { color: colors.foreground }]}>{safeFormat(selectedDate, "MMMM yyyy")}</Text>
+                <Text style={[styles.dayHeaderWeekday, { color: colors.primary }]}>{safeFormat(selectedDate, "EEEE")}</Text>
               </View>
             </View>
           )}
@@ -550,7 +551,7 @@ export const CalendarScreen: React.FC = () => {
                   ))}
 
                   {daysToRender.map((day, dayIndex) => {
-                    const dateStr = format(day, "yyyy-MM-dd");
+                    const dateStr = safeFormat(day, "yyyy-MM-dd");
                     // Use helper to get proper events including recurring and multi-day
                     const dayEvents = getEventsForDate(day, currentEvents as any[], []) as any[];
 
@@ -770,7 +771,7 @@ export const CalendarScreen: React.FC = () => {
                   <Pressable onPress={() => navigateDate(-1)} style={{ padding: 4 }}>
                     <AppIcon name="chevronLeft" size={20} color="#fff" />
                   </Pressable>
-                  <Text style={[styles.monthTitle, { marginHorizontal: 8 }]}>{format(selectedDate, "MMMM yyyy")}</Text>
+                  <Text style={[styles.monthTitle, { marginHorizontal: 8 }]}>{safeFormat(selectedDate, "MMMM yyyy")}</Text>
                   <Pressable onPress={() => navigateDate(1)} style={{ padding: 4 }}>
                     <AppIcon name="chevronRight" size={20} color="#fff" />
                   </Pressable>
@@ -853,7 +854,7 @@ export const CalendarScreen: React.FC = () => {
                 filterMember === null && styles.textWhite
               ]}>All</Text>
             </Pressable>
-            {members.map(member => (
+            {members.map((member: any) => (
               <Pressable
                 key={member.id}
                 onPress={() => setFilterMember(member.id)}
@@ -903,7 +904,7 @@ export const CalendarScreen: React.FC = () => {
                   <Text style={{ fontSize: 24 }}>{event.icon}</Text>
                   <View>
                     <Text style={[styles.upcomingTitle, { color: colors.foreground }]}>{event.title}</Text>
-                    <Text style={[styles.upcomingMeta, { color: colors.mutedForeground }]}>{format(new Date(event.date), "MMM d")} · {event.time}</Text>
+                    <Text style={[styles.upcomingMeta, { color: colors.mutedForeground }]}>{safeFormat(ensureDate(event.date), "MMM d")} · {event.time}</Text>
                   </View>
                 </View>
               </Pressable>
@@ -922,7 +923,7 @@ export const CalendarScreen: React.FC = () => {
               setSelectedEvent(undefined);
             }
           }}
-          initialDate={format(selectedDate, "yyyy-MM-dd")}
+          initialDate={safeFormat(selectedDate, "yyyy-MM-dd")}
           initialTime={selectedTime}
           eventToEdit={selectedEvent as CalendarEvent}
           onSelectEvent={setSelectedEvent}

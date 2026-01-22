@@ -54,7 +54,7 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
     // Initialize localMembers from context when modal opens
     React.useEffect(() => {
         if (open) {
-            setLocalMembers(members.map(m => ({
+            setLocalMembers(members.map((m: any) => ({
                 id: m.id,
                 name: m.name,
                 avatar: m.symbol,
@@ -65,7 +65,7 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
         }
     }, [open, members, familyName]);
 
-    const usedColors = localMembers.map(m => m.color);
+    const usedColors = localMembers.map((m: any) => m.color);
 
     // Auto-select first available color
     React.useEffect(() => {
@@ -116,7 +116,7 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
 
         // Apply changes
         // 1. Members to remove (in context but not in local)
-        const localIds = new Set(localMembers.filter(m => m.id).map(m => m.id));
+        const localIds = new Set(localMembers.filter(m => m.id).map((m: any) => m.id));
         members.forEach(m => {
             if (!localIds.has(m.id)) removeMember(m.id);
         });
