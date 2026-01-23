@@ -1,7 +1,7 @@
 import React from "react";
 import { DefaultTheme, DarkTheme, NavigationContainer } from "@react-navigation/native";
 import { theme } from "../theme";
-import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { createNativeStackNavigator, NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 
 import { SplashScreen } from "../screens/SplashScreen";
@@ -79,7 +79,7 @@ const AppNavigatorInner = () => {
           <>
             {!hasCompletedOnboarding ? (
               <Stack.Screen name="Onboarding">
-                {({ navigation }) => (
+                {({ navigation }: { navigation: NativeStackNavigationProp<any> }) => (
                   <OnboardingScreen
                     onSkip={() => {
                       completeOnboarding();
@@ -94,7 +94,7 @@ const AppNavigatorInner = () => {
               </Stack.Screen>
             ) : null}
             <Stack.Screen name="Auth">
-              {({ navigation }) => (
+              {({ navigation }: { navigation: NativeStackNavigationProp<any> }) => (
                 <AuthScreen
                   onAuthenticated={() => {
                     // MainTabs will render automatically due to state change
