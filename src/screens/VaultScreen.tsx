@@ -79,7 +79,7 @@ export const VaultScreen: React.FC = () => {
 
   useEffect(() => {
     setVaultAlerts(generateAlerts(allDocs));
-  }, [allDocs]);
+  }, [allDocs.length]); // Use length to avoid infinite loop
 
   const liveAlerts = vaultAlerts;
 

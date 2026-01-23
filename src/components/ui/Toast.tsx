@@ -10,26 +10,17 @@ import {
 } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
+import { registerToastHandler, ToastRequest, ToastType } from "../../services/ToastService";
 import { theme } from "../../theme";
 
-export type ToastType = "default" | "warning" | "success";
-
-export interface ToastOptions {
-  id?: string;
-  title: string;
-  description?: string;
-  type?: ToastType;
-  duration?: number;
-}
-
-interface ActiveToast extends ToastOptions {
+interface ActiveToast extends ToastRequest {
   id: string;
   type: ToastType;
   duration: number;
 }
 
 interface ToastContextValue {
-  showToast: (options: ToastOptions) => void;
+  showToast: (options: ToastRequest) => void;
   hideToast: (id: string) => void;
 }
 
@@ -41,13 +32,6 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
   const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const [toasts, setToasts] = useState<ActiveToast[]>([]);
 
-  useEffect(() => {
-    return () => {
-      timers.current.forEach((timer) => clearTimeout(timer));
-      timers.current.clear();
-    };
-  }, []);
-
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
     const timer = timers.current.get(id);
@@ -58,7 +42,7 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const showToast = useCallback(
-    (options: ToastOptions) => {
+    (options: ToastRequest) => {
       const id = options.id ?? `${Date.now()}-${Math.random()}`;
       const type = options.type ?? "default";
       const duration = options.duration ?? DEFAULT_DURATION;
@@ -79,6 +63,15 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
     },
     [removeToast]
   );
+
+  useEffect(() => {
+    registerToastHandler(showToast);
+    return () => {
+      registerToastHandler(null);
+      timers.current.forEach((timer) => clearTimeout(timer));
+      timers.current.clear();
+    };
+  }, [showToast]);
 
   const value = useMemo(
     () => ({

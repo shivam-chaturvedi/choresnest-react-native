@@ -1,7 +1,34 @@
+import RNFS from 'react-native-fs';
 import { database } from '../database';
 import { Recipe, Collection, CollectionRecipe } from '../database/models/Recipe';
 import MealPlan from '../database/models/MealPlan';
 import { Q } from '@nozbe/watermelondb';
+
+// Helper to save image to permanent storage
+const saveImageToStorage = async (tempUri: string): Promise<string> => {
+    try {
+        if (!tempUri) return '';
+
+        // Create recipes directory if it doesn't exist
+        const destDir = `${RNFS.DocumentDirectoryPath}/recipes`;
+        const exists = await RNFS.exists(destDir);
+        if (!exists) {
+            await RNFS.mkdir(destDir);
+        }
+
+        // Generate unique filename
+        const filename = `recipe_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.jpg`;
+        const destPath = `${destDir}/${filename}`;
+
+        // Copy file
+        await RNFS.copyFile(tempUri, destPath);
+        return `file://${destPath}`;
+    } catch (error) {
+        console.error('Error saving image to storage:', error);
+        // Fallback to original URI if copy fails
+        return tempUri;
+    }
+};
 
 export const RecipeService = {
     // Recipes
@@ -20,6 +47,12 @@ export const RecipeService = {
     // Recipe Operations
     addRecipe: async (data: Partial<Recipe>) => {
         try {
+            // Persist image if provided
+            let finalImagePath = data.imagePath || '';
+            if (finalImagePath && !finalImagePath.includes(RNFS.DocumentDirectoryPath)) {
+                finalImagePath = await saveImageToStorage(finalImagePath);
+            }
+
             return await database.write(async () => {
                 return await database.get<Recipe>('recipes').create(r => {
                     r.name = data.name || 'Untitled Recipe';
@@ -27,12 +60,11 @@ export const RecipeService = {
                     r.prepTime = data.prepTime || '0 mins';
                     r.cookTime = data.cookTime || '0 mins';
                     r.servings = data.servings || 1;
-                    r.imagePath = data.imagePath || '';
+                    r.imagePath = finalImagePath;
                     r.isSaved = data.isSaved || false;
                     r.ingredients = data.ingredients || [];
                     r.instructions = data.instructions || [];
                     r.tags = data.tags || [];
-                    // Handle other fields safely if they exist in data
                 });
             });
         } catch (error) {
@@ -47,10 +79,6 @@ export const RecipeService = {
             return database.get<MealPlan>('meal_plans').query(Q.where('date', date)).observe();
         } catch (error) {
             console.error('Error observing meal plans:', error);
-            // Return empty observable or handle gracefully? WatermelonDB usually handles observer errors but setup might fail.
-            // For observe, we might not be able to catch easily inside here without breaking return type.
-            // Letting it throw might be better or returning empty if possible.
-            // Standard approach: just let observe happen, errors usually in query definition.
             return database.get<MealPlan>('meal_plans').query(Q.where('date', date)).observe();
         }
     },

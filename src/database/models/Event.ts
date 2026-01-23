@@ -1,5 +1,5 @@
 import { Model } from '@nozbe/watermelondb';
-import { field, text, date } from '@nozbe/watermelondb/decorators';
+import { field, text } from '@nozbe/watermelondb/decorators';
 
 export default class Event extends Model {
     static table = 'events';
@@ -21,4 +21,5 @@ export default class Event extends Model {
     @text('recurrence_end_date') recurrenceEndDate?: string;
     @text('notification_id') notificationId?: string;
     @field('reminder_offset_minutes') reminderOffsetMinutes?: number;
+    @field('updated_at') updatedAt!: number;
 }

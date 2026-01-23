@@ -122,13 +122,16 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         setAllDay(true);
       } else {
         setAllDay(false);
-        const timeParts = eventToEdit.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
+        const timeParts = eventToEdit.time.match(/(\d+):(\d+)(\s*(AM|PM))?/i);
         if (timeParts) {
           let hours = parseInt(timeParts[1]);
           const minutes = parseInt(timeParts[2]);
-          const period = timeParts[3].toUpperCase();
+          const period = timeParts[3] ? timeParts[3].trim().toUpperCase() : null;
+
           if (period === "PM" && hours !== 12) hours += 12;
           if (period === "AM" && hours === 12) hours = 0;
+          // If no period, assume 24h unless it's obviously ambiguous (e.g. 10:00 could be AM or PM, usually treat as 24h -> 10:00 is 10AM, 22:00 is 10PM)
+
           const timeDate = new Date();
           timeDate.setHours(hours, minutes, 0, 0);
           setStartTime(timeDate);
@@ -136,13 +139,15 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       }
 
       if (eventToEdit.endTime) {
-        const timeParts = eventToEdit.endTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
+        const timeParts = eventToEdit.endTime.match(/(\d+):(\d+)(\s*(AM|PM))?/i);
         if (timeParts) {
           let hours = parseInt(timeParts[1]);
           const minutes = parseInt(timeParts[2]);
-          const period = timeParts[3].toUpperCase();
+          const period = timeParts[3] ? timeParts[3].trim().toUpperCase() : null;
+
           if (period === "PM" && hours !== 12) hours += 12;
           if (period === "AM" && hours === 12) hours = 0;
+
           const timeDate = new Date();
           timeDate.setHours(hours, minutes, 0, 0);
           setEndTime(timeDate);
@@ -169,6 +174,19 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       if (eventToEdit.recurrenceRule) setRepeatType(eventToEdit.recurrenceRule);
       if (eventToEdit.recurrenceEndDate) setRepeatEndDate(new Date(eventToEdit.recurrenceEndDate));
       if (eventToEdit.endDate) setEndDate(new Date(eventToEdit.endDate));
+      if (eventToEdit.reminderOffsetMinutes !== undefined) {
+        if (eventToEdit.reminderOffsetMinutes < 0) {
+          setReminder(false);
+          setReminderTime("15");
+        } else {
+          const matchOption = reminderOptions.find(o => parseInt(o.value, 10) === eventToEdit.reminderOffsetMinutes);
+          setReminderTime(matchOption ? matchOption.value : "15");
+          setReminder(true);
+        }
+      } else {
+        setReminder(true);
+        setReminderTime("15");
+      }
 
     } else {
       // Reset form for new event
@@ -306,6 +324,8 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         }) : undefined;
       }
 
+      const reminderOffsetMinutes = reminder ? parseInt(reminderTime, 10) : -1;
+
       if (activeTab === 'task') {
         if (isEditing && eventToEdit) {
           updateTask(eventToEdit.id, {
@@ -344,6 +364,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             isRecurring: repeatType !== 'never',
             recurrenceRule: repeatType !== 'never' ? repeatType : undefined,
             recurrenceEndDate: repeatEndDate ? safeFormat(repeatEndDate, "yyyy-MM-dd") : undefined,
+            reminderOffsetMinutes,
           });
         } else {
           // Validation for recurring events
@@ -372,6 +393,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             isRecurring: repeatType !== 'never',
             recurrenceRule: repeatType !== 'never' ? repeatType : undefined,
             recurrenceEndDate: repeatEndDate ? safeFormat(repeatEndDate, "yyyy-MM-dd") : undefined,
+            reminderOffsetMinutes,
           });
         }
       }

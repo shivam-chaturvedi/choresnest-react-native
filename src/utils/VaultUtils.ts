@@ -23,7 +23,7 @@ export const generateAlerts = (documents: VaultDocument[]): VaultAlert[] => {
             if (daysUntilExpiry < 0) {
                 alerts.push({
                     id: `${doc.id}-expired`,
-                    icon: doc.icon,
+                    icon: doc.icon || 'file',
                     name: doc.name,
                     message: 'Warranty expired',
                     type: 'danger',
@@ -32,7 +32,7 @@ export const generateAlerts = (documents: VaultDocument[]): VaultAlert[] => {
             } else if (daysUntilExpiry <= 15) {
                 alerts.push({
                     id: `${doc.id}-expiring`,
-                    icon: doc.icon,
+                    icon: doc.icon || 'file',
                     name: doc.name,
                     message: `Warranty expires in ${daysUntilExpiry} days`,
                     type: 'warning',
@@ -49,7 +49,7 @@ export const generateAlerts = (documents: VaultDocument[]): VaultAlert[] => {
             if (daysUntilService < 0) {
                 alerts.push({
                     id: `${doc.id}-overdue`,
-                    icon: doc.icon,
+                    icon: doc.icon || 'file',
                     name: doc.name,
                     message: 'Service overdue',
                     type: 'danger',
@@ -58,7 +58,7 @@ export const generateAlerts = (documents: VaultDocument[]): VaultAlert[] => {
             } else if (daysUntilService <= 15) {
                 alerts.push({
                     id: `${doc.id}-due`,
-                    icon: doc.icon,
+                    icon: doc.icon || 'file',
                     name: doc.name,
                     message: `Service due in ${daysUntilService} days`,
                     type: 'info',
@@ -75,7 +75,7 @@ export const generateAlerts = (documents: VaultDocument[]): VaultAlert[] => {
             if (daysUntilExpiry <= 30 && daysUntilExpiry > 0) {
                 alerts.push({
                     id: `${doc.id}-renewal`,
-                    icon: doc.icon,
+                    icon: doc.icon || 'file',
                     name: doc.name,
                     message: `Renewal due in ${daysUntilExpiry} days`,
                     type: 'info',

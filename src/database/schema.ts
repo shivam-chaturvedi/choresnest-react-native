@@ -43,6 +43,7 @@ export default appSchema({
                 { name: 'recurrence_end_date', type: 'string', isOptional: true },
                 { name: 'notification_id', type: 'string', isOptional: true },
                 { name: 'reminder_offset_minutes', type: 'number', isOptional: true }, // 15, 30, 60, etc.
+                { name: 'updated_at', type: 'number' }, // ✅ CRITICAL for reactivity
             ],
         }),
         tableSchema({
@@ -58,6 +59,7 @@ export default appSchema({
                 { name: 'tab', type: 'string' }, // "My Tasks", "Family Tasks"
                 { name: 'notification_id', type: 'string', isOptional: true },
                 { name: 'reminder_enabled', type: 'boolean' }, // default true
+                { name: 'updated_at', type: 'number' }, // ✅ CRITICAL for reactivity
             ],
         }),
         tableSchema({
@@ -208,6 +210,7 @@ export default appSchema({
             columns: [
                 { name: 'category', type: 'string', isIndexed: true }, // events, tasks, documents, meals, budgets
                 { name: 'enabled', type: 'boolean' },
+                { name: 'reminder_offset_minutes', type: 'number', isOptional: true },
                 { name: 'updated_at', type: 'number' },
             ],
         }),

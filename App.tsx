@@ -20,14 +20,15 @@ import { NotificationScheduler } from "./src/services/NotificationScheduler";
 
 const App = () => {
   useEffect(() => {
-    const initDB = async () => {
-      try {
-        await databaseService.init();
-        await NotificationScheduler.initialize();
-      } catch (e) {
-        console.error("Failed to init DB/Notifications on launch", e);
-      }
-    };
+        const initDB = async () => {
+          try {
+            await databaseService.init();
+            await NotificationScheduler.initialize();
+            await NotificationScheduler.rescheduleAllMissing();
+          } catch (e) {
+            console.error("Failed to init DB/Notifications on launch", e);
+          }
+        };
     initDB();
   }, []);
 

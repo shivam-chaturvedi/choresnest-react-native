@@ -3,18 +3,17 @@ import {
   StyleSheet,
   Text,
   View,
-  ScrollView,
   Pressable,
   Dimensions,
   Platform,
   Animated,
   TextInput,
 } from "react-native";
-import { PanGestureHandler, State, PanGestureHandlerStateChangeEvent } from "react-native-gesture-handler";
+import { PanGestureHandler, State, PanGestureHandlerStateChangeEvent, ScrollView } from "react-native-gesture-handler";
 import { AppLayout } from "../components/layout/AppLayout";
 import { AddEventModal } from "../components/modals/AddEventModal";
 import { GlobalSearch } from "../components/search/GlobalSearch";
-import { useFamily, CalendarEvent } from "../contexts/FamilyContext";
+import { useFamily, CalendarEvent, Task } from "../contexts/FamilyContext";
 import { theme } from "../theme";
 import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { AppIcon } from "../components/ui/AppIcon";
@@ -81,16 +80,15 @@ const DraggableEvent: React.FC<{
         // In the new Week view (Single Day with Header), we disable dragging between days
         // because only one day is rendered at a time in the body.
 
-        /* 
         if (activeView === "Week") {
-          const colShift = Math.round(deltaX / (Dimensions.get('window').width * (dayColumnWidth / 100)));
+          // Allow easier dragging between days (threshold: 1/3 screen width)
+          const colShift = Math.round(deltaX / (Dimensions.get('window').width / 3));
           if (colShift !== 0) {
             const currentDate = new Date(event.date);
             currentDate.setDate(currentDate.getDate() + colShift);
-            newDate = format(currentDate, "yyyy-MM-dd");
+            newDate = safeFormat(currentDate, "yyyy-MM-dd");
           }
         }
-        */
 
         // Calculate new start time in minutes
         const totalMinutes = (totalY / HOUR_HEIGHT) * 60;
@@ -192,6 +190,8 @@ const DraggableEvent: React.FC<{
         enabled={isOwner}
         onGestureEvent={onGestureEvent}
         onHandlerStateChange={onHandlerStateChange}
+        activeOffsetX={[-10, 10]}
+        activeOffsetY={[-10, 10]}
       >
         <Animated.View
           style={{
@@ -261,7 +261,9 @@ const DraggableEvent: React.FC<{
 };
 
 export const CalendarScreen: React.FC = () => {
-  const { members, activeMember, events, tasks, addEvent, updateEvent, updateTask } = useFamily();
+  const {
+    members, activeMember, events, tasks, addEvent, updateEvent, updateTask,
+  } = useFamily();
   const { openSidebar } = useSidebar();
   const navigation = useNavigation();
   const colors = useThemeColors();
@@ -310,26 +312,47 @@ export const CalendarScreen: React.FC = () => {
   const today = new Date();
 
   // Unified items (Events + Tasks)
-  const unifiedItems = useMemo(() => {
-    const eventItems = events.map((e: CalendarEvent) => ({ ...e, type: 'event' }));
-    const taskItems = tasks
-      .filter((t: any) => t.status !== 'done')
-      .map((t: any) => ({
+  const filteredEvents = useMemo(() => {
+    if (!filterMember) return events;
+    return events.filter(e => e.memberId === filterMember);
+  }, [events, filterMember]);
+
+  const filteredTasks = useMemo(() => {
+    if (!filterMember) return tasks;
+    return tasks.filter(t => t.assignee === filterMember);
+  }, [tasks, filterMember]);
+
+  const calendarItems = useMemo(() => {
+    const eventItems = filteredEvents.map((e: CalendarEvent) => ({ ...e, type: 'event' as const }));
+    const taskItems = filteredTasks
+      .filter((t: Task) => t.status !== 'done')
+      .map((t: Task) => ({
         id: t.id,
         title: t.name,
         icon: t.icon,
         date: t.date,
         time: t.due && t.due.match(/\d+:\d+\s*(AM|PM)/i) ? t.due : "All Day",
         memberId: t.assignee,
-        type: 'task',
-        priority: t.priority
+        type: 'task' as const,
+        priority: t.priority,
       }));
 
-    const all = [...eventItems, ...taskItems];
-    return filteredEvents(all, filterMember);
-  }, [events, tasks, filterMember]);
+    return [...eventItems, ...taskItems];
+  }, [filteredEvents, filteredTasks]);
 
-  const currentEvents = useMemo(() => unifiedItems, [unifiedItems]);
+  const upcomingItems = useMemo(() => {
+    const sorted = [...calendarItems].sort((a, b) => {
+      const dateA = safeParseDate(a.date);
+      const dateB = safeParseDate(b.date);
+      if (!dateA || !dateB) return 0;
+      const timeA = a.time && a.time !== "All Day" ? a.time : "00:00 AM";
+      const timeB = b.time && b.time !== "All Day" ? b.time : "00:00 AM";
+      const dateTimeA = new Date(`${safeFormat(dateA, "yyyy-MM-dd")} ${timeA}`);
+      const dateTimeB = new Date(`${safeFormat(dateB, "yyyy-MM-dd")} ${timeB}`);
+      return dateTimeA.getTime() - dateTimeB.getTime();
+    });
+    return sorted;
+  }, [calendarItems]);
 
   const navigateDate = (direction: number) => {
     if (activeView === "Month") {
@@ -375,8 +398,7 @@ export const CalendarScreen: React.FC = () => {
           const isToday = isSameDay(day, today);
 
           // Use helper to get proper events including recurring and multi-day
-          // We cast result to any[] because we know we passed normalized unified items
-          const dayEvents = getEventsForDate(day, currentEvents as any[], []) as any[];
+          const dayEvents = getEventsForDate(day, filteredEvents as CalendarEvent[], filteredTasks as Task[]) as any[];
 
           return (
             <Pressable
@@ -452,7 +474,7 @@ export const CalendarScreen: React.FC = () => {
 
       addEvent({
         title,
-        date: safeFormat(selectedDate, "yyyy-MM-dd"),
+        dateString: safeFormat(selectedDate, "yyyy-MM-dd"),
         time: timeString,
         icon: "📅",
         memberId: activeMember?.id || members[0]?.id,
@@ -553,7 +575,7 @@ export const CalendarScreen: React.FC = () => {
                   {daysToRender.map((day, dayIndex) => {
                     const dateStr = safeFormat(day, "yyyy-MM-dd");
                     // Use helper to get proper events including recurring and multi-day
-                    const dayEvents = getEventsForDate(day, currentEvents as any[], []) as any[];
+                    const dayEvents = getEventsForDate(day, filteredEvents as CalendarEvent[], filteredTasks as Task[]) as any[];
 
                     const parseTimeToMinutes = (timeStr: string | undefined): number | null => {
                       if (!timeStr || timeStr === "All Day") return null;
@@ -698,7 +720,21 @@ export const CalendarScreen: React.FC = () => {
                               colors={colors}
                               members={members}
                               activeView={activeView}
-                              onUpdate={(id, updates) => updateEvent(id, updates)}
+                              onUpdate={(id, updates) => {
+                                if (event.type === 'task') {
+                                  const taskUpdates: any = {};
+                                  if (updates.date) taskUpdates.dateString = updates.date;
+                                  if (updates.time) taskUpdates.dueDisplay = updates.time;
+                                  updateTask(id, taskUpdates);
+                                } else {
+                                  const eventUpdates: any = {};
+                                  if (updates.date) eventUpdates.dateString = updates.date;
+                                  if (updates.time) eventUpdates.time = updates.time;
+                                  if (updates.endTime !== undefined) eventUpdates.endTime = updates.endTime;
+                                  if (updates.endDate !== undefined) eventUpdates.endDate = updates.endDate;
+                                  updateEvent(id, eventUpdates);
+                                }
+                              }}
                               onPress={(e) => {
                                 setSelectedEvent(e);
                                 setShowAddEventModal(true);
@@ -891,7 +927,7 @@ export const CalendarScreen: React.FC = () => {
 
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>📋 Upcoming Events</Text>
-            {currentEvents.slice(0, 3).map(event => (
+            {upcomingItems.slice(0, 3).map(event => (
               <Pressable
                 key={event.id}
                 onPress={() => {

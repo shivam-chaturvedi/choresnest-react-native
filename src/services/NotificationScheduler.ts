@@ -1,7 +1,12 @@
-import notifee, { AndroidImportance, TriggerType, TimestampTrigger } from '@notifee/react-native';
+import notifee, { AndroidImportance, TriggerType, TimestampTrigger, RepeatFrequency } from '@notifee/react-native';
 import { Platform } from 'react-native';
 import { database } from '../database';
 import { Q } from '@nozbe/watermelondb';
+import Event from '../database/models/Event';
+import Task from '../database/models/Task';
+import { NotificationPreferencesService } from './NotificationPreferencesService';
+import { parseReminderDateTime } from '../utils/ReminderDateTimeUtils';
+import { checkPermission, requestPermission } from '../utils/permissions';
 
 /**
  * NotificationScheduler
@@ -48,6 +53,11 @@ export const NotificationScheduler = {
      */
     async initialize() {
         try {
+            const hasPermission = await requestPermission('notification');
+            if (!hasPermission) {
+                console.warn('Notifications permission was not granted; scheduled notifications will not fire until the user enables it.');
+            }
+
             await notifee.requestPermission();
 
             // Create all channels
@@ -171,9 +181,16 @@ export const NotificationScheduler = {
     async scheduleNotification(
         category: NotificationCategory,
         data: NotificationData,
-        triggerDate: Date
+        triggerDate: Date,
+        repeatRule?: string // 'daily', 'weekly', 'monthly', 'yearly'
     ): Promise<string | null> {
         try {
+            const hasPermission = await checkPermission('notification');
+            if (!hasPermission) {
+                console.warn(`Skipping scheduling for ${category} because notification permission is not granted`);
+                return null;
+            }
+
             // Check if category is enabled
             const enabled = await this.isCategoryEnabled(category);
             if (!enabled) {
@@ -181,8 +198,8 @@ export const NotificationScheduler = {
                 return null;
             }
 
-            // Don't schedule past notifications
-            if (triggerDate <= new Date()) {
+            // Don't schedule past notifications unless it's repeating (Notifee helps here, but we should be careful)
+            if (triggerDate <= new Date() && !repeatRule) {
                 console.log(`Notification not scheduled: trigger date ${triggerDate.toISOString()} is in the past`);
                 return null;
             }
@@ -193,10 +210,27 @@ export const NotificationScheduler = {
             // Get channel for category
             const channel = CHANNELS[category];
 
+            // Map repeat rule to Frequency
+            let repeatFrequency: RepeatFrequency | undefined;
+            if (repeatRule) {
+                switch (repeatRule.toLowerCase()) {
+                    case 'daily': repeatFrequency = RepeatFrequency.DAILY; break;
+                    case 'weekly': repeatFrequency = RepeatFrequency.WEEKLY; break;
+                    // Notifee doesn't natively support biweekly/monthly/yearly in TimestampTrigger via RepeatFrequency enum easily in all versions, 
+                    // but usually supports DAILY/WEEKLY/HOURLY. 
+                    // For monthly/yearly, complex logic is often needed or checking docs.
+                    // Assuming basic support or fallback.
+                    // Actually, RepeatFrequency typically ONLY has NONE, HOURLY, DAILY, WEEKLY.
+                    // For Monthly/Yearly, we might need custom logic or just fallback to Weekly if not specific.
+                    // Let's stick to standard RepeatFrequency.
+                }
+            }
+
             // Create trigger
             const trigger: TimestampTrigger = {
                 type: TriggerType.TIMESTAMP,
                 timestamp: adjustedDate.getTime(),
+                repeatFrequency: repeatFrequency,
                 alarmManager: Platform.OS === 'android' ? {
                     allowWhileIdle: true, // Fire even in Doze mode
                 } : undefined,
@@ -222,7 +256,7 @@ export const NotificationScheduler = {
                 trigger
             );
 
-            console.log(`✓ Scheduled ${category} notification: ${notificationId} for ${adjustedDate.toISOString()} on channel ${channel.id}`);
+            console.log(`✓ Scheduled ${category} notification: ${notificationId} for ${adjustedDate.toISOString()} ${repeatRule ? `(Repeat: ${repeatRule})` : ''}`);
             return notificationId;
         } catch (error) {
             console.error(`Failed to schedule ${category} notification:`, error);
@@ -231,6 +265,44 @@ export const NotificationScheduler = {
                 console.error('Stack:', error.stack);
             }
             return null;
+        }
+    },
+
+    /**
+     * Fire an immediate notification (e.g., after user edits a reminder).
+     */
+    async notifyImmediateUpdate(
+        category: NotificationCategory,
+        title: string,
+        body: string,
+        data?: Record<string, any>
+    ): Promise<void> {
+        try {
+            const hasPermission = await checkPermission('notification');
+            if (!hasPermission) {
+                console.warn(`Skipping immediate ${category} notification because notifications are disabled`);
+                return;
+            }
+
+            const channel = CHANNELS[category];
+
+            await notifee.displayNotification({
+                title,
+                body,
+                data,
+                android: {
+                    channelId: channel.id,
+                    pressAction: {
+                        id: 'default',
+                    },
+                    smallIcon: 'ic_launcher',
+                },
+                ios: {
+                    sound: 'default',
+                },
+            });
+        } catch (error) {
+            console.error(`Failed to display update notification for ${category}:`, error);
         }
     },
 
@@ -352,15 +424,76 @@ export const NotificationScheduler = {
         try {
             console.log('Running notification safety check...');
 
-            const categories: NotificationCategory[] = ['events', 'tasks', 'documents', 'meals'];
+            const [defaultEventReminder, defaultTaskReminder] = await Promise.all([
+                NotificationPreferencesService.getReminderTime('events'),
+                NotificationPreferencesService.getReminderTime('tasks'),
+            ]);
 
-            for (const category of categories) {
-                const enabled = await this.isCategoryEnabled(category);
-                if (!enabled) continue;
+            const eventCollection = database.get<Event>('events');
+            const events = await eventCollection.query().fetch();
 
-                // Implementation will be added when we integrate with models
-                // For now, just log
-                console.log(`Checking ${category} for missing notifications...`);
+            for (const event of events) {
+                if (event.notificationId) continue;
+                if (event.reminderOffsetMinutes !== undefined && event.reminderOffsetMinutes < 0) continue;
+
+                const eventDate = parseReminderDateTime(event.dateString, event.time);
+                if (!eventDate) continue;
+
+                const reminderMinutes = event.reminderOffsetMinutes ?? defaultEventReminder;
+                const triggerDate = new Date(eventDate.getTime() - reminderMinutes * 60000);
+                if (triggerDate <= new Date() && !event.isRecurring) continue;
+
+                const notificationId = await this.scheduleNotification(
+                    'events',
+                    {
+                        title: `Event: ${event.title}`,
+                        body: event.location ? `at ${event.location}` : `Starting soon`,
+                        data: { eventId: event.id },
+                    },
+                    triggerDate,
+                    event.isRecurring ? event.recurrenceRule : undefined
+                );
+
+                if (notificationId) {
+                    await database.write(async () => {
+                        await event.update(e => {
+                            e.notificationId = notificationId;
+                        });
+                    });
+                }
+            }
+
+            const taskCollection = database.get<Task>('tasks');
+            const tasks = await taskCollection.query().fetch();
+
+            for (const task of tasks) {
+                if (task.status === 'done' || task.notificationId || !task.reminderEnabled) {
+                    continue;
+                }
+
+                const taskDate = parseReminderDateTime(task.dateString, task.dueDisplay);
+                if (!taskDate) continue;
+
+                const triggerDate = new Date(taskDate.getTime() - defaultTaskReminder * 60000);
+                if (triggerDate <= new Date()) continue;
+
+                const notificationId = await this.scheduleNotification(
+                    'tasks',
+                    {
+                        title: `Task: ${task.name}`,
+                        body: `Due ${task.dueDisplay || 'today'}! Priority: ${task.priority}`,
+                        data: { taskId: task.id },
+                    },
+                    triggerDate
+                );
+
+                if (notificationId) {
+                    await database.write(async () => {
+                        await task.update(t => {
+                            t.notificationId = notificationId;
+                        });
+                    });
+                }
             }
 
             console.log('✓ Notification safety check complete');

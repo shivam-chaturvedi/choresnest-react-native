@@ -30,6 +30,9 @@ export interface CalendarEvent {
   recurrenceEndDate?: string;
   endDate?: string;
   isRecurring?: boolean;
+  location?: string;
+  notificationId?: string;
+  reminderOffsetMinutes?: number;
 }
 
 export interface Task {
@@ -85,6 +88,42 @@ export interface VaultDocument {
   cost?: string;
 }
 
+const formatIsoDate = (value: string | Date | undefined): string => {
+  const fallback = new Date().toISOString().split('T')[0];
+  return safeFormat(value, "yyyy-MM-dd", fallback);
+};
+
+const mapEventModelToCalendarEvent = (eventModel: any): CalendarEvent => ({
+  id: eventModel.id,
+  title: eventModel.title,
+  icon: eventModel.icon,
+  date: formatIsoDate(eventModel.dateString),
+  time: eventModel.time,
+  endTime: eventModel.endTime,
+  memberId: eventModel.memberId,
+  description: eventModel.description,
+  notes: eventModel.notes,
+  recurrenceRule: eventModel.recurrenceRule,
+  recurrenceEndDate: eventModel.recurrenceEndDate,
+  endDate: eventModel.endDate,
+  isRecurring: eventModel.isRecurring,
+  location: eventModel.location,
+  notificationId: eventModel.notificationId,
+  reminderOffsetMinutes: eventModel.reminderOffsetMinutes,
+});
+
+const mapTaskModelToTask = (taskModel: any): Task => ({
+  id: taskModel.id,
+  name: taskModel.name,
+  status: taskModel.status,
+  priority: taskModel.priority,
+  due: taskModel.dueDisplay,
+  date: formatIsoDate(taskModel.dateString),
+  assignee: taskModel.assigneeId,
+  tab: taskModel.tab,
+  icon: taskModel.icon,
+});
+
 export const FamilyContext = createContext<any>(undefined);
 
 export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -96,6 +135,30 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [memberVaults, setMemberVaults] = useState<Record<string, any[]>>({});
   const [groceryList, setGroceryList] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
+
+  const upsertEvent = (eventModel: any) => {
+    const normalized = mapEventModelToCalendarEvent(eventModel);
+    setEvents(prev => {
+      const filtered = prev.filter(ev => ev.id !== normalized.id);
+      return [...filtered, normalized];
+    });
+  };
+
+  const removeEvent = (id: string) => {
+    setEvents(prev => prev.filter(ev => ev.id !== id));
+  };
+
+  const upsertTask = (taskModel: any) => {
+    const normalized = mapTaskModelToTask(taskModel);
+    setTasks(prev => {
+      const filtered = prev.filter(tsk => tsk.id !== normalized.id);
+      return [...filtered, normalized];
+    });
+  };
+
+  const removeTask = (id: string) => {
+    setTasks(prev => prev.filter(tsk => tsk.id !== id));
+  };
 
   // --- Load Family Name ---
   useEffect(() => {
@@ -175,25 +238,16 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     try {
       const sub = TaskService.observeEvents().subscribe({
         next: (rawEvents) => {
+          console.log(`FamilyContext: Received ${rawEvents.length} events from DB`);
           try {
             const mapped = rawEvents
-              .filter(e => safeParseDate(e.dateString)) // Filter out invalid dates immediately
-              .map(e => ({
-                id: e.id,
-                title: e.title,
-                icon: e.icon,
-                date: safeFormat(e.dateString, "yyyy-MM-dd"), // Ensure valid format
-                time: e.time,
-                endTime: e.endTime,
-                memberId: e.memberId,
-                description: e.description,
-                notes: e.notes,
-                recurrenceRule: e.recurrenceRule,
-                recurrenceEndDate: e.recurrenceEndDate,
-                endDate: e.endDate,
-                isRecurring: e.isRecurring,
-                notificationId: e.notificationId
-              }));
+              .filter(e => {
+                const isValid = safeParseDate(e.dateString);
+                if (!isValid) console.warn(`FamilyContext: Invalid date for event ${e.id}: ${e.dateString}`);
+                return isValid;
+              })
+              .map(mapEventModelToCalendarEvent);
+            console.log(`FamilyContext: Updating events state with ${mapped.length} items`);
             setEvents(mapped);
           } catch (error) {
             console.error('Error mapping events:', error);
@@ -215,18 +269,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       const sub = TaskService.observeTasks().subscribe({
         next: (rawTasks) => {
           try {
-            const mapped = rawTasks.map(t => ({
-              id: t.id,
-              name: t.name,
-              status: t.status,
-              priority: t.priority,
-              due: t.dueDisplay,
-              date: safeFormat(t.dateString, "yyyy-MM-dd", new Date().toISOString().split('T')[0]), // Fallback to today if invalid
-              assignee: t.assigneeId,
-              tab: t.tab,
-              icon: t.icon,
-              notificationId: t.notificationId
-            }));
+            const mapped = rawTasks.map(mapTaskModelToTask);
             setTasks(mapped);
           } catch (error) {
             console.error('Error mapping tasks:', error);
@@ -244,16 +287,44 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const addTask = async (t: any) => {
     try {
-      return await TaskService.addTask(t);
+      const task = await TaskService.addTask(t);
+      upsertTask(task);
+      return task;
     } catch (error) {
       console.error('Failed to add task:', error);
       throw new Error('Failed to add task. Please try again.');
     }
   };
 
+  const updateTask = async (id: string, updates: any) => {
+    try {
+      const task = await TaskService.updateTask(id, updates);
+      if (task) {
+        upsertTask(task);
+      }
+      return task;
+    } catch (error) {
+      console.error('Failed to update task:', error);
+      throw new Error('Failed to update task. Please try again.');
+    }
+  };
+
+  const deleteTask = async (id: string) => {
+    try {
+      return await TaskService.deleteTask(id);
+    } catch (error) {
+      console.error('Failed to delete task:', error);
+      throw new Error('Failed to delete task. Please try again.');
+    } finally {
+      removeTask(id);
+    }
+  };
+
   const addEvent = async (e: any) => {
     try {
-      return await TaskService.addEvent(e);
+      const event = await TaskService.addEvent(e);
+      upsertEvent(event);
+      return event;
     } catch (error) {
       console.error('Failed to add event:', error);
       throw new Error('Failed to add event. Please try again.');
@@ -262,7 +333,11 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const updateEvent = async (id: string, updates: any) => {
     try {
-      return await TaskService.updateEvent(id, updates);
+      const event = await TaskService.updateEvent(id, updates);
+      if (event) {
+        upsertEvent(event);
+      }
+      return event;
     } catch (error) {
       console.error('Failed to update event:', error);
       throw new Error('Failed to update event. Please try again.');
@@ -275,6 +350,8 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     } catch (error) {
       console.error('Failed to delete event:', error);
       throw new Error('Failed to delete event. Please try again.');
+    } finally {
+      removeEvent(id);
     }
   };
 
@@ -288,6 +365,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             const m: Record<string, any[]> = {};
 
             docs.forEach(d => {
+              const meta = d.meta || {};
               const docObj = {
                 id: d.id,
                 name: d.name,
@@ -295,7 +373,10 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                 icon: d.icon,
                 date: d.date,
                 memberId: d.memberId,
-                // ... mapping
+                filePath: d.filePath,
+                uri: d.filePath, // Map for VaultUtils
+                fileUri: d.filePath, // Alias
+                ...meta,  // Merge meta fields (expiryDate, etc.) to top level
               };
               if (d.memberId === 'global') {
                 g.push(docObj);
@@ -383,8 +464,8 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
         tasks,
         addTask,
-        updateTask: TaskService.updateTask,
-        deleteTask: TaskService.deleteTask,
+        updateTask,
+        deleteTask,
 
         categories: [], // TODO: ListCategoryService
         addCategory: () => { },

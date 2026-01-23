@@ -3,22 +3,31 @@ import {
     check,
     request,
     requestMultiple,
+    checkNotifications,
+    requestNotifications,
     PERMISSIONS,
     RESULTS,
     Permission,
-    PermissionStatus
+    PermissionStatus,
 } from 'react-native-permissions';
 
 export type PermissionType = 'camera' | 'photo' | 'audio' | 'notification' | 'storage';
 
-const getPermissionType = (type: PermissionType): Permission | null => {
+const PERMISSION_LABELS: Record<PermissionType, string> = {
+    camera: 'camera',
+    photo: 'photo library',
+    audio: 'microphone',
+    notification: 'notifications',
+    storage: 'storage',
+};
+
+const getPermissionType = (type: Exclude<PermissionType, 'notification'>): Permission | null => {
     if (Platform.OS === 'ios') {
         switch (type) {
             case 'camera': return PERMISSIONS.IOS.CAMERA;
             case 'photo': return PERMISSIONS.IOS.PHOTO_LIBRARY;
             case 'audio': return PERMISSIONS.IOS.MICROPHONE;
-            case 'notification': return PERMISSIONS.IOS.REMINDERS; // Notifications handled differently usually, but basic mapping
-            case 'storage': return PERMISSIONS.IOS.PHOTO_LIBRARY; // iOS doesn't have generic filesystem permission like Android
+            case 'storage': return PERMISSIONS.IOS.PHOTO_LIBRARY;
             default: return null;
         }
     } else {
@@ -27,26 +36,71 @@ const getPermissionType = (type: PermissionType): Permission | null => {
             case 'camera': return PERMISSIONS.ANDROID.CAMERA;
             case 'photo': return androidVersion >= 33 ? PERMISSIONS.ANDROID.READ_MEDIA_IMAGES : PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE;
             case 'audio': return PERMISSIONS.ANDROID.RECORD_AUDIO;
-            case 'notification':
-                // POST_NOTIFICATIONS is only available on Android 13+ (API 33)
-                // We cast to any to avoid TS errors if the type definition is outdated
-                return androidVersion >= 33
-                    ? (PERMISSIONS.ANDROID as any).POST_NOTIFICATIONS
-                    : null;
             case 'storage': return androidVersion >= 33 ? PERMISSIONS.ANDROID.READ_MEDIA_IMAGES : PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE;
             default: return null;
         }
     }
 };
 
+const showSettingsPrompt = (type: PermissionType) => {
+    Alert.alert(
+        'Permission Required',
+        `This feature requires ${PERMISSION_LABELS[type]} access. Please enable it in settings.`,
+        [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() }
+        ]
+    );
+};
+
+const isStatusGranted = (status: PermissionStatus) =>
+    status === RESULTS.GRANTED || status === RESULTS.LIMITED;
+
+const checkNotificationPermission = async (): Promise<boolean> => {
+    try {
+        const response = await checkNotifications();
+        if (isStatusGranted(response.status)) {
+            return true;
+        }
+
+        if (response.status === RESULTS.DENIED || response.status === RESULTS.BLOCKED) {
+            return false;
+        }
+        return false;
+    } catch (error) {
+        console.error("Notification check failed:", error);
+        return false;
+    }
+};
+
+const requestNotificationPermission = async (): Promise<boolean> => {
+    try {
+        const response = await requestNotifications(['alert', 'sound', 'badge']);
+        if (isStatusGranted(response.status)) {
+            return true;
+        }
+
+        if (response.status === RESULTS.DENIED || response.status === RESULTS.BLOCKED) {
+            showSettingsPrompt('notification');
+        }
+        return false;
+    } catch (error) {
+        console.error("Notification request failed:", error);
+        return false;
+    }
+};
+
 export const checkPermission = async (type: PermissionType): Promise<boolean> => {
+    if (type === 'notification') {
+        return checkNotificationPermission();
+    }
+
     const permission = getPermissionType(type);
     if (!permission) return true; // Assume true for unhandled permissions to avoid blocking
 
     try {
         const result = await check(permission);
-        if (result === RESULTS.GRANTED || result === RESULTS.LIMITED) return true;
-        return false;
+        return isStatusGranted(result);
     } catch (error) {
         console.error("Permission check failed:", error);
         return false;
@@ -55,11 +109,14 @@ export const checkPermission = async (type: PermissionType): Promise<boolean> =>
 
 
 export const requestPermission = async (type: PermissionType): Promise<boolean> => {
+    if (type === 'notification') {
+        return requestNotificationPermission();
+    }
+
     const permission = getPermissionType(type);
     if (!permission) return true;
 
     try {
-        // Special handling for audio on Android to include storage for older versions
         if (Platform.OS === 'android' && type === 'audio') {
             const androidVersion = typeof Platform.Version === 'string' ? parseInt(Platform.Version, 10) : Platform.Version;
             if (androidVersion < 33) {
@@ -73,17 +130,10 @@ export const requestPermission = async (type: PermissionType): Promise<boolean> 
         }
 
         const result = await request(permission);
-        if (result === RESULTS.GRANTED || result === RESULTS.LIMITED) return true;
+        if (isStatusGranted(result)) return true;
 
         if (result === RESULTS.BLOCKED || result === RESULTS.DENIED) {
-            Alert.alert(
-                'Permission Required',
-                `This feature requires ${type} access. Please enable it in settings.`,
-                [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Open Settings', onPress: () => Linking.openSettings() }
-                ]
-            );
+            showSettingsPrompt(type);
         }
         return false;
     } catch (error) {
