@@ -56,7 +56,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
   const { events, tasks, groceryList, globalVault, memberVaults } = useFamily();
   const { recipes } = useRecipes();
   const vaultCount = useMemo(() => {
-    const memberCount = Object.values(memberVaults || {} as Record<string, any[]>).reduce((total: number, docs: any[]) => total + (docs?.length ?? 0), 0);
+    const memberCount = (Object.values(memberVaults || {} as Record<string, any[]>) as any[][]).reduce((total: number, docs: any[]) => total + (docs?.length ?? 0), 0);
     return (globalVault?.length ?? 0) + memberCount;
   }, [globalVault, memberVaults]);
   const quickCounts = useMemo(() => ({
@@ -66,14 +66,16 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
     recipe: recipes.length,
     document: vaultCount,
   }), [events, tasks, groceryList, recipes, vaultCount]) as Record<keyof typeof typeConfig, number>;
+
   const [query, setQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [results, setResults] = useState<SearchResult[]>([]);
+  const PREVIEW_LIMIT = 5;
 
   const buildContextResults = (filter: string): SearchResult[] => {
     switch (filter) {
       case "event":
-        return events.map(e => ({
+        return (events || []).slice(0, PREVIEW_LIMIT).map((e: any) => ({
           id: `evt-${e.id}`,
           type: "event" as const,
           title: e.title,
@@ -83,7 +85,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
           meta: e.time,
         }));
       case "task":
-        return tasks.map(t => ({
+        return (tasks || []).slice(0, PREVIEW_LIMIT).map((t: any) => ({
           id: `task-${t.id}`,
           type: "task" as const,
           title: t.name,
@@ -94,6 +96,8 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
         }));
       case "grocery":
         return (groceryList || [])
+          .filter((item: any) => !item.completed)
+          .slice(0, PREVIEW_LIMIT)
           .map((item: any, index: number) => ({
             id: `grocery-${item.id ?? index}`,
             type: "grocery" as const,
@@ -103,9 +107,8 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
             path: "lists",
             meta: item.quantity ? `${item.quantity} ${item.unit ?? ""}`.trim() : "",
           }))
-          .filter(item => !item.subtitle || !item.subtitle.includes("completed"));
       case "recipe":
-        return recipes.map(r => ({
+        return (recipes || []).slice(0, PREVIEW_LIMIT).map((r: any) => ({
           id: `recipe-${r.id}`,
           type: "recipe" as const,
           title: r.name,
@@ -115,10 +118,10 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
         }));
       case "document": {
         const memberDocs = Object.entries(memberVaults || {}).flatMap(([memberId, docs]) =>
-          (docs || []).map(doc => ({ ...doc, memberId }))
+          (docs || []).map((doc: any) => ({ ...doc, memberId }))
         );
         const allDocs = [...(globalVault || []), ...memberDocs];
-        return allDocs.map(doc => ({
+        return allDocs.slice(0, PREVIEW_LIMIT).map(doc => ({
           id: `doc-${doc.id ?? doc.documentId ?? Math.random().toString(36).slice(2, 8)}`,
           type: "document" as const,
           title: doc.name,
@@ -141,14 +144,12 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
   }, [open]);
 
   useEffect(() => {
-    if (!query.trim() && activeFilter) {
-      setResults(buildContextResults(activeFilter));
-    }
-  }, [activeFilter, query, events, tasks, groceryList, recipes, globalVault, memberVaults]);
-
-  useEffect(() => {
     if (!query.trim()) {
-      setResults([]);
+      if (activeFilter) {
+        setResults(buildContextResults(activeFilter).slice(0, PREVIEW_LIMIT));
+      } else {
+        setResults([]);
+      }
       return;
     }
 
@@ -173,7 +174,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
     // Debounce slightly
     const timeout = setTimeout(performSearch, 300);
     return () => clearTimeout(timeout);
-  }, [query, activeFilter]);
+  }, [query, activeFilter, events, tasks, groceryList, recipes, globalVault, memberVaults]);
 
   // Grouping Logic
   const groupedResults = useMemo(() => {

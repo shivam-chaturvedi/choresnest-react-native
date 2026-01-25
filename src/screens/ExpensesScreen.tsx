@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Pressable } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { AppLayout } from '../components/layout/AppLayout';
 import { theme } from '../theme';
@@ -40,6 +40,7 @@ export const ExpensesScreen: React.FC = () => {
   const { openSidebar } = useSidebar();
 
   const { transactions, addTransaction, budgets, categoryColors, categoryIcons } = useFinance();
+
 
   const handlePrevMonth = () => {
     setViewDate(prev => {
@@ -500,6 +501,15 @@ export const ExpensesScreen: React.FC = () => {
               <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Track income, expenses & budgets</Text>
             </View>
             {/* Removed top Add button, keeping only FAB */}
+            <Pressable
+              onPress={() => navigation.navigate('ExpensesHistory')}
+              style={[
+                styles.historyBtn,
+                { borderColor: colors.border, backgroundColor: colors.muted, borderRadius: radius.md }
+              ]}
+            >
+              <Text style={[styles.historyBtnText, { color: colors.foreground }]}>History</Text>
+            </Pressable>
           </View>
 
           {/* Tabs */}
@@ -806,6 +816,18 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 12,
+  },
+  historyBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    minWidth: 110,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  historyBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
   },
   tabContainer: {
     flexDirection: 'row',

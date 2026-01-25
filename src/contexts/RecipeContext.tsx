@@ -17,7 +17,7 @@ interface RecipeContextType {
     collections: Collection[];
     addRecipe: (recipe: Omit<Recipe, 'id' | 'saved'>) => void;
     updateRecipe: (id: number, updates: Partial<Recipe>) => void;
-    toggleBookmark: (id: number) => void;
+    toggleBookmark: (id: number) => boolean;
     addCollection: (collection: Omit<Collection, 'id' | 'count'>) => void;
     updateCollection: (id: number, updates: Partial<Collection>) => void;
     addRecipesToCollection: (collectionId: number, recipeIds: number[]) => void;
@@ -101,8 +101,11 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             );
             setRecipes(updatedRecipes);
             saveData(updatedRecipes, collections);
+            const updatedRecipe = updatedRecipes.find(recipe => recipe.id === id);
+            return !!updatedRecipe?.saved;
         } catch (error) {
             console.error('Error toggling bookmark:', error);
+            return false;
         }
     };
 

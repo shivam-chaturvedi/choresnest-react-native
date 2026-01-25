@@ -22,6 +22,7 @@ import { WeeklyGroceryListModal } from '../components/modals/WeeklyGroceryListMo
 import { RecipeImage } from '../components/recipes/RecipeImage';
 import { addDays, subDays, isToday, isTomorrow, parse, subMinutes, isAfter, startOfDay } from 'date-fns';
 import { safeFormat } from '../utils/SafeDateUtils';
+import { useRecipes } from '../contexts/RecipeContext';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -121,6 +122,13 @@ export const MealPlanScreen: React.FC = () => {
       setSelectedRecipe(recipe);
       setShowRecipeDetail(true);
     }
+  };
+
+  const handleBookmark = (recipe: Recipe) => {
+    const nextSaved = toggleBookmark(recipe.id);
+    const updated = getRecipeById(recipe.id) ?? { ...recipe, saved: nextSaved };
+    setSelectedRecipe(updated);
+    return nextSaved;
   };
 
   const renderPlanTab = () => {
@@ -491,6 +499,7 @@ export const MealPlanScreen: React.FC = () => {
         recipe={selectedRecipe}
         open={showRecipeDetail}
         onOpenChange={setShowRecipeDetail}
+        onBookmark={handleBookmark}
       />
     </>
   );

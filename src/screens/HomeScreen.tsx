@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { setupNotifications } from "../utils/notifications";
 import {
   View,
@@ -11,7 +11,8 @@ import {
   Image,
   Alert,
   StatusBar,
-  Dimensions
+  Dimensions,
+  Modal,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppLayout } from "../components/layout/AppLayout";
@@ -62,9 +63,12 @@ export const HomeScreen: React.FC = () => {
   const [showAddItem, setShowAddItem] = useState(false);
   const [showMemberModal, setShowMemberModal] = useState(false);
   const [showFamilyOnboarding, setShowFamilyOnboarding] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
 
   // Dashboard Toggle
   const [showDashboard, setShowDashboard] = useState(false);
+  const navTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const NAV_MARK_DELAY = 3000;
 
   // Tutorial logic
   // Key: '@familychore:firstSignUp'
@@ -120,6 +124,13 @@ export const HomeScreen: React.FC = () => {
 
   }, []);
 
+  useEffect(() => {
+    return () => {
+      navTimers.current.forEach((timer) => clearTimeout(timer));
+      navTimers.current = [];
+    };
+  }, []);
+
   const handleTutorialClose = async () => {
     try {
       // When closed, we mark it as seen ('false').
@@ -143,12 +154,14 @@ export const HomeScreen: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    const previousRead = new Map(notificationAlerts.map(alert => [alert.id, alert.read]));
     const newAlerts: AppNotification[] = [];
     const todayStr = new Date().toISOString().split("T")[0];
 
     // 1. Events Today
     const eventsToday = events.filter((e: any) => e.date === todayStr);
     eventsToday.forEach((e: any) => {
+      const prevRead = previousRead.get(`evt-${e.id}`);
       newAlerts.push({
         id: `evt-${e.id}`,
         title: "Event Today",
@@ -157,7 +170,7 @@ export const HomeScreen: React.FC = () => {
         textColor: colors.primary,
         icon: "calendar",
         time: "Today",
-        read: false,
+        read: prevRead ?? false,
         route: { tab: "calendar" },
       });
     });
@@ -165,6 +178,7 @@ export const HomeScreen: React.FC = () => {
     // 2. Pending Tasks (High Priority)
     const highPriorityTasks = tasks.filter((t: any) => t.priority === 'high' && t.status === 'pending');
     highPriorityTasks.forEach((t: any) => {
+      const prevRead = previousRead.get(`task-${t.id}`);
       newAlerts.push({
         id: `task-${t.id}`,
         title: "High Priority Task",
@@ -173,7 +187,7 @@ export const HomeScreen: React.FC = () => {
         textColor: colors.danger,
         icon: "checkSquare",
         time: t.due, // "Today" or ISO date
-        read: false,
+        read: prevRead ?? false,
         route: { tab: "more", screen: "Tasks" },
       })
     });
@@ -181,6 +195,7 @@ export const HomeScreen: React.FC = () => {
     // 3. Pending Grocery Items
     const pendingItems = groceryList.filter((i: any) => !i.completed);
     if (pendingItems.length > 0) {
+      const prevRead = previousRead.get("grocery-pending");
       newAlerts.push({
         id: "grocery-pending",
         title: "Grocery Needed",
@@ -189,7 +204,7 @@ export const HomeScreen: React.FC = () => {
         textColor: colors.warning,
         icon: "shoppingCart",
         time: "Now",
-        read: false,
+        read: prevRead ?? false,
         route: { tab: "lists" },
       });
     }
@@ -198,6 +213,7 @@ export const HomeScreen: React.FC = () => {
   }, [events, groceryList, tasks, colors]);
 
   const alerts = [...manualNotifications, ...notificationAlerts];
+  const visibleAlerts = useMemo(() => alerts.filter((alert) => !alert.read), [alerts]);
 
   const markDynamicAlertRead = (id: string) => {
     setNotificationAlerts(prev =>
@@ -208,27 +224,87 @@ export const HomeScreen: React.FC = () => {
   const navigateForNotification = (route?: NotificationRoute) => {
     if (!route) return;
     const { tab, screen, params } = route;
-    if (screen) {
-      navigation.navigate(tab, { screen, params });
-    } else {
-      navigation.navigate(tab);
+    navigation.navigate("MainTabs", {
+      screen: tab,
+      params: screen ? { screen, params } : params,
+    } as any);
+  };
+
+  const finalizeNotification = (notification: AppNotification, isManual: boolean) => {
+    if (!isManual) {
+      setNotificationAlerts((prev) => prev.filter((item) => item.id !== notification.id));
     }
   };
 
-  const handleNotificationPress = (notification: AppNotification) => {
-    const isManual = manualNotifications.some((n) => n.id === notification.id);
+  const scheduleNotificationFinalization = (notification: AppNotification, isManual: boolean) => {
+    const timer = setTimeout(() => {
+      finalizeNotification(notification, isManual);
+      navTimers.current = navTimers.current.filter((t) => t !== timer);
+    }, NAV_MARK_DELAY);
+    navTimers.current.push(timer);
+  };
+
+  const markReadImmediate = (notification: AppNotification, isManual: boolean) => {
     if (isManual) {
       NotificationCenter.markRead(notification.id);
     } else {
       markDynamicAlertRead(notification.id);
     }
+  };
 
+  const handleNotificationPress = (notification: AppNotification) => {
+    const isManual = manualNotifications.some((n) => n.id === notification.id);
+    markReadImmediate(notification, isManual);
     if (notification.route) {
       navigateForNotification(notification.route);
     }
-
+    scheduleNotificationFinalization(notification, isManual);
     setShowNotifications(false);
   };
+
+  const handleAlertPress = (alert: AppNotification) => {
+    handleNotificationPress(alert);
+  };
+
+  const formatDateTimeValue = (date?: string, time?: string) => {
+    if (!date && !time) return null;
+    return [date, time].filter(Boolean).join(" · ");
+  };
+
+  const renderDetailRow = (label: string, value?: string | number | null) => (
+    <View style={[styles.detailRow, { borderColor: colors.border, backgroundColor: colors.card + "10", borderRadius: radius.md }]}>
+      <Text style={[styles.detailLabel, { color: colors.foreground }]}>{label}</Text>
+      <Text style={[styles.detailValue, { color: colors.primary }]} numberOfLines={2}>
+        {value ? value : "No Info Available"}
+      </Text>
+    </View>
+  );
+
+  const renderPairRow = (
+    leftLabel: string,
+    leftValue?: string | number | null,
+    rightLabel?: string,
+    rightValue?: string | number | null
+  ) => (
+    <View style={styles.detailPairRow}>
+      <View style={[styles.detailRowHalf, { borderColor: colors.border, backgroundColor: colors.card + "05", borderRadius: radius.md }]}>
+        <Text style={[styles.detailLabel, { color: colors.foreground }]}>{leftLabel}</Text>
+        <Text style={[styles.detailValue, { color: colors.primary }]} numberOfLines={2}>
+          {leftValue ? leftValue : "No Info Available"}
+        </Text>
+      </View>
+      {rightLabel && (
+        <View style={[styles.detailRowHalf, { borderColor: colors.border, backgroundColor: colors.card + "05", borderRadius: radius.md }]}>
+          <Text style={[styles.detailLabel, { color: colors.foreground }]}>{rightLabel}</Text>
+          <Text style={[styles.detailValue, { color: colors.primary }]} numberOfLines={2}>
+            {rightValue ? rightValue : "No Info Available"}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+
+  const closeEventDetail = () => setSelectedEvent(null);
 
   const handleClearAllNotifications = () => {
     setNotificationAlerts([]);
@@ -305,7 +381,7 @@ export const HomeScreen: React.FC = () => {
               </Pressable>
               <Pressable onPress={() => setShowNotifications(true)} style={[styles.iconButton, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radius.sm }]}>
                 <AppIcon name="bell" size={24} color={colors.foreground} />
-                {alerts.length > 0 && <View style={[styles.notificationDot, { backgroundColor: colors.danger }]} />}
+                {visibleAlerts.length > 0 && <View style={[styles.notificationDot, { backgroundColor: colors.danger }]} />}
               </Pressable>
             </View>
           </View>
@@ -466,7 +542,18 @@ export const HomeScreen: React.FC = () => {
               <Text style={{ color: colors.mutedForeground, fontStyle: 'italic', marginVertical: 8 }}>No events for today</Text>
             ) : (
               events.slice(0, 3).map((event: any) => (
-                <View key={event?.id || Math.random().toString()} style={[styles.scheduleRow, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
+                <Pressable
+                  key={event?.id || Math.random().toString()}
+                  style={({ pressed }) => [
+                    styles.scheduleRow,
+                    {
+                      backgroundColor: colors.muted,
+                      borderRadius: radius.md,
+                      opacity: pressed ? 0.85 : 1,
+                    },
+                  ]}
+                  onPress={() => setSelectedEvent(event)}
+                >
                   <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                     <View style={[styles.scheduleIconBox, { backgroundColor: colors.card, borderRadius: radius.xs }]}>
                       <Text style={{ fontSize: 18 }}>{event?.icon || "📅"}</Text>
@@ -481,7 +568,7 @@ export const HomeScreen: React.FC = () => {
                   <View style={[styles.scheduleAvatar, { backgroundColor: colors.primary, borderRadius: radius.xs }]}>
                     <AppIcon name="user" size={14} color={colors.primaryForeground} />
                   </View>
-                </View>
+                </Pressable>
               ))
             )}
           </View>
@@ -519,12 +606,36 @@ export const HomeScreen: React.FC = () => {
 
           {/* Alerts */}
           <View style={{ marginBottom: 24 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              marginBottom: 12,
+              justifyContent: 'space-between',
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
               <AppIcon name="alert" size={18} color={colors.warning} style={{ marginRight: 8 }} />
               <Text style={{ fontSize: 18, fontWeight: "700", color: colors.foreground }}>Alerts & Reminders</Text>
             </View>
-            {alerts.map((alert) => (
-              <View key={alert.id} style={[styles.alertRow, { backgroundColor: alert.tone, borderColor: colors.border, borderRadius: radius.md }]}>
+            <Pressable onPress={() => setShowNotifications(true)}>
+              <Text style={{ fontSize: 12, color: colors.primary, fontWeight: "600" }}>Show all</Text>
+            </Pressable>
+          </View>
+            {visibleAlerts.slice(0, 3).map((alert) => (
+              <Pressable
+                key={alert.id}
+                style={({ pressed }) => [
+                  styles.alertRow,
+                  {
+                    backgroundColor: alert.tone,
+                    borderColor: colors.border,
+                    borderRadius: radius.md,
+                    opacity: pressed ? 0.8 : 1,
+                  },
+                ]}
+                onPress={() => handleAlertPress(alert)}
+              >
                 <View style={[styles.alertIconBox]}>
                   <AppIcon name={alert.icon} size={20} color={alert.textColor} />
                 </View>
@@ -533,8 +644,16 @@ export const HomeScreen: React.FC = () => {
                   <Text style={{ marginTop: 2, fontSize: 13, color: alert.textColor }}>{alert.detail}</Text>
                 </View>
                 <AppIcon name="chevronRight" size={16} color={alert.textColor} />
-              </View>
+              </Pressable>
             ))}
+            {visibleAlerts.length > 3 && (
+              <Pressable
+                style={{ alignSelf: "flex-start", marginTop: 8 }}
+                onPress={() => setShowNotifications(true)}
+              >
+                <Text style={{ fontSize: 14, color: colors.primary }}>Show all alerts</Text>
+              </Pressable>
+            )}
           </View>
 
           {/* Stats Grid */}
@@ -564,6 +683,73 @@ export const HomeScreen: React.FC = () => {
           </View>
         </ScrollView>
       </AppLayout>
+
+      {selectedEvent && (
+        <Modal visible transparent animationType="slide" onRequestClose={closeEventDetail}>
+          <Pressable style={styles.detailOverlay} onPress={closeEventDetail}>
+            <Pressable
+              style={[
+                styles.detailModal,
+                {
+                  backgroundColor: colors.background,
+                  borderRadius: radius.card,
+                  borderColor: colors.border,
+                  shadowColor: colors.shadow,
+                },
+              ]}
+              onPress={() => {}}
+              onStartShouldSetResponder={() => true}
+            >
+              <View style={styles.detailModalHeader}>
+                <View style={{ flexDirection: "row", alignItems: "center", flex: 1, gap: 12 }}>
+                  <View style={[styles.detailIconBox, { backgroundColor: colors.primary + "15" }]}>
+                    <Text style={[styles.detailIcon, { color: colors.primary }]}>{selectedEvent.icon || "📅"}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.detailHeaderTitle, { color: colors.foreground }]}>
+                      {selectedEvent.title || "Untitled Event"}
+                    </Text>
+                    <Text style={[styles.detailHeaderSubtitle, { color: colors.mutedForeground }]}>
+                      {formatDateTimeValue(selectedEvent.dateString || selectedEvent.date, selectedEvent.time) || "No Info Available"}
+                    </Text>
+                  </View>
+                </View>
+                <Pressable onPress={closeEventDetail} style={styles.detailCloseButton}>
+                  <AppIcon name="x" size={20} color={colors.mutedForeground} />
+                </Pressable>
+              </View>
+              <ScrollView contentContainerStyle={styles.detailContent}>
+                {renderDetailRow("Description", selectedEvent.description)}
+                {renderPairRow(
+                  "Schedule Start",
+                  formatDateTimeValue(selectedEvent.dateString || selectedEvent.date, selectedEvent.time),
+                  "Schedule End",
+                  formatDateTimeValue(selectedEvent.endDate, selectedEvent.endTime)
+                )}
+                {renderPairRow(
+                  "Repeat",
+                  selectedEvent.isRecurring ? (selectedEvent.recurrenceRule || "Recurring schedule") : null,
+                  "Reminder",
+                  selectedEvent.reminderOffsetMinutes !== undefined && selectedEvent.reminderOffsetMinutes !== null
+                    ? `${selectedEvent.reminderOffsetMinutes} minute${selectedEvent.reminderOffsetMinutes === 1 ? "" : "s"} before`
+                    : null
+                )}
+                {renderPairRow(
+                  "Location",
+                  selectedEvent.location,
+                  "Assigned to",
+                  (() => {
+                    if (!selectedEvent.memberId) return null;
+                    const member = members.find((m: any) => m.id === selectedEvent.memberId);
+                    return member?.name ?? null;
+                  })()
+                )}
+                {renderDetailRow("Notes", selectedEvent.notes)}
+              </ScrollView>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
 
       <NotificationPanel
         open={showNotifications}
@@ -775,6 +961,86 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: "center",
     marginBottom: 12,
+  },
+  detailOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    padding: 16,
+    zIndex: 2,
+  },
+  detailModal: {
+    width: "100%",
+    maxHeight: "70%",
+    overflow: "hidden",
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  detailModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 16,
+  },
+  detailIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  detailIcon: {
+    fontSize: 24,
+  },
+  detailHeaderTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  detailHeaderSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  detailCloseButton: {
+    padding: 8,
+  },
+  detailContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+    flexGrow: 1,
+  },
+  detailRow: {
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 12,
+    alignItems: "center",
+  },
+  detailLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  detailValue: {
+    fontSize: 14,
+    marginTop: 6,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  detailPairRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 12,
+  },
+  detailRowHalf: {
+    flex: 1,
+    borderWidth: 1,
+    padding: 10,
+    alignItems: "center",
   },
 });
 

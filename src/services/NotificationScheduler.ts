@@ -478,6 +478,8 @@ export const NotificationScheduler = {
             const notifyCenter = options?.notifyCenter ?? false;
             const soundEnabled = await NotificationPreferencesService.isSoundEnabled();
             await ensureChannelsCreated(soundEnabled);
+            const androidSound = soundEnabled ? SOUND_NAME : undefined;
+            const iosSound = soundEnabled ? 'reminder.caf' : undefined;
 
             let candidateDate = new Date(triggerDate);
             if (repeatType === 'custom' && repeatMeta?.dates) {

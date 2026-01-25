@@ -136,7 +136,8 @@ export const RecipesScreen: React.FC = () => {
   // ... (handleRecipePress, toast, handleAddToGroceryList, handleAddCollectionToGrocery, render helpers)
 
   const handleRecipePress = (recipe: Recipe) => {
-    setSelectedRecipe(recipe);
+    const updated = recipes.find((r) => r.id === recipe.id) ?? recipe;
+    setSelectedRecipe(updated);
 
     if (recipe.url) {
       let targetUrl = recipe.url;
@@ -166,6 +167,13 @@ export const RecipesScreen: React.FC = () => {
   };
 
   const { showToast } = useToast();
+
+  const handleBookmark = (recipe: Recipe) => {
+    const nextSaved = toggleBookmark(recipe.id);
+    const updated = recipes.find((r) => r.id === recipe.id) ?? { ...recipe, saved: nextSaved };
+    setSelectedRecipe(updated);
+    return nextSaved;
+  };
 
   const handleAddToGroceryList = (recipe: Recipe) => {
     try {
@@ -564,6 +572,7 @@ export const RecipesScreen: React.FC = () => {
         onOpenChange={setShowRecipeDetail}
         recipe={selectedRecipe}
         onAddToGroceryList={handleAddToGroceryList}
+        onBookmark={(recipe) => handleBookmark(recipe)}
       />
 
       {showAddRecipeModal && (

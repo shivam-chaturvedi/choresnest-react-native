@@ -17,6 +17,7 @@ import { NutritionScreen } from "../screens/NutritionScreen";
 import { ExportScreen } from "../screens/UtilityScreens";
 import { VaultScreen } from "../screens/VaultScreen";
 import { ExpensesScreen } from "../screens/ExpensesScreen";
+import { ExpensesHistoryScreen } from "../screens/ExpensesHistoryScreen";
 import { FamilyScreen } from "../screens/FamilyScreen";
 import { NotesScreen } from "../screens/NotesScreen";
 import { NoteDetailScreen } from "../screens/NoteDetailScreen";
@@ -41,6 +42,7 @@ const HomeStack = () => (
     <Stack.Screen name="Nutrition" component={NutritionScreen} />
     <Stack.Screen name="Vault" component={VaultScreen} />
     <Stack.Screen name="Expenses" component={ExpensesScreen} />
+    <Stack.Screen name="ExpensesHistory" component={ExpensesHistoryScreen} />
     <Stack.Screen name="Family" component={FamilyScreen} />
     <Stack.Screen name="Notes" component={NotesScreen} />
     <Stack.Screen name="NoteDetail" component={NoteDetailScreen} />

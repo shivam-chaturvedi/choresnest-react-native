@@ -6,7 +6,9 @@ import {
     StyleSheet,
     ScrollView,
     Pressable,
-    Image,
+    Platform,
+    ToastAndroid,
+    Alert,
 } from "react-native";
 import { AppIcon } from "../ui/AppIcon";
 import { RecipeImage } from "../recipes/RecipeImage";
@@ -18,6 +20,7 @@ interface RecipeDetailModalProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onAddToGroceryList?: (recipe: Recipe) => void;
+    onBookmark?: (recipe: Recipe) => void;
 }
 
 // Mock nutrition data
@@ -63,6 +66,7 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
     open,
     onOpenChange,
     onAddToGroceryList,
+    onBookmark,
 }) => {
     const colors = useThemeColors();
 
@@ -70,6 +74,14 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
 
     const nutrition = getNutritionData(recipe);
     const instructions = getInstructions(recipe);
+
+    const showNativeToast = (message: string) => {
+        if (Platform.OS === "android") {
+            ToastAndroid.show(message, ToastAndroid.SHORT);
+        } else {
+            Alert.alert(message);
+        }
+    };
 
     return (
         <Modal
@@ -95,7 +107,15 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
                     >
                         <AppIcon name="x" size={20} color="#fff" />
                     </Pressable>
-                    <Pressable style={styles.bookmarkButton}>
+                    <Pressable
+                        style={styles.bookmarkButton}
+                        onPress={() => {
+                            const nextSaved = onBookmark?.(recipe);
+                            if (typeof nextSaved === "boolean") {
+                                showNativeToast(nextSaved ? "Bookmark added" : "Bookmark removed");
+                            }
+                        }}
+                    >
                         <AppIcon
                             name="bookmark"
                             size={20}
