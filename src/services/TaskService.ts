@@ -6,7 +6,7 @@ import { Q } from '@nozbe/watermelondb';
 import { NotificationScheduler } from './NotificationScheduler';
 import { NotificationPreferencesService } from './NotificationPreferencesService';
 import { parseReminderDateTime } from '../utils/ReminderDateTimeUtils';
-import { toastService } from './ToastService';
+import { NotificationCenter, NotificationRoute } from './NotificationCenter';
 
 const formatReminderDateTimeDisplay = (date: Date) =>
     date.toLocaleString(undefined, {
@@ -15,6 +15,32 @@ const formatReminderDateTimeDisplay = (date: Date) =>
         hour: "numeric",
         minute: "2-digit",
     });
+
+const severityMeta: Record<"success" | "warning" | "default", { tone: string; textColor: string }> = {
+    success: { tone: 'rgba(34,197,94,0.2)', textColor: '#22C55E' },
+    warning: { tone: 'rgba(245,158,11,0.2)', textColor: '#F59E0B' },
+    default: { tone: 'rgba(12,17,43,0.08)', textColor: '#0D2440' },
+};
+
+const TASKS_ROUTE: NotificationRoute = { tab: "more", screen: "Tasks" };
+const EVENTS_ROUTE: NotificationRoute = { tab: "calendar" };
+
+const pushHomeNotification = (
+    title: string,
+    detail: string,
+    severity: "success" | "warning" | "default" = "default",
+    route?: NotificationRoute
+) => {
+    const { tone, textColor } = severityMeta[severity];
+    NotificationCenter.addNotification({
+        title,
+        detail,
+        tone,
+        textColor,
+        icon: severity === "warning" ? "alertCircle" : "bell",
+        route,
+    });
+};
 
 export const TaskService = {
     // --- Tasks ---
@@ -53,7 +79,10 @@ export const TaskService = {
                                 body: `Due ${task.dueDisplay || 'today'}! Priority: ${task.priority}`,
                                 data: { taskId: task.id }
                             },
-                            notificationTrigger
+                            notificationTrigger,
+                            {
+                                notifyCenter: true,
+                            }
                         );
                         if (notificationId) {
                             await database.write(async () => {
@@ -111,7 +140,10 @@ export const TaskService = {
                                 body: `Due ${task.dueDisplay || 'today'}! Priority: ${task.priority}`,
                                 data: { taskId: task.id }
                             },
-                            notificationTrigger
+                            notificationTrigger,
+                            {
+                                notifyCenter: true,
+                            }
                         );
                         if (newId) {
                             await database.write(async () => {
@@ -119,11 +151,12 @@ export const TaskService = {
                             });
 
                             const formattedReminder = formatReminderDateTimeDisplay(notificationTrigger);
-                            toastService.showToast({
-                                title: "Task reminder updated",
-                                description: `${task.name} reminder set for ${formattedReminder}.`,
-                                type: "success",
-                            });
+                            pushHomeNotification(
+                                "Task reminder updated",
+                                `${task.name} reminder set for ${formattedReminder}.`,
+                                "success",
+                                TASKS_ROUTE
+                            );
                             await NotificationScheduler.notifyImmediateUpdate(
                                 'tasks',
                                 `Task reminder updated: ${task.name}`,
@@ -139,11 +172,12 @@ export const TaskService = {
                         await task.update(t => { t.notificationId = undefined; });
                     });
 
-                    toastService.showToast({
-                        title: "Task reminder cancelled",
-                        description: `${task.name} will no longer trigger reminders.`,
-                        type: "warning",
-                    });
+                        pushHomeNotification(
+                            "Task reminder cancelled",
+                            `${task.name} will no longer trigger reminders.`,
+                            "warning",
+                            TASKS_ROUTE
+                        );
                     await NotificationScheduler.notifyImmediateUpdate(
                         'tasks',
                         `Task reminder cancelled: ${task.name}`,
@@ -221,17 +255,24 @@ export const TaskService = {
                 const reminderMinutes = event.reminderOffsetMinutes ?? preferredReminderMinutes;
                 const triggerDate = new Date(eventDate.getTime() - reminderMinutes * 60000);
 
-                if (triggerDate > new Date() || event.isRecurring) {
-                    const notificationId = await NotificationScheduler.scheduleNotification(
-                        'events',
-                        {
-                            title: `Event: ${event.title}`,
-                            body: event.location ? `at ${event.location}` : `Starting soon`,
-                            data: { eventId: event.id }
-                        },
-                        triggerDate,
-                        event.isRecurring ? event.recurrenceRule : undefined
-                    );
+                    if (triggerDate > new Date() || event.isRecurring) {
+                        const repeatRule = event.isRecurring ? event.recurrenceRule : undefined;
+                        const repeatType = NotificationScheduler.normalizeRepeatType(repeatRule);
+                        const repeatMeta = NotificationScheduler.buildRepeatMetaFromRule(repeatRule);
+                        const notificationId = await NotificationScheduler.scheduleNotification(
+                            'events',
+                            {
+                                title: `Event: ${event.title}`,
+                                body: event.location ? `at ${event.location}` : `Starting soon`,
+                                data: { eventId: event.id }
+                            },
+                            triggerDate,
+                            {
+                                repeatType,
+                                repeatMeta,
+                                notifyCenter: true,
+                            }
+                        );
 
                     if (notificationId) {
                         await database.write(async () => {
@@ -284,11 +325,12 @@ export const TaskService = {
                         await database.write(async () => {
                             await event.update(e => { e.notificationId = undefined; });
                         });
-                        toastService.showToast({
-                            title: "Event reminder cancelled",
-                            description: `${event.title} reminders have been disabled.`,
-                            type: "warning",
-                        });
+                        pushHomeNotification(
+                            "Event reminder cancelled",
+                            `${event.title} reminders have been disabled.`,
+                            "warning",
+                            EVENTS_ROUTE
+                        );
                         await NotificationScheduler.notifyImmediateUpdate(
                             'events',
                             `Event reminder cancelled: ${event.title}`,
@@ -311,6 +353,9 @@ export const TaskService = {
                             await NotificationScheduler.cancelNotification(oldNotificationId);
                         }
 
+                        const repeatRule = event.isRecurring ? event.recurrenceRule : undefined;
+                        const repeatType = NotificationScheduler.normalizeRepeatType(repeatRule);
+                        const repeatMeta = NotificationScheduler.buildRepeatMetaFromRule(repeatRule);
                         const newId = await NotificationScheduler.scheduleNotification(
                             'events',
                             {
@@ -319,7 +364,11 @@ export const TaskService = {
                                 data: { eventId: event.id }
                             },
                             triggerDate,
-                            event.isRecurring ? event.recurrenceRule : undefined
+                            {
+                                repeatType,
+                                repeatMeta,
+                                notifyCenter: true,
+                            }
                         );
 
                         if (newId) {
@@ -327,11 +376,12 @@ export const TaskService = {
                                 await event.update(e => { e.notificationId = newId; });
                             });
                             const formattedReminder = formatReminderDateTimeDisplay(triggerDate);
-                            toastService.showToast({
-                                title: "Event reminder updated",
-                                description: `${event.title} reminder set for ${formattedReminder}.`,
-                                type: "success",
-                            });
+                            pushHomeNotification(
+                                "Event reminder updated",
+                                `${event.title} reminder set for ${formattedReminder}.`,
+                                "success",
+                                EVENTS_ROUTE
+                            );
                             await NotificationScheduler.notifyImmediateUpdate(
                                 'events',
                                 `Event reminder updated: ${event.title}`,
@@ -345,11 +395,12 @@ export const TaskService = {
                         await database.write(async () => {
                             await event.update(e => { e.notificationId = undefined; });
                         });
-                        toastService.showToast({
-                            title: "Event reminder cancelled",
-                            description: `${event.title} reminder cleared because the event is in the past.`,
-                            type: "warning",
-                        });
+                        pushHomeNotification(
+                            "Event reminder cancelled",
+                            `${event.title} reminder cleared because the event is in the past.`,
+                            "warning",
+                            EVENTS_ROUTE
+                        );
                         await NotificationScheduler.notifyImmediateUpdate(
                             'events',
                             `Event reminder cancelled: ${event.title}`,

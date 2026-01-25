@@ -1,4 +1,5 @@
 import "react-native-gesture-handler";
+import notifee, { EventType } from "@notifee/react-native";
 import React, { useEffect } from "react";
 import { StatusBar, StyleSheet } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -16,7 +17,15 @@ import { AppNavigator } from "./src/navigation/AppNavigator";
 import { ThemeProvider } from "./src/contexts/ThemeContext";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { databaseService } from "./src/services/DBService";
-import { NotificationScheduler } from "./src/services/NotificationScheduler";
+import { database } from "./src/database";
+import Event from "./src/database/models/Event";
+import Task from "./src/database/models/Task";
+import {
+  NotificationCategory,
+  NotificationScheduler,
+  RepeatMeta,
+  RepeatType,
+} from "./src/services/NotificationScheduler";
 
 const App = () => {
   useEffect(() => {
@@ -30,6 +39,89 @@ const App = () => {
           }
         };
     initDB();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = notifee.onForegroundEvent(async ({ type, detail }) => {
+      if (type !== EventType.DELIVERED && type !== EventType.PRESS) {
+        return;
+      }
+
+      const notification = detail.notification;
+      const payload = notification?.data as Record<string, any> | undefined;
+      if (!payload?.__repeatType || !payload.__category) {
+        return;
+      }
+
+      const repeatType = payload.__repeatType as RepeatType;
+      if (repeatType === "daily" || repeatType === "weekly") {
+        return;
+      }
+
+      const repeatMeta = payload.__repeatMeta as RepeatMeta | undefined;
+      let nextTrigger: Date | null = null;
+
+      if (repeatType === "custom") {
+        nextTrigger = NotificationScheduler.getNextCustomDate(repeatMeta?.dates);
+      } else {
+        const lastTriggerValue = payload.__lastTrigger;
+        if (lastTriggerValue) {
+          const lastTrigger = new Date(lastTriggerValue);
+          if (!Number.isNaN(lastTrigger.getTime())) {
+            nextTrigger = NotificationScheduler.computeNextDate(lastTrigger, repeatType, repeatMeta);
+          }
+        }
+      }
+
+      if (!nextTrigger) {
+        return;
+      }
+
+      const category = payload.__category as NotificationCategory;
+      if (!category) {
+        return;
+      }
+
+      try {
+        const newNotificationId = await NotificationScheduler.scheduleNotification(
+          category,
+          {
+            title: notification?.title ?? "",
+            body: notification?.body ?? "",
+            data: { ...payload },
+          },
+          nextTrigger,
+          {
+            repeatType,
+            repeatMeta,
+          }
+        );
+
+        if (!newNotificationId) {
+          return;
+        }
+
+        if (category === "events" && payload.eventId) {
+          await database.write(async () => {
+            const record = await database.get<Event>("events").find(payload.eventId);
+            await record.update(e => {
+              e.notificationId = newNotificationId;
+            });
+          });
+        } else if (category === "tasks" && payload.taskId) {
+          await database.write(async () => {
+            const record = await database.get<Task>("tasks").find(payload.taskId);
+            await record.update(t => {
+              t.notificationId = newNotificationId;
+            });
+          });
+        }
+      } catch (error) {
+        console.warn("Failed to reschedule manual repeat notification", error);
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   return (

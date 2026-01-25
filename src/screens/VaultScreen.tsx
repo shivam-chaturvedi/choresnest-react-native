@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -21,7 +21,6 @@ import { FilterModal, FilterOptions } from "../components/modals/FilterModal";
 import { NotificationPanel } from "../components/notifications/NotificationPanel";
 import { calculateTotalStorage, formatStorageSize } from "../utils/StorageUtils";
 import { generateAlerts, getCategoryCounts } from "../utils/VaultUtils";
-import { useEffect } from "react";
 import {
   Menu,
   Camera,
@@ -102,13 +101,18 @@ export const VaultScreen: React.FC = () => {
   ];
 
   // Calculate storage on mount and when docs change
+  const docFingerprint = useMemo(
+    () => allDocs.map(doc => `${doc.id}:${doc.filePath || doc.uri || doc.fileUri || ''}:${doc.date}`).join('|'),
+    [allDocs]
+  );
+
   useEffect(() => {
     const calcStorage = async () => {
       const totalBytes = await calculateTotalStorage(allDocs);
       setStorageUsed(formatStorageSize(totalBytes));
     };
     calcStorage();
-  }, [allDocs.length]);
+  }, [docFingerprint]);
 
   // Apply all filters
   const filteredDocs = allDocs.filter(doc => {
@@ -236,6 +240,7 @@ export const VaultScreen: React.FC = () => {
       date: new Date().toISOString().split('T')[0],
       memberId: activeMember?.id || 'global',
       sharedWith: [],
+      filePath: doc.uri,
       uri: doc.uri,
       // Warranty fields
       purchaseDate: doc.purchaseDate,

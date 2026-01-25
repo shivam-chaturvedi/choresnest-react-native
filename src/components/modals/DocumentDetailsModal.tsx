@@ -13,7 +13,7 @@ import {
 import { X, Edit2, Save } from "lucide-react-native";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { VaultDocument } from "../../contexts/FamilyContext";
-import { useToast } from "../ui/Toast";
+import { NotificationCenter } from "../../services/NotificationCenter";
 import { DateTimePicker } from "../ui/SimpleDatePicker";
 import FileViewer from 'react-native-file-viewer';
 
@@ -44,8 +44,29 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
 }) => {
     const colors = useThemeColors();
     const radius = useThemeRadius();
-    const { showToast } = useToast();
+    const pushNotification = (title: string, detail: string, severity: "success" | "warning" | "default" = "default") => {
+        NotificationCenter.addNotification({
+            title,
+            detail,
+            tone:
+                severity === "success"
+                    ? colors.success + "20"
+                    : severity === "warning"
+                        ? colors.warning + "20"
+                        : colors.muted + "50",
+            textColor:
+                severity === "success"
+                    ? colors.success
+                    : severity === "warning"
+                        ? colors.warning
+                        : colors.foreground,
+            icon: severity === "warning" ? "alertCircle" : "file",
+            route: { tab: "home", screen: "Vault" },
+        });
+    };
     const [isEditMode, setIsEditMode] = useState(false);
+
+    const viewUri = document?.uri || document?.filePath || document?.fileUri;
 
     // Form fields
     const [documentName, setDocumentName] = useState('');
@@ -121,43 +142,51 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                 cost,
             });
 
-            showToast({ title: "Success", description: "Document updated successfully.", type: "success" });
+            pushNotification("Document updated", `${documentName} details saved successfully.`, "success");
             setIsEditMode(false);
         } catch (error) {
             console.error("Failed to update document:", error);
-            showToast({ title: "Error", description: "Failed to update document.", type: "warning" });
+            pushNotification("Error", "Failed to update document.", "warning");
         }
 
     };
 
     const handleViewFile = async () => {
-        if (!document.uri) return;
+        if (!viewUri) return;
 
         const isImage = (uri: string) => {
             const lower = uri.toLowerCase();
             return lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png') || lower.endsWith('.webp') || lower.endsWith('.heic');
         };
 
-        if (!isImage(document.uri)) {
+        if (!isImage(viewUri)) {
             try {
-                await FileViewer.open(document.uri, { showOpenWithDialog: true });
+                await FileViewer.open(viewUri, { showOpenWithDialog: true });
             } catch (e) {
                 console.log('Error opening file:', e);
-                showToast({ title: "Error", description: "Could not open this file.", type: "warning" });
+                pushNotification("Error", "Could not open this file.", "warning");
             }
         } else {
             // It is an image
             if (onViewImage) {
-                onViewImage(document.uri);
+                onViewImage(viewUri);
             } else {
                 // Fallback to FileViewer if no handler provided
                 try {
-                    await FileViewer.open(document.uri);
+                    await FileViewer.open(viewUri);
                 } catch (e) {
                     console.log('Error opening image:', e);
                 }
             }
         }
+    };
+
+    const getViewButtonLabel = () => {
+        if (!viewUri) return 'View File';
+        const lower = viewUri.toLowerCase();
+        if (lower.endsWith('.pdf')) return 'View PDF';
+        if (lower.match(/\.(jpg|jpeg|png|webp|heic)$/i)) return 'View Image';
+        return 'View File';
     };
 
     const renderCategoryFields = () => {
@@ -421,15 +450,13 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
 
                                 {renderCategoryFields()}
 
-                                {document.uri && (
+                                {viewUri && (
                                     <Pressable
                                         style={[styles.viewFileButton, { backgroundColor: colors.primary, borderRadius: radius.md }]}
                                         onPress={handleViewFile}
                                     >
                                         <Text style={[styles.viewFileButtonText, { color: colors.primaryForeground }]}>
-                                            {document.uri.toLowerCase().endsWith('.pdf') ? 'View PDF' :
-                                                document.uri.match(/\.(jpg|jpeg|png|webp|heic)$/i) ? 'View Image' :
-                                                    'View File'}
+                                            {getViewButtonLabel()}
                                         </Text>
                                     </Pressable>
                                 )}

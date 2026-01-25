@@ -1,4 +1,4 @@
-import notifee, { AndroidImportance, TriggerType, TimestampTrigger, RepeatFrequency } from '@notifee/react-native';
+import notifee, { AndroidImportance, AndroidNotificationSetting, TriggerType, TimestampTrigger, RepeatFrequency } from '@notifee/react-native';
 import { Platform } from 'react-native';
 import { database } from '../database';
 import { Q } from '@nozbe/watermelondb';
@@ -7,6 +7,8 @@ import Task from '../database/models/Task';
 import { NotificationPreferencesService } from './NotificationPreferencesService';
 import { parseReminderDateTime } from '../utils/ReminderDateTimeUtils';
 import { checkPermission, requestPermission } from '../utils/permissions';
+import { NotificationCenter, NotificationRoute } from './NotificationCenter';
+import { AppIconName } from '../components/ui/AppIcon';
 
 /**
  * NotificationScheduler
@@ -38,6 +40,8 @@ interface QuietHours {
     endMinute: number;
 }
 
+const SOUND_NAME = 'reminder';
+
 // Notification Channels
 const CHANNELS = {
     events: { id: 'events', name: 'Events', importance: AndroidImportance.HIGH },
@@ -45,6 +49,249 @@ const CHANNELS = {
     documents: { id: 'documents', name: 'Documents', importance: AndroidImportance.HIGH },
     meals: { id: 'meals', name: 'Meals', importance: AndroidImportance.DEFAULT },
     budgets: { id: 'budgets', name: 'Budgets', importance: AndroidImportance.HIGH },
+};
+
+const CATEGORY_META: Record<NotificationCategory, { label: string; icon: AppIconName; tone: string; textColor: string }> = {
+    events: { label: 'Event', icon: 'calendar', tone: 'rgba(59,130,246,0.2)', textColor: '#2563eb' },
+    tasks: { label: 'Task', icon: 'checkSquare', tone: 'rgba(34,197,94,0.2)', textColor: '#22C55E' },
+    documents: { label: 'Document', icon: 'file', tone: 'rgba(16,185,129,0.2)', textColor: '#10B981' },
+    meals: { label: 'Meal prep', icon: 'utensils', tone: 'rgba(245,158,11,0.2)', textColor: '#F59E0B' },
+    budgets: { label: 'Budget', icon: 'wallet', tone: 'rgba(14,165,233,0.2)', textColor: '#0EA5E9' },
+};
+
+const ROUTE_FOR_CATEGORY: Record<NotificationCategory, NotificationRoute> = {
+    events: { tab: 'calendar' },
+    tasks: { tab: 'more', screen: 'Tasks' },
+    documents: { tab: 'home', screen: 'Vault' },
+    meals: { tab: 'home', screen: 'MealPlan' },
+    budgets: { tab: 'more', screen: 'Expenses' },
+};
+
+export type RepeatType =
+    | 'none'
+    | 'daily'
+    | 'weekly'
+    | 'biweekly'
+    | 'weekday'
+    | 'monthly'
+    | 'yearly'
+    | 'custom';
+
+export interface RepeatMeta {
+    daysOfWeek?: number[];
+    interval?: number;
+    dates?: string[];
+}
+
+const describeRepeat = (repeatType: RepeatType) => {
+    if (repeatType === 'none') return '';
+    return ` (Repeat: ${repeatType})`;
+};
+
+const DEFAULT_WEEKDAY_SCHEDULE = [1, 2, 3, 4, 5];
+const MANUAL_REPEAT_TYPES: RepeatType[] = ['biweekly', 'weekday', 'monthly', 'yearly', 'custom'];
+
+const getNextWeekday = (date: Date, allowed: number[]) => {
+    const next = new Date(date);
+    for (let i = 1; i <= 7; i++) {
+        next.setDate(date.getDate() + i);
+        if (allowed.includes(next.getDay())) {
+            return next;
+        }
+    }
+    return null;
+};
+
+const getNextCustomDate = (dates: string[] | undefined) => {
+    if (!dates || dates.length === 0) return null;
+    const now = Date.now();
+    const sorted = dates
+        .map(d => new Date(d))
+        .filter(d => !Number.isNaN(d.getTime()))
+        .sort((a, b) => a.getTime() - b.getTime());
+    return sorted.find(d => d.getTime() > now) || null;
+};
+
+const computeNextDate = (
+    current: Date,
+    repeatType: RepeatType,
+    meta?: RepeatMeta
+): Date | null => {
+    const next = new Date(current);
+
+    switch (repeatType) {
+        case 'biweekly':
+            next.setDate(next.getDate() + 14);
+            return next;
+        case 'monthly': {
+            const day = current.getDate();
+            next.setMonth(next.getMonth() + (meta?.interval ?? 1));
+            if (next.getDate() !== day) {
+                next.setDate(0);
+            }
+            return next;
+        }
+        case 'yearly':
+            next.setFullYear(next.getFullYear() + (meta?.interval ?? 1));
+            return next;
+        case 'weekday':
+            return getNextWeekday(current, meta?.daysOfWeek ?? DEFAULT_WEEKDAY_SCHEDULE);
+        default:
+            return null;
+    }
+};
+
+const isManualRepeatType = (repeatType: RepeatType) => MANUAL_REPEAT_TYPES.includes(repeatType);
+
+const findNextManualEventDate = (
+    base: Date,
+    repeatType: RepeatType,
+    meta?: RepeatMeta,
+    reminderMinutes = 0
+): Date | null => {
+    const now = new Date();
+    const reminderOffset = reminderMinutes * 60000;
+    const limit = 240;
+    let candidate = new Date(base);
+
+    if (repeatType === 'custom') {
+        const sortedDates = (meta?.dates ?? [])
+            .map(d => new Date(d))
+            .filter(d => !Number.isNaN(d.getTime()))
+            .sort((a, b) => a.getTime() - b.getTime());
+
+        for (const customDate of sortedDates) {
+            const reminderTrigger = new Date(customDate.getTime() - reminderOffset);
+            if (reminderTrigger > now) {
+                return customDate;
+            }
+        }
+
+        return null;
+    }
+
+    let attempts = 0;
+    while (attempts < limit) {
+        if (candidate > now) {
+            const reminderTrigger = new Date(candidate.getTime() - reminderOffset);
+            if (reminderTrigger > now) {
+                return candidate;
+            }
+        }
+
+        const next = computeNextDate(candidate, repeatType, meta);
+        if (!next) {
+            return null;
+        }
+        candidate = next;
+        attempts += 1;
+    }
+
+    console.warn('Manual repeat lookup exhausted without finding a future occurrence');
+    return null;
+};
+
+const repeatFrequencyForType = (repeatType: RepeatType): RepeatFrequency | undefined => {
+    switch (repeatType) {
+        case 'daily':
+            return RepeatFrequency.DAILY;
+        case 'weekly':
+            return RepeatFrequency.WEEKLY;
+        default:
+            return undefined;
+    }
+};
+
+const buildRepeatMetaFromRule = (rule?: string): RepeatMeta | undefined => {
+    switch (normalizeRepeatType(rule)) {
+        case 'biweekly':
+            return { interval: 2 };
+        case 'monthly':
+            return { interval: 1 };
+        case 'yearly':
+            return { interval: 1 };
+        case 'weekday':
+            return { daysOfWeek: DEFAULT_WEEKDAY_SCHEDULE };
+        default:
+            return undefined;
+    }
+};
+
+const normalizeRepeatType = (rule?: string | RepeatType): RepeatType => {
+    if (!rule) return 'none';
+    if (typeof rule !== 'string') {
+        return rule;
+    }
+    switch (rule.toLowerCase()) {
+        case 'daily':
+            return 'daily';
+        case 'weekly':
+            return 'weekly';
+        case 'biweekly':
+            return 'biweekly';
+        case 'monthly':
+            return 'monthly';
+        case 'yearly':
+            return 'yearly';
+        case 'weekday':
+            return 'weekday';
+        case 'custom':
+            return 'custom';
+        default:
+            return 'none';
+    }
+};
+
+let alarmPermissionChecked = false;
+let alarmPermissionGranted = false;
+let alarmSettingsPrompted = false;
+let lastChannelSoundSetting: boolean | null = null;
+
+const ensureChannelsCreated = async (soundEnabled: boolean): Promise<void> => {
+    if (lastChannelSoundSetting === soundEnabled) {
+        return;
+    }
+    const soundValue = soundEnabled ? SOUND_NAME : undefined;
+    for (const channel of Object.values(CHANNELS)) {
+        await notifee.createChannel({
+            id: channel.id,
+            name: channel.name,
+            importance: channel.importance,
+            sound: soundValue,
+        });
+    }
+    lastChannelSoundSetting = soundEnabled;
+};
+
+const ensureAlarmPermission = async (promptToOpenSettings = false): Promise<boolean> => {
+    if (Platform.OS !== 'android') return true;
+    if (alarmPermissionChecked && alarmPermissionGranted) return true;
+
+    try {
+        const settings = await notifee.getNotificationSettings();
+        const androidSettings = settings.android;
+        const alarmSetting = androidSettings?.alarm;
+        const enabled = alarmSetting === AndroidNotificationSetting.ENABLED;
+        alarmPermissionChecked = true;
+        alarmPermissionGranted = enabled;
+
+        if (!enabled && promptToOpenSettings && !alarmSettingsPrompted) {
+            alarmSettingsPrompted = true;
+            NotificationCenter.addNotification({
+                title: "Enable exact alarms",
+                detail: "Allow Exact Alarms (Android S/14+) so reminders fire on time.",
+                tone: 'rgba(245,158,11,0.2)',
+                textColor: '#F59E0B',
+                icon: 'alertCircle',
+            });
+            await notifee.openAlarmPermissionSettings();
+        }
+
+        return enabled;
+    } catch (error) {
+        console.warn("Failed to query alarm permission:", error);
+        return alarmPermissionGranted;
+    }
 };
 
 export const NotificationScheduler = {
@@ -60,18 +307,28 @@ export const NotificationScheduler = {
 
             await notifee.requestPermission();
 
-            // Create all channels
-            for (const [key, channel] of Object.entries(CHANNELS)) {
-                await notifee.createChannel({
-                    id: channel.id,
-                    name: channel.name,
-                    importance: channel.importance,
-                });
-            }
+            const soundEnabled = await NotificationPreferencesService.isSoundEnabled();
+            await ensureChannelsCreated(soundEnabled);
+            const androidSound = soundEnabled ? SOUND_NAME : undefined;
+            const iosSound = soundEnabled ? 'reminder.caf' : undefined;
+
+            await ensureAlarmPermission(false);
 
             console.log('✓ Notification channels initialized');
         } catch (error) {
             console.error('Failed to initialize notifications:', error);
+        }
+    },
+
+    /**
+     * Update all channels to respect the global sound toggle.
+     */
+    async updateChannelSoundPreference(soundEnabled: boolean): Promise<void> {
+        try {
+            await ensureChannelsCreated(soundEnabled);
+            console.log(`Notification channels updated for ${soundEnabled ? 'sound' : 'silent'} delivery`);
+        } catch (error) {
+            console.error('Failed to update channel sound preference:', error);
         }
     },
 
@@ -182,12 +439,22 @@ export const NotificationScheduler = {
         category: NotificationCategory,
         data: NotificationData,
         triggerDate: Date,
-        repeatRule?: string // 'daily', 'weekly', 'monthly', 'yearly'
+        options?: {
+            repeatType?: RepeatType | string;
+            repeatMeta?: RepeatMeta;
+            notifyCenter?: boolean;
+        }
     ): Promise<string | null> {
         try {
             const hasPermission = await checkPermission('notification');
             if (!hasPermission) {
                 console.warn(`Skipping scheduling for ${category} because notification permission is not granted`);
+                return null;
+            }
+
+            const pushEnabled = await NotificationPreferencesService.isPushEnabled();
+            if (!pushEnabled) {
+                console.log('Global push notifications disabled; skipping scheduling.');
                 return null;
             }
 
@@ -198,65 +465,108 @@ export const NotificationScheduler = {
                 return null;
             }
 
+            if (Platform.OS === 'android') {
+                const hasAlarm = await ensureAlarmPermission(true);
+                if (!hasAlarm) {
+                    console.warn('Exact alarm permission is not granted; scheduled reminders may not fire reliably.');
+                }
+            }
+
             // Don't schedule past notifications unless it's repeating (Notifee helps here, but we should be careful)
-            if (triggerDate <= new Date() && !repeatRule) {
-                console.log(`Notification not scheduled: trigger date ${triggerDate.toISOString()} is in the past`);
+            const repeatType = normalizeRepeatType(options?.repeatType);
+            const repeatMeta = options?.repeatMeta;
+            const notifyCenter = options?.notifyCenter ?? false;
+            const soundEnabled = await NotificationPreferencesService.isSoundEnabled();
+            await ensureChannelsCreated(soundEnabled);
+
+            let candidateDate = new Date(triggerDate);
+            if (repeatType === 'custom' && repeatMeta?.dates) {
+                const nextCustom = getNextCustomDate(repeatMeta.dates);
+                if (nextCustom) {
+                    candidateDate = nextCustom;
+                } else {
+                    console.log('Custom repeat has no upcoming dates; not scheduling notification.');
+                    return null;
+                }
+            }
+
+            const quietAdjustedDate = await this.adjustForQuietHours(candidateDate);
+            if (quietAdjustedDate <= new Date() && repeatType === 'none') {
+                console.log(`Notification not scheduled: trigger date ${quietAdjustedDate.toISOString()} is in the past`);
                 return null;
             }
 
-            // Adjust for quiet hours
-            const adjustedDate = await this.adjustForQuietHours(triggerDate);
+            let finalTrigger = quietAdjustedDate;
+            if (repeatType === 'weekday') {
+                const allowedDays = repeatMeta?.daysOfWeek ?? DEFAULT_WEEKDAY_SCHEDULE;
+                if (!allowedDays.includes(finalTrigger.getDay())) {
+                    const nextWeekday = getNextWeekday(finalTrigger, allowedDays);
+                    if (nextWeekday) {
+                        finalTrigger = await this.adjustForQuietHours(nextWeekday);
+                    }
+                }
+            }
 
             // Get channel for category
             const channel = CHANNELS[category];
 
-            // Map repeat rule to Frequency
-            let repeatFrequency: RepeatFrequency | undefined;
-            if (repeatRule) {
-                switch (repeatRule.toLowerCase()) {
-                    case 'daily': repeatFrequency = RepeatFrequency.DAILY; break;
-                    case 'weekly': repeatFrequency = RepeatFrequency.WEEKLY; break;
-                    // Notifee doesn't natively support biweekly/monthly/yearly in TimestampTrigger via RepeatFrequency enum easily in all versions, 
-                    // but usually supports DAILY/WEEKLY/HOURLY. 
-                    // For monthly/yearly, complex logic is often needed or checking docs.
-                    // Assuming basic support or fallback.
-                    // Actually, RepeatFrequency typically ONLY has NONE, HOURLY, DAILY, WEEKLY.
-                    // For Monthly/Yearly, we might need custom logic or just fallback to Weekly if not specific.
-                    // Let's stick to standard RepeatFrequency.
-                }
-            }
+            const repeatFrequency = repeatFrequencyForType(repeatType);
 
             // Create trigger
             const trigger: TimestampTrigger = {
                 type: TriggerType.TIMESTAMP,
-                timestamp: adjustedDate.getTime(),
-                repeatFrequency: repeatFrequency,
-                alarmManager: Platform.OS === 'android' ? {
-                    allowWhileIdle: true, // Fire even in Doze mode
-                } : undefined,
+                timestamp: finalTrigger.getTime(),
+                repeatFrequency,
+                alarmManager: {
+                    allowWhileIdle: true,
+                },
             };
 
             // Schedule notification
             const notificationId = await notifee.createTriggerNotification(
-                {
-                    title: data.title,
-                    body: data.body,
-                    data: data.data,
-                    android: {
-                        channelId: channel.id,
-                        pressAction: {
-                            id: 'default',
+                    {
+                        title: data.title,
+                        body: data.body,
+                        data: {
+                            ...(data.data ?? {}),
+                            __repeatType: repeatType,
+                            ...(repeatMeta ? { __repeatMeta: repeatMeta } : {}),
+                            __lastTrigger: finalTrigger.toISOString(),
+                            __category: category,
                         },
-                        smallIcon: 'ic_launcher',
+                        android: {
+                            channelId: channel.id,
+                            pressAction: {
+                                id: 'default',
+                            },
+                            smallIcon: 'ic_launcher',
+                            sound: androidSound,
+                        },
+                        ios: {
+                            ...(iosSound ? { sound: iosSound } : {}),
+                        },
                     },
-                    ios: {
-                        sound: 'default',
-                    },
-                },
                 trigger
             );
 
-            console.log(`✓ Scheduled ${category} notification: ${notificationId} for ${adjustedDate.toISOString()} ${repeatRule ? `(Repeat: ${repeatRule})` : ''}`);
+            console.log(`✓ Scheduled ${category} notification: ${notificationId} for ${finalTrigger.toISOString()} ${repeatType !== 'none' ? `(Repeat: ${repeatType})` : ''}`);
+
+            if (notifyCenter) {
+                const meta = CATEGORY_META[category];
+                NotificationCenter.addNotification({
+                    title: `${meta.label} reminder scheduled`,
+                    detail: `${data.title} · ${finalTrigger.toLocaleString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                    })}${describeRepeat(repeatType)}`,
+                    tone: meta.tone,
+                    textColor: meta.textColor,
+                    icon: meta.icon,
+                    route: ROUTE_FOR_CATEGORY[category],
+                });
+            }
             return notificationId;
         } catch (error) {
             console.error(`Failed to schedule ${category} notification:`, error);
@@ -306,6 +616,14 @@ export const NotificationScheduler = {
         }
     },
 
+    async ensureExactAlarm(promptToOpenSettings = false): Promise<boolean> {
+        return ensureAlarmPermission(promptToOpenSettings);
+    },
+
+    isExactAlarmEnabled(): boolean {
+        return alarmPermissionGranted;
+    },
+
     /**
      * Cancel a notification
      */
@@ -342,7 +660,12 @@ export const NotificationScheduler = {
         oldNotificationId: string | null,
         category: NotificationCategory,
         data: NotificationData,
-        triggerDate: Date
+        triggerDate: Date,
+        options?: {
+            repeatType?: RepeatType | string;
+            repeatMeta?: RepeatMeta;
+            notifyCenter?: boolean;
+        }
     ): Promise<string | null> {
         try {
             // Cancel old notification
@@ -351,7 +674,7 @@ export const NotificationScheduler = {
             }
 
             // Schedule new notification
-            return await this.scheduleNotification(category, data, triggerDate);
+            return await this.scheduleNotification(category, data, triggerDate, options);
         } catch (error) {
             console.error('Failed to update notification:', error);
             return null;
@@ -433,15 +756,36 @@ export const NotificationScheduler = {
             const events = await eventCollection.query().fetch();
 
             for (const event of events) {
-                if (event.notificationId) continue;
                 if (event.reminderOffsetMinutes !== undefined && event.reminderOffsetMinutes < 0) continue;
 
                 const eventDate = parseReminderDateTime(event.dateString, event.time);
                 if (!eventDate) continue;
 
+                const repeatRule = event.isRecurring ? event.recurrenceRule : undefined;
+                const repeatType = event.isRecurring ? normalizeRepeatType(repeatRule) : 'none';
+                const repeatMeta = event.isRecurring ? buildRepeatMetaFromRule(repeatRule) : undefined;
                 const reminderMinutes = event.reminderOffsetMinutes ?? defaultEventReminder;
-                const triggerDate = new Date(eventDate.getTime() - reminderMinutes * 60000);
-                if (triggerDate <= new Date() && !event.isRecurring) continue;
+                const manualRepeat = isManualRepeatType(repeatType);
+
+                const shouldSkipBecauseScheduled = !!event.notificationId && !manualRepeat;
+                if (shouldSkipBecauseScheduled) {
+                    continue;
+                }
+
+                let targetEventDate = eventDate;
+                if (manualRepeat) {
+                    const nextEventDate = findNextManualEventDate(eventDate, repeatType, repeatMeta, reminderMinutes);
+                    if (!nextEventDate) continue;
+                    targetEventDate = nextEventDate;
+                }
+
+                const triggerDate = new Date(targetEventDate.getTime() - reminderMinutes * 60000);
+                if (!manualRepeat && triggerDate <= new Date() && !event.isRecurring) continue;
+                if (manualRepeat && triggerDate <= new Date()) continue;
+
+                if (manualRepeat && event.notificationId) {
+                    await this.cancelNotification(event.notificationId);
+                }
 
                 const notificationId = await this.scheduleNotification(
                     'events',
@@ -451,7 +795,10 @@ export const NotificationScheduler = {
                         data: { eventId: event.id },
                     },
                     triggerDate,
-                    event.isRecurring ? event.recurrenceRule : undefined
+                    {
+                        repeatType,
+                        repeatMeta,
+                    }
                 );
 
                 if (notificationId) {
@@ -501,4 +848,9 @@ export const NotificationScheduler = {
             console.error('Failed to reschedule missing notifications:', error);
         }
     },
+    computeNextDate,
+    getNextWeekday,
+    getNextCustomDate,
+    normalizeRepeatType,
+    buildRepeatMetaFromRule,
 };

@@ -11,6 +11,7 @@ import {
 import { StyleSheet, Text, View } from "react-native";
 
 import { registerToastHandler, ToastRequest, ToastType } from "../../services/ToastService";
+import { NotificationCenter } from "../../services/NotificationCenter";
 import { theme } from "../../theme";
 
 interface ActiveToast extends ToastRequest {
@@ -27,6 +28,19 @@ interface ToastContextValue {
 const ToastContext = createContext<ToastContextValue | undefined>(undefined);
 
 const DEFAULT_DURATION = 4000;
+const ENABLE_TOAST_OVERLAY = false;
+
+const toneForType = (type: ToastType) => {
+  if (type === "success") return theme.colors.success + "20";
+  if (type === "warning") return theme.colors.danger;
+  return "rgba(12, 17, 43, 0.8)";
+};
+
+const textColorForType = (type: ToastType) => {
+  if (type === "success") return theme.colors.success;
+  if (type === "warning") return theme.colors.danger;
+  return "#fff";
+};
 
 export const ToastProvider = ({ children }: { children: ReactNode }) => {
   const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -60,6 +74,13 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
           removeToast(id);
         }, duration)
       );
+      NotificationCenter.addNotification({
+        title: toast.title,
+        detail: toast.description ?? "",
+        tone: toneForType(toast.type),
+        textColor: textColorForType(toast.type),
+        icon: "bell",
+      });
     },
     [removeToast]
   );
@@ -84,24 +105,26 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <View style={styles.portal} pointerEvents="box-none">
-        {toasts.map((toast) => (
-          <View
-            key={toast.id}
-            style={[
-              styles.toast,
-              toast.type === "warning"
-                ? styles.toastWarning
-                : toast.type === "success"
-                ? styles.toastSuccess
-                : styles.toastDefault,
-            ]}
-          >
-            <Text style={styles.title}>{toast.title}</Text>
-            {toast.description ? <Text style={styles.description}>{toast.description}</Text> : null}
-          </View>
-        ))}
-      </View>
+      {ENABLE_TOAST_OVERLAY && (
+        <View style={styles.portal} pointerEvents="box-none">
+          {toasts.map((toast) => (
+            <View
+              key={toast.id}
+              style={[
+                styles.toast,
+                toast.type === "warning"
+                  ? styles.toastWarning
+                  : toast.type === "success"
+                  ? styles.toastSuccess
+                  : styles.toastDefault,
+              ]}
+            >
+              <Text style={styles.title}>{toast.title}</Text>
+              {toast.description ? <Text style={styles.description}>{toast.description}</Text> : null}
+            </View>
+          ))}
+        </View>
+      )}
     </ToastContext.Provider>
   );
 };

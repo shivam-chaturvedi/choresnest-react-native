@@ -13,7 +13,7 @@ import {
 import { Camera, Upload, X } from "lucide-react-native";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { captureImage, pickDocument, SavedDocument } from "../../utils/DocumentUtils";
-import { useToast } from "../ui/Toast";
+import { NotificationCenter } from "../../services/NotificationCenter";
 import { DateTimePicker } from "../ui/SimpleDatePicker";
 
 interface DocumentScannerProps {
@@ -46,16 +46,15 @@ const CATEGORIES = [
 ];
 
 const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
-    open,
-    onOpenChange,
-    onDocumentSaved,
+  open,
+  onOpenChange,
+  onDocumentSaved,
 }) => {
-    const colors = useThemeColors();
-    const radius = useThemeRadius();
-    const { showToast } = useToast();
-    const [loading, setLoading] = useState(false);
-    const [step, setStep] = useState<'upload' | 'form'>('upload');
-    const [selectedFile, setSelectedFile] = useState<SavedDocument | null>(null);
+  const colors = useThemeColors();
+  const radius = useThemeRadius();
+  const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState<'upload' | 'form'>('upload');
+  const [selectedFile, setSelectedFile] = useState<SavedDocument | null>(null);
 
     // Form fields
     const [documentName, setDocumentName] = useState('');
@@ -80,7 +79,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
     const [nextServiceDate, setNextServiceDate] = useState('');
     const [cost, setCost] = useState('');
 
-    const resetForm = () => {
+  const resetForm = () => {
         setStep('upload');
         setSelectedFile(null);
         setDocumentName('');
@@ -96,7 +95,28 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
         setServiceDate('');
         setNextServiceDate('');
         setCost('');
-    };
+  };
+
+    const pushNotification = (title: string, detail: string, severity: "success" | "warning" | "default") => {
+    NotificationCenter.addNotification({
+      title,
+      detail,
+      tone:
+        severity === "success"
+          ? colors.success + "20"
+          : severity === "warning"
+            ? colors.warning + "20"
+            : colors.muted + "50",
+      textColor:
+        severity === "success"
+          ? colors.success
+          : severity === "warning"
+            ? colors.warning
+            : colors.foreground,
+      icon: severity === "warning" ? "alertCircle" : "file",
+      route: { tab: "home", screen: "Vault" },
+    });
+  };
 
     // if (!open) return null; // Logic handled by wrapper
 
@@ -111,7 +131,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
             }
         } catch (error) {
             console.error(error);
-            showToast({ title: "Error", description: "Failed to capture image.", type: "warning" });
+            pushNotification("Error", "Failed to capture image.", "warning");
         } finally {
             setLoading(false);
         }
@@ -128,7 +148,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
             }
         } catch (error) {
             console.error(error);
-            showToast({ title: "Error", description: "Failed to upload document.", type: "warning" });
+            pushNotification("Error", "Failed to upload document.", "warning");
         } finally {
             setLoading(false);
         }
@@ -140,11 +160,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
             return;
         }
         if (!selectedCategory) {
-            showToast({
-                title: "Category Required",
-                description: "Please select a category for your document.",
-                type: "warning"
-            });
+            pushNotification("Category Required", "Please select a category for your document.", "warning");
             return;
         }
 
@@ -164,7 +180,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
                 nextServiceDate,
                 cost,
             });
-            showToast({ title: "Success", description: "Document saved successfully.", type: "success" });
+            pushNotification("Document saved", `${documentName} added to the vault.`, "success");
             resetForm();
             onOpenChange(false);
         }

@@ -17,6 +17,7 @@ import { useFamily, CalendarEvent } from "../../contexts/FamilyContext";
 import { useThemeColors } from "../../contexts/ThemeContext";
 import { AppIcon, AppIconName, CustomDateTimePicker } from "../ui";
 import { PROFILE_COLORS } from "../../constants/profileColors";
+import { NotificationPreferencesService } from "../../services/NotificationPreferencesService";
 
 interface AddEventModalProps {
   open: boolean;
@@ -104,10 +105,27 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
   const [reminder, setReminder] = useState(true);
   const [reminderTime, setReminderTime] = useState("15");
+  const [defaultEventReminderMinutes, setDefaultEventReminderMinutes] = useState(15);
   const [showReminderOptions, setShowReminderOptions] = useState(false);
 
   const [notes, setNotes] = useState("");
   // Removed visibility and time zone states as requested
+
+  useEffect(() => {
+    let isMounted = true;
+    NotificationPreferencesService.getReminderTime("events")
+      .then((minutes) => {
+        if (isMounted) {
+          setDefaultEventReminderMinutes(minutes);
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to load event reminder preference:", error);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (eventToEdit) {
@@ -180,12 +198,12 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
           setReminderTime("15");
         } else {
           const matchOption = reminderOptions.find(o => parseInt(o.value, 10) === eventToEdit.reminderOffsetMinutes);
-          setReminderTime(matchOption ? matchOption.value : "15");
+          setReminderTime(matchOption ? matchOption.value : eventToEdit.reminderOffsetMinutes.toString());
           setReminder(true);
         }
       } else {
         setReminder(true);
-        setReminderTime("15");
+        setReminderTime(defaultEventReminderMinutes.toString());
       }
 
     } else {
@@ -243,11 +261,11 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       setRepeatType("never");
       setRepeatEndDate(null);
       setReminder(true);
-      setReminderTime("15");
+      setReminderTime(defaultEventReminderMinutes.toString());
       setNotes("");
       setShowRepeatOptions(false);
     }
-  }, [open, initialDate, initialTime, members, eventToEdit]);
+  }, [open, initialDate, initialTime, members, eventToEdit, defaultEventReminderMinutes]);
 
 
 
@@ -411,7 +429,17 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
   const getReminderLabel = () => {
     if (!reminder) return "Off";
-    return reminderOptions.find(o => o.value === reminderTime)?.label || "15 minutes before";
+    const option = reminderOptions.find(o => o.value === reminderTime);
+    if (option) return option.label;
+    const minutes = parseInt(reminderTime, 10);
+    if (!isNaN(minutes)) {
+      if (minutes >= 60 && minutes % 60 === 0) {
+        const hours = minutes / 60;
+        return `${hours} hour${hours === 1 ? "" : "s"} before`;
+      }
+      return `${minutes} minutes before`;
+    }
+    return "Reminder set";
   };
 
   return (

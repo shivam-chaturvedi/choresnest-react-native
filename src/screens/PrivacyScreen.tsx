@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
     View,
     Text,
@@ -15,6 +15,7 @@ import { AppLayout } from "../components/layout/AppLayout";
 import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import { useSidebar } from "../contexts/SidebarContext";
 import { useAuth } from "../contexts/AuthContext";
+import notifee from "@notifee/react-native";
 import {
     ChevronLeft,
     Shield,
@@ -38,6 +39,26 @@ export const PrivacyScreen: React.FC = () => {
     const { deleteAccount } = useAuth();
     const colors = useThemeColors();
     const radius = useThemeRadius();
+
+    const [clearNotifications, setClearNotifications] = useState(false);
+
+    useEffect(() => {
+        if (!clearNotifications) return;
+        let active = true;
+        notifee.cancelAllNotifications()
+            .then(() => {
+                if (active) console.log("🔥 Cleared legacy notifications");
+            })
+            .catch((error) => {
+                if (active) console.warn("Failed to clear notifications", error);
+            })
+            .finally(() => {
+                if (active) setClearNotifications(false);
+            });
+        return () => {
+            active = false;
+        };
+    }, [clearNotifications]);
 
     // State management for toggles
     const [settingsState, setSettingsState] = useState(
@@ -330,6 +351,7 @@ export const PrivacyScreen: React.FC = () => {
                                         style: "destructive",
                                         onPress: async () => {
                                             try {
+                                                setClearNotifications(true);
                                                 await deleteAccount();
                                             } catch (error) {
                                                 console.error("Delete account failed", error);

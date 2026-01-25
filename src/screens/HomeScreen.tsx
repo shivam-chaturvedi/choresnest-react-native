@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { setupNotifications, displayImmediateNotification, scheduleDailyNotification } from "../utils/notifications";
+import { setupNotifications } from "../utils/notifications";
 import {
   View,
   Text,
@@ -27,6 +27,7 @@ import { AddMemberModal } from "../components/modals/AddMemberModal";
 import { FamilyOnboarding } from "../components/family/FamilyOnboarding";
 import { FamilyDashboard } from "../components/dashboard/FamilyDashboard";
 import { NotificationPanel } from "../components/notifications/NotificationPanel";
+import { AppNotification, NotificationCenter, NotificationRoute } from "../services/NotificationCenter";
 import { GettingStartedTutorial } from "../components/tutorial/GettingStartedTutorial";
 import { GlobalSearch } from "../components/search/GlobalSearch";
 import { useSidebar } from "../contexts/SidebarContext";
@@ -49,7 +50,7 @@ export const HomeScreen: React.FC = () => {
   const radius = theme.radius; // Dynamic radius
   const { members, activeMember, events, groceryList, setActiveMember, addGroceryItem, tasks, globalVault, memberVaults, familyName } = useFamily();
   const { getMealsForDay, getRecipeById } = useMealPlan();
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const { openSidebar } = useSidebar();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -111,8 +112,6 @@ export const HomeScreen: React.FC = () => {
         // Immediate notification removed as per user request to stop spam
         // await displayImmediateNotification("Welcome Back! 👋", "Notifications are working correctly. Daily reminder set for 10 PM.");
 
-        // Schedule Daily Notification
-        await scheduleDailyNotification();
       } catch (e) {
         console.error("Notification setup failed", e);
       }
@@ -133,19 +132,18 @@ export const HomeScreen: React.FC = () => {
   };
 
   // Dynamic Alerts derived from real data
-  const [notificationAlerts, setNotificationAlerts] = useState<{
-    id: string;
-    title: string;
-    detail: string;
-    tone: string;
-    textColor: string;
-    icon: AppIconName;
-    time: string;
-    read: boolean;
-  }[]>([]);
+  const [notificationAlerts, setNotificationAlerts] = useState<AppNotification[]>([]);
+  const [manualNotifications, setManualNotifications] = useState<AppNotification[]>(NotificationCenter.getNotifications());
 
   useEffect(() => {
-    const newAlerts: any[] = [];
+    const unsubscribe = NotificationCenter.subscribe((items) => {
+      setManualNotifications(items);
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    const newAlerts: AppNotification[] = [];
     const todayStr = new Date().toISOString().split("T")[0];
 
     // 1. Events Today
@@ -160,6 +158,7 @@ export const HomeScreen: React.FC = () => {
         icon: "calendar",
         time: "Today",
         read: false,
+        route: { tab: "calendar" },
       });
     });
 
@@ -175,6 +174,7 @@ export const HomeScreen: React.FC = () => {
         icon: "checkSquare",
         time: t.due, // "Today" or ISO date
         read: false,
+        route: { tab: "more", screen: "Tasks" },
       })
     });
 
@@ -190,21 +190,55 @@ export const HomeScreen: React.FC = () => {
         icon: "shoppingCart",
         time: "Now",
         read: false,
+        route: { tab: "lists" },
       });
     }
 
     setNotificationAlerts(newAlerts);
   }, [events, groceryList, tasks, colors]);
 
-  const alerts = notificationAlerts;
+  const alerts = [...manualNotifications, ...notificationAlerts];
+
+  const markDynamicAlertRead = (id: string) => {
+    setNotificationAlerts(prev =>
+      prev.map((alert) => (alert.id === id ? { ...alert, read: true } : alert))
+    );
+  };
+
+  const navigateForNotification = (route?: NotificationRoute) => {
+    if (!route) return;
+    const { tab, screen, params } = route;
+    if (screen) {
+      navigation.navigate(tab, { screen, params });
+    } else {
+      navigation.navigate(tab);
+    }
+  };
+
+  const handleNotificationPress = (notification: AppNotification) => {
+    const isManual = manualNotifications.some((n) => n.id === notification.id);
+    if (isManual) {
+      NotificationCenter.markRead(notification.id);
+    } else {
+      markDynamicAlertRead(notification.id);
+    }
+
+    if (notification.route) {
+      navigateForNotification(notification.route);
+    }
+
+    setShowNotifications(false);
+  };
 
   const handleClearAllNotifications = () => {
     setNotificationAlerts([]);
+    NotificationCenter.clearNotifications();
     setShowNotifications(false);
   };
 
   const handleMarkAllAsRead = () => {
     setNotificationAlerts(prev => prev.map(alert => ({ ...alert, read: true })));
+    NotificationCenter.markAllRead();
   };
 
   const quickActions: { label: string; iconName: AppIconName; action: () => void; color: string; bg: string }[] = [
@@ -537,6 +571,7 @@ export const HomeScreen: React.FC = () => {
         notifications={alerts}
         onClearAll={handleClearAllNotifications}
         onMarkAllRead={handleMarkAllAsRead}
+        onNotificationPress={handleNotificationPress}
       />
       <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} />
       <GettingStartedTutorial open={showTutorial} onClose={handleTutorialClose} />

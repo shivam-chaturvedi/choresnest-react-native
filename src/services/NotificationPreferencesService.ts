@@ -1,6 +1,7 @@
 import { database } from '../database';
 import NotificationPreference from '../database/models/NotificationPreference';
 import QuietHours from '../database/models/QuietHours';
+import Setting from '../database/models/Setting';
 import { Q } from '@nozbe/watermelondb';
 
 export type NotificationCategory = 'events' | 'tasks' | 'documents' | 'meals' | 'budgets';
@@ -12,6 +13,45 @@ interface QuietHoursSettings {
     endHour: number;
     endMinute: number;
 }
+
+const DELIVERY_SETTINGS = {
+    push: { key: 'delivery_push_enabled', defaultValue: true },
+    email: { key: 'delivery_email_enabled', defaultValue: false },
+    sound: { key: 'delivery_sound_enabled', defaultValue: true },
+};
+
+const getDeliverySetting = async (key: string, defaultValue: boolean): Promise<boolean> => {
+    try {
+        const settings = await database.get<Setting>('settings').query(Q.where('key', key)).fetch();
+        if (settings.length > 0) {
+            return settings[0].value === 'true';
+        }
+    } catch (error) {
+        console.error(`Error reading delivery setting ${key}:`, error);
+    }
+    return defaultValue;
+};
+
+const setDeliverySetting = async (key: string, value: boolean): Promise<void> => {
+    try {
+        await database.write(async () => {
+            const existing = await database.get<Setting>('settings').query(Q.where('key', key)).fetch();
+            if (existing.length > 0) {
+                await existing[0].update(setting => {
+                    setting.value = value ? 'true' : 'false';
+                });
+            } else {
+                await database.get<Setting>('settings').create(setting => {
+                    setting.key = key;
+                    setting.value = value ? 'true' : 'false';
+                });
+            }
+        });
+    } catch (error) {
+        console.error(`Error saving delivery setting ${key}:`, error);
+        throw error;
+    }
+};
 
 /**
  * NotificationPreferencesService
@@ -208,6 +248,9 @@ export const NotificationPreferencesService = {
         mealPrepTime: number;
         vaultReminders: boolean;
         quietHours: QuietHoursSettings | null;
+        pushEnabled: boolean;
+        emailEnabled: boolean;
+        soundEnabled: boolean;
     }> {
         try {
             const [
@@ -230,6 +273,12 @@ export const NotificationPreferencesService = {
                 this.getQuietHours()
             ]);
 
+            const [pushEnabled, emailEnabled, soundEnabled] = await Promise.all([
+                this.isPushEnabled(),
+                this.isEmailEnabled(),
+                this.isSoundEnabled(),
+            ]);
+
             return {
                 eventReminders: eventEnabled,
                 eventReminderTime: eventTime,
@@ -239,10 +288,37 @@ export const NotificationPreferencesService = {
                 mealPrepTime: mealTime,
                 vaultReminders: vaultEnabled,
                 quietHours,
+                pushEnabled,
+                emailEnabled,
+                soundEnabled,
             };
         } catch (error) {
             console.error('Error getting all preferences:', error);
             throw error;
         }
+    },
+
+    async isPushEnabled(): Promise<boolean> {
+        return getDeliverySetting(DELIVERY_SETTINGS.push.key, DELIVERY_SETTINGS.push.defaultValue);
+    },
+
+    async setPushEnabled(value: boolean): Promise<void> {
+        return setDeliverySetting(DELIVERY_SETTINGS.push.key, value);
+    },
+
+    async isEmailEnabled(): Promise<boolean> {
+        return getDeliverySetting(DELIVERY_SETTINGS.email.key, DELIVERY_SETTINGS.email.defaultValue);
+    },
+
+    async setEmailEnabled(value: boolean): Promise<void> {
+        return setDeliverySetting(DELIVERY_SETTINGS.email.key, value);
+    },
+
+    async isSoundEnabled(): Promise<boolean> {
+        return getDeliverySetting(DELIVERY_SETTINGS.sound.key, DELIVERY_SETTINGS.sound.defaultValue);
+    },
+
+    async setSoundEnabled(value: boolean): Promise<void> {
+        return setDeliverySetting(DELIVERY_SETTINGS.sound.key, value);
     },
 };

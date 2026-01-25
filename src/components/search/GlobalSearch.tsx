@@ -13,6 +13,8 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import { AppIcon, AppIconName } from "../ui/AppIcon";
 import { useTheme, useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
+import { useFamily } from "../../contexts/FamilyContext";
+import { useRecipes } from "../../contexts/RecipeContext";
 
 interface SearchResult {
   id: string;
@@ -51,8 +53,85 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
     }),
     [colors]
   );
+  const { events, tasks, groceryList, globalVault, memberVaults } = useFamily();
+  const { recipes } = useRecipes();
+  const vaultCount = useMemo(() => {
+    const memberCount = Object.values(memberVaults || {} as Record<string, any[]>).reduce((total: number, docs: any[]) => total + (docs?.length ?? 0), 0);
+    return (globalVault?.length ?? 0) + memberCount;
+  }, [globalVault, memberVaults]);
+  const quickCounts = useMemo(() => ({
+    event: events.length,
+    task: tasks.length,
+    grocery: (groceryList || []).filter((item: any) => !item.completed).length,
+    recipe: recipes.length,
+    document: vaultCount,
+  }), [events, tasks, groceryList, recipes, vaultCount]) as Record<keyof typeof typeConfig, number>;
   const [query, setQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
+  const [results, setResults] = useState<SearchResult[]>([]);
+
+  const buildContextResults = (filter: string): SearchResult[] => {
+    switch (filter) {
+      case "event":
+        return events.map(e => ({
+          id: `evt-${e.id}`,
+          type: "event" as const,
+          title: e.title,
+          subtitle: e.dateString || e.date || "",
+          icon: "📅",
+          path: "calendar",
+          meta: e.time,
+        }));
+      case "task":
+        return tasks.map(t => ({
+          id: `task-${t.id}`,
+          type: "task" as const,
+          title: t.name,
+          subtitle: t.status,
+          icon: "✅",
+          path: "Tasks",
+          meta: t.priority,
+        }));
+      case "grocery":
+        return (groceryList || [])
+          .map((item: any, index: number) => ({
+            id: `grocery-${item.id ?? index}`,
+            type: "grocery" as const,
+            title: item.name,
+            subtitle: item.category || "Grocery item",
+            icon: "🛒",
+            path: "lists",
+            meta: item.quantity ? `${item.quantity} ${item.unit ?? ""}`.trim() : "",
+          }))
+          .filter(item => !item.subtitle || !item.subtitle.includes("completed"));
+      case "recipe":
+        return recipes.map(r => ({
+          id: `recipe-${r.id}`,
+          type: "recipe" as const,
+          title: r.name,
+          subtitle: r.description || "Recipe",
+          icon: "🍳",
+          path: "Recipes",
+        }));
+      case "document": {
+        const memberDocs = Object.entries(memberVaults || {}).flatMap(([memberId, docs]) =>
+          (docs || []).map(doc => ({ ...doc, memberId }))
+        );
+        const allDocs = [...(globalVault || []), ...memberDocs];
+        return allDocs.map(doc => ({
+          id: `doc-${doc.id ?? doc.documentId ?? Math.random().toString(36).slice(2, 8)}`,
+          type: "document" as const,
+          title: doc.name,
+          subtitle: doc.type || "Vault item",
+          icon: "📄",
+          path: "Vault",
+          meta: doc.date || doc.purchaseDate,
+        }));
+      }
+      default:
+        return [];
+    }
+  };
 
   useEffect(() => {
     if (open) {
@@ -61,7 +140,11 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
     }
   }, [open]);
 
-  const [results, setResults] = useState<SearchResult[]>([]);
+  useEffect(() => {
+    if (!query.trim() && activeFilter) {
+      setResults(buildContextResults(activeFilter));
+    }
+  }, [activeFilter, query, events, tasks, groceryList, recipes, globalVault, memberVaults]);
 
   useEffect(() => {
     if (!query.trim()) {
@@ -202,7 +285,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
                 <Text style={styles.sectionTitle}>Quick Access</Text>
                 <View style={styles.grid}>
                   {Object.entries(typeConfig).map(([type, config]) => {
-                    const count = 0; // Live counts not pre-fetched in empty state for performance
+                    const count = quickCounts[type as keyof typeof quickCounts] ?? 0;
                     return (
                       <Pressable
                         key={type}

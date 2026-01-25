@@ -19,6 +19,10 @@ import { Button } from "../components/ui/Button";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { NotificationPreferencesService } from "../services/NotificationPreferencesService";
 import {
+  NotificationCategory,
+  NotificationScheduler,
+} from "../services/NotificationScheduler";
+import {
   Calendar,
   CheckSquare,
   ShoppingCart,
@@ -42,11 +46,14 @@ const notificationSettings = [
   { id: 'mealprep', icon: ChefHat, label: 'Meal Prep Reminders', description: 'Time to start cooking', enabled: true },
 ];
 
+const DELIVERY_CATEGORIES: NotificationCategory[] = ['events', 'tasks', 'documents', 'meals', 'budgets'];
+
 const eventReminderOptions = [
   { label: '5 min before', value: 5 },
   { label: '15 min before', value: 15 },
   { label: '30 min before', value: 30 },
   { label: '1 hour before', value: 60 },
+  { label: '2 hr 25 min before', value: 145 },
   { label: '1 day before', value: 1440 },
 ];
 
@@ -186,6 +193,10 @@ export const NotificationsScreen: React.FC = () => {
         return s;
       }));
 
+      setPushEnabled(prefs.pushEnabled);
+      setEmailEnabled(prefs.emailEnabled);
+      setSoundEnabled(prefs.soundEnabled);
+
       // Load quiet hours
       if (prefs.quietHours) {
         setQuietHoursEnabled(prefs.quietHours.enabled);
@@ -251,6 +262,45 @@ export const NotificationsScreen: React.FC = () => {
     };
     saveQuietHours();
   }, [quietHoursEnabled, quietStart, quietEnd]);
+
+  useEffect(() => {
+    const updatePush = async () => {
+      try {
+        await NotificationPreferencesService.setPushEnabled(pushEnabled);
+        if (!pushEnabled) {
+          await Promise.all(DELIVERY_CATEGORIES.map(category => NotificationScheduler.cancelAllForCategory(category)));
+        } else {
+          await NotificationScheduler.rescheduleAllMissing();
+        }
+      } catch (error) {
+        console.error('Error updating push preference:', error);
+      }
+    };
+    updatePush();
+  }, [pushEnabled]);
+
+  useEffect(() => {
+    const updateEmail = async () => {
+      try {
+        await NotificationPreferencesService.setEmailEnabled(emailEnabled);
+      } catch (error) {
+        console.error('Error updating email preference:', error);
+      }
+    };
+    updateEmail();
+  }, [emailEnabled]);
+
+  useEffect(() => {
+    const updateSound = async () => {
+      try {
+        await NotificationPreferencesService.setSoundEnabled(soundEnabled);
+        await NotificationScheduler.updateChannelSoundPreference(soundEnabled);
+      } catch (error) {
+        console.error('Error updating sound preference:', error);
+      }
+    };
+    updateSound();
+  }, [soundEnabled]);
 
   const toggleSetting = async (id: string) => {
     const newSettings = settings.map(s => s.id === id ? { ...s, enabled: !s.enabled } : s);
