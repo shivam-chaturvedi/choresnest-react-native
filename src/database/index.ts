@@ -18,6 +18,7 @@ import { Note, Folder } from './models/Note';
 import NotificationPreference from './models/NotificationPreference';
 import QuietHours from './models/QuietHours';
 import AppLock from './models/AppLock';
+import UserPreference from './models/UserPreference';
 
 const adapter = new SQLiteAdapter({
     schema,
@@ -52,5 +53,6 @@ export const database = new Database({
         NotificationPreference,
         QuietHours,
         AppLock,
+        UserPreference,
     ],
 });

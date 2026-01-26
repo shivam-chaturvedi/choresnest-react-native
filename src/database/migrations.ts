@@ -28,5 +28,18 @@ export default schemaMigrations({
                 }),
             ],
         },
+        {
+            toVersion: 4,
+            steps: [
+                createTable({
+                    name: 'user_preferences',
+                    columns: [
+                        { name: 'country_code', type: 'string' },
+                        { name: 'created_at', type: 'number' },
+                        { name: 'updated_at', type: 'number' },
+                    ],
+                }),
+            ],
+        },
     ],
 });

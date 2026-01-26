@@ -25,7 +25,11 @@ import { database } from "../database";
 
 const Stack = createNativeStackNavigator();
 
-export const AppNavigator = () => {
+interface AppNavigatorProps {
+  shouldRequireAuthOnStartup?: boolean;
+}
+
+export const AppNavigator = ({ shouldRequireAuthOnStartup = true }: AppNavigatorProps) => {
   const { isDark } = useTheme();
   const [navState, setNavState] = React.useState<any>();
 
@@ -45,7 +49,7 @@ export const AppNavigator = () => {
 
   return (
     <AuthProvider>
-      <AppLockProvider>
+      <AppLockProvider shouldRequireAuthOnStartup={shouldRequireAuthOnStartup}>
         <NotesProvider>
           <NavigationContainer
             theme={navigationTheme}

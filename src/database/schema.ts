@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export default appSchema({
-    version: 3,
+    version: 4,
     tables: [
         tableSchema({
             name: 'users',
@@ -213,6 +213,14 @@ export default appSchema({
             columns: [
                 { name: 'key', type: 'string', isIndexed: true },
                 { name: 'value', type: 'string' },
+            ],
+        }),
+        tableSchema({
+            name: 'user_preferences',
+            columns: [
+                { name: 'country_code', type: 'string' },
+                { name: 'created_at', type: 'number' },
+                { name: 'updated_at', type: 'number' },
             ],
         }),
         tableSchema({

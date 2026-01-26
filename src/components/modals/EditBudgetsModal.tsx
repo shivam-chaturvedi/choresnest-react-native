@@ -14,6 +14,7 @@ import { X, Save, Edit2 } from "lucide-react-native";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { useFinance, Budget } from "../../contexts/FinanceContext";
 import { useToast } from "../ui/Toast";
+import { useCountry } from "../../contexts/CountryContext";
 
 interface EditBudgetsModalProps {
     visible: boolean;
@@ -28,6 +29,7 @@ export const EditBudgetsModal: React.FC<EditBudgetsModalProps> = ({
     const radius = useThemeRadius();
     const { budgets, updateBudget, categoryIcons } = useFinance();
     const { showToast } = useToast();
+    const { formatCurrency } = useCountry();
 
 
 
@@ -50,7 +52,7 @@ export const EditBudgetsModal: React.FC<EditBudgetsModalProps> = ({
                 delete next[category];
                 return next;
             });
-            showToast({ title: "Budget Updated", description: `Updated ${category} budget to ₹${amount}`, type: "success" });
+            showToast({ title: "Budget Updated", description: `Updated ${category} budget to ${formatCurrency(amount)}`, type: "success" });
         }
     };
 
@@ -101,7 +103,7 @@ export const EditBudgetsModal: React.FC<EditBudgetsModalProps> = ({
                                                 <Text style={[styles.catName, { color: colors.foreground }]}>{displayName}</Text>
                                                 {!isEditing && (
                                                     <Text style={[styles.amountText, { color: colors.mutedForeground }]}>
-                                                        ₹{amount.toLocaleString()}
+                                                        {formatCurrency(amount)}
                                                     </Text>
                                                 )}
                                             </View>

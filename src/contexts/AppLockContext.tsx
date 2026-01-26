@@ -8,12 +8,13 @@ import React, {
     useRef,
     ReactNode,
 } from 'react';
-import { AppState } from 'react-native';
 import ReactNativeBiometrics from 'react-native-biometrics';
 import { useAuth } from './AuthContext';
 import { appLockService, hashPin } from '../services/AppLockService';
 import AppLock from '../database/models/AppLock';
 import { database } from '../database';
+import { markBiometricPromptShown } from '../services/biometricLifecycle';
+import { appLockManager } from '../services/AppLockManager';
 
 export interface AppLockContextType {
     isReady: boolean;
@@ -35,7 +36,15 @@ export interface AppLockContextType {
 const AppLockContext = createContext<AppLockContextType | undefined>(undefined);
 const biometricClient = new ReactNativeBiometrics();
 
-export const AppLockProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+type AppLockProviderProps = {
+    children: ReactNode;
+    shouldRequireAuthOnStartup?: boolean;
+};
+
+export const AppLockProvider: React.FC<AppLockProviderProps> = ({
+    children,
+    shouldRequireAuthOnStartup = true,
+}) => {
     const { isAuthenticated } = useAuth();
     type AppLockSnapshot = {
         id: string;
@@ -84,6 +93,14 @@ export const AppLockProvider: React.FC<{ children: ReactNode }> = ({ children })
     }, [mapToSnapshot]);
 
     useEffect(() => {
+        appLockManager.updateSettings({
+            enabled: !!record?.enabled,
+            biometricEnabled: !!record?.biometricEnabled,
+            hasPin: !!record?.pinHash,
+        });
+    }, [record?.enabled, record?.biometricEnabled, record?.pinHash]);
+
+    useEffect(() => {
         (async () => {
             try {
                 await refreshRecord();
@@ -109,16 +126,6 @@ export const AppLockProvider: React.FC<{ children: ReactNode }> = ({ children })
         })();
     }, []);
 
-    useEffect(() => {
-        const subscription = AppState.addEventListener('change', nextState => {
-            if (nextState === 'active' && record?.enabled && isAuthenticated) {
-                setSessionUnlocked(false);
-                setIsLocked(true);
-            }
-        });
-        return () => subscription.remove();
-    }, [record?.enabled, isAuthenticated]);
-
     const prevEnabledRef = useRef<boolean | null>(null);
     useEffect(() => {
         if (record?.enabled) {
@@ -138,18 +145,18 @@ export const AppLockProvider: React.FC<{ children: ReactNode }> = ({ children })
             setSessionUnlocked(false);
             return;
         }
-        if (record?.enabled && !sessionUnlocked) {
-            setIsLocked(true);
-        } else {
-            setIsLocked(false);
-        }
-    }, [isReady, record?.enabled, isAuthenticated, sessionUnlocked]);
+        const requiresStartupLock =
+            shouldRequireAuthOnStartup && record?.enabled && !sessionUnlocked && appLockManager.shouldRequireAuth();
+        setIsLocked(requiresStartupLock);
+    }, [isReady, record?.enabled, isAuthenticated, sessionUnlocked, shouldRequireAuthOnStartup]);
 
     const hasPin = Boolean(record?.pinHash);
 
     const handleUnlockSuccess = useCallback(() => {
         setSessionUnlocked(true);
         setIsLocked(false);
+        markBiometricPromptShown();
+        appLockManager.markAuthenticated();
     }, []);
 
     const enableAppLock = useCallback(async () => {

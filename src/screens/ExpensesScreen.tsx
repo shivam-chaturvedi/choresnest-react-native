@@ -25,6 +25,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import { useFinance, Transaction } from '../contexts/FinanceContext';
 import { ScreenErrorView } from '../components/ui/ScreenErrorView';
+import { useCountry } from '../contexts/CountryContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -41,6 +42,7 @@ export const ExpensesScreen: React.FC = () => {
   const { openSidebar } = useSidebar();
 
   const { transactions, addTransaction, budgets, categoryColors, categoryIcons } = useFinance();
+  const { formatCurrency } = useCountry();
   const [screenError, setScreenError] = useState<string | null>(null);
   const handleScreenError = useCallback((context: string, error: unknown) => {
     console.error(`ExpensesScreen - ${context}`, error);
@@ -97,17 +99,21 @@ export const ExpensesScreen: React.FC = () => {
   }, [transactions]);
 
   const categories = useMemo(() => {
-    return Object.entries(categorySpending).map(([name, amount]) => ({
-      name: name.charAt(0).toUpperCase() + name.slice(1),
-      id: name,
-      amount: `₹${amount.toLocaleString()}`,
-      numAmount: amount,
-      percent: totalExpenses > 0 ? Math.round((amount / totalExpenses) * 100) : 0,
-      icon: categoryIcons[name] || '📦',
-      color: categoryColors[name] || categoryColors.other,
-      budget: budgets[name] || 0,
-    })).sort((a, b) => b.numAmount - a.numAmount);
-  }, [categorySpending, totalExpenses, budgets, categoryIcons, categoryColors]);
+    return Object.entries(categorySpending).map(([name, amount]) => {
+      const budgetValue = budgets[name] || 0;
+      return {
+        name: name.charAt(0).toUpperCase() + name.slice(1),
+        id: name,
+        formattedAmount: formatCurrency(amount),
+        numAmount: amount,
+        percent: totalExpenses > 0 ? Math.round((amount / totalExpenses) * 100) : 0,
+        icon: categoryIcons[name] || '📦',
+        color: categoryColors[name] || categoryColors.other,
+        budget: budgetValue,
+        formattedBudget: budgetValue > 0 ? formatCurrency(budgetValue) : null,
+      };
+    }).sort((a, b) => b.numAmount - a.numAmount);
+  }, [categorySpending, totalExpenses, budgets, categoryIcons, categoryColors, formatCurrency]);
 
   // Daily Data for Area Chart (Current Month)
   const dailyData = useMemo(() => {
@@ -455,7 +461,7 @@ export const ExpensesScreen: React.FC = () => {
             textAnchor="middle"
             fontWeight="bold"
           >
-            {total.toLocaleString()}
+            {formatCurrency(total)}
           </SvgText>
         </Svg>
       </View>
@@ -493,7 +499,7 @@ export const ExpensesScreen: React.FC = () => {
                 ]}
               />
             </View>
-            <Text style={[styles.barValue, { color: colors.mutedForeground }]}>{cat.amount}</Text>
+            <Text style={[styles.barValue, { color: colors.mutedForeground }]}>{cat.formattedAmount}</Text>
           </View>
         ))}
       </View>
@@ -561,7 +567,7 @@ export const ExpensesScreen: React.FC = () => {
               <Text style={styles.balanceLabel}>Current Balance</Text>
               <Wallet size={24} color="rgba(255,255,255,0.6)" />
             </View>
-            <Text style={styles.balanceAmount}>₹{balance.toLocaleString()}</Text>
+            <Text style={styles.balanceAmount}>{formatCurrency(balance)}</Text>
 
             <View style={styles.statsRow}>
               <View style={[styles.statBox, { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: radius.md }]}>
@@ -569,14 +575,14 @@ export const ExpensesScreen: React.FC = () => {
                   <ArrowDownLeft size={14} color="#6ee7b7" />
                   <Text style={styles.statLabel}> Income</Text>
                 </View>
-                <Text style={styles.statValue}>₹{totalIncome.toLocaleString()}</Text>
+                <Text style={styles.statValue}>{formatCurrency(totalIncome)}</Text>
               </View>
               <View style={[styles.statBox, { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: radius.md }]}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
                   <ArrowUpRight size={14} color="#fca5a5" />
                   <Text style={styles.statLabel}> Expenses</Text>
                 </View>
-                <Text style={styles.statValue}>₹{totalExpenses.toLocaleString()}</Text>
+                <Text style={styles.statValue}>{formatCurrency(totalExpenses)}</Text>
               </View>
             </View>
           </View>
@@ -594,7 +600,7 @@ export const ExpensesScreen: React.FC = () => {
                     <Text style={[styles.cardSubtitle, { color: colors.mutedForeground }]}>{savingsPercent.toFixed(1)}% of income</Text>
                   </View>
                   <Text style={[styles.amountText, { color: colors.success }]}>
-                    ₹{savings.toLocaleString()}
+                    {formatCurrency(savings)}
                   </Text>
                 </View>
                 <View style={[styles.progressBarBg, { backgroundColor: colors.muted, borderRadius: radius.xs }]}>
@@ -630,7 +636,7 @@ export const ExpensesScreen: React.FC = () => {
                       styles.txAmount,
                       tx.type === 'income' ? { color: colors.success } : { color: colors.danger }
                     ]}>
-                      {tx.type === 'income' ? '+' : '-'}₹{tx.amount.toLocaleString()}
+                      {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
                     </Text>
                   </View>
                 ))}
@@ -667,8 +673,8 @@ export const ExpensesScreen: React.FC = () => {
                           <Text style={{ fontSize: 12, color: colors.mutedForeground }}>{cat.percent}% of total</Text>
                         </View>
                       </View>
-                      <View style={{ alignItems: 'flex-end' }}>
-                        <Text style={{ fontSize: 14, fontWeight: '700', color: colors.foreground }}>{cat.amount}</Text>
+            <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={{ fontSize: 14, fontWeight: '700', color: colors.foreground }}>{cat.formattedAmount}</Text>
                       </View>
                     </View>
                   ))}
@@ -702,9 +708,14 @@ export const ExpensesScreen: React.FC = () => {
                           </View>
                           <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
                             <Text style={[styles.catAmount, isOverBudget && { color: colors.danger }, { color: colors.foreground }]}>
-                              {cat.amount}
+                              {cat.formattedAmount}
                             </Text>
-                            {cat.budget > 0 && <Text style={[styles.catBudget, { color: colors.mutedForeground }]}> / ₹{cat.budget.toLocaleString()}</Text>}
+                            {cat.budget > 0 && (
+                              <Text style={[styles.catBudget, { color: colors.mutedForeground }]}>
+                                {' / '}
+                                {cat.formattedBudget}
+                              </Text>
+                            )}
                           </View>
                         </View>
                         <View style={[styles.progressBarBg, { backgroundColor: colors.muted, borderRadius: radius.xs }]}>
@@ -720,8 +731,8 @@ export const ExpensesScreen: React.FC = () => {
                           />
                         </View>
                         {isOverBudget && (
-                          <Text style={[styles.overBudgetText, { color: colors.danger }]}>
-                            ⚠️ Over budget by ₹{(cat.numAmount - cat.budget).toLocaleString()}
+                        <Text style={[styles.overBudgetText, { color: colors.danger }]}>
+                            ⚠️ Over budget by {formatCurrency(Math.max(cat.numAmount - cat.budget, 0))}
                           </Text>
                         )}
                       </View>

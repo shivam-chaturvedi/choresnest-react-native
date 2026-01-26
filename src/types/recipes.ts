@@ -25,6 +25,7 @@ export interface Recipe {
     duration?: number;
     url?: string;
     images?: string[];
+    countryCode?: string;
 }
 
 export interface RecipeCollection {

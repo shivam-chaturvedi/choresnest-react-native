@@ -6,9 +6,11 @@ import { NotificationScheduler } from './NotificationScheduler';
 import { NotificationPreferencesService } from './NotificationPreferencesService';
 import { parseReminderDateTime } from '../utils/ReminderDateTimeUtils';
 import { NotificationCenter, NotificationRoute } from './NotificationCenter';
+import { CountryPreferenceService } from './CountryPreferenceService';
+import { formatDateTime } from '../utils/countryFormatting';
 
 const formatReminderDateTimeDisplay = (date: Date) =>
-    date.toLocaleString(undefined, {
+    formatDateTime(date, CountryPreferenceService.getCurrentCountry(), {
         month: "short",
         day: "numeric",
         hour: "numeric",

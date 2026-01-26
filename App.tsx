@@ -1,6 +1,6 @@
 import "react-native-gesture-handler";
 import notifee, { EventType } from "@notifee/react-native";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { StatusBar, StyleSheet } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -26,6 +26,9 @@ import {
   RepeatMeta,
   RepeatType,
 } from "./src/services/NotificationScheduler";
+import { shouldShowBiometricOnStartup } from "./src/services/biometricLifecycle";
+import { CountryProvider } from "./src/contexts/CountryContext";
+import { appLockManager } from "./src/services/AppLockManager";
 
 const App = () => {
   useEffect(() => {
@@ -124,9 +127,16 @@ const App = () => {
     return () => unsubscribe();
   }, []);
 
+  const [shouldRequireStartupAuth] = useState(() => shouldShowBiometricOnStartup());
+
+  useEffect(() => {
+    appLockManager.requestFreshAuth();
+  }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
+      <CountryProvider>
+        <SafeAreaProvider>
         <ThemeProvider>
           <FamilyProvider>
             <FinanceProvider>
@@ -141,7 +151,7 @@ const App = () => {
                       />
                       <SafeAreaView style={styles.appWrapper} edges={["top", "bottom", "left", "right"]}>
                         <ErrorBoundary>
-                          <AppNavigator />
+                          <AppNavigator shouldRequireAuthOnStartup={shouldRequireStartupAuth} />
                         </ErrorBoundary>
                       </SafeAreaView>
                     </ToastProvider>
@@ -152,7 +162,8 @@ const App = () => {
           </FamilyProvider>
         </ThemeProvider>
       </SafeAreaProvider>
-    </GestureHandlerRootView>
+    </CountryProvider>
+  </GestureHandlerRootView>
   );
 };
 

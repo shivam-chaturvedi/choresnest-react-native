@@ -19,6 +19,7 @@ import { useFamily } from "../contexts/FamilyContext";
 import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { AppIcon } from "../components/ui/AppIcon";
 import { useRecipes } from "../contexts/RecipeContext";
+import { useCountry } from "../contexts/CountryContext";
 import { RecipeImage } from "../components/recipes/RecipeImage";
 import { Recipe } from "../types/recipes";
 import { RecipeDetailModal } from "../components/modals/RecipeDetailModal";
@@ -52,6 +53,7 @@ export const RecipesScreen: React.FC = () => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
   const { recipes, collections, toggleBookmark, removeRecipe } = useRecipes();
+  const { currentCountry } = useCountry();
 
   const [screenError, setScreenError] = useState<string | null>(null);
   const handleScreenError = useCallback((context: string, error: unknown) => {
@@ -99,17 +101,21 @@ export const RecipesScreen: React.FC = () => {
     );
   };
 
+  const locationAwareRecipes = useMemo(() => {
+    return recipes.filter(recipe => !recipe.countryCode || recipe.countryCode === currentCountry.code);
+  }, [recipes, currentCountry.code]);
+
   const filteredRecipes = useMemo(() => {
     const lowerQuery = query.toLowerCase();
-    return recipes.filter(
+    return locationAwareRecipes.filter(
       (recipe) =>
         recipe.name.toLowerCase().includes(lowerQuery) ||
         recipe.tags.some((tag) => tag.toLowerCase().includes(lowerQuery))
     );
-  }, [query, recipes]);
+  }, [query, locationAwareRecipes]);
 
   const quickMeals = useMemo(() => {
-    return recipes
+    return locationAwareRecipes
       .filter((r) => {
         const timeVal = parseInt(r.time.split(" ")[0]);
         return timeVal <= 25;
@@ -119,15 +125,15 @@ export const RecipesScreen: React.FC = () => {
         const timeB = parseInt(b.time.split(" ")[0]);
         return timeA - timeB;
       });
-  }, [recipes]);
+  }, [locationAwareRecipes]);
 
-  const favorites = recipes.filter(r => r.saved);
+  const favorites = locationAwareRecipes.filter(r => r.saved);
 
   const recommended = useMemo(() => {
     if (activePreferences.length === 0) {
-      return recipes.slice(0, 4);
+      return locationAwareRecipes.slice(0, 4);
     }
-    return recipes.filter(r =>
+    return locationAwareRecipes.filter(r =>
       r.tags.some(tag => activePreferences.includes(tag)) ||
       activePreferences.some(pref => {
         if (pref === "Quick Meals") return parseInt(r.time) <= 25;
@@ -139,7 +145,7 @@ export const RecipesScreen: React.FC = () => {
         return false;
       })
     );
-  }, [recipes, activePreferences]);
+  }, [locationAwareRecipes, activePreferences]);
 
   // Handle Recipe Click
   const [showImageGallery, setShowImageGallery] = useState(false);

@@ -129,6 +129,14 @@ export const MoreScreen: React.FC = () => {
           route: "Theme"
         },
         {
+          label: "Localization",
+          description: "Country, currency & time zone",
+          icon: "globe",
+          color: colors.info + '25',
+          iconColor: colors.info,
+          route: "Settings"
+        },
+        {
           label: "Data Export",
           description: "Backup your data",
           icon: "download",

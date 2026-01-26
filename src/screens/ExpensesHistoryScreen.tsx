@@ -14,6 +14,7 @@ import { useFinance, Transaction } from '../contexts/FinanceContext';
 import { DateTimePicker } from '../components/ui/SimpleDatePicker';
 import { ChevronLeft } from 'lucide-react-native';
 import { formatMonthKey, formatMonthLabel, parseTransactionDate, toDate } from '../utils/financeDateUtils';
+import { useCountry } from '../contexts/CountryContext';
 
 type HistoryFilter = 'month' | 'week' | 'year' | 'custom';
 
@@ -39,6 +40,7 @@ export const ExpensesHistoryScreen: React.FC = () => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
   const { transactions } = useFinance();
+  const { formatCurrency } = useCountry();
 
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>('month');
   const [historyMonth, setHistoryMonth] = useState(formatMonthKey(new Date()));
@@ -295,7 +297,7 @@ export const ExpensesHistoryScreen: React.FC = () => {
         styles.txAmount,
         item.type === 'income' ? { color: colors.success } : { color: colors.danger }
       ]}>
-        {item.type === 'income' ? '+' : '-'}₹{item.amount.toLocaleString()}
+        {item.type === 'income' ? '+' : '-'}{formatCurrency(item.amount)}
       </Text>
     </View>
   );
@@ -320,11 +322,11 @@ export const ExpensesHistoryScreen: React.FC = () => {
         </View>
         <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.md }]}>
           <Text style={[styles.summaryLabel, { color: colors.success }]}>Income</Text>
-          <Text style={[styles.summaryValue, { color: colors.success }]}>₹{summary.income.toLocaleString()}</Text>
+          <Text style={[styles.summaryValue, { color: colors.success }]}>{formatCurrency(summary.income)}</Text>
         </View>
         <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.md }]}>
           <Text style={[styles.summaryLabel, { color: colors.danger }]}>Expenses</Text>
-          <Text style={[styles.summaryValue, { color: colors.danger }]}>₹{summary.expense.toLocaleString()}</Text>
+          <Text style={[styles.summaryValue, { color: colors.danger }]}>{formatCurrency(summary.expense)}</Text>
         </View>
       </View>
       <View style={{ marginBottom: 8 }}>

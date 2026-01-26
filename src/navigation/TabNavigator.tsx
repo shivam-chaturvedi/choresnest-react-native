@@ -29,6 +29,7 @@ import { ThemeScreen } from "../screens/ThemeScreen";
 import { DataExportScreen } from "../screens/DataExportScreen";
 import { HelpScreen } from "../screens/HelpScreen";
 import { TasksScreen } from "../screens/TasksScreen";
+import { SettingsScreen } from "../screens/SettingsScreen";
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -50,12 +51,13 @@ const HomeStack = () => (
 );
 
 const MoreStack = () => (
-  <Stack.Navigator screenOptions={{ headerShown: false }}>
-    <Stack.Screen name="MoreMain" component={MoreScreen} />
-    <Stack.Screen name="Notifications" component={NotificationsScreen} />
-    <Stack.Screen name="Privacy" component={PrivacyScreen} />
-    <Stack.Screen name="Theme" component={ThemeScreen} />
-    <Stack.Screen name="Export" component={ExportScreen} />
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="MoreMain" component={MoreScreen} />
+      <Stack.Screen name="Notifications" component={NotificationsScreen} />
+      <Stack.Screen name="Privacy" component={PrivacyScreen} />
+      <Stack.Screen name="Theme" component={ThemeScreen} />
+      <Stack.Screen name="Settings" component={SettingsScreen} />
+      <Stack.Screen name="Export" component={ExportScreen} />
     <Stack.Screen name="DataExport" component={DataExportScreen} />
     <Stack.Screen name="Help" component={HelpScreen} />
     <Stack.Screen name="Tasks" component={TasksScreen} />

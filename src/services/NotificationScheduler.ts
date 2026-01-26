@@ -42,13 +42,53 @@ interface QuietHours {
 
 const SOUND_NAME = 'reminder';
 
-// Notification Channels
-const CHANNELS = {
-    events: { id: 'events', name: 'Events', importance: AndroidImportance.HIGH },
-    tasks: { id: 'tasks', name: 'Tasks', importance: AndroidImportance.DEFAULT },
-    documents: { id: 'documents', name: 'Documents', importance: AndroidImportance.HIGH },
-    meals: { id: 'meals', name: 'Meals', importance: AndroidImportance.DEFAULT },
-    budgets: { id: 'budgets', name: 'Budgets', importance: AndroidImportance.HIGH },
+/**
+ * Android 8+ ties notification sound and vibration settings to the channel.
+ * To respect the user's sound toggle without mutating existing channels, we create
+ * two channels (sound on vs. silent) and select the correct one when dispatching a notification.
+ */
+
+const SOUND_CHANNELS = {
+    SOUND_ON: {
+        id: 'chat_sound_on',
+        name: 'FamilyChores (Sound)',
+        importance: AndroidImportance.HIGH,
+        sound: SOUND_NAME,
+        vibration: true,
+    },
+    SOUND_OFF: {
+        id: 'chat_sound_off',
+        name: 'FamilyChores (Silent)',
+        importance: AndroidImportance.LOW,
+        vibration: false,
+    },
+} as const;
+
+const soundChannelList = Object.values(SOUND_CHANNELS);
+let soundChannelsInitialized = false;
+
+const ensureSoundChannelsCreated = async (): Promise<void> => {
+    if (soundChannelsInitialized) {
+        return;
+    }
+
+    await Promise.all(
+        soundChannelList.map(channel =>
+            notifee.createChannel({
+                id: channel.id,
+                name: channel.name,
+                importance: channel.importance,
+                sound: channel.sound,
+                vibration: channel.vibration,
+            })
+        )
+    );
+
+    soundChannelsInitialized = true;
+};
+
+const getChannelIdBySoundPreference = (soundEnabled: boolean): string => {
+    return soundEnabled ? SOUND_CHANNELS.SOUND_ON.id : SOUND_CHANNELS.SOUND_OFF.id;
 };
 
 const CATEGORY_META: Record<NotificationCategory, { label: string; icon: AppIconName; tone: string; textColor: string }> = {
@@ -245,49 +285,6 @@ const normalizeRepeatType = (rule?: string | RepeatType): RepeatType => {
 let alarmPermissionChecked = false;
 let alarmPermissionGranted = false;
 let alarmSettingsPrompted = false;
-let lastChannelSoundSetting: boolean | null = null;
-
-const deleteChannelSafe = async (channelId: string) => {
-    try {
-        await notifee.deleteChannel(channelId);
-    } catch (error) {
-        console.warn(`Failed to delete channel ${channelId}:`, error);
-    }
-};
-
-const createChannelWithSound = async (channel: typeof CHANNELS[keyof typeof CHANNELS], soundEnabled: boolean) => {
-    const soundValue = soundEnabled ? SOUND_NAME : undefined;
-    await notifee.createChannel({
-        id: channel.id,
-        name: channel.name,
-        importance: channel.importance,
-        sound: soundValue,
-    });
-};
-
-const recreateAllNotificationChannels = async (soundEnabled: boolean): Promise<void> => {
-    for (const channel of Object.values(CHANNELS)) {
-        await deleteChannelSafe(channel.id);
-    }
-    for (const channel of Object.values(CHANNELS)) {
-        await createChannelWithSound(channel, soundEnabled);
-    }
-    lastChannelSoundSetting = soundEnabled;
-};
-
-const recreateChannelForCategory = async (category: NotificationCategory, soundEnabled: boolean): Promise<void> => {
-    const channel = CHANNELS[category];
-    if (!channel) return;
-    await deleteChannelSafe(channel.id);
-    await createChannelWithSound(channel, soundEnabled);
-};
-
-const ensureChannelsCreated = async (soundEnabled: boolean): Promise<void> => {
-    if (lastChannelSoundSetting === soundEnabled) {
-        return;
-    }
-    await recreateAllNotificationChannels(soundEnabled);
-};
 
 const ensureAlarmPermission = async (promptToOpenSettings = false): Promise<boolean> => {
     if (Platform.OS !== 'android') return true;
@@ -326,9 +323,7 @@ export const NotificationScheduler = {
      */
     async initialize() {
         try {
-
-            const soundEnabled = await NotificationPreferencesService.isSoundEnabled();
-            await ensureChannelsCreated(soundEnabled);
+            await ensureSoundChannelsCreated();
 
             await ensureAlarmPermission(false);
 
@@ -339,30 +334,15 @@ export const NotificationScheduler = {
     },
 
     /**
-     * Update all channels to respect the global sound toggle.
+     * Update channel selection after user toggles sound. Channels are immutable,
+     * so we just ensure they exist and rely on runtime channel selection instead.
      */
     async updateChannelSoundPreference(soundEnabled: boolean): Promise<void> {
         try {
-            await ensureChannelsCreated(soundEnabled);
-            console.log(`Notification channels updated for ${soundEnabled ? 'sound' : 'silent'} delivery`);
+            await ensureSoundChannelsCreated();
+            console.log(`Notification sound preference updated; future notifications will use ${soundEnabled ? 'chat_sound_on' : 'chat_sound_off'}`);
         } catch (error) {
             console.error('Failed to update channel sound preference:', error);
-        }
-    },
-
-    async recreateChannel(category: NotificationCategory, soundEnabled: boolean): Promise<void> {
-        try {
-            await recreateChannelForCategory(category, soundEnabled);
-        } catch (error) {
-            console.error(`Failed to recreate channel ${category}:`, error);
-        }
-    },
-
-    async recreateAllChannels(soundEnabled: boolean): Promise<void> {
-        try {
-            await recreateAllNotificationChannels(soundEnabled);
-        } catch (error) {
-            console.error('Failed to recreate all notification channels:', error);
         }
     },
 
@@ -522,8 +502,8 @@ export const NotificationScheduler = {
             const repeatMeta = options?.repeatMeta;
             const notifyCenter = options?.notifyCenter ?? false;
             const soundEnabled = await NotificationPreferencesService.isSoundEnabled();
-            await ensureChannelsCreated(soundEnabled);
-            const androidSound = soundEnabled ? SOUND_NAME : undefined;
+            await ensureSoundChannelsCreated();
+            const channelId = getChannelIdBySoundPreference(soundEnabled);
             const iosSound = soundEnabled ? 'reminder.caf' : undefined;
 
             let candidateDate = new Date(triggerDate);
@@ -554,9 +534,6 @@ export const NotificationScheduler = {
                 }
             }
 
-            // Get channel for category
-            const channel = CHANNELS[category];
-
             const repeatFrequency = repeatFrequencyForType(repeatType);
 
             // Create trigger
@@ -582,12 +559,11 @@ export const NotificationScheduler = {
                             __category: category,
                         },
                         android: {
-                            channelId: channel.id,
+                            channelId,
                             pressAction: {
                                 id: 'default',
                             },
                             smallIcon: 'ic_launcher',
-                            sound: androidSound,
                         },
                         ios: {
                             ...(iosSound ? { sound: iosSound } : {}),
@@ -641,14 +617,16 @@ export const NotificationScheduler = {
                 return;
             }
 
-            const channel = CHANNELS[category];
+            const soundEnabled = await NotificationPreferencesService.isSoundEnabled();
+            await ensureSoundChannelsCreated();
+            const channelId = getChannelIdBySoundPreference(soundEnabled);
 
             await notifee.displayNotification({
                 title,
                 body,
                 data,
                 android: {
-                    channelId: channel.id,
+                    channelId,
                     pressAction: {
                         id: 'default',
                     },

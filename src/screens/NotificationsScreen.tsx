@@ -216,11 +216,10 @@ export const NotificationsScreen: React.FC = () => {
   useEffect(() => {
     const saveEventPrefs = async () => {
       try {
-        await NotificationPreferencesService.toggleCategory('events', eventReminders);
-        if (eventReminders) {
-          await NotificationPreferencesService.saveReminderTime('events', eventReminderTime);
-        }
-        await NotificationScheduler.recreateChannel('events', soundEnabled);
+      await NotificationPreferencesService.toggleCategory('events', eventReminders);
+      if (eventReminders) {
+        await NotificationPreferencesService.saveReminderTime('events', eventReminderTime);
+      }
       } catch (error) {
         console.error('Error saving event preferences:', error);
       }
@@ -232,11 +231,10 @@ export const NotificationsScreen: React.FC = () => {
   useEffect(() => {
     const saveMealPrefs = async () => {
       try {
-        await NotificationPreferencesService.toggleCategory('meals', mealPrepReminders);
-        if (mealPrepReminders) {
-          await NotificationPreferencesService.saveReminderTime('meals', mealPrepTime);
-        }
-        await NotificationScheduler.recreateChannel('meals', soundEnabled);
+      await NotificationPreferencesService.toggleCategory('meals', mealPrepReminders);
+      if (mealPrepReminders) {
+        await NotificationPreferencesService.saveReminderTime('meals', mealPrepTime);
+      }
       } catch (error) {
         console.error('Error saving meal preferences:', error);
       }
@@ -258,7 +256,7 @@ export const NotificationsScreen: React.FC = () => {
           endHour,
           endMinute,
         });
-        await NotificationScheduler.recreateAllChannels(soundEnabled);
+        await NotificationScheduler.rescheduleAllMissing();
       } catch (error) {
         console.error('Error saving quiet hours:', error);
       }
@@ -275,7 +273,6 @@ export const NotificationsScreen: React.FC = () => {
         } else {
           await NotificationScheduler.rescheduleAllMissing();
         }
-        await NotificationScheduler.recreateAllChannels(soundEnabled);
       } catch (error) {
         console.error('Error updating push preference:', error);
       }
@@ -320,7 +317,6 @@ export const NotificationsScreen: React.FC = () => {
         else if (id === 'mealprep') category = 'meals';
 
         await NotificationPreferencesService.toggleCategory(category, setting.enabled);
-        await NotificationScheduler.recreateChannel(category, soundEnabled);
       }
     } catch (error) {
       console.error('Error toggling setting:', error);
