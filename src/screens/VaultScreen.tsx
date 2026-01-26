@@ -11,9 +11,12 @@ import {
 } from "react-native";
 import { AppLayout } from "../components/layout/AppLayout";
 import { useFamily } from "../contexts/FamilyContext";
+import { useFinance } from "../contexts/FinanceContext";
+import type { VaultDocument } from "../contexts/FamilyContext";
 import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import { useSidebar } from "../contexts/SidebarContext";
 import { useToast } from "../components/ui/Toast";
+import { useCountry } from "../contexts/CountryContext";
 import { DocumentScanner } from "../components/vault/DocumentScanner";
 import { ImageViewerModal } from "../components/modals/ImageViewerModal";
 import { DocumentDetailsModal } from "../components/modals/DocumentDetailsModal";
@@ -21,6 +24,7 @@ import { FilterModal, FilterOptions } from "../components/modals/FilterModal";
 import { NotificationPanel } from "../components/notifications/NotificationPanel";
 import { calculateTotalStorage, formatStorageSize } from "../utils/StorageUtils";
 import { generateAlerts, getCategoryCounts } from "../utils/VaultUtils";
+import { formatReminderRulesSummary, getPrimaryReminderField } from "../utils/VaultReminderUtils";
 import {
   Menu,
   Camera,
@@ -37,10 +41,6 @@ import {
   Activity
 } from "lucide-react-native";
 
-import { pickDocument, SavedDocument } from "../utils/DocumentUtils";
-import FileViewer from 'react-native-file-viewer';
-import { Alert } from 'react-native';
-import { useFinance } from "../contexts/FinanceContext";
 
 export const VaultScreen: React.FC = () => {
   const { globalVault, memberVaults, activeMember, addDocument, updateDocument } = useFamily();
@@ -68,17 +68,126 @@ export const VaultScreen: React.FC = () => {
   const [storageUsed, setStorageUsed] = useState('0 B');
   const [currentView, setCurrentView] = useState<'main' | 'category' | 'all'>('main');
   const [viewCategory, setViewCategory] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
+  const { formatDateTime } = useCountry();
+  const nowDate = new Date(currentTime);
+
+  const formatVaultDateLabel = (value?: string): string | null => {
+    if (!value) return null;
+    return formatDateTime(value, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
+
+  const getDocumentDateLabel = (doc: VaultDocument): string | null => {
+    if (doc.type === 'bill' && doc.billDate) {
+      const formatted = formatVaultDateLabel(doc.billDate);
+      return formatted ? `Due ${formatted}` : null;
+    }
+    if (doc.type === 'warranty' && doc.warrantyTillDate) {
+      const formatted = formatVaultDateLabel(doc.warrantyTillDate);
+      return formatted ? `Expires ${formatted}` : null;
+    }
+    if (doc.type === 'service' && doc.nextServiceDate) {
+      const formatted = formatVaultDateLabel(doc.nextServiceDate);
+      return formatted ? `Next service ${formatted}` : null;
+    }
+    if (doc.type === 'insurance' && doc.expiryDate) {
+      const formatted = formatVaultDateLabel(doc.expiryDate);
+      return formatted ? `Renewal ${formatted}` : null;
+    }
+    const fallback = formatVaultDateLabel(doc.date);
+    return fallback ? `Added ${fallback}` : null;
+  };
+
+  const getDocumentStatus = (doc: VaultDocument): string | null => {
+    const field = getPrimaryReminderField(doc.type);
+    const rawDate = field ? (doc as any)[field] : doc.date;
+    if (!rawDate) return null;
+    const parsed = new Date(rawDate);
+    if (Number.isNaN(parsed.getTime())) return null;
+    const days = Math.ceil((parsed.getTime() - nowDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (days < 0) {
+      return 'Expired';
+    }
+    if (days === 0) {
+      return 'Due today';
+    }
+    if (days <= 7) {
+      return `Expiring in ${days} day${days === 1 ? '' : 's'}`;
+    }
+    return `${days} day${days === 1 ? '' : 's'} left`;
+  };
+
+  const getReminderSummaryText = (doc: VaultDocument): string | null => {
+    if (!doc.reminderRules || doc.reminderRules.length === 0) {
+      return null;
+    }
+    return formatReminderRulesSummary(doc.reminderRules);
+  };
+
+  const renderDocMeta = (doc: VaultDocument) => {
+    const statusText = getDocumentStatus(doc);
+    const reminderText = getReminderSummaryText(doc);
+    if (!statusText && !reminderText) return null;
+    return (
+      <View style={{ marginTop: 4 }}>
+        {statusText ? <Text style={[styles.docMetaText, { color: colors.mutedForeground }]}>{statusText}</Text> : null}
+        {reminderText ? (
+          <Text style={[styles.docMetaText, { color: colors.primary }]} numberOfLines={2}>
+            {reminderText}
+          </Text>
+        ) : null}
+      </View>
+    );
+  };
 
   // Combine global and active member docs
-  const allDocs = [...globalVault, ...(activeMember ? (memberVaults[activeMember.id] || []) : [])];
+  const allDocs = useMemo(() => {
+    const memberDocs = activeMember ? (memberVaults[activeMember.id] || []) : [];
+    return [...globalVault, ...memberDocs];
+  }, [globalVault, memberVaults, activeMember]);
+
+  useEffect(() => {
+    if (!selectedDocument) return;
+    const updated = allDocs.find(doc => doc.id === selectedDocument.id);
+    if (updated) {
+      setSelectedDocument(updated);
+    }
+  }, [allDocs, selectedDocument]);
+
+  useEffect(() => {
+    const ticker = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 60 * 1000);
+    return () => clearInterval(ticker);
+  }, []);
 
   // Calculate dynamic values
   const categoryCounts = getCategoryCounts(allDocs);
   const [vaultAlerts, setVaultAlerts] = useState<any[]>([]);
+  const alertFingerprint = useMemo(
+    () =>
+      allDocs
+        .map(doc =>
+          [
+            doc.id,
+            doc.type,
+            doc.warrantyTillDate || '',
+            doc.billDate || '',
+            doc.nextServiceDate || '',
+            doc.expiryDate || '',
+          ].join(':')
+        )
+        .join('|'),
+    [allDocs]
+  );
 
   useEffect(() => {
     setVaultAlerts(generateAlerts(allDocs));
-  }, [allDocs.length]); // Use length to avoid infinite loop
+  }, [alertFingerprint, currentTime]);
 
   const liveAlerts = vaultAlerts;
 
@@ -102,7 +211,20 @@ export const VaultScreen: React.FC = () => {
 
   // Calculate storage on mount and when docs change
   const docFingerprint = useMemo(
-    () => allDocs.map(doc => `${doc.id}:${doc.filePath || doc.uri || doc.fileUri || ''}:${doc.date}`).join('|'),
+    () =>
+      allDocs
+        .map(doc =>
+          [
+            doc.id,
+            doc.filePath || doc.uri || doc.fileUri || '',
+            doc.date,
+            doc.warrantyTillDate || '',
+            doc.billDate || '',
+            doc.nextServiceDate || '',
+            doc.expiryDate || '',
+          ].join(':')
+        )
+        .join('|'),
     [allDocs]
   );
 
@@ -304,27 +426,33 @@ export const VaultScreen: React.FC = () => {
       <View style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {categoryDocs.length > 0 ? (
-            categoryDocs.map(doc => (
-              <Pressable
-                key={doc.id}
-                style={[styles.docRow, { backgroundColor: colors.card, borderRadius: radius.md }]}
-                onPress={() => {
-                  setSelectedDocument(doc);
-                  setShowDetailsModal(true);
-                }}
-              >
-                <View style={[styles.docIconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
-                  <Text style={{ fontSize: 20 }}>{doc.icon}</Text>
-                </View>
+            categoryDocs.map(doc => {
+              const docDateLabel = getDocumentDateLabel(doc);
+              return (
+                <Pressable
+                  key={doc.id}
+                  style={[styles.docRow, { backgroundColor: colors.card, borderRadius: radius.md }]}
+                  onPress={() => {
+                    setSelectedDocument(doc);
+                    setShowDetailsModal(true);
+                  }}
+                >
+                  <View style={[styles.docIconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
+                    <Text style={{ fontSize: 20 }}>{doc.icon}</Text>
+                  </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.docName, { color: colors.foreground }]}>{doc.name}</Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                    <Text style={[styles.docDate, { color: colors.mutedForeground }]}>{doc.date}</Text>
+                    {docDateLabel ? (
+                      <Text style={[styles.docDate, { color: colors.mutedForeground }]}>{docDateLabel}</Text>
+                    ) : null}
                   </View>
+                  {renderDocMeta(doc)}
                 </View>
-                <ChevronRight size={16} color={colors.mutedForeground} />
-              </Pressable>
-            ))
+                  <ChevronRight size={16} color={colors.mutedForeground} />
+                </Pressable>
+              );
+            })
           ) : (
             <View style={{ alignItems: 'center', marginTop: 40 }}>
               <View style={[styles.shieldIcon, { backgroundColor: colors.muted, marginBottom: 16 }]}>
@@ -350,8 +478,10 @@ export const VaultScreen: React.FC = () => {
           return (
             <View key={cat.id} style={styles.section}>
               <Text style={[styles.sectionTitle, { color: colors.foreground, marginBottom: 8 }]}>{cat.name}</Text>
-              {docsInCat.map(doc => (
-                <Pressable
+              {docsInCat.map(doc => {
+                const docDateLabel = getDocumentDateLabel(doc);
+                return (
+                  <Pressable
                   key={doc.id}
                   style={[styles.docRow, { backgroundColor: colors.card, borderRadius: radius.md }]}
                   onPress={() => {
@@ -365,12 +495,16 @@ export const VaultScreen: React.FC = () => {
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.docName, { color: colors.foreground }]}>{doc.name}</Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                      <Text style={[styles.docDate, { color: colors.mutedForeground }]}>{doc.date}</Text>
+                      {docDateLabel ? (
+                        <Text style={[styles.docDate, { color: colors.mutedForeground }]}>{docDateLabel}</Text>
+                      ) : null}
                     </View>
+                    {renderDocMeta(doc)}
                   </View>
                   <ChevronRight size={16} color={colors.mutedForeground} />
                 </Pressable>
-              ))}
+                );
+              })}
             </View>
           );
         })}
@@ -472,30 +606,36 @@ export const VaultScreen: React.FC = () => {
         </View>
 
         {recentDocs.length > 0 ? (
-          recentDocs.map(doc => (
-            <Pressable
-              key={doc.id}
-              style={[styles.docRow, { backgroundColor: colors.card, borderRadius: radius.md }]}
-              onPress={() => {
-                setSelectedDocument(doc);
-                setShowDetailsModal(true);
-              }}
-            >
-              <View style={[styles.docIconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
-                <Text style={{ fontSize: 20 }}>{doc.icon}</Text>
-              </View>
+          recentDocs.map(doc => {
+            const docDateLabel = getDocumentDateLabel(doc);
+            return (
+              <Pressable
+                key={doc.id}
+                style={[styles.docRow, { backgroundColor: colors.card, borderRadius: radius.md }]}
+                onPress={() => {
+                  setSelectedDocument(doc);
+                  setShowDetailsModal(true);
+                }}
+              >
+                <View style={[styles.docIconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
+                  <Text style={{ fontSize: 20 }}>{doc.icon}</Text>
+                </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.docName, { color: colors.foreground }]}>{doc.name}</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
                   <View style={[styles.docBadge, { backgroundColor: colors.muted, borderRadius: radius.xs }]}>
                     <Text style={[styles.docBadgeText, { color: colors.mutedForeground }]}>{doc.type}</Text>
                   </View>
-                  <Text style={[styles.docDate, { color: colors.mutedForeground }]}>{doc.date}</Text>
+                  {docDateLabel ? (
+                    <Text style={[styles.docDate, { color: colors.mutedForeground }]}>{docDateLabel}</Text>
+                  ) : null}
                 </View>
+                {renderDocMeta(doc)}
               </View>
-              <ChevronRight size={16} color={colors.mutedForeground} />
-            </Pressable>
-          ))
+                <ChevronRight size={16} color={colors.mutedForeground} />
+              </Pressable>
+            );
+          })
         ) : (
           <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No documents found</Text>
         )}
@@ -848,6 +988,10 @@ const styles = StyleSheet.create({
   emptyText: {
     textAlign: 'center',
     marginTop: 10,
+  },
+  docMetaText: {
+    fontSize: 10,
+    lineHeight: 14,
   },
   actionsGrid: {
     flexDirection: 'row',

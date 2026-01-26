@@ -19,10 +19,12 @@ import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { AppIcon } from "../components/ui/AppIcon";
 import { PROFILE_COLORS } from "../constants/profileColors";
 import { useSidebar } from "../contexts/SidebarContext";
+import { useCountry } from "../contexts/CountryContext";
 import { addMonths, subMonths, addDays, subDays, startOfWeek, endOfWeek, isSameMonth, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval, addYears, startOfDay, isAfter } from "date-fns";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { getEventsForDate } from "../utils/EventUtils";
-import { safeFormat, safeParseDate } from "../utils/SafeDateUtils";
+import { safeParseDate } from "../utils/SafeDateUtils";
+import { formatInTimeZone, toZonedTime } from "date-fns-tz";
 
 const filteredEvents = (events: any[], filterMember: string | null) => {
   if (!filterMember) return events;
@@ -167,11 +169,11 @@ const DraggableEvent: React.FC<{
         if (activeView === "Week") {
           // Allow easier dragging between days (threshold: 1/3 screen width)
           const colShift = Math.round(deltaX / (Dimensions.get('window').width / 3));
-          if (colShift !== 0) {
-            const currentDate = new Date(event.date);
-            currentDate.setDate(currentDate.getDate() + colShift);
-            newDate = safeFormat(currentDate, "yyyy-MM-dd");
-          }
+        if (colShift !== 0) {
+          const currentDate = new Date(event.date);
+          currentDate.setDate(currentDate.getDate() + colShift);
+          newDate = formatInTimeZone(currentDate, timeZone, "yyyy-MM-dd");
+        }
         }
 
         // Calculate new start time in minutes
@@ -352,14 +354,29 @@ export const CalendarScreen: React.FC = () => {
   const navigation = useNavigation();
   const colors = useThemeColors();
   const radius = useThemeRadius();
+  const { currentCountry } = useCountry();
+  const timeZone = currentCountry.timeZone;
 
   const [activeView, setActiveView] = useState("Day");
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(() => toZonedTime(new Date(), timeZone));
   const [showAddEventModal, setShowAddEventModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<any | undefined>(undefined);
   const [selectedTime, setSelectedTime] = useState<string | undefined>(undefined);
   const [filterMember, setFilterMember] = useState<string | null>(null);
   const [showSearch, setShowSearch] = useState(false);
+
+  useEffect(() => {
+    setSelectedDate(toZonedTime(new Date(), timeZone));
+  }, [timeZone]);
+
+  const formatZoned = (value: Date | undefined, pattern: string) => {
+    if (!value) return "";
+    try {
+      return formatInTimeZone(value, timeZone, pattern);
+    } catch {
+      return "";
+    }
+  };
 
   /* New state for current time line */
   const [now, setNow] = useState(new Date());
@@ -374,10 +391,10 @@ export const CalendarScreen: React.FC = () => {
 
   useFocusEffect(
     React.useCallback(() => {
-      if ((activeView === "Day" || activeView === "Week") && isSameDay(selectedDate, new Date())) {
+      if ((activeView === "Day" || activeView === "Week") && isSameDay(selectedDate, today)) {
         // Wait for layout to be ready
         const timer = setTimeout(() => {
-          const current = new Date();
+          const current = toZonedTime(new Date(), timeZone);
           const minutes = (current.getHours() * 60) + current.getMinutes();
           const y = (minutes / 60) * HOUR_HEIGHT;
           // Scroll to 2 hours before current time to show context
@@ -393,7 +410,7 @@ export const CalendarScreen: React.FC = () => {
     }, [activeView, selectedDate])
   );
 
-  const today = new Date();
+  const today = toZonedTime(new Date(), timeZone);
 
   // Unified items (Events + Tasks)
   const filteredEvents = useMemo(() => {
@@ -405,6 +422,8 @@ export const CalendarScreen: React.FC = () => {
     if (!filterMember) return tasks;
     return tasks.filter(t => t.assignee === filterMember);
   }, [tasks, filterMember]);
+
+  const zonedNow = toZonedTime(now, timeZone);
 
   const calendarItems = useMemo<CalendarListEntry[]>(() => {
     const eventItems = filteredEvents.map((e: CalendarEvent) => ({ ...e, type: 'event' as const }));
@@ -425,16 +444,15 @@ export const CalendarScreen: React.FC = () => {
   }, [filteredEvents, filteredTasks]);
 
   const upcomingItems = useMemo<UpcomingEntry[]>(() => {
-    const now = new Date();
     const entries: UpcomingEntry[] = [];
     calendarItems.forEach(item => {
-      const nextDate = getNextCandidateForEntry(item, now);
+      const nextDate = getNextCandidateForEntry(item, zonedNow);
       if (nextDate) {
         entries.push({ ...item, nextDate });
       }
     });
     return entries.sort((a, b) => a.nextDate.getTime() - b.nextDate.getTime());
-  }, [calendarItems]);
+  }, [calendarItems, zonedNow]);
 
   const navigateDate = (direction: number) => {
     if (activeView === "Month") {
@@ -480,7 +498,7 @@ export const CalendarScreen: React.FC = () => {
           const isToday = isSameDay(day, today);
 
           // Use helper to get proper events including recurring and multi-day
-          const dayEvents = getEventsForDate(day, filteredEvents as CalendarEvent[], filteredTasks as Task[]) as any[];
+          const dayEvents = getEventsForDate(day, filteredEvents as CalendarEvent[], filteredTasks as Task[], timeZone) as any[];
 
           return (
             <Pressable
@@ -504,7 +522,7 @@ export const CalendarScreen: React.FC = () => {
                 isSelected && { color: "#fff", fontWeight: "700" },
                 isToday && !isSelected && { color: colors.primary, fontWeight: "700" }
               ]}>
-                {safeFormat(day, "d")}
+                {formatZoned(day, "d")}
               </Text>
 
               <View style={styles.eventDotRx}>
@@ -543,7 +561,7 @@ export const CalendarScreen: React.FC = () => {
       if (!quickAddText.trim()) return;
 
       let title = quickAddText.trim();
-      let timeString = safeFormat(new Date(), "h:mm aa");
+      let timeString = formatZoned(zonedNow, "h:mm aa");
 
       const timeMatch = title.match(/at (\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i);
       if (timeMatch) {
@@ -556,10 +574,11 @@ export const CalendarScreen: React.FC = () => {
 
       addEvent({
         title,
-        dateString: safeFormat(selectedDate, "yyyy-MM-dd"),
+        dateString: formatZoned(selectedDate, "yyyy-MM-dd"),
         time: timeString,
         icon: "📅",
         memberId: activeMember?.id || members[0]?.id,
+        timeZone,
       });
 
       setQuickAddText("");
@@ -585,7 +604,7 @@ export const CalendarScreen: React.FC = () => {
             <View style={styles.weekHeaderRow}>
               {days.map((day, i) => {
                 const isSelected = isSameDay(day, selectedDate);
-                const isToday = isSameDay(day, now);
+                const isToday = isSameDay(day, zonedNow);
                 return (
                   <Pressable
                     key={i}
@@ -597,8 +616,8 @@ export const CalendarScreen: React.FC = () => {
                       isToday && !isSelected && { backgroundColor: colors.primary + '10', borderColor: colors.primary, borderWidth: 1 }
                     ]}
                   >
-                    <Text style={[styles.weekDayLabel, { color: colors.mutedForeground, fontSize: 11 }, isSelected && styles.textWhite]}>{safeFormat(day, "EEE")}</Text>
-                    <Text style={[styles.weekDateLabel, { color: colors.foreground, fontSize: 16, fontWeight: '600' }, isSelected && styles.textWhite]}>{safeFormat(day, "d")}</Text>
+                    <Text style={[styles.weekDayLabel, { color: colors.mutedForeground, fontSize: 11 }, isSelected && styles.textWhite]}>{formatZoned(day, "EEE")}</Text>
+                    <Text style={[styles.weekDateLabel, { color: colors.foreground, fontSize: 16, fontWeight: '600' }, isSelected && styles.textWhite]}>{formatZoned(day, "d")}</Text>
                   </Pressable>
                 );
               })}
@@ -609,10 +628,10 @@ export const CalendarScreen: React.FC = () => {
         <View style={[styles.card, { backgroundColor: colors.card, borderRadius: radius.card, padding: 0, overflow: 'hidden', flex: 1 }]}>
           {(activeView === "Day" || activeView === "Week") && (
             <View style={styles.dayHeader}>
-              <Text style={[styles.dayHeaderNumber, { color: colors.foreground }]}>{safeFormat(selectedDate, "d")}</Text>
+              <Text style={[styles.dayHeaderNumber, { color: colors.foreground }]}>{formatZoned(selectedDate, "d")}</Text>
               <View>
-                <Text style={[styles.dayHeaderMonth, { color: colors.foreground }]}>{safeFormat(selectedDate, "MMMM yyyy")}</Text>
-                <Text style={[styles.dayHeaderWeekday, { color: colors.primary }]}>{safeFormat(selectedDate, "EEEE")}</Text>
+                <Text style={[styles.dayHeaderMonth, { color: colors.foreground }]}>{formatZoned(selectedDate, "MMMM yyyy")}</Text>
+                <Text style={[styles.dayHeaderWeekday, { color: colors.primary }]}>{formatZoned(selectedDate, "EEEE")}</Text>
               </View>
             </View>
           )}
@@ -655,9 +674,9 @@ export const CalendarScreen: React.FC = () => {
                   ))}
 
                   {daysToRender.map((day, dayIndex) => {
-                    const dateStr = safeFormat(day, "yyyy-MM-dd");
+                    const dateStr = formatZoned(day, "yyyy-MM-dd");
                     // Use helper to get proper events including recurring and multi-day
-                    const dayEvents = getEventsForDate(day, filteredEvents as CalendarEvent[], filteredTasks as Task[]) as any[];
+                    const dayEvents = getEventsForDate(day, filteredEvents as CalendarEvent[], filteredTasks as Task[], timeZone) as any[];
 
                     const parseTimeToMinutes = (timeStr: string | undefined): number | null => {
                       if (!timeStr || timeStr === "All Day") return null;
@@ -828,11 +847,11 @@ export const CalendarScreen: React.FC = () => {
                     );
                   })}
 
-                  {(activeView === "Day" || activeView === "Week") && isSameDay(selectedDate, now) && (
+                  {(activeView === "Day" || activeView === "Week") && isSameDay(selectedDate, zonedNow) && (
                     <View
                       style={{
                         position: 'absolute',
-                        top: (now.getHours() * HOUR_HEIGHT) + (now.getMinutes() * (HOUR_HEIGHT / 60)),
+                        top: (zonedNow.getHours() * HOUR_HEIGHT) + (zonedNow.getMinutes() * (HOUR_HEIGHT / 60)),
                         left: 0,
                         right: 0,
                         flexDirection: 'row',
@@ -889,7 +908,7 @@ export const CalendarScreen: React.FC = () => {
                   <Pressable onPress={() => navigateDate(-1)} style={{ padding: 4 }}>
                     <AppIcon name="chevronLeft" size={20} color="#fff" />
                   </Pressable>
-                  <Text style={[styles.monthTitle, { marginHorizontal: 8 }]}>{safeFormat(selectedDate, "MMMM yyyy")}</Text>
+                  <Text style={[styles.monthTitle, { marginHorizontal: 8 }]}>{formatZoned(selectedDate, "MMMM yyyy")}</Text>
                   <Pressable onPress={() => navigateDate(1)} style={{ padding: 4 }}>
                     <AppIcon name="chevronRight" size={20} color="#fff" />
                   </Pressable>
@@ -996,7 +1015,7 @@ export const CalendarScreen: React.FC = () => {
             <Pressable onPress={() => navigateDate(-1)} style={[styles.navArrow, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.sm }]}>
               <AppIcon name="chevronLeft" size={20} color={colors.foreground} />
             </Pressable>
-            <Pressable onPress={() => setSelectedDate(new Date())} style={[styles.todayBtn, { backgroundColor: colors.primary + '15', borderRadius: radius.sm }]}>
+            <Pressable onPress={() => setSelectedDate(toZonedTime(new Date(), timeZone))} style={[styles.todayBtn, { backgroundColor: colors.primary + '15', borderRadius: radius.sm }]}>
               <Text style={[styles.todayText, { color: colors.primary }]}>Today</Text>
             </Pressable>
             <Pressable onPress={() => navigateDate(1)} style={[styles.navArrow, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.sm }]}>
@@ -1010,7 +1029,7 @@ export const CalendarScreen: React.FC = () => {
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>📋 Upcoming Events</Text>
             {upcomingItems.slice(0, 3).map(event => {
-              const displayDate = safeFormat(event.nextDate, "MMM d");
+              const displayDate = formatInTimeZone(event.nextDate, timeZone, "MMM d");
               const displayTime = event.time && event.time !== "All Day" ? event.time : "All Day";
               return (
                 <Pressable
@@ -1048,7 +1067,7 @@ export const CalendarScreen: React.FC = () => {
               setSelectedEvent(undefined);
             }
           }}
-          initialDate={safeFormat(selectedDate, "yyyy-MM-dd")}
+          initialDate={formatZoned(selectedDate, "yyyy-MM-dd")}
           initialTime={selectedTime}
           eventToEdit={selectedEvent as CalendarEvent}
           onSelectEvent={setSelectedEvent}

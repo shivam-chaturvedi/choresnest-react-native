@@ -13,6 +13,8 @@ import { useFamily } from "../../contexts/FamilyContext";
 import { AppIcon } from "../ui/AppIcon";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { PROFILE_COLORS } from "../../constants/profileColors";
+import { useCountry } from "../../contexts/CountryContext";
+import { listCountries, CountryConfiguration } from "../../config/countries";
 
 const avatarOptions = ["👤", "👩", "👨", "👶", "👧", "👦", "🧒", "👴", "👵", "🧑", "👱", "🧔", "👩‍🦰", "👨‍🦱", "🧑‍🦳", "👩‍🦲"];
 
@@ -38,6 +40,7 @@ interface NewMember {
 
 export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClose }) => {
     const { members, addMember, updateMember, removeMember, setFamilyName, familyName } = useFamily();
+    const { currentCountry, setCountry } = useCountry();
     const colors = useThemeColors();
     const radius = useThemeRadius();
 
@@ -50,6 +53,10 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
         avatar: "👤",
         color: PROFILE_COLORS[0].value,
     });
+    const countries = listCountries();
+    const [selectedCountryCode, setSelectedCountryCode] = useState(currentCountry.code);
+    const [countryDropdownOpen, setCountryDropdownOpen] = useState(false);
+    const selectedCountry = countries.find((country) => country.code === selectedCountryCode) ?? currentCountry;
 
     // Initialize localMembers from context when modal opens
     React.useEffect(() => {
@@ -60,12 +67,23 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
                 avatar: m.symbol,
                 color: m.color
             })));
-            setNewFamilyName(familyName);
-            setStep(1);
+        setNewFamilyName(familyName);
+        setStep(1);
+        setSelectedCountryCode(currentCountry.code);
+    }
+    }, [open, members, familyName, currentCountry.code]);
+
+    React.useEffect(() => {
+        if (!open) {
+            setCountryDropdownOpen(false);
         }
-    }, [open, members, familyName]);
+    }, [open]);
 
     const usedColors = localMembers.map((m: any) => m.color);
+
+    React.useEffect(() => {
+        setCountry(selectedCountryCode).catch((error) => console.warn("Failed to update country during onboarding:", error));
+    }, [selectedCountryCode, setCountry]);
 
     // Auto-select first available color
     React.useEffect(() => {
@@ -176,11 +194,54 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
                             <View style={[styles.iconCircle, { backgroundColor: colors.muted }]}>
                                 <AppIcon name="users" size={40} color={colors.primary} />
                             </View>
-                            <Text style={[styles.stepTitle, { color: colors.foreground }]}>Name Your Family</Text>
-                            <Text style={[styles.stepDesc, { color: colors.mutedForeground }]}>This will be displayed at the top of your home screen</Text>
+                    <Text style={[styles.stepTitle, { color: colors.foreground }]}>Name Your Family</Text>
+                    <Text style={[styles.stepDesc, { color: colors.mutedForeground }]}>This will be displayed at the top of your home screen</Text>
 
-                            <Text style={[styles.inputLabel, { color: colors.foreground }]}>Family Name</Text>
-                            <TextInput
+                    <Text style={[styles.inputLabel, { color: colors.foreground }]}>Country / Region</Text>
+                    <Pressable
+                        onPress={() => setCountryDropdownOpen((prev) => !prev)}
+                        style={[styles.countrySelector, {
+                            backgroundColor: colors.card,
+                            borderColor: colors.border,
+                            borderRadius: radius.md,
+                        }]}
+                    >
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                            <Text style={{ fontSize: 22 }}>{selectedCountry.flag}</Text>
+                            <View>
+                                <Text style={{ fontWeight: "600", color: colors.foreground }}>{selectedCountry.name}</Text>
+                                <Text style={{ fontSize: 12, color: colors.mutedForeground }}>{selectedCountry.locale}</Text>
+                            </View>
+                        </View>
+                        <AppIcon name={countryDropdownOpen ? "chevronUp" : "chevronDown"} size={18} color={colors.foreground} />
+                    </Pressable>
+                    {countryDropdownOpen && (
+                        <View style={[styles.countryList, { borderColor: colors.border, backgroundColor: colors.card, shadowColor: colors.shadow }]}>
+                            {countries.map((country) => (
+                                <Pressable
+                                    key={country.code}
+                                    onPress={() => {
+                                        setSelectedCountryCode(country.code);
+                                        setCountryDropdownOpen(false);
+                                    }}
+                                    style={[
+                                        styles.countryItem,
+                                        { borderBottomColor: colors.border },
+                                    ]}
+                                >
+                                    <Text style={{ fontSize: 22 }}>{country.flag}</Text>
+                                    <View style={{ flex: 1, marginLeft: 8 }}>
+                                        <Text style={{ color: colors.foreground, fontWeight: "600" }}>{country.name}</Text>
+                                        <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>{country.timeZone}</Text>
+                                    </View>
+                                    <Text style={{ color: colors.primary }}>{country.code}</Text>
+                                </Pressable>
+                            ))}
+                        </View>
+                    )}
+
+                    <Text style={[styles.inputLabel, { color: colors.foreground }]}>Family Name</Text>
+                    <TextInput
                                 value={newFamilyName}
                                 onChangeText={setNewFamilyName}
                                 placeholder="e.g., The Smiths"
@@ -195,9 +256,9 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
 
                             <Pressable
                                 style={[styles.primaryButton, { backgroundColor: colors.primary, borderRadius: radius.md }, !newFamilyName.trim() && styles.disabledButton]}
-                                onPress={() => setStep(2)}
-                                disabled={!newFamilyName.trim()}
-                            >
+                            onPress={() => setStep(2)}
+                            disabled={!newFamilyName.trim()}
+                        >
                                 <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>Continue</Text>
                                 <AppIcon name="arrowRight" size={16} color={colors.primaryForeground} style={{ marginLeft: 8 }} />
                             </Pressable>
@@ -337,6 +398,14 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
                                 <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
                                     <AppIcon name="users" size={20} color={colors.primary} style={{ marginRight: 8 }} />
                                     <Text style={{ fontSize: 18, fontWeight: '700', color: colors.foreground }}>{newFamilyName}</Text>
+                                </View>
+                                <View style={[styles.countrySelector, { marginBottom: 16 }]}>
+                                    <Text style={{ fontSize: 22 }}>{selectedCountry.flag}</Text>
+                                    <View style={{ flex: 1, marginLeft: 12 }}>
+                                        <Text style={{ color: colors.foreground, fontWeight: '600' }}>{selectedCountry.name}</Text>
+                                        <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>{selectedCountry.timeZone}</Text>
+                                    </View>
+                                    <Text style={{ color: colors.primary }}>{selectedCountry.code}</Text>
                                 </View>
                                 {localMembers.map((member, index) => (
                                     <View key={index} style={[styles.memberItem, { backgroundColor: colors.muted }]}>
@@ -518,6 +587,32 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         marginTop: 8,
+    },
+
+    countrySelector: {
+        width: '100%',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderWidth: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 16,
+    },
+    countryList: {
+        width: '100%',
+        borderWidth: 1,
+        borderRadius: 12,
+        marginBottom: 24,
+        maxHeight: 240,
+    },
+    countryItem: {
+        width: '100%',
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderBottomWidth: 1,
     },
     outlineButtonText: {
         fontWeight: '600',

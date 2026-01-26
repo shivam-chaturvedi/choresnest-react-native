@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Modal,
   Pressable,
@@ -13,6 +13,8 @@ import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { useFamily } from "../../contexts/FamilyContext";
 import { PROFILE_COLORS } from "../../constants/profileColors";
 import { AppIcon, CustomDateTimePicker } from "../ui";
+import { useCountry } from "../../contexts/CountryContext";
+import { toZonedTime } from "date-fns-tz";
 
 interface AddTaskModalProps {
   open: boolean;
@@ -34,6 +36,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
   const colors = useThemeColors();
   const radius = useThemeRadius();
   const { members, activeMember } = useFamily();
+  const { currentCountry } = useCountry();
 
   const priorities = [
     { label: "High", value: "high", color: colors.primary, bgColor: colors.danger + "20", textColor: colors.danger },
@@ -41,26 +44,30 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
     { label: "Low", value: "low", color: colors.mutedForeground, bgColor: colors.muted, textColor: colors.mutedForeground },
   ];
 
-  const [formData, setFormData] = useState<TaskData>({
+  const defaultMemberId = members?.[0]?.id;
+  const buildLocalizedNow = () => toZonedTime(new Date(), currentCountry.timeZone);
+
+  const createDefaultTaskData = useCallback((): TaskData => ({
     name: "",
     icon: "📝",
     priority: "medium",
-    dueDate: new Date(),
-    person: activeMember?.id || (members?.[0]?.id || "1"),
-  });
+    dueDate: buildLocalizedNow(),
+    person: activeMember?.id || defaultMemberId || "1",
+  }), [currentCountry.timeZone, activeMember?.id, defaultMemberId]);
+
+  const [formData, setFormData] = useState<TaskData>(createDefaultTaskData);
+
+  useEffect(() => {
+    if (!open) return;
+    setFormData(createDefaultTaskData());
+  }, [open, createDefaultTaskData]);
 
 
   const handleSave = () => {
     try {
       if (formData.name.trim()) {
         onSave?.(formData);
-        setFormData({
-          name: "",
-          icon: "📝",
-          priority: "medium",
-          dueDate: new Date(),
-          person: activeMember?.id || (members?.[0]?.id || "1"),
-        });
+        setFormData(createDefaultTaskData());
         onClose();
       }
     } catch (error) {

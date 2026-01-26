@@ -4,6 +4,7 @@ import { database } from '../database';
 import { Q } from '@nozbe/watermelondb';
 import Event from '../database/models/Event';
 import Task from '../database/models/Task';
+import Document from '../database/models/Document';
 import { NotificationPreferencesService } from './NotificationPreferencesService';
 import { parseReminderDateTime } from '../utils/ReminderDateTimeUtils';
 import { checkPermission, requestPermission } from '../utils/permissions';
@@ -78,7 +79,7 @@ const ensureSoundChannelsCreated = async (): Promise<void> => {
                 id: channel.id,
                 name: channel.name,
                 importance: channel.importance,
-                sound: channel.sound,
+                ...(('sound' in channel) && { sound: channel.sound }),
                 vibration: channel.vibration,
             })
         )
@@ -254,6 +255,175 @@ const buildRepeatMetaFromRule = (rule?: string): RepeatMeta | undefined => {
             return { daysOfWeek: DEFAULT_WEEKDAY_SCHEDULE };
         default:
             return undefined;
+    }
+};
+
+interface DocumentReminderCandidate {
+    field: string;
+    label: string;
+    date: Date;
+}
+
+interface DocumentReminderDefinition {
+    field: string;
+    label: string;
+    shouldInclude?: (doc: Document) => boolean;
+}
+
+const getDocumentMetaValue = (doc: Document, key: string): string | undefined => {
+    const metaValue = doc.meta?.[key];
+    if (metaValue) return metaValue;
+    return (doc as any)[key];
+};
+
+const DOCUMENT_REMINDER_DEFINITIONS: DocumentReminderDefinition[] = [
+    {
+        field: 'warrantyTillDate',
+        label: 'Warranty',
+        shouldInclude: (doc) => Boolean(getDocumentMetaValue(doc, 'warrantyTillDate')),
+    },
+    {
+        field: 'nextServiceDate',
+        label: 'Service',
+        shouldInclude: (doc) => Boolean(getDocumentMetaValue(doc, 'nextServiceDate')),
+    },
+    {
+        field: 'billDate',
+        label: 'Bill',
+        shouldInclude: (doc) => Boolean(getDocumentMetaValue(doc, 'billDate')),
+    },
+    {
+        field: 'expiryDate',
+        label: 'Expiry',
+        shouldInclude: (doc) => Boolean(getDocumentMetaValue(doc, 'expiryDate') || doc.expiryDate),
+    },
+];
+
+const formatDocumentDate = (date: Date): string => {
+    return date.toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+    });
+};
+
+const buildDocumentReminderBody = (doc: Document, field: string, dateLabel: string): string => {
+    switch (field) {
+        case 'warrantyTillDate':
+            return `Warranty for ${doc.name} expires on ${dateLabel}.`;
+        case 'nextServiceDate':
+            return `Service for ${doc.name} is scheduled on ${dateLabel}.`;
+        case 'billDate':
+            return `Bill for ${doc.name} is due on ${dateLabel}.`;
+        case 'expiryDate':
+        default:
+            return `${doc.name} expires on ${dateLabel}.`;
+    }
+};
+
+const buildDocumentReminderCandidates = (doc: Document): DocumentReminderCandidate[] => {
+    const candidates: DocumentReminderCandidate[] = [];
+    DOCUMENT_REMINDER_DEFINITIONS.forEach((definition) => {
+        if (definition.shouldInclude && !definition.shouldInclude(doc)) return;
+        const rawValue = getDocumentMetaValue(doc, definition.field);
+        if (!rawValue) return;
+        const parsed = new Date(rawValue);
+        if (Number.isNaN(parsed.getTime())) return;
+        candidates.push({
+            field: definition.field,
+            label: definition.label,
+            date: parsed,
+        });
+    });
+    return candidates;
+};
+
+interface DocumentReminderRule {
+    field: string;
+    offsets: number[];
+    timeOfDay?: string;
+}
+
+const DEFAULT_REMINDER_OFFSETS = [1];
+const DEFAULT_REMINDER_TIME = '09:00';
+
+const sanitizeOffsets = (values: any): number[] => {
+    if (!Array.isArray(values)) return [];
+    return Array.from(new Set(values.map((value: any) => Number(value)).filter(offset => Number.isFinite(offset) && offset > 0))).sort((a, b) => a - b);
+};
+
+const sanitizeReminderRules = (raw: any): DocumentReminderRule[] => {
+    if (!raw) return [];
+    if (!Array.isArray(raw)) return [];
+    return raw.map(item => ({
+        field: item?.field,
+        offsets: sanitizeOffsets(item?.offsets),
+        timeOfDay: typeof item?.timeOfDay === 'string' ? item.timeOfDay : undefined,
+    }))
+        .filter(rule => rule.field && rule.offsets.length > 0);
+};
+
+const getDocumentReminderRules = (doc: Document, field: string): DocumentReminderRule[] => {
+    const metaRaw = doc.meta?.reminderRules;
+    const hasMeta = Array.isArray(metaRaw);
+    const metaRules = sanitizeReminderRules(metaRaw);
+    if (hasMeta) {
+        if (Array.isArray(metaRaw) && metaRaw.length === 0) {
+            return [];
+        }
+        const fieldSpecific = metaRules.filter(rule => rule.field === field);
+        if (fieldSpecific.length > 0) return fieldSpecific;
+        return [];
+    }
+
+    if (Number.isFinite(doc.reminderDaysBefore)) {
+        return [{
+            field,
+            offsets: [doc.reminderDaysBefore!],
+            timeOfDay: DEFAULT_REMINDER_TIME,
+        }];
+    }
+    return [{
+        field,
+        offsets: DEFAULT_REMINDER_OFFSETS,
+        timeOfDay: DEFAULT_REMINDER_TIME,
+    }];
+};
+
+const parseTimeOfDay = (value?: string): { hours: number; minutes: number } | null => {
+    if (!value) return null;
+    const match = value.match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return null;
+    let hours = Number(match[1]);
+    let minutes = Number(match[2]);
+    if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+    hours = Math.min(Math.max(hours, 0), 23);
+    minutes = Math.min(Math.max(minutes, 0), 59);
+    return { hours, minutes };
+};
+
+const buildReminderTrigger = (baseDate: Date, offsetDays: number, timeOfDay?: string): Date => {
+    const trigger = new Date(baseDate);
+    trigger.setDate(trigger.getDate() - offsetDays);
+    const parsedTime = parseTimeOfDay(timeOfDay);
+    if (parsedTime) {
+        trigger.setHours(parsedTime.hours, parsedTime.minutes, 0, 0);
+    } else {
+        trigger.setHours(9, 0, 0, 0);
+    }
+    return trigger;
+};
+
+const persistDocumentNotificationIds = async (documentId: string, ids: string[] | null): Promise<void> => {
+    try {
+        await database.write(async () => {
+            const doc = await database.get<Document>('documents').find(documentId);
+            await doc.update(d => {
+                d.notificationIdsJson = ids && ids.length ? JSON.stringify(ids) : undefined;
+            });
+        });
+    } catch (error) {
+        console.error('Failed to persist document notification IDs:', error);
     }
 };
 
@@ -765,6 +935,86 @@ export const NotificationScheduler = {
     },
 
     /**
+     * Cancel notifications tied to a document
+     */
+    async cancelDocumentNotifications(document: Document): Promise<void> {
+        try {
+            if (!document.notificationIdsJson) return;
+            let ids: string[] = [];
+            try {
+                ids = JSON.parse(document.notificationIdsJson);
+            } catch (error) {
+                console.error('Failed to parse document notification IDs JSON:', error);
+                ids = [];
+            }
+            if (ids.length === 0) {
+                await persistDocumentNotificationIds(document.id, null);
+                return;
+            }
+            await this.cancelNotifications(ids);
+            await persistDocumentNotificationIds(document.id, null);
+        } catch (error) {
+            console.error('Failed to cancel document notifications:', error);
+        }
+    },
+
+    /**
+     * Ensure all reminders for a document are aligned with its metadata
+     */
+    async syncDocumentReminders(document: Document): Promise<void> {
+        if (!document) return;
+        try {
+            await this.cancelDocumentNotifications(document);
+            const candidates = buildDocumentReminderCandidates(document);
+            if (candidates.length === 0) {
+                await persistDocumentNotificationIds(document.id, null);
+                return;
+            }
+
+            const now = new Date();
+            const scheduledIds: string[] = [];
+
+            for (const candidate of candidates) {
+                const candidateRules = getDocumentReminderRules(document, candidate.field);
+                const formattedDate = formatDocumentDate(candidate.date);
+                const title = `${candidate.label} reminder`;
+                const body = buildDocumentReminderBody(document, candidate.field, formattedDate);
+
+                for (const rule of candidateRules) {
+                    for (const offset of rule.offsets) {
+                        const triggerDate = buildReminderTrigger(candidate.date, offset, rule.timeOfDay);
+                        if (triggerDate <= now) continue;
+
+                        const notificationId = await this.scheduleNotification(
+                            'documents',
+                            {
+                                title,
+                                body,
+                                data: {
+                                    documentId: document.id,
+                                    reminderField: candidate.field,
+                                },
+                            },
+                            triggerDate,
+                            {
+                                notifyCenter: true,
+                                promptForPermission: true,
+                                promptForAlarm: true,
+                            }
+                        );
+
+                        if (notificationId) scheduledIds.push(notificationId);
+                    }
+                }
+            }
+
+            await persistDocumentNotificationIds(document.id, scheduledIds.length ? scheduledIds : null);
+        } catch (error) {
+            console.error('Failed to sync document notifications:', error);
+        }
+    },
+
+    /**
      * Reschedule all missing notifications
      * Called on app launch as a safety check
      */
@@ -866,6 +1116,12 @@ export const NotificationScheduler = {
                         });
                     });
                 }
+            }
+
+            const documentCollection = database.get<Document>('documents');
+            const documents = await documentCollection.query().fetch();
+            for (const document of documents) {
+                await this.syncDocumentReminders(document);
             }
 
             console.log('✓ Notification safety check complete');

@@ -1,6 +1,7 @@
 import { database } from '../database';
 import Document from '../database/models/Document';
 import { Q } from '@nozbe/watermelondb';
+import { NotificationScheduler } from './NotificationScheduler';
 
 export const VaultService = {
     observeGlobalDocuments: () => {
@@ -17,7 +18,7 @@ export const VaultService = {
 
     addDocument: async (data: Partial<Document>) => {
         try {
-            return await database.write(async () => {
+            const createdDoc = await database.write(async () => {
                 return await database.get<Document>('documents').create(d => {
                     d.name = data.name || 'Untitled Doc';
                     d.type = data.type || 'other';
@@ -26,9 +27,40 @@ export const VaultService = {
                     d.memberId = data.memberId || 'global';
                     d.sharedWithIds = data.sharedWithIds || [];
                     d.filePath = data.filePath || '';
-                    d.meta = data.meta || {};
+                    const meta: Record<string, any> = {
+                        ...(data.meta || {})
+                    };
+
+                    const mergeMeta = (key: string, value: any) => {
+                        if (value !== undefined && value !== null && value !== "") {
+                            meta[key] = value;
+                        } else if (meta[key] === undefined) {
+                            delete meta[key];
+                        }
+                    };
+
+                    mergeMeta('purchaseDate', data.purchaseDate);
+                    mergeMeta('warrantyTillDate', data.warrantyTillDate);
+                    mergeMeta('billDate', data.billDate);
+                    mergeMeta('billAmount', data.billAmount);
+                    mergeMeta('provider', data.provider);
+                    mergeMeta('policyNumber', data.policyNumber);
+                    mergeMeta('premiumAmount', data.premiumAmount);
+                    mergeMeta('reminderRules', data.reminderRules);
+                    mergeMeta('serviceDate', data.serviceDate);
+                    mergeMeta('nextServiceDate', data.nextServiceDate);
+                    mergeMeta('cost', data.cost);
+                    mergeMeta('expiryDate', data.expiryDate);
+                    d.meta = meta;
+                    if (typeof data.reminderDaysBefore === 'number') {
+                        d.reminderDaysBefore = data.reminderDaysBefore;
+                    }
                 });
             });
+
+            NotificationScheduler.syncDocumentReminders(createdDoc).catch(err => console.error('Failed to schedule document notifications:', err));
+
+            return createdDoc;
         } catch (error) {
             console.error('Error adding document:', error);
             return null;
@@ -37,6 +69,7 @@ export const VaultService = {
 
     updateDocument: async (id: string, updates: Partial<Document> | any) => {
         try {
+            let updatedDoc: Document | null = null;
             await database.write(async () => {
                 const doc = await database.get<Document>('documents').find(id);
                 await doc.update(d => {
@@ -63,10 +96,16 @@ export const VaultService = {
                     if (updates.serviceDate) metaUpdates.serviceDate = updates.serviceDate;
                     if (updates.nextServiceDate) metaUpdates.nextServiceDate = updates.nextServiceDate;
                     if (updates.cost) metaUpdates.cost = updates.cost;
+                    if (updates.reminderRules !== undefined) metaUpdates.reminderRules = updates.reminderRules;
 
                     d.meta = metaUpdates;
                 });
+                updatedDoc = doc;
             });
+
+            if (updatedDoc) {
+                NotificationScheduler.syncDocumentReminders(updatedDoc).catch(err => console.error('Failed to schedule document notifications:', err));
+            }
         } catch (error) {
             console.error('Error updating document:', error);
         }

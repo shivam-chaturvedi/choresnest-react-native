@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { format } from "date-fns"; // Keeping specific functions if needed, but we'll try to use safeFormat
+import { toZonedTime } from "date-fns-tz";
 import { safeFormat, ensureDate, safeParseDate } from "../../utils/SafeDateUtils";
 import {
   Modal,
@@ -15,6 +16,7 @@ import {
 } from "react-native";
 import { useFamily, CalendarEvent } from "../../contexts/FamilyContext";
 import { useThemeColors } from "../../contexts/ThemeContext";
+import { useCountry } from "../../contexts/CountryContext";
 import { AppIcon, AppIconName, CustomDateTimePicker } from "../ui";
 import { PROFILE_COLORS } from "../../constants/profileColors";
 import { NotificationPreferencesService } from "../../services/NotificationPreferencesService";
@@ -74,6 +76,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   /* Hook and State Setup */
   const { members, activeMember, events, tasks, addEvent, updateEvent, deleteEvent, addTask, updateTask, deleteTask } = useFamily();
   const colors = useThemeColors();
+  const { currentCountry } = useCountry();
 
   const [activeTab, setActiveTab] = useState<'event' | 'task' | 'existing'>('event');
 
@@ -84,8 +87,10 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [startDate, setStartDate] = useState(new Date());
-  const [startTime, setStartTime] = useState(new Date());
+  const buildLocalizedNow = () => toZonedTime(new Date(), currentCountry.timeZone);
+
+  const [startDate, setStartDate] = useState(() => buildLocalizedNow());
+  const [startTime, setStartTime] = useState(() => buildLocalizedNow());
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [endTime, setEndTime] = useState<Date | null>(null);
   const [selectedIcon, setSelectedIcon] = useState("📅");
@@ -126,6 +131,15 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!open || eventToEdit) return;
+    const localizedNow = buildLocalizedNow();
+    setStartDate(localizedNow);
+    setStartTime(localizedNow);
+    setEndDate(null);
+    setEndTime(null);
+  }, [open, eventToEdit, currentCountry.timeZone]);
 
   useEffect(() => {
     if (eventToEdit) {
@@ -343,6 +357,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       }
 
       const reminderOffsetMinutes = reminder ? parseInt(reminderTime, 10) : -1;
+      const eventTimeZone = eventToEdit?.timeZone || currentCountry.timeZone;
 
       if (activeTab === 'task') {
         if (isEditing && eventToEdit) {
@@ -383,6 +398,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             recurrenceRule: repeatType !== 'never' ? repeatType : undefined,
             recurrenceEndDate: repeatEndDate ? safeFormat(repeatEndDate, "yyyy-MM-dd") : undefined,
             reminderOffsetMinutes,
+            timeZone: eventTimeZone,
           });
         } else {
           // Validation for recurring events
@@ -412,6 +428,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             recurrenceRule: repeatType !== 'never' ? repeatType : undefined,
             recurrenceEndDate: repeatEndDate ? safeFormat(repeatEndDate, "yyyy-MM-dd") : undefined,
             reminderOffsetMinutes,
+            timeZone: currentCountry.timeZone,
           });
         }
       }

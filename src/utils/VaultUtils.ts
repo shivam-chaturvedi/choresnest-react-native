@@ -66,6 +66,32 @@ export const generateAlerts = (documents: VaultDocument[]): VaultAlert[] => {
             }
         }
 
+        // Bill due alerts
+        if (doc.type === 'bill' && doc.billDate) {
+            const billDate = new Date(doc.billDate);
+            const daysUntilBill = Math.ceil((billDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+            if (daysUntilBill < 0) {
+                alerts.push({
+                    id: `${doc.id}-bill-overdue`,
+                    icon: doc.icon || 'file',
+                    name: doc.name,
+                    message: 'Bill overdue',
+                    type: 'danger',
+                    documentId: doc.id,
+                });
+            } else if (daysUntilBill <= 7) {
+                alerts.push({
+                    id: `${doc.id}-bill-due`,
+                    icon: doc.icon || 'file',
+                    name: doc.name,
+                    message: `Bill due in ${daysUntilBill} days`,
+                    type: 'warning',
+                    documentId: doc.id,
+                });
+            }
+        }
+
         // Insurance alerts (example: if we had renewal date)
         if (doc.type === 'insurance' && doc.expiryDate) {
             const expiryDate = new Date(doc.expiryDate);

@@ -22,6 +22,7 @@ import { WeeklyGroceryListModal } from '../components/modals/WeeklyGroceryListMo
 import { RecipeImage } from '../components/recipes/RecipeImage';
 import { addDays, subDays, isToday, isTomorrow, parse, subMinutes, isAfter, startOfDay } from 'date-fns';
 import { safeFormat } from '../utils/SafeDateUtils';
+import { getTargetTimeForMeal } from '../utils/mealTimes';
 import { useRecipes } from '../contexts/RecipeContext';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -33,20 +34,6 @@ const getDayNumber = (date: Date) => safeFormat(date, 'd'); // 5
 const parseDuration = (timeStr: string): number => {
   const match = timeStr.match(/(\d+)\s*min/i);
   return match ? parseInt(match[1], 10) : 30; // default 30
-};
-
-// Helper to get target meal times
-const getTargetTimeForMeal = (date: Date, type: MealType): Date => {
-  const dateStr = safeFormat(date, 'yyyy-MM-dd');
-  const d = new Date(dateStr);
-
-  switch (type) {
-    case 'breakfast': return new Date(d.setHours(8, 0, 0)); // 8:00 AM
-    case 'lunch': return new Date(d.setHours(13, 0, 0)); // 1:00 PM
-    case 'snack': return new Date(d.setHours(16, 0, 0)); // 4:00 PM
-    case 'dinner': return new Date(d.setHours(19, 30, 0)); // 7:30 PM
-    default: return new Date(d.setHours(12, 0, 0));
-  }
 };
 
 export const MealPlanScreen: React.FC = () => {

@@ -17,7 +17,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppLayout } from "../components/layout/AppLayout";
 import { useNavigation } from "@react-navigation/native";
-import { useFamily } from "../contexts/FamilyContext";
+import { useFamily, CalendarEvent, Task } from "../contexts/FamilyContext";
 import { MealType, useMealPlan } from "../contexts/MealPlanContext";
 import { theme } from "../theme";
 import { useThemeColors } from "../contexts/ThemeContext";
@@ -34,6 +34,7 @@ import { GlobalSearch } from "../components/search/GlobalSearch";
 import { useSidebar } from "../contexts/SidebarContext";
 import { AppIcon, AppIconName } from "../components/ui/AppIcon";
 import { PROFILE_COLORS } from "../constants/profileColors";
+import { safeParseDate } from "../utils/SafeDateUtils";
 
 
 const STORAGE_TUTORIAL_KEY = "@familychore:firstSignUp";
@@ -154,9 +155,100 @@ export const HomeScreen: React.FC = () => {
   }, []);
 
   const todaysDateLabel = useMemo(() => new Date().toISOString().split("T")[0], []);
-  const todaysEvents = useMemo(() => {
-    return events.filter((event: any) => event.date === todaysDateLabel);
-  }, [events, todaysDateLabel]);
+  const todaysEvents = useMemo(() => events.filter((event: any) => event.date === todaysDateLabel), [events, todaysDateLabel]);
+  const parseEventDateTime = (event: any): { dateTime: Date | null; isAllDay: boolean } => {
+    const baseDate = safeParseDate(event?.date);
+    if (!baseDate) return { dateTime: null, isAllDay: false };
+
+    const normalized = new Date(baseDate.getTime());
+    normalized.setHours(0, 0, 0, 0);
+
+    const timeString = event?.time;
+    if (!timeString || timeString === "All Day") {
+      return { dateTime: normalized, isAllDay: true };
+    }
+
+    const match = timeString.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);
+    if (!match) {
+      return { dateTime: normalized, isAllDay: true };
+    }
+
+    let hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2] ?? "0", 10);
+    const period = match[3].toUpperCase();
+
+    if (period === "PM" && hours !== 12) hours += 12;
+    if (period === "AM" && hours === 12) hours = 0;
+
+    normalized.setHours(hours, minutes, 0, 0);
+    return { dateTime: normalized, isAllDay: false };
+  };
+
+  const parseTimeToMinutes = (time?: string | null): number | null => {
+    if (!time) return null;
+    const match = time.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);
+    if (!match) return null;
+
+    let hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2] ?? "0", 10);
+    const period = match[3].toUpperCase();
+
+    if (period === "PM" && hours !== 12) hours += 12;
+    if (period === "AM" && hours === 12) hours = 0;
+
+    return (hours * 60) + minutes;
+  };
+
+  type ScheduleItem = {
+    id: string;
+    type: "event" | "task";
+    title: string;
+    timeLabel: string;
+    minutes: number | null;
+    icon?: string;
+    source: CalendarEvent | Task;
+  };
+
+  const SCHEDULE_ITEM_HEIGHT = 80;
+
+  const todaysScheduleItems = useMemo<ScheduleItem[]>(() => {
+    const scheduleItems: ScheduleItem[] = [];
+
+    todaysEvents.forEach((event: CalendarEvent) => {
+      const minutes = parseTimeToMinutes(event.time);
+      scheduleItems.push({
+        id: event.id,
+        type: "event",
+        title: event.title || "Untitled Event",
+        timeLabel: event.time || "All Day",
+        minutes,
+        icon: event.icon,
+        source: event,
+      });
+    });
+
+    tasks
+      .filter((task: Task) => task.date === todaysDateLabel)
+      .forEach((task: Task) => {
+        const dueLabel = task.due || "All Day";
+        const minutes = parseTimeToMinutes(dueLabel);
+        scheduleItems.push({
+          id: task.id,
+          type: "task",
+          title: task.name,
+          timeLabel: dueLabel,
+          minutes,
+          icon: task.icon,
+          source: task,
+        });
+      });
+
+    return scheduleItems.sort((a, b) => {
+      const aValue = a.minutes !== null ? a.minutes : -1;
+      const bValue = b.minutes !== null ? b.minutes : -1;
+      return aValue - bValue;
+    });
+  }, [tasks, todaysDateLabel, todaysEvents]);
 
   useEffect(() => {
     const previousRead = new Map(notificationAlerts.map(alert => [alert.id, alert.read]));
@@ -164,8 +256,7 @@ export const HomeScreen: React.FC = () => {
     const todayStr = todaysDateLabel;
 
     // 1. Events Today
-    const eventsToday = events.filter((e: any) => e.date === todayStr);
-    eventsToday.forEach((e: any) => {
+    todaysEvents.forEach((e: any) => {
       const prevRead = previousRead.get(`evt-${e.id}`);
       newAlerts.push({
         id: `evt-${e.id}`,
@@ -215,7 +306,7 @@ export const HomeScreen: React.FC = () => {
     }
 
     setNotificationAlerts(newAlerts);
-  }, [events, groceryList, tasks, colors]);
+  }, [todaysEvents, groceryList, tasks, colors]);
 
   const alerts = [...manualNotifications, ...notificationAlerts];
   const visibleAlerts = useMemo(() => alerts.filter((alert) => !alert.read), [alerts]);
@@ -543,38 +634,52 @@ export const HomeScreen: React.FC = () => {
                 <Text style={[styles.linkText, { color: colors.primary }]}>View All ›</Text>
               </Pressable>
             </View>
-            {todaysEvents.length === 0 ? (
-              <Text style={{ color: colors.mutedForeground, fontStyle: 'italic', marginVertical: 8 }}>No events for today</Text>
+            {todaysScheduleItems.length === 0 ? (
+              <Text style={{ color: colors.mutedForeground, fontStyle: 'italic', marginVertical: 8 }}>Nothing on the calendar for today</Text>
             ) : (
-              todaysEvents.slice(0, 3).map((event: any) => (
-                <Pressable
-                  key={event?.id || Math.random().toString()}
-                  style={({ pressed }) => [
-                    styles.scheduleRow,
-                    {
-                      backgroundColor: colors.muted,
-                      borderRadius: radius.md,
-                      opacity: pressed ? 0.85 : 1,
-                    },
-                  ]}
-                  onPress={() => setSelectedEvent(event)}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                    <View style={[styles.scheduleIconBox, { backgroundColor: colors.card, borderRadius: radius.xs }]}>
-                      <Text style={{ fontSize: 18 }}>{event?.icon || "📅"}</Text>
+              <ScrollView
+                style={{ maxHeight: SCHEDULE_ITEM_HEIGHT * 3 }}
+                contentContainerStyle={{ paddingBottom: 4 }}
+                showsVerticalScrollIndicator
+              >
+                {todaysScheduleItems.map((item) => (
+                  <Pressable
+                    key={`${item.type}-${item.id}`}
+                    style={({ pressed }) => [
+                      styles.scheduleRow,
+                      {
+                        backgroundColor: colors.muted,
+                        borderRadius: radius.md,
+                        opacity: pressed ? 0.85 : 1,
+                        marginBottom: 6,
+                      },
+                    ]}
+                    onPress={() => {
+                      if (item.type === "event") {
+                        setSelectedEvent(item.source as CalendarEvent);
+                        setShowAddEvent(true);
+                      } else {
+                        (navigation as any).navigate("MainTabs", { screen: "more", params: { screen: "Tasks" } });
+                      }
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                      <View style={[styles.scheduleIconBox, { backgroundColor: colors.card, borderRadius: radius.xs }]}>
+                        <Text style={{ fontSize: 18 }}>{item.icon || (item.type === "task" ? "📝" : "📅")}</Text>
+                      </View>
+                      <View style={{ marginLeft: 12 }}>
+                        <Text style={{ fontSize: 16, fontWeight: "600", color: colors.foreground }}>{item.title}</Text>
+                        <Text style={{ fontSize: 13, color: colors.mutedForeground, marginTop: 2 }}>
+                          <AppIcon name="clock" size={12} color={colors.mutedForeground} /> {item.timeLabel}
+                        </Text>
+                      </View>
                     </View>
-                    <View style={{ marginLeft: 12 }}>
-                      <Text style={{ fontSize: 16, fontWeight: "600", color: colors.foreground }}>{event?.title || "Untitled Event"}</Text>
-                      <Text style={{ fontSize: 13, color: colors.mutedForeground, marginTop: 2 }}>
-                        <AppIcon name="clock" size={12} color={colors.mutedForeground} /> {event?.time || "No time"}
-                      </Text>
+                    <View style={[styles.scheduleAvatar, { backgroundColor: colors.primary, borderRadius: radius.xs }]}>
+                      <AppIcon name={item.type === "task" ? "checkSquare" : "user"} size={14} color={colors.primaryForeground} />
                     </View>
-                  </View>
-                  <View style={[styles.scheduleAvatar, { backgroundColor: colors.primary, borderRadius: radius.xs }]}>
-                    <AppIcon name="user" size={14} color={colors.primaryForeground} />
-                  </View>
-                </Pressable>
-              ))
+                  </Pressable>
+                ))}
+              </ScrollView>
             )}
           </View>
 

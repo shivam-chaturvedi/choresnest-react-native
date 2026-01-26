@@ -9,6 +9,7 @@ import React, {
 } from 'react';
 import { CountryConfiguration } from '../config/countries';
 import { CountryPreferenceService } from '../services/CountryPreferenceService';
+import { NotificationScheduler } from '../services/NotificationScheduler';
 import { formatCurrency, formatDateTime } from '../utils/countryFormatting';
 
 interface CountryContextValue {
@@ -39,6 +40,12 @@ export const CountryProvider: React.FC<{ children: ReactNode }> = ({ children })
         await CountryPreferenceService.setCountry(code);
         setCurrentCountry(CountryPreferenceService.getCurrentCountry());
     }, []);
+
+    useEffect(() => {
+        NotificationScheduler.rescheduleAllMissing().catch(error => {
+            console.warn('Failed to reschedule vault notifications after country change:', error);
+        });
+    }, [currentCountry.code]);
 
     const value = useMemo<CountryContextValue>(() => ({
         currentCountry,

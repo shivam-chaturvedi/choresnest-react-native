@@ -2,14 +2,19 @@ import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { addDays, startOfWeek, format } from 'date-fns';
 import { useRecipes } from './RecipeContext';
 import { Recipe } from '../types/recipes';
+import { MealType } from '../types/meals';
+import { NotificationScheduler } from '../services/NotificationScheduler';
+import { NotificationPreferencesService } from '../services/NotificationPreferencesService';
+import { getTargetTimeForMeal } from '../utils/mealTimes';
 
-export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+export type { MealType };
 
 export interface PlannedMeal {
   id: string;
   recipeId: number;
   date: string; // YYYY-MM-DD
   mealType: MealType;
+  notificationId?: string;
 }
 
 export interface GroceryListItem {
@@ -41,6 +46,59 @@ export const MealPlanProvider: React.FC<{ children: ReactNode }> = ({ children }
     startOfWeek(new Date(), { weekStartsOn: 1 })
   );
 
+  const getRecipeById = (id: number): Recipe | undefined => {
+    try {
+      if (!id) return undefined;
+      return recipes.find(r => r.id === id);
+    } catch (error) {
+      console.error("Error in getRecipeById:", error);
+      return undefined;
+    }
+  };
+
+  const scheduleMealReminder = async (meal: PlannedMeal) => {
+    if (!meal) return;
+    try {
+      const reminderMinutes = await NotificationPreferencesService.getReminderTime('meals');
+      const mealTime = getTargetTimeForMeal(new Date(meal.date), meal.mealType);
+      const triggerDate = new Date(mealTime.getTime() - reminderMinutes * 60000);
+      if (triggerDate <= new Date()) return;
+
+      const recipeName = getRecipeById(meal.recipeId)?.name || 'Meal';
+      const formattedTime = mealTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      const notificationId = await NotificationScheduler.scheduleNotification(
+        'meals',
+        {
+          title: `Meal prep: ${recipeName}`,
+          body: `Prepare ${recipeName} for ${meal.mealType} at ${formattedTime}.`,
+          data: {
+            mealId: meal.id,
+            recipeId: meal.recipeId,
+          },
+        },
+        triggerDate,
+        {
+          notifyCenter: true,
+          promptForPermission: true,
+          promptForAlarm: true,
+        }
+      );
+
+      if (notificationId) {
+        setPlannedMeals(prev => prev.map(item => item.id === meal.id ? { ...item, notificationId } : item));
+      }
+    } catch (error) {
+      console.error("Failed to schedule meal reminder:", error);
+    }
+  };
+
+  const cancelMealReminder = (notificationId?: string) => {
+    if (!notificationId) return;
+    NotificationScheduler.cancelNotification(notificationId).catch(error => {
+      console.error("Failed to cancel meal reminder:", error);
+    });
+  };
+
   const addMealToPlan = (recipeId: number, date: string, mealType: MealType) => {
     try {
       if (!recipeId || !date || !mealType) return;
@@ -51,6 +109,7 @@ export const MealPlanProvider: React.FC<{ children: ReactNode }> = ({ children }
         mealType,
       };
       setPlannedMeals(prev => [...prev, newMeal]);
+      void scheduleMealReminder(newMeal);
     } catch (error) {
       console.error("Error in addMealToPlan:", error);
     }
@@ -59,7 +118,13 @@ export const MealPlanProvider: React.FC<{ children: ReactNode }> = ({ children }
   const removeMealFromPlan = (mealId: string) => {
     try {
       if (!mealId) return;
-      setPlannedMeals(prev => prev.filter(m => m.id !== mealId));
+      setPlannedMeals(prev => {
+        const meal = prev.find(m => m.id === mealId);
+        if (meal?.notificationId) {
+          cancelMealReminder(meal.notificationId);
+        }
+        return prev.filter(m => m.id !== mealId);
+      });
     } catch (error) {
       console.error("Error in removeMealFromPlan:", error);
     }
@@ -72,16 +137,6 @@ export const MealPlanProvider: React.FC<{ children: ReactNode }> = ({ children }
     } catch (error) {
       console.error("Error in getMealsForDay:", error);
       return [];
-    }
-  };
-
-  const getRecipeById = (id: number): Recipe | undefined => {
-    try {
-      if (!id) return undefined;
-      return recipes.find(r => r.id === id);
-    } catch (error) {
-      console.error("Error in getRecipeById:", error);
-      return undefined;
     }
   };
 
@@ -127,11 +182,31 @@ export const MealPlanProvider: React.FC<{ children: ReactNode }> = ({ children }
   const clearWeekPlan = () => {
     try {
       const weekEnd = addDays(currentWeekStart, 6);
-      setPlannedMeals(prev => prev.filter(m => {
-        if (!m.date) return false;
-        const mealDate = new Date(m.date);
-        return isNaN(mealDate.getTime()) || (mealDate < currentWeekStart || mealDate > weekEnd);
-      }));
+      setPlannedMeals(prev => {
+        const toKeep: PlannedMeal[] = [];
+        const toRemove: PlannedMeal[] = [];
+        prev.forEach(meal => {
+          if (!meal.date) {
+            toRemove.push(meal);
+            return;
+          }
+          const mealDate = new Date(meal.date);
+          const isOutOfWeek = isNaN(mealDate.getTime()) || (mealDate < currentWeekStart || mealDate > weekEnd);
+          if (isOutOfWeek) {
+            toKeep.push(meal);
+          } else {
+            toRemove.push(meal);
+          }
+        });
+
+        toRemove.forEach(meal => {
+          if (meal.notificationId) {
+            cancelMealReminder(meal.notificationId);
+          }
+        });
+
+        return toKeep;
+      });
     } catch (error) {
       console.error("Error in clearWeekPlan:", error);
     }

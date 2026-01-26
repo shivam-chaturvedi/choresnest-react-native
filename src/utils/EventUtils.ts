@@ -1,4 +1,5 @@
 import { differenceInDays, isAfter, isBefore, isSameDay, startOfDay } from "date-fns";
+import { formatInTimeZone, toZonedTime } from "date-fns-tz";
 import { safeParseDate, safeFormat } from "./SafeDateUtils";
 import { CalendarEvent, Task } from "../contexts/FamilyContext";
 
@@ -14,10 +15,12 @@ export type CalendarItem = (CalendarEvent | Task) & {
 export const getEventsForDate = (
     date: Date,
     events: CalendarEvent[],
-    tasks: Task[]
+    tasks: Task[],
+    timeZone: string
 ): CalendarItem[] => {
-    const targetDateStr = safeFormat(date, "yyyy-MM-dd");
-    const targetDate = startOfDay(date);
+    const targetZoned = toZonedTime(date, timeZone);
+    const targetDateStr = formatInTimeZone(targetZoned, timeZone, "yyyy-MM-dd");
+    const targetDate = startOfDay(targetZoned);
 
     const result: CalendarItem[] = [];
 
@@ -49,10 +52,10 @@ export const getEventsForDate = (
         if (!event.isRecurring) {
             // Check if target date is within [start, end]
             // using string comparison for safety or date comparison
-            if (
-                (isSameDay(targetDate, eventStartDate) || isAfter(targetDate, eventStartDate)) &&
-                (isSameDay(targetDate, eventEndDate) || isBefore(targetDate, eventEndDate))
-            ) {
+            const startString = formatInTimeZone(toZonedTime(eventStartDate, timeZone), timeZone, "yyyy-MM-dd");
+            const endString = formatInTimeZone(toZonedTime(eventEndDate, timeZone), timeZone, "yyyy-MM-dd");
+
+            if (targetDateStr >= startString && targetDateStr <= endString) {
                 result.push(event);
             }
             return;
@@ -61,10 +64,13 @@ export const getEventsForDate = (
         // 2. Recurrence Check
         if (event.isRecurring && event.recurrenceRule) {
             // If target date is before start date, ignore
-            if (isBefore(targetDate, startOfDay(eventStartDate))) return;
+            const eventStartZoned = toZonedTime(startOfDay(eventStartDate), timeZone);
+            const eventEndZoned = recurrenceEnd ? toZonedTime(startOfDay(recurrenceEnd), timeZone) : null;
+
+            if (isBefore(targetDate, eventStartZoned)) return;
 
             // If recurrence has an end date, and target is after it, ignore
-            if (recurrenceEnd && isAfter(targetDate, startOfDay(recurrenceEnd))) return;
+            if (eventEndZoned && isAfter(targetDate, eventEndZoned)) return;
 
             // Check specific rules
             let isMatch = false;
@@ -74,21 +80,21 @@ export const getEventsForDate = (
                     isMatch = true;
                     break;
                 case 'weekly':
-                    isMatch = isSameDayOfWeek(targetDate, eventStartDate);
+                    isMatch = isSameDayOfWeek(targetDate, eventStartZoned);
                     break;
                 case 'biweekly':
                     // Check if difference in weeks is even
-                    const diffDays = differenceInDays(targetDate, eventStartDate);
+                    const diffDays = differenceInDays(targetDate, eventStartZoned);
                     const diffWeeks = Math.floor(diffDays / 7);
                     isMatch = diffDays % 14 === 0 || (isSameDayOfWeek(targetDate, eventStartDate) && diffWeeks % 2 === 0);
                     // Simple biweekly: needs to be same day of week AND even number of weeks apart
-                    isMatch = isSameDayOfWeek(targetDate, eventStartDate) && (Math.floor(differenceInDays(targetDate, eventStartDate) / 7) % 2 === 0);
+                    isMatch = isSameDayOfWeek(targetDate, eventStartZoned) && (Math.floor(differenceInDays(targetDate, eventStartZoned) / 7) % 2 === 0);
                     break;
                 case 'monthly':
-                    isMatch = targetDate.getDate() === eventStartDate.getDate();
+                    isMatch = targetDate.getDate() === eventStartZoned.getDate();
                     break;
                 case 'yearly':
-                    isMatch = targetDate.getMonth() === eventStartDate.getMonth() && targetDate.getDate() === eventStartDate.getDate();
+                    isMatch = targetDate.getMonth() === eventStartZoned.getMonth() && targetDate.getDate() === eventStartZoned.getDate();
                     break;
                 case 'weekday':
                     const day = targetDate.getDay();

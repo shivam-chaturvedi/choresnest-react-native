@@ -45,6 +45,12 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({
     }, [unlockWithBiometrics]);
 
     useEffect(() => {
+        if (isLocked) {
+            setBiometricTriggered(false);
+        }
+    }, [isLocked]);
+
+    useEffect(() => {
         if (isLocked && isBiometricEnabled && isBiometricAvailable && !biometricTriggered) {
             setBiometricTriggered(true);
             triggerBiometric();

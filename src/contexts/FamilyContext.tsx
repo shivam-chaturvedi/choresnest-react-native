@@ -33,6 +33,7 @@ export interface CalendarEvent {
   location?: string;
   notificationId?: string;
   reminderOffsetMinutes?: number;
+  timeZone?: string;
 }
 
 export interface Task {
@@ -65,6 +66,8 @@ export interface GroceryCategory {
   color?: string;
 }
 
+import { VaultReminderRule } from "../utils/VaultReminderUtils";
+
 export interface VaultDocument {
   id: string;
   name: string;
@@ -86,6 +89,7 @@ export interface VaultDocument {
   serviceDate?: string;
   nextServiceDate?: string;
   cost?: string;
+  reminderRules?: VaultReminderRule[];
 }
 
 const formatIsoDate = (value: string | Date | undefined): string => {
@@ -110,6 +114,7 @@ const mapEventModelToCalendarEvent = (eventModel: any): CalendarEvent => ({
   location: eventModel.location,
   notificationId: eventModel.notificationId,
   reminderOffsetMinutes: eventModel.reminderOffsetMinutes,
+  timeZone: eventModel.timeZone,
 });
 
 const mapTaskModelToTask = (taskModel: any): Task => ({

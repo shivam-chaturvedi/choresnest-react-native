@@ -89,26 +89,22 @@ export const TasksScreen: React.FC = () => {
         minute: "2-digit",
       });
 
+      const taskPayload = {
+        name: taskData.name,
+        icon: taskData.icon,
+        priority: taskData.priority,
+        dateString: formattedDate,
+        dueDisplay: formattedTime,
+        assigneeId: taskData.person,
+        tab: activeTab,
+      };
+
       if (editingTask) {
-        updateTask(editingTask.id, {
-          name: taskData.name,
-          icon: taskData.icon,
-          priority: taskData.priority,
-          date: formattedDate,
-          due: formattedTime,
-          assignee: taskData.person,
-          tab: activeTab
-        });
+        updateTask(editingTask.id, taskPayload);
       } else {
         addTask({
-          name: taskData.name,
-          icon: taskData.icon,
-          priority: taskData.priority,
-          date: formattedDate,
-          due: formattedTime,
-          assignee: taskData.person,
-          tab: activeTab,
-          status: 'pending'
+          ...taskPayload,
+          status: 'pending',
         });
         Alert.alert("Success", `Task "${taskData.name}" created successfully!\nDate: ${formattedDate}\nTime: ${formattedTime}`);
       }
