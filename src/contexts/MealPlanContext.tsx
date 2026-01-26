@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { recipes, Recipe } from '../data/recipes';
 import { addDays, startOfWeek, format } from 'date-fns';
+import { useRecipes } from './RecipeContext';
+import { Recipe } from '../types/recipes';
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
@@ -33,25 +34,9 @@ interface MealPlanContextType {
 
 const MealPlanContext = createContext<MealPlanContextType | undefined>(undefined);
 
-// Sample default meals
-const getDefaultMeals = (): PlannedMeal[] => {
-  const today = new Date();
-  const weekStart = startOfWeek(today, { weekStartsOn: 1 });
-
-  return [
-    { id: '1', recipeId: 6, date: format(weekStart, 'yyyy-MM-dd'), mealType: 'breakfast' },
-    { id: '2', recipeId: 1, date: format(weekStart, 'yyyy-MM-dd'), mealType: 'lunch' },
-    { id: '3', recipeId: 5, date: format(weekStart, 'yyyy-MM-dd'), mealType: 'dinner' },
-    { id: '4', recipeId: 6, date: format(addDays(weekStart, 1), 'yyyy-MM-dd'), mealType: 'breakfast' },
-    { id: '5', recipeId: 7, date: format(addDays(weekStart, 1), 'yyyy-MM-dd'), mealType: 'lunch' },
-    { id: '6', recipeId: 2, date: format(addDays(weekStart, 1), 'yyyy-MM-dd'), mealType: 'dinner' },
-    { id: '7', recipeId: 4, date: format(addDays(weekStart, 2), 'yyyy-MM-dd'), mealType: 'breakfast' },
-    { id: '8', recipeId: 3, date: format(addDays(weekStart, 2), 'yyyy-MM-dd'), mealType: 'dinner' },
-  ];
-};
-
 export const MealPlanProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [plannedMeals, setPlannedMeals] = useState<PlannedMeal[]>(getDefaultMeals());
+  const { recipes } = useRecipes();
+  const [plannedMeals, setPlannedMeals] = useState<PlannedMeal[]>([]);
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(
     startOfWeek(new Date(), { weekStartsOn: 1 })
   );

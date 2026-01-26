@@ -15,7 +15,7 @@ export const safeParseDate = (date: string | Date | null | undefined): Date | nu
         // Try simple new Date() for non-ISO strings
         const textDate = new Date(date);
         return isValid(textDate) ? textDate : null;
-    } catch (e) {
+    } catch {
         return null;
     }
 };
@@ -29,7 +29,7 @@ export const safeFormat = (date: Date | string | number | null | undefined, form
         const d = new Date(date);
         if (!isValid(d)) return fallback;
         return dateFnsFormat(d, formatStr);
-    } catch (e) {
+    } catch {
         return fallback;
     }
 };

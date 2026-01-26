@@ -12,7 +12,7 @@ import { useNavigation } from '@react-navigation/native';
 import { AppLayout } from '../components/layout/AppLayout';
 import { theme } from '../theme';
 import { AppIcon } from '../components/ui/AppIcon';
-import { Recipe } from '../data/recipes';
+import { Recipe } from '../types/recipes';
 import { useToast } from '../components/ui/Toast';
 import { useMealPlan, MealType } from '../contexts/MealPlanContext';
 import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
@@ -63,6 +63,7 @@ export const MealPlanScreen: React.FC = () => {
     clearWeekPlan,
     generateGroceryList,
   } = useMealPlan();
+  const { toggleBookmark } = useRecipes();
 
   const [activeTab, setActiveTab] = useState<'plan' | 'prep'>('plan');
   const [addMealModal, setAddMealModal] = useState<{ open: boolean; date: string; mealType: MealType } | null>(null);

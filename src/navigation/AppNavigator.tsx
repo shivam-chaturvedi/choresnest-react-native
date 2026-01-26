@@ -16,6 +16,8 @@ import { useSidebar } from "../contexts/SidebarContext";
 import { NotesProvider } from "../contexts/NotesContext";
 import { useTheme } from "../contexts/ThemeContext";
 import { AuthProvider, useAuth } from "../contexts/AuthContext";
+import { AppLockProvider, useAppLock } from "../contexts/AppLockContext";
+import { AppLockScreen } from "../screens/AppLockScreen";
 import { database } from "../database";
 
 
@@ -43,15 +45,17 @@ export const AppNavigator = () => {
 
   return (
     <AuthProvider>
-      <NotesProvider>
-        <NavigationContainer
-          theme={navigationTheme}
-          initialState={navState}
-          onStateChange={(state) => setNavState(state)}
-        >
-          <AppNavigatorInner />
-        </NavigationContainer>
-      </NotesProvider>
+      <AppLockProvider>
+        <NotesProvider>
+          <NavigationContainer
+            theme={navigationTheme}
+            initialState={navState}
+            onStateChange={(state) => setNavState(state)}
+          >
+            <AppNavigatorInner />
+          </NavigationContainer>
+        </NotesProvider>
+      </AppLockProvider>
     </AuthProvider>
   );
 };
@@ -144,7 +148,34 @@ const AppNavigatorInner = () => {
           </>
         )}
       </Stack.Navigator>
+      <AppLockOverlay />
       <AppSidebar open={isSidebarOpen} onClose={closeSidebar} />
     </>
+  );
+};
+
+const AppLockOverlay = () => {
+  const {
+    isLocked,
+    isBiometricEnabled,
+    isBiometricAvailable,
+    biometryType,
+    unlockWithPin,
+    unlockWithBiometrics,
+  } = useAppLock();
+
+  if (!isLocked) {
+    return null;
+  }
+
+  return (
+    <AppLockScreen
+      isLocked={isLocked}
+      isBiometricEnabled={isBiometricEnabled}
+      isBiometricAvailable={isBiometricAvailable}
+      biometryType={biometryType}
+      unlockWithPin={unlockWithPin}
+      unlockWithBiometrics={unlockWithBiometrics}
+    />
   );
 };

@@ -153,10 +153,15 @@ export const HomeScreen: React.FC = () => {
     return unsubscribe;
   }, []);
 
+  const todaysDateLabel = useMemo(() => new Date().toISOString().split("T")[0], []);
+  const todaysEvents = useMemo(() => {
+    return events.filter((event: any) => event.date === todaysDateLabel);
+  }, [events, todaysDateLabel]);
+
   useEffect(() => {
     const previousRead = new Map(notificationAlerts.map(alert => [alert.id, alert.read]));
     const newAlerts: AppNotification[] = [];
-    const todayStr = new Date().toISOString().split("T")[0];
+    const todayStr = todaysDateLabel;
 
     // 1. Events Today
     const eventsToday = events.filter((e: any) => e.date === todayStr);
@@ -538,10 +543,10 @@ export const HomeScreen: React.FC = () => {
                 <Text style={[styles.linkText, { color: colors.primary }]}>View All ›</Text>
               </Pressable>
             </View>
-            {(!events || events.length === 0) ? (
+            {todaysEvents.length === 0 ? (
               <Text style={{ color: colors.mutedForeground, fontStyle: 'italic', marginVertical: 8 }}>No events for today</Text>
             ) : (
-              events.slice(0, 3).map((event: any) => (
+              todaysEvents.slice(0, 3).map((event: any) => (
                 <Pressable
                   key={event?.id || Math.random().toString()}
                   style={({ pressed }) => [

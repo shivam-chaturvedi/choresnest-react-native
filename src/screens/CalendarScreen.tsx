@@ -19,14 +19,98 @@ import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { AppIcon } from "../components/ui/AppIcon";
 import { PROFILE_COLORS } from "../constants/profileColors";
 import { useSidebar } from "../contexts/SidebarContext";
-import { addMonths, subMonths, addDays, subDays, startOfWeek, endOfWeek, isSameMonth, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval } from "date-fns";
+import { addMonths, subMonths, addDays, subDays, startOfWeek, endOfWeek, isSameMonth, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval, addYears, startOfDay, isAfter } from "date-fns";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { getEventsForDate } from "../utils/EventUtils";
-import { safeFormat, ensureDate, safeParseDate } from "../utils/SafeDateUtils";
+import { safeFormat, safeParseDate } from "../utils/SafeDateUtils";
 
 const filteredEvents = (events: any[], filterMember: string | null) => {
   if (!filterMember) return events;
   return events.filter((e) => e.memberId === filterMember);
+};
+
+type CalendarListEntry = (CalendarEvent & { type: 'event'; isVirtual?: boolean; originalDate?: string }) | (Task & { type: 'task' });
+type UpcomingEntry = CalendarListEntry & { nextDate: Date };
+
+const parseTimeToDate = (date: Date, time?: string): Date => {
+  const result = new Date(date.getTime());
+  result.setHours(0, 0, 0, 0);
+  if (!time || time === "All Day") return result;
+
+  const match = time.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);
+  if (!match) return result;
+
+  let hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2] || "0", 10);
+  const period = match[3].toUpperCase();
+
+  if (period === "PM" && hours !== 12) hours += 12;
+  if (period === "AM" && hours === 12) hours = 0;
+
+  result.setHours(hours, minutes, 0, 0);
+  return result;
+};
+
+const advanceRecurrenceDate = (date: Date, rule: string): Date | null => {
+  switch (rule) {
+    case "daily":
+      return addDays(date, 1);
+    case "weekly":
+      return addDays(date, 7);
+    case "biweekly":
+      return addDays(date, 14);
+    case "monthly":
+      return addMonths(date, 1);
+    case "yearly":
+      return addYears(date, 1);
+    case "weekday": {
+      let next = addDays(date, 1);
+      while (next.getDay() === 0 || next.getDay() === 6) {
+        next = addDays(next, 1);
+      }
+      return next;
+    }
+    default:
+      return null;
+  }
+};
+
+const getNextRecurringOccurrence = (event: CalendarEvent, reference: Date): Date | null => {
+  if (!event.isRecurring || !event.recurrenceRule) return null;
+  const start = safeParseDate(event.date);
+  if (!start) return null;
+  const endDate = event.recurrenceEndDate ? safeParseDate(event.recurrenceEndDate) : null;
+
+  let candidateDate = startOfDay(start);
+  const limit = 500;
+
+  for (let i = 0; i < limit; i += 1) {
+    if (endDate && isAfter(candidateDate, startOfDay(endDate))) return null;
+    const candidateDateTime = parseTimeToDate(candidateDate, event.time);
+    if (candidateDateTime > reference) {
+      return candidateDateTime;
+    }
+    const nextDate = advanceRecurrenceDate(candidateDate, event.recurrenceRule);
+    if (!nextDate) break;
+    candidateDate = nextDate;
+  }
+  return null;
+};
+
+const getNextCandidateForEntry = (entry: CalendarListEntry, reference: Date): Date | null => {
+  const baseDate = safeParseDate(entry.date);
+  if (!baseDate) return null;
+
+  if (entry.type === "event") {
+    if (entry.isRecurring) {
+      const recurring = getNextRecurringOccurrence(entry, reference);
+      if (recurring) return recurring;
+    }
+  }
+
+  const candidate = parseTimeToDate(baseDate, entry.time);
+  if (candidate > reference) return candidate;
+  return null;
 };
 
 const views = ["Day", "Week", "Month"];
@@ -322,7 +406,7 @@ export const CalendarScreen: React.FC = () => {
     return tasks.filter(t => t.assignee === filterMember);
   }, [tasks, filterMember]);
 
-  const calendarItems = useMemo(() => {
+  const calendarItems = useMemo<CalendarListEntry[]>(() => {
     const eventItems = filteredEvents.map((e: CalendarEvent) => ({ ...e, type: 'event' as const }));
     const taskItems = filteredTasks
       .filter((t: Task) => t.status !== 'done')
@@ -340,18 +424,16 @@ export const CalendarScreen: React.FC = () => {
     return [...eventItems, ...taskItems];
   }, [filteredEvents, filteredTasks]);
 
-  const upcomingItems = useMemo(() => {
-    const sorted = [...calendarItems].sort((a, b) => {
-      const dateA = safeParseDate(a.date);
-      const dateB = safeParseDate(b.date);
-      if (!dateA || !dateB) return 0;
-      const timeA = a.time && a.time !== "All Day" ? a.time : "00:00 AM";
-      const timeB = b.time && b.time !== "All Day" ? b.time : "00:00 AM";
-      const dateTimeA = new Date(`${safeFormat(dateA, "yyyy-MM-dd")} ${timeA}`);
-      const dateTimeB = new Date(`${safeFormat(dateB, "yyyy-MM-dd")} ${timeB}`);
-      return dateTimeA.getTime() - dateTimeB.getTime();
+  const upcomingItems = useMemo<UpcomingEntry[]>(() => {
+    const now = new Date();
+    const entries: UpcomingEntry[] = [];
+    calendarItems.forEach(item => {
+      const nextDate = getNextCandidateForEntry(item, now);
+      if (nextDate) {
+        entries.push({ ...item, nextDate });
+      }
     });
-    return sorted;
+    return entries.sort((a, b) => a.nextDate.getTime() - b.nextDate.getTime());
   }, [calendarItems]);
 
   const navigateDate = (direction: number) => {
@@ -927,24 +1009,31 @@ export const CalendarScreen: React.FC = () => {
 
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>📋 Upcoming Events</Text>
-            {upcomingItems.slice(0, 3).map(event => (
-              <Pressable
-                key={event.id}
-                onPress={() => {
-                  setSelectedEvent(event);
-                  setShowAddEventModal(true);
-                }}
-                style={[styles.upcomingItem, { backgroundColor: colors.card, borderRadius: radius.card }]}
-              >
-                <View style={styles.upcomingLeft}>
-                  <Text style={{ fontSize: 24 }}>{event.icon}</Text>
-                  <View>
-                    <Text style={[styles.upcomingTitle, { color: colors.foreground }]}>{event.title}</Text>
-                    <Text style={[styles.upcomingMeta, { color: colors.mutedForeground }]}>{safeFormat(ensureDate(event.date), "MMM d")} · {event.time}</Text>
+            {upcomingItems.slice(0, 3).map(event => {
+              const displayDate = safeFormat(event.nextDate, "MMM d");
+              const displayTime = event.time && event.time !== "All Day" ? event.time : "All Day";
+              return (
+                <Pressable
+                  key={`${event.id}-${event.nextDate.getTime()}`}
+                  onPress={() => {
+                    setSelectedEvent(event);
+                    setShowAddEventModal(true);
+                  }}
+                  style={[styles.upcomingItem, { backgroundColor: colors.card, borderRadius: radius.card }]}
+                >
+                  <View style={styles.upcomingLeft}>
+                    <Text style={{ fontSize: 24 }}>{event.icon}</Text>
+                    <View>
+                      <Text style={[styles.upcomingTitle, { color: colors.foreground }]}>{event.title}</Text>
+                      <Text style={[styles.upcomingMeta, { color: colors.mutedForeground }]}>{displayDate} · {displayTime}</Text>
+                    </View>
                   </View>
-                </View>
-              </Pressable>
-            ))}
+                </Pressable>
+              );
+            })}
+            {upcomingItems.length === 0 && (
+              <Text style={{ color: colors.mutedForeground, fontStyle: 'italic', marginTop: 8 }}>No upcoming events</Text>
+            )}
           </View>
 
           <View style={{ height: 100 }} />

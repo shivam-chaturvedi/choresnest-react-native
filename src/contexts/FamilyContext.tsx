@@ -133,7 +133,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [tasks, setTasks] = useState<any[]>([]);
   const [globalVault, setGlobalVault] = useState<any[]>([]);
   const [memberVaults, setMemberVaults] = useState<Record<string, any[]>>({});
-  const [groceryList, setGroceryList] = useState<any[]>([]);
+  const [groceryList, setGroceryList] = useState<GroceryItem[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
 
   const upsertEvent = (eventModel: any) => {
@@ -408,14 +408,19 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         next: (items) => {
           try {
             // Map to grocery list format
-            const mapped = items.map(i => ({
-              id: i.id,
-              name: i.name,
-              quantity: i.quantity,
-              unit: i.unit,
-              completed: i.isCompleted,
-              // ...
-            }));
+            const mapped = items.map(i => {
+              const purchasedAtIso = typeof i.purchasedAt === 'number' ? new Date(i.purchasedAt).toISOString() : undefined;
+              return {
+                id: i.id,
+                name: i.name,
+                quantity: i.quantity,
+                unit: i.unit,
+                completed: i.isCompleted,
+                categoryId: i.categoryId,
+                addedBy: i.addedById,
+                purchasedAt: purchasedAtIso,
+              };
+            });
             setGroceryList(mapped);
           } catch (error) {
             console.error('Error mapping grocery items:', error);
@@ -461,6 +466,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         groceryList,
         addGroceryItem: TaskService.addGroceryItem,
         toggleGroceryItem: TaskService.toggleGroceryItem,
+        removeGroceryItem: TaskService.removeGroceryItem,
 
         tasks,
         addTask,

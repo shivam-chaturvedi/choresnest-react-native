@@ -15,6 +15,7 @@ import { AppLayout } from "../components/layout/AppLayout";
 import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import { useSidebar } from "../contexts/SidebarContext";
 import { useAuth } from "../contexts/AuthContext";
+import { useAppLock } from "../contexts/AppLockContext";
 import notifee from "@notifee/react-native";
 import {
     ChevronLeft,
@@ -29,14 +30,28 @@ import {
 
 // --- Data ---
 const securitySettings = [
-    { id: 'bio', icon: Fingerprint, label: 'Biometric Lock', description: 'Use fingerprint or face to unlock', enabled: true },
-    { id: 'app', icon: Lock, label: 'App Lock', description: 'Require PIN when opening app', enabled: false },
+    { id: 'bio', icon: Fingerprint, label: 'Biometric Lock' },
+    { id: 'app', icon: Lock, label: 'App Lock' },
 ];
 
 export const PrivacyScreen: React.FC = () => {
     const navigation = useNavigation();
     const { openSidebar } = useSidebar();
     const { deleteAccount } = useAuth();
+    const {
+        isAppLockEnabled,
+        isBiometricEnabled,
+        isBiometricAvailable,
+        biometryType,
+        hasPin,
+        enableAppLock,
+        disableAppLock,
+        setPin: persistPin,
+        toggleBiometric,
+        unlockWithPin,
+    } = useAppLock();
+    const [pendingAppLockRequest, setPendingAppLockRequest] = useState<boolean | null>(null);
+    const [pendingBiometricRequest, setPendingBiometricRequest] = useState<boolean | null>(null);
     const colors = useThemeColors();
     const radius = useThemeRadius();
 
@@ -60,15 +75,6 @@ export const PrivacyScreen: React.FC = () => {
         };
     }, [clearNotifications]);
 
-    // State management for toggles
-    const [settingsState, setSettingsState] = useState(
-        securitySettings.reduce((acc, curr) => ({ ...acc, [curr.id]: curr.enabled }), {}) as Record<string, boolean>
-    );
-
-    const toggleSetting = (id: string) => {
-        setSettingsState(prev => ({ ...prev, [id]: !prev[id] }));
-    };
-
     // Modal States
     const [showPasswordModal, setShowPasswordModal] = useState(false);
     const [showPinModal, setShowPinModal] = useState(false);
@@ -79,6 +85,27 @@ export const PrivacyScreen: React.FC = () => {
     const [confirmPassword, setConfirmPassword] = useState("");
     const [pin, setPin] = useState("");
     const [confirmPin, setConfirmPin] = useState("");
+    const [appLockBusy, setAppLockBusy] = useState(false);
+    const [biometricBusy, setBiometricBusy] = useState(false);
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
+    const [confirmValue, setConfirmValue] = useState("");
+    const [confirmError, setConfirmError] = useState("");
+    const [confirmBusy, setConfirmBusy] = useState(false);
+
+    useEffect(() => {
+        if (pendingAppLockRequest !== null && pendingAppLockRequest === isAppLockEnabled) {
+            setPendingAppLockRequest(null);
+        }
+    }, [pendingAppLockRequest, isAppLockEnabled]);
+
+    useEffect(() => {
+        if (pendingBiometricRequest !== null && pendingBiometricRequest === isBiometricEnabled) {
+            setPendingBiometricRequest(null);
+        }
+    }, [pendingBiometricRequest, isBiometricEnabled]);
+
+    const appLockSwitchValue = pendingAppLockRequest ?? isAppLockEnabled;
+    const biometricSwitchValue = pendingBiometricRequest ?? isBiometricEnabled;
 
     const handleSavePassword = () => {
         if (!currentPassword || !newPassword || !confirmPassword) {
@@ -97,7 +124,7 @@ export const PrivacyScreen: React.FC = () => {
         setConfirmPassword("");
     };
 
-    const handleSavePin = () => {
+    const handleSavePin = async () => {
         if (!pin || !confirmPin) {
             Alert.alert("Error", "Please fill in all fields");
             return;
@@ -110,13 +137,117 @@ export const PrivacyScreen: React.FC = () => {
             Alert.alert("Error", "PINs do not match");
             return;
         }
-        // Mock save
-        setShowPinModal(false);
-        Alert.alert("Success", "PIN code set successfully");
-        setPin("");
-        setConfirmPin("");
+        // Save pin and enable app lock
+        try {
+            await persistPin(pin);
+            setShowPinModal(false);
+            Alert.alert("Success", "PIN code saved and app lock is now enabled.");
+            setPendingAppLockRequest(null);
+            setPendingBiometricRequest(null);
+        } catch (error) {
+            console.error("Failed to save PIN", error);
+            Alert.alert("Error", "We couldn't save your PIN. Please try again.");
+        } finally {
+            setPin("");
+            setConfirmPin("");
+        }
     };
 
+    const handleAppLockToggle = async (value: boolean) => {
+        if (value && !hasPin) {
+            setPendingAppLockRequest(null);
+            setShowPinModal(true);
+            return;
+        }
+
+        if (value) {
+            setPendingAppLockRequest(null);
+            setShowConfirmModal(true);
+            return;
+        }
+
+        setPendingAppLockRequest(false);
+        setAppLockBusy(true);
+        try {
+            await disableAppLock();
+        } catch (error) {
+            console.error("App lock toggle failed", error);
+            Alert.alert("App Lock", "Unable to update app lock. Please try again.");
+            setPendingAppLockRequest(true);
+        } finally {
+            setAppLockBusy(false);
+        }
+    };
+
+    const handleBiometricToggle = async (value: boolean) => {
+        if (value && !isBiometricAvailable) {
+            Alert.alert("Biometric Lock", "Biometric sensors are not available on this device.");
+            return;
+        }
+
+        setPendingBiometricRequest(value);
+        setBiometricBusy(true);
+        if (value && isAppLockEnabled) {
+            setPendingAppLockRequest(false);
+            setAppLockBusy(true);
+            try {
+                await disableAppLock();
+            } catch (error) {
+                console.error("Failed to disable App Lock before enabling biometrics", error);
+                Alert.alert("App Lock", "Please disable App Lock before turning on biometrics.");
+                setBiometricBusy(false);
+                setPendingBiometricRequest(null);
+                return;
+            } finally {
+                setAppLockBusy(false);
+            }
+        }
+        try {
+            await toggleBiometric(value);
+        } catch (error: any) {
+            console.error("Biometric toggle failed", error);
+            Alert.alert("Biometric Lock", error?.message || "Unable to update biometric settings.");
+        } finally {
+            setBiometricBusy(false);
+            setPendingBiometricRequest(null);
+        }
+    };
+
+    const handleConfirmSubmit = async () => {
+        if (confirmValue.length !== 4) {
+            setConfirmError("Enter your 4-digit PIN");
+            return;
+        }
+
+        setConfirmBusy(true);
+        setConfirmError("");
+        try {
+            const success = await unlockWithPin(confirmValue);
+            if (!success) {
+                setConfirmError("PIN did not match");
+                return;
+            }
+            await enableAppLock();
+            setConfirmError("");
+            setShowConfirmModal(false);
+            setConfirmValue("");
+            setPendingAppLockRequest(null);
+            setPendingBiometricRequest(null);
+        } catch (error) {
+            console.error("Confirm PIN failed", error);
+            setConfirmError("Failed to verify PIN.");
+        } finally {
+            setConfirmBusy(false);
+        }
+    };
+
+    const handleConfirmCancel = () => {
+        setShowConfirmModal(false);
+        setConfirmValue("");
+        setConfirmError("");
+        setPendingAppLockRequest(null);
+        setPendingBiometricRequest(null);
+    };
     return (
         <AppLayout>
             <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
@@ -147,25 +278,35 @@ export const PrivacyScreen: React.FC = () => {
                 <View>
                     <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Security</Text>
                     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
-                        {securitySettings.map((item, index) => (
-                            <View key={item.id}>
-                                <View style={styles.settingRow}>
-                                    <View style={[styles.iconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
-                                        <item.icon size={20} color={colors.mutedForeground} />
+                        {securitySettings.map((item, index) => {
+                            const isBio = item.id === 'bio';
+                            const description = isBio
+                                ? isBiometricAvailable
+                                    ? `Use ${biometryType ?? 'biometric'} credentials to unlock`
+                                    : 'Biometric sensors unavailable on this device'
+                                : 'Require a PIN when opening the app';
+
+                            return (
+                                <View key={item.id}>
+                                    <View style={styles.settingRow}>
+                                        <View style={[styles.iconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
+                                            <item.icon size={20} color={colors.mutedForeground} />
+                                        </View>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={[styles.settingLabel, { color: colors.foreground }]}>{item.label}</Text>
+                                            <Text style={[styles.settingDesc, { color: colors.mutedForeground }]}>{description}</Text>
+                                        </View>
+                                        <Switch
+                                            value={isBio ? biometricSwitchValue : appLockSwitchValue}
+                                            onValueChange={value => isBio ? handleBiometricToggle(value) : handleAppLockToggle(value)}
+                                            trackColor={{ false: colors.muted, true: colors.primary }}
+                                            disabled={isBio ? (!isBiometricAvailable || biometricBusy) : (appLockBusy || showConfirmModal || showPinModal)}
+                                        />
                                     </View>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={[styles.settingLabel, { color: colors.foreground }]}>{item.label}</Text>
-                                        <Text style={[styles.settingDesc, { color: colors.mutedForeground }]}>{item.description}</Text>
-                                    </View>
-                                    <Switch
-                                        value={settingsState[item.id]}
-                                        onValueChange={() => toggleSetting(item.id)}
-                                        trackColor={{ false: colors.muted, true: colors.primary }}
-                                    />
+                                    {index !== securitySettings.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
                                 </View>
-                                {index !== securitySettings.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
-                            </View>
-                        ))}
+                            );
+                        })}
                     </View>
                 </View>
 
@@ -310,6 +451,56 @@ export const PrivacyScreen: React.FC = () => {
                                     <Text style={{ color: colors.primaryForeground, fontWeight: '600' }}>Set PIN</Text>
                                 </Pressable>
                             </View>
+                        </View>
+                    </View>
+                </Modal>
+
+                {/* Confirm PIN Before Enabling App Lock */}
+                <Modal
+                    visible={showConfirmModal}
+                    transparent
+                    animationType="slide"
+                    onRequestClose={handleConfirmCancel}
+                >
+                    <View style={styles.modalOverlay}>
+                        <View style={[styles.modalContent, { backgroundColor: colors.card, borderRadius: radius.card }]}>
+                            <View style={styles.modalHeader}>
+                                <Text style={[styles.modalTitle, { color: colors.foreground }]}>Secure Access</Text>
+                                <Pressable onPress={handleConfirmCancel}>
+                                    <Text style={{ color: colors.mutedForeground, padding: 4 }}>Cancel</Text>
+                                </Pressable>
+                            </View>
+
+                            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>
+                                Enter your existing PIN to enable App Lock
+                            </Text>
+                            <TextInput
+                                style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.sm, letterSpacing: 8, fontSize: 20, textAlign: 'center' }]}
+                                secureTextEntry
+                                keyboardType="numeric"
+                                maxLength={4}
+                                value={confirmValue}
+                                onChangeText={value => setConfirmValue(value.replace(/[^0-9]/g, ''))}
+                                placeholder="••••"
+                                placeholderTextColor={colors.mutedForeground}
+                            />
+                            {confirmError ? <Text style={[styles.error, { color: colors.danger }]}>{confirmError}</Text> : null}
+                            <Pressable
+                                onPress={handleConfirmSubmit}
+                                disabled={confirmBusy}
+                                style={({ pressed }) => [
+                                    styles.saveButton,
+                                    {
+                                        backgroundColor: pressed ? `${colors.primary}cc` : colors.primary,
+                                        borderRadius: radius.sm,
+                                        opacity: confirmBusy ? 0.6 : 1,
+                                    },
+                                ]}
+                            >
+                                <Text style={{ color: colors.primaryForeground, fontWeight: '600' }}>
+                                    {confirmBusy ? 'Verifying…' : 'Confirm PIN'}
+                                </Text>
+                            </Pressable>
                         </View>
                     </View>
                 </Modal>

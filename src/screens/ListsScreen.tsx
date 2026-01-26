@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { GlobalSearch } from "../components/search/GlobalSearch";
 import { useSidebar } from "../contexts/SidebarContext";
 import { AppIcon, CustomDateTimePicker } from "../components/ui";
+import { ScreenErrorView } from "../components/ui/ScreenErrorView";
 import { AddShoppingItemModal } from "../components/modals/AddShoppingItemModal";
 
 export const ListsScreen: React.FC = () => {
@@ -39,6 +40,16 @@ export const ListsScreen: React.FC = () => {
   const [historyCategoryFilter, setHistoryCategoryFilter] = useState<string | null>(null);
   const [historyDate, setHistoryDate] = useState<Date | null>(null);
   const [historyTime, setHistoryTime] = useState<Date | null>(null);
+  const [screenError, setScreenError] = useState<string | null>(null);
+
+  const handleScreenError = useCallback((context: string, error: unknown) => {
+    console.error(`ListsScreen - ${context}`, error);
+    const message =
+      error instanceof Error ? error.message : typeof error === "string" ? error : "Something went wrong";
+    setScreenError(message);
+  }, []);
+
+  const resetScreenError = useCallback(() => setScreenError(null), []);
 
   const filteredItems = useMemo(() => {
     return groceryList.filter((item) =>
@@ -87,15 +98,20 @@ export const ListsScreen: React.FC = () => {
         completed: false,
       });
     } catch (error) {
-      console.error("Error adding grocery item:", error);
+      handleScreenError("handleAddItem", error);
       Alert.alert("Error", "Failed to add item. Please try again.");
     }
   };
 
   const handleOpenImport = () => {
-    const items = generateGroceryList();
-    setMealPlanItems(items);
-    setShowImportModal(true);
+    try {
+      const items = generateGroceryList();
+      setMealPlanItems(items);
+      setShowImportModal(true);
+    } catch (error) {
+      handleScreenError("handleOpenImport", error);
+      Alert.alert("Error", "Unable to load meal plan items.");
+    }
   };
 
   const handleImportItem = (item: { name: string; quantity: number; unit: string }) => {
@@ -110,7 +126,7 @@ export const ListsScreen: React.FC = () => {
       });
       Alert.alert("Item added", `${item.name} added to grocery list`);
     } catch (error) {
-      console.error("Error importing item:", error);
+      handleScreenError("handleImportItem", error);
       Alert.alert("Error", "Failed to import item.");
     }
   };
@@ -130,7 +146,7 @@ export const ListsScreen: React.FC = () => {
       setShowImportModal(false);
       Alert.alert("All items imported!", `${mealPlanItems.length} items added to your list`);
     } catch (error) {
-      console.error("Error importing all items:", error);
+      handleScreenError("handleImportAll", error);
       Alert.alert("Error", "Failed to import all items.");
     }
   };
@@ -255,6 +271,25 @@ export const ListsScreen: React.FC = () => {
       }
     }
   };
+
+  if (screenError) {
+    return (
+      <>
+        <AppLayout
+          showAddButton={false}
+          showNav={false}
+          style={{ backgroundColor: colors.background }}
+        >
+          <ScreenErrorView
+            message={screenError}
+            onRetry={resetScreenError}
+            actionLabel="Reload"
+          />
+        </AppLayout>
+        <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} />
+      </>
+    );
+  }
 
   return (
     <>
@@ -851,4 +886,3 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
 });
-

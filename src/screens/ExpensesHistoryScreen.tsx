@@ -26,6 +26,14 @@ const getWeekStartIso = (): string => {
 
 type TransactionWithDate = Transaction & { dateObj: Date };
 
+const formatWeekRangeLabel = (start: string): string => {
+  const startDate = toDate(start) || new Date();
+  const endDate = new Date(startDate);
+  endDate.setDate(endDate.getDate() + 6);
+  const formatOptions: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+  return `${startDate.toLocaleDateString('en-US', formatOptions)} - ${endDate.toLocaleDateString('en-US', formatOptions)}`;
+};
+
 export const ExpensesHistoryScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const colors = useThemeColors();
@@ -35,7 +43,7 @@ export const ExpensesHistoryScreen: React.FC = () => {
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>('month');
   const [historyMonth, setHistoryMonth] = useState(formatMonthKey(new Date()));
   const [historyWeekStart, setHistoryWeekStart] = useState(getWeekStartIso());
-  const [historyYear, setHistoryYear] = useState(new Date().toISOString().split('T')[0]);
+  const [historyYear, setHistoryYear] = useState(new Date().getFullYear().toString());
   const [historyCustomStart, setHistoryCustomStart] = useState('');
   const [historyCustomEnd, setHistoryCustomEnd] = useState('');
 
@@ -68,6 +76,16 @@ export const ExpensesHistoryScreen: React.FC = () => {
       })
       .filter((tx): tx is TransactionWithDate => Boolean(tx));
   }, [transactions]);
+
+  const yearOptions = useMemo(() => {
+    const uniqueYears = new Set<string>();
+    transactionsWithDate.forEach(tx => {
+      uniqueYears.add(tx.dateObj.getFullYear().toString());
+    });
+    uniqueYears.add(new Date().getFullYear().toString());
+    return Array.from(uniqueYears)
+      .sort((a, b) => Number(b) - Number(a));
+  }, [transactionsWithDate]);
 
   const filteredTransactions = useMemo(() => {
     const monthKey = historyMonth || formatMonthKey(new Date());
@@ -133,89 +151,134 @@ export const ExpensesHistoryScreen: React.FC = () => {
     };
   }, [filteredTransactions]);
 
-  const renderFilterControls = () => (
-    <View style={styles.filterSection}>
-      <View style={styles.filterTabs}>
-        {(['month', 'week', 'year', 'custom'] as HistoryFilter[]).map(filter => (
-          <Pressable
-            key={filter}
-            onPress={() => setHistoryFilter(filter)}
-            style={[
-              styles.filterTab,
-              { borderColor: colors.border },
-              historyFilter === filter && {
-                borderColor: colors.primary,
-                backgroundColor: colors.primary + '15',
-              },
-            ]}
-          >
-            <Text style={[
-              styles.filterTabText,
-              { color: historyFilter === filter ? colors.primary : colors.mutedForeground }
-            ]}>
-              {filter.toUpperCase()}
-            </Text>
-          </Pressable>
-        ))}
+  const renderFilterControls = () => {
+    const weekRangeLabel = formatWeekRangeLabel(historyWeekStart);
+    const normalizedYearOptions = yearOptions.length ? yearOptions : [new Date().getFullYear().toString()];
+
+    return (
+      <View style={styles.filterSection}>
+        <View style={styles.filterTabs}>
+          {(['month', 'week', 'year', 'custom'] as HistoryFilter[]).map(filter => (
+            <Pressable
+              key={filter}
+              onPress={() => setHistoryFilter(filter)}
+              style={[
+                styles.filterTab,
+                { borderColor: colors.border },
+                historyFilter === filter && {
+                  borderColor: colors.primary,
+                  backgroundColor: colors.primary + '15',
+                },
+              ]}
+            >
+              <Text style={[
+                styles.filterTabText,
+                { color: historyFilter === filter ? colors.primary : colors.mutedForeground }
+              ]}>
+                {filter.toUpperCase()}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        <View style={styles.filterControls}>
+          {historyFilter === 'month' && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.monthScroll}
+            >
+              {(monthOptions.length ? monthOptions : [{ value: formatMonthKey(new Date()), label: formatMonthLabel(formatMonthKey(new Date())) }]).map(monthValue => (
+                <Pressable
+                  key={monthValue.value}
+                  onPress={() => setHistoryMonth(monthValue.value)}
+                  style={[
+                    styles.monthOption,
+                    { borderColor: colors.border },
+                    historyMonth === monthValue.value && {
+                      borderColor: colors.primary,
+                      backgroundColor: colors.primary + '20',
+                    },
+                  ]}
+                >
+                  <Text style={{ color: historyMonth === monthValue.value ? colors.primary : colors.foreground }}>
+                    {monthValue.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
+          {historyFilter === 'week' && (
+            <View style={styles.weekSelector}>
+              <Text style={[styles.weekLabel, { color: colors.mutedForeground }]}>Week range</Text>
+              <View style={styles.weekPickerRow}>
+                <DateTimePicker
+                  value={historyWeekStart}
+                  onChange={setHistoryWeekStart}
+                  placeholder="Select week start"
+                  buttonStyle={styles.weekPickerButton}
+                  textStyle={styles.weekPickerText}
+                />
+                <View style={styles.weekRangeContainer}>
+                  <Text style={[styles.weekRangeText, { color: colors.foreground }]}>{weekRangeLabel}</Text>
+                  <Text style={[styles.weekRangeHint, { color: colors.mutedForeground }]}>Aligned to the selected start date</Text>
+                </View>
+              </View>
+            </View>
+          )}
+          {historyFilter === 'year' && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.yearScroll}
+            >
+              {normalizedYearOptions.map(yearValue => (
+                <Pressable
+                  key={yearValue}
+                  onPress={() => setHistoryYear(yearValue)}
+                  style={[
+                    styles.monthOption,
+                    { borderColor: colors.border },
+                    historyYear === yearValue && {
+                      borderColor: colors.primary,
+                      backgroundColor: colors.primary + '20',
+                    },
+                  ]}
+                >
+                  <Text style={{ color: historyYear === yearValue ? colors.primary : colors.foreground }}>
+                    {yearValue}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
+          {historyFilter === 'custom' && (
+            <View style={styles.customRangeRow}>
+              <View style={styles.dateField}>
+                <Text style={[styles.dateFieldLabel, { color: colors.mutedForeground }]}>Start date & time</Text>
+                <DateTimePicker
+                  value={historyCustomStart}
+                  onChange={setHistoryCustomStart}
+                  placeholder="Start date"
+                  buttonStyle={styles.customDateButton}
+                  textStyle={styles.customDateText}
+                />
+              </View>
+              <View style={styles.dateField}>
+                <Text style={[styles.dateFieldLabel, { color: colors.mutedForeground }]}>End date & time</Text>
+                <DateTimePicker
+                  value={historyCustomEnd}
+                  onChange={setHistoryCustomEnd}
+                  placeholder="End date"
+                  buttonStyle={styles.customDateButton}
+                  textStyle={styles.customDateText}
+                />
+              </View>
+            </View>
+          )}
+        </View>
       </View>
-      <View style={styles.filterControls}>
-        {historyFilter === 'month' && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.monthScroll}
-          >
-            {(monthOptions.length ? monthOptions : [{ value: formatMonthKey(new Date()), label: formatMonthLabel(formatMonthKey(new Date())) }]).map(monthValue => (
-              <Pressable
-                key={monthValue.value}
-                onPress={() => setHistoryMonth(monthValue.value)}
-                style={[
-                  styles.monthOption,
-                  { borderColor: colors.border },
-                  historyMonth === monthValue.value && {
-                    borderColor: colors.primary,
-                    backgroundColor: colors.primary + '20',
-                  },
-                ]}
-              >
-                <Text style={{ color: historyMonth === monthValue.value ? colors.primary : colors.foreground }}>
-                  {monthValue.label}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        )}
-        {historyFilter === 'week' && (
-          <DateTimePicker
-            value={historyWeekStart}
-            onChange={setHistoryWeekStart}
-            placeholder="Pick week start"
-          />
-        )}
-        {historyFilter === 'year' && (
-          <DateTimePicker
-            value={historyYear}
-            onChange={setHistoryYear}
-            placeholder="Pick year"
-          />
-        )}
-        {historyFilter === 'custom' && (
-          <View style={styles.customRange}>
-            <DateTimePicker
-              value={historyCustomStart}
-              onChange={setHistoryCustomStart}
-              placeholder="Start date"
-            />
-            <DateTimePicker
-              value={historyCustomEnd}
-              onChange={setHistoryCustomEnd}
-              placeholder="End date"
-            />
-          </View>
-        )}
-      </View>
-    </View>
-  );
+    );
+  };
 
   const renderItem = ({ item }: { item: TransactionWithDate }) => (
     <View style={[styles.txRow, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radius.md }]}>
@@ -351,10 +414,43 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 10,
+    minWidth: 90,
+    alignItems: 'center',
   },
-  customRange: {
+  weekSelector: {
+    gap: 4,
+  },
+  weekLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  weekPickerRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
+  },
+  weekPickerButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    minHeight: 50,
+  },
+  weekPickerText: {
+    fontWeight: '600',
+  },
+  weekRangeContainer: {
+    flex: 1,
+  },
+  weekRangeText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  weekRangeHint: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+  yearScroll: {
+    gap: 8,
   },
   summaryRow: {
     flexDirection: 'row',
@@ -373,6 +469,27 @@ const styles = StyleSheet.create({
   summaryValue: {
     fontSize: 18,
     fontWeight: '700',
+  },
+  customRangeRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  dateField: {
+    flex: 1,
+  },
+  dateFieldLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  customDateButton: {
+    width: '100%',
+    minHeight: 48,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  customDateText: {
+    fontWeight: '600',
   },
   sectionTitle: {
     fontSize: 16,

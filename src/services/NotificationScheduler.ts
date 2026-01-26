@@ -247,20 +247,46 @@ let alarmPermissionGranted = false;
 let alarmSettingsPrompted = false;
 let lastChannelSoundSetting: boolean | null = null;
 
+const deleteChannelSafe = async (channelId: string) => {
+    try {
+        await notifee.deleteChannel(channelId);
+    } catch (error) {
+        console.warn(`Failed to delete channel ${channelId}:`, error);
+    }
+};
+
+const createChannelWithSound = async (channel: typeof CHANNELS[keyof typeof CHANNELS], soundEnabled: boolean) => {
+    const soundValue = soundEnabled ? SOUND_NAME : undefined;
+    await notifee.createChannel({
+        id: channel.id,
+        name: channel.name,
+        importance: channel.importance,
+        sound: soundValue,
+    });
+};
+
+const recreateAllNotificationChannels = async (soundEnabled: boolean): Promise<void> => {
+    for (const channel of Object.values(CHANNELS)) {
+        await deleteChannelSafe(channel.id);
+    }
+    for (const channel of Object.values(CHANNELS)) {
+        await createChannelWithSound(channel, soundEnabled);
+    }
+    lastChannelSoundSetting = soundEnabled;
+};
+
+const recreateChannelForCategory = async (category: NotificationCategory, soundEnabled: boolean): Promise<void> => {
+    const channel = CHANNELS[category];
+    if (!channel) return;
+    await deleteChannelSafe(channel.id);
+    await createChannelWithSound(channel, soundEnabled);
+};
+
 const ensureChannelsCreated = async (soundEnabled: boolean): Promise<void> => {
     if (lastChannelSoundSetting === soundEnabled) {
         return;
     }
-    const soundValue = soundEnabled ? SOUND_NAME : undefined;
-    for (const channel of Object.values(CHANNELS)) {
-        await notifee.createChannel({
-            id: channel.id,
-            name: channel.name,
-            importance: channel.importance,
-            sound: soundValue,
-        });
-    }
-    lastChannelSoundSetting = soundEnabled;
+    await recreateAllNotificationChannels(soundEnabled);
 };
 
 const ensureAlarmPermission = async (promptToOpenSettings = false): Promise<boolean> => {
@@ -300,17 +326,9 @@ export const NotificationScheduler = {
      */
     async initialize() {
         try {
-            const hasPermission = await requestPermission('notification');
-            if (!hasPermission) {
-                console.warn('Notifications permission was not granted; scheduled notifications will not fire until the user enables it.');
-            }
-
-            await notifee.requestPermission();
 
             const soundEnabled = await NotificationPreferencesService.isSoundEnabled();
             await ensureChannelsCreated(soundEnabled);
-            const androidSound = soundEnabled ? SOUND_NAME : undefined;
-            const iosSound = soundEnabled ? 'reminder.caf' : undefined;
 
             await ensureAlarmPermission(false);
 
@@ -329,6 +347,22 @@ export const NotificationScheduler = {
             console.log(`Notification channels updated for ${soundEnabled ? 'sound' : 'silent'} delivery`);
         } catch (error) {
             console.error('Failed to update channel sound preference:', error);
+        }
+    },
+
+    async recreateChannel(category: NotificationCategory, soundEnabled: boolean): Promise<void> {
+        try {
+            await recreateChannelForCategory(category, soundEnabled);
+        } catch (error) {
+            console.error(`Failed to recreate channel ${category}:`, error);
+        }
+    },
+
+    async recreateAllChannels(soundEnabled: boolean): Promise<void> {
+        try {
+            await recreateAllNotificationChannels(soundEnabled);
+        } catch (error) {
+            console.error('Failed to recreate all notification channels:', error);
         }
     },
 
@@ -443,13 +477,23 @@ export const NotificationScheduler = {
             repeatType?: RepeatType | string;
             repeatMeta?: RepeatMeta;
             notifyCenter?: boolean;
+            promptForPermission?: boolean;
+            promptForAlarm?: boolean;
         }
     ): Promise<string | null> {
         try {
             const hasPermission = await checkPermission('notification');
             if (!hasPermission) {
-                console.warn(`Skipping scheduling for ${category} because notification permission is not granted`);
-                return null;
+                if (options?.promptForPermission) {
+                    const granted = await requestPermission('notification');
+                    if (!granted) {
+                        console.warn(`Skipping scheduling for ${category} because the user denied notification permission`);
+                        return null;
+                    }
+                } else {
+                    console.warn(`Skipping scheduling for ${category} because notification permission is not granted`);
+                    return null;
+                }
             }
 
             const pushEnabled = await NotificationPreferencesService.isPushEnabled();
@@ -465,8 +509,9 @@ export const NotificationScheduler = {
                 return null;
             }
 
+            const promptForAlarm = options?.promptForAlarm ?? false;
             if (Platform.OS === 'android') {
-                const hasAlarm = await ensureAlarmPermission(true);
+                const hasAlarm = await ensureAlarmPermission(promptForAlarm);
                 if (!hasAlarm) {
                     console.warn('Exact alarm permission is not granted; scheduled reminders may not fire reliably.');
                 }
@@ -667,6 +712,8 @@ export const NotificationScheduler = {
             repeatType?: RepeatType | string;
             repeatMeta?: RepeatMeta;
             notifyCenter?: boolean;
+            promptForPermission?: boolean;
+            promptForAlarm?: boolean;
         }
     ): Promise<string | null> {
         try {
@@ -693,7 +740,6 @@ export const NotificationScheduler = {
 
             // Get all items with notifications for this category
             let collection;
-            let notificationIdField = 'notificationId';
 
             switch (category) {
                 case 'events':
@@ -704,7 +750,6 @@ export const NotificationScheduler = {
                     break;
                 case 'documents':
                     collection = database.get('documents');
-                    notificationIdField = 'notificationIdsJson';
                     break;
                 case 'meals':
                     collection = database.get('meal_plans');

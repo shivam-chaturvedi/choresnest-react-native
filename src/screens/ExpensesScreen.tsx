@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Pressable } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { AppLayout } from '../components/layout/AppLayout';
@@ -24,6 +24,7 @@ import { AppIcon } from '../components/ui/AppIcon';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import { useFinance, Transaction } from '../contexts/FinanceContext';
+import { ScreenErrorView } from '../components/ui/ScreenErrorView';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -40,6 +41,14 @@ export const ExpensesScreen: React.FC = () => {
   const { openSidebar } = useSidebar();
 
   const { transactions, addTransaction, budgets, categoryColors, categoryIcons } = useFinance();
+  const [screenError, setScreenError] = useState<string | null>(null);
+  const handleScreenError = useCallback((context: string, error: unknown) => {
+    console.error(`ExpensesScreen - ${context}`, error);
+    const message =
+      error instanceof Error ? error.message : typeof error === "string" ? error : "Something went wrong";
+    setScreenError(message);
+  }, []);
+  const resetScreenError = useCallback(() => setScreenError(null), []);
 
 
   const handlePrevMonth = () => {
@@ -178,14 +187,18 @@ export const ExpensesScreen: React.FC = () => {
 
 
   const handleAddExpense = (expense: ExpenseData) => {
-    addTransaction({
-      name: expense.name,
-      amount: expense.amount,
-      date: expense.date,
-      icon: categoryIcons[expense.category] || '📦',
-      type: expense.type,
-      category: expense.category,
-    });
+    try {
+      addTransaction({
+        name: expense.name,
+        amount: expense.amount,
+        date: expense.date,
+        icon: categoryIcons[expense.category] || '📦',
+        type: expense.type,
+        category: expense.category,
+      });
+    } catch (error) {
+      handleScreenError("handleAddExpense", error);
+    }
   };
 
   // --- Gesture Logic ---
@@ -487,6 +500,14 @@ export const ExpensesScreen: React.FC = () => {
     );
   }
 
+  if (screenError) {
+    return (
+      <AppLayout showNav={false} showAddButton={false}>
+        <ScreenErrorView message={screenError} onRetry={resetScreenError} actionLabel="Refresh" />
+      </AppLayout>
+    );
+  }
+
   return (
     <AppLayout showNav={false} showAddButton={false}>
       <GestureDetector gesture={panGesture}>
@@ -502,7 +523,7 @@ export const ExpensesScreen: React.FC = () => {
             </View>
             {/* Removed top Add button, keeping only FAB */}
             <Pressable
-              onPress={() => navigation.navigate('ExpensesHistory')}
+              onPress={() => navigation.navigate('ExpensesHistory' as never)}
               style={[
                 styles.historyBtn,
                 { borderColor: colors.border, backgroundColor: colors.muted, borderRadius: radius.md }

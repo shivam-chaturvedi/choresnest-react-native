@@ -14,21 +14,12 @@ import { AppIcon } from "../ui/AppIcon";
 import { RecipeImage } from "../recipes/RecipeImage";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { useRecipes } from "../../contexts/RecipeContext";
-import { Recipe } from "../../data/recipes";
-
-interface Collection {
-    id: number;
-    name: string;
-    description?: string;
-    count: number;
-    color: string;
-    recipeIds?: number[];
-}
+import { Recipe, RecipeCollection } from "../../types/recipes";
 
 interface CollectionDetailModalProps {
     open: boolean;
     onClose: () => void;
-    collection: Collection | null;
+    collection: RecipeCollection | null;
     onRecipePress?: (recipe: Recipe) => void;
 }
 

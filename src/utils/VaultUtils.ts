@@ -12,7 +12,6 @@ export interface VaultAlert {
 export const generateAlerts = (documents: VaultDocument[]): VaultAlert[] => {
     const alerts: VaultAlert[] = [];
     const now = new Date();
-    const fifteenDaysFromNow = new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000);
 
     documents.forEach(doc => {
         // Warranty expiry alerts

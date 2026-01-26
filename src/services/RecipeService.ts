@@ -1,6 +1,6 @@
 import RNFS from 'react-native-fs';
 import { database } from '../database';
-import { Recipe, Collection, CollectionRecipe } from '../database/models/Recipe';
+import { Recipe, Collection } from '../database/models/Recipe';
 import MealPlan from '../database/models/MealPlan';
 import { Q } from '@nozbe/watermelondb';
 

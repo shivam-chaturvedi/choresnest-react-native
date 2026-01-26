@@ -1,8 +1,7 @@
 import { database } from '../database';
 import Task from '../database/models/Task';
 import Event from '../database/models/Event';
-import { List, ListItem, ListCategory } from '../database/models/List';
-import { Q } from '@nozbe/watermelondb';
+import { List, ListItem } from '../database/models/List';
 import { NotificationScheduler } from './NotificationScheduler';
 import { NotificationPreferencesService } from './NotificationPreferencesService';
 import { parseReminderDateTime } from '../utils/ReminderDateTimeUtils';
@@ -24,6 +23,8 @@ const severityMeta: Record<"success" | "warning" | "default", { tone: string; te
 
 const TASKS_ROUTE: NotificationRoute = { tab: "more", screen: "Tasks" };
 const EVENTS_ROUTE: NotificationRoute = { tab: "calendar" };
+
+type GroceryItemPayload = Partial<ListItem> & { addedBy?: string };
 
 const pushHomeNotification = (
     title: string,
@@ -82,6 +83,8 @@ export const TaskService = {
                             notificationTrigger,
                             {
                                 notifyCenter: true,
+                                promptForPermission: true,
+                                promptForAlarm: true,
                             }
                         );
                         if (notificationId) {
@@ -143,6 +146,8 @@ export const TaskService = {
                             notificationTrigger,
                             {
                                 notifyCenter: true,
+                                promptForPermission: true,
+                                promptForAlarm: true,
                             }
                         );
                         if (newId) {
@@ -200,7 +205,7 @@ export const TaskService = {
         try {
             const task = await database.get<Task>('tasks').find(id);
             notificationId = task.notificationId;
-        } catch (e) { /* ignore */ }
+        } catch { /* ignore */ }
 
         await database.write(async () => {
             const task = await database.get<Task>('tasks').find(id);
@@ -271,6 +276,8 @@ export const TaskService = {
                                 repeatType,
                                 repeatMeta,
                                 notifyCenter: true,
+                                promptForPermission: true,
+                                promptForAlarm: true,
                             }
                         );
 
@@ -368,6 +375,8 @@ export const TaskService = {
                                 repeatType,
                                 repeatMeta,
                                 notifyCenter: true,
+                                promptForPermission: true,
+                                promptForAlarm: true,
                             }
                         );
 
@@ -423,7 +432,7 @@ export const TaskService = {
         try {
             const event = await database.get<Event>('events').find(id);
             notificationId = event.notificationId;
-        } catch (e) { /* ignore if not found */ }
+        } catch { /* ignore if not found */ }
 
         await database.write(async () => {
             try {
@@ -447,13 +456,21 @@ export const TaskService = {
         return database.get<ListItem>('list_items').query().observe();
     },
 
-    addGroceryItem: async (data: Partial<ListItem>) => {
+    addGroceryItem: async (data: GroceryItemPayload) => {
         await database.write(async () => {
             await database.get<ListItem>('list_items').create(i => {
                 i.name = data.name || 'Item';
                 i.quantity = data.quantity || 1;
                 i.unit = data.unit || 'pcs';
-                i.isCompleted = false;
+                if (data.categoryId) {
+                    i.categoryId = data.categoryId;
+                }
+                const addedById = data.addedBy || data.addedById;
+                i.addedById = addedById || 'system';
+                i.isCompleted = data.isCompleted ?? false;
+                if (data.purchasedAt) {
+                    i.purchasedAt = data.purchasedAt;
+                }
             });
         });
     },
@@ -461,9 +478,18 @@ export const TaskService = {
     toggleGroceryItem: async (id: string) => {
         await database.write(async () => {
             const item = await database.get<ListItem>('list_items').find(id);
+            const nextState = !item.isCompleted;
             await item.update(i => {
-                i.isCompleted = !i.isCompleted;
+                i.isCompleted = nextState;
+                i.purchasedAt = nextState ? Date.now() : undefined;
             });
+        });
+    },
+
+    removeGroceryItem: async (id: string) => {
+        await database.write(async () => {
+            const item = await database.get<ListItem>('list_items').find(id);
+            await item.markAsDeleted();
         });
     }
 };

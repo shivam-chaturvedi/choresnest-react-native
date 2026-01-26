@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export default appSchema({
-    version: 2,
+    version: 3,
     tables: [
         tableSchema({
             name: 'users',
@@ -196,6 +196,16 @@ export default appSchema({
             columns: [
                 { name: 'title', type: 'string' },
                 { name: 'icon', type: 'string' },
+            ],
+        }),
+        tableSchema({
+            name: 'app_lock',
+            columns: [
+                { name: 'enabled', type: 'boolean' },
+                { name: 'biometric_enabled', type: 'boolean' },
+                { name: 'pin_hash', type: 'string' },
+                { name: 'created_at', type: 'number' },
+                { name: 'updated_at', type: 'number' },
             ],
         }),
         tableSchema({

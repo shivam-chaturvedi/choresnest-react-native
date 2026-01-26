@@ -13,7 +13,7 @@ import {
 import { AppIcon } from "../ui/AppIcon";
 import { RecipeImage } from "../recipes/RecipeImage";
 import { useThemeColors } from "../../contexts/ThemeContext";
-import { Recipe } from "../../data/recipes";
+import { Recipe } from "../../types/recipes";
 
 interface RecipeDetailModalProps {
     recipe: Recipe | null;
@@ -21,6 +21,8 @@ interface RecipeDetailModalProps {
     onOpenChange: (open: boolean) => void;
     onAddToGroceryList?: (recipe: Recipe) => void;
     onBookmark?: (recipe: Recipe) => void;
+    onEdit?: (recipe: Recipe) => void;
+    onDelete?: (recipe: Recipe) => void;
 }
 
 // Mock nutrition data
@@ -67,6 +69,8 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
     onOpenChange,
     onAddToGroceryList,
     onBookmark,
+    onEdit,
+    onDelete,
 }) => {
     const colors = useThemeColors();
 
@@ -107,23 +111,37 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
                     >
                         <AppIcon name="x" size={20} color="#fff" />
                     </Pressable>
-                    <Pressable
-                        style={styles.bookmarkButton}
-                        onPress={() => {
-                            const nextSaved = onBookmark?.(recipe);
-                            if (typeof nextSaved === "boolean") {
-                                showNativeToast(nextSaved ? "Bookmark added" : "Bookmark removed");
-                            }
-                        }}
-                    >
-                        <AppIcon
-                            name="bookmark"
-                            size={20}
-                            color="#fff"
-                            style={recipe.saved ? { opacity: 1 } : { opacity: 0.7 }}
-                        />
-                    </Pressable>
-                </View>
+                    <View style={styles.headerActions}>
+                        <Pressable
+                            style={[styles.smallButton, { borderColor: "#ffffff55" }]}
+                            onPress={() => onEdit?.(recipe)}
+                        >
+                            <AppIcon name="edit" size={18} color="#fff" />
+                        </Pressable>
+                        <Pressable
+                            style={[styles.smallButton, styles.deleteButton]}
+                            onPress={() => onDelete?.(recipe)}
+                        >
+                            <AppIcon name="trash" size={18} color="#fff" />
+                        </Pressable>
+                        <Pressable
+                            style={styles.bookmarkButton}
+                            onPress={() => {
+                                const nextSaved = onBookmark?.(recipe);
+                                if (typeof nextSaved === "boolean") {
+                                    showNativeToast(nextSaved ? "Bookmark added" : "Bookmark removed");
+                                }
+                            }}
+                        >
+                            <AppIcon
+                                name="bookmark"
+                                size={20}
+                                color="#fff"
+                                style={recipe.saved ? { opacity: 1 } : { opacity: 0.7 }}
+                            />
+                        </Pressable>
+                    </View>
+                    </View>
 
                 {/* Content Sheet */}
                 <View style={[styles.sheetContainer, { backgroundColor: colors.card }]}>
@@ -276,6 +294,14 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         zIndex: 1,
     },
+    headerActions: {
+        flexDirection: "row",
+        alignItems: "center",
+        position: "absolute",
+        top: 50,
+        right: 80,
+        gap: 8,
+    },
     heroEmoji: {
         fontSize: 80,
     },
@@ -300,6 +326,19 @@ const styles = StyleSheet.create({
         backgroundColor: "rgba(255,255,255,0.2)",
         alignItems: "center",
         justifyContent: "center",
+    },
+    smallButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,0.6)",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    deleteButton: {
+        borderColor: "transparent",
+        backgroundColor: "rgba(244,63,94,0.3)",
     },
     sheetContainer: {
         flex: 1,

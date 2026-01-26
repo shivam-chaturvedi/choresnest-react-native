@@ -1,5 +1,4 @@
 import notifee, { AndroidImportance } from '@notifee/react-native';
-import { Platform } from 'react-native';
 
 export const setupNotifications = async () => {
     // Request permissions (required for iOS 10+)

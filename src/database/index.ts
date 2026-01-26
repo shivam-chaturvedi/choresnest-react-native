@@ -17,6 +17,7 @@ import { Transaction, Budget } from './models/Finance';
 import { Note, Folder } from './models/Note';
 import NotificationPreference from './models/NotificationPreference';
 import QuietHours from './models/QuietHours';
+import AppLock from './models/AppLock';
 
 const adapter = new SQLiteAdapter({
     schema,
@@ -50,5 +51,6 @@ export const database = new Database({
         Folder,
         NotificationPreference,
         QuietHours,
+        AppLock,
     ],
 });

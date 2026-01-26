@@ -5844,6 +5844,11 @@ react-is@^19.1.0:
   resolved "https://registry.npmjs.org/react-is/-/react-is-19.2.3.tgz"
   integrity sha512-qJNJfu81ByyabuG7hPFEbXqNcWSU3+eVus+KJs+0ncpGfMyYdvSmxiJxbWR65lYi1I+/0HBcliO029gc4F+PnA==
 
+react-native-biometrics@^3.0.1:
+  version "3.0.1"
+  resolved "https://registry.npmjs.org/react-native-biometrics/-/react-native-biometrics-3.0.1.tgz"
+  integrity sha512-Ru80gXRa9KG04sl5AB9HyjLjVbduhqZVjA+AiOSGqr+fNqCDmCu9y5WEksnjbnniNLmq1yGcw+qcLXmR1ddLDQ==
+
 react-native-file-viewer@^2.1.5:
   version "2.1.5"
   resolved "https://registry.npmjs.org/react-native-file-viewer/-/react-native-file-viewer-2.1.5.tgz"
