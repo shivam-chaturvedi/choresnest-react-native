@@ -4,6 +4,7 @@ import { useThemeColors } from '../../contexts/ThemeContext';
 import { Calendar as CalendarIcon, DollarSign, Tag, FileText, AlertTriangle, X } from 'lucide-react-native';
 import { Button } from '../ui/Button';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { useCountry } from '../../contexts/CountryContext';
 
 export interface ExpenseData {
     name: string;
@@ -95,6 +96,8 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
         }
     };
 
+    const { currentCountry } = useCountry();
+
     return (
         <Modal
             visible={visible}
@@ -172,7 +175,9 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                                 <Text style={[styles.label, { color: colors.foreground }]}>Amount</Text>
                             </View>
                             <View style={styles.amountContainer}>
-                                <Text style={[styles.currencySymbol, { color: colors.mutedForeground }]}>₹</Text>
+                                <Text style={[styles.currencySymbol, { color: colors.mutedForeground }]}>
+                                    {currentCountry.currencySymbol}
+                                </Text>
                                 <TextInput
                                     style={[styles.input, styles.amountInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground }]}
                                     placeholder="0.00"

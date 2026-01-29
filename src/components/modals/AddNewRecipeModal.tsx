@@ -19,7 +19,7 @@ import { Platform } from "react-native";
 
 
 import { launchImageLibrary } from 'react-native-image-picker';
-import { Recipe } from "../../data/recipes";
+import { Recipe } from "../../types/recipes";
 import { requestPermission } from "../../utils/permissions";
 import { getAudioRecorder, SafeAudioRecorderType } from "../../utils/AudioRecorder";
 import { RecordBackType, PlayBackType } from 'react-native-nitro-sound';

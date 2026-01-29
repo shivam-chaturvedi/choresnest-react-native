@@ -12,7 +12,6 @@ export interface VaultAlert {
 export const generateAlerts = (documents: VaultDocument[]): VaultAlert[] => {
     const alerts: VaultAlert[] = [];
     const now = new Date();
-    const fifteenDaysFromNow = new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000);
 
     documents.forEach(doc => {
         // Warranty expiry alerts
@@ -23,7 +22,7 @@ export const generateAlerts = (documents: VaultDocument[]): VaultAlert[] => {
             if (daysUntilExpiry < 0) {
                 alerts.push({
                     id: `${doc.id}-expired`,
-                    icon: doc.icon,
+                    icon: doc.icon || 'file',
                     name: doc.name,
                     message: 'Warranty expired',
                     type: 'danger',
@@ -32,7 +31,7 @@ export const generateAlerts = (documents: VaultDocument[]): VaultAlert[] => {
             } else if (daysUntilExpiry <= 15) {
                 alerts.push({
                     id: `${doc.id}-expiring`,
-                    icon: doc.icon,
+                    icon: doc.icon || 'file',
                     name: doc.name,
                     message: `Warranty expires in ${daysUntilExpiry} days`,
                     type: 'warning',
@@ -49,7 +48,7 @@ export const generateAlerts = (documents: VaultDocument[]): VaultAlert[] => {
             if (daysUntilService < 0) {
                 alerts.push({
                     id: `${doc.id}-overdue`,
-                    icon: doc.icon,
+                    icon: doc.icon || 'file',
                     name: doc.name,
                     message: 'Service overdue',
                     type: 'danger',
@@ -58,10 +57,36 @@ export const generateAlerts = (documents: VaultDocument[]): VaultAlert[] => {
             } else if (daysUntilService <= 15) {
                 alerts.push({
                     id: `${doc.id}-due`,
-                    icon: doc.icon,
+                    icon: doc.icon || 'file',
                     name: doc.name,
                     message: `Service due in ${daysUntilService} days`,
                     type: 'info',
+                    documentId: doc.id,
+                });
+            }
+        }
+
+        // Bill due alerts
+        if (doc.type === 'bill' && doc.billDate) {
+            const billDate = new Date(doc.billDate);
+            const daysUntilBill = Math.ceil((billDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+            if (daysUntilBill < 0) {
+                alerts.push({
+                    id: `${doc.id}-bill-overdue`,
+                    icon: doc.icon || 'file',
+                    name: doc.name,
+                    message: 'Bill overdue',
+                    type: 'danger',
+                    documentId: doc.id,
+                });
+            } else if (daysUntilBill <= 7) {
+                alerts.push({
+                    id: `${doc.id}-bill-due`,
+                    icon: doc.icon || 'file',
+                    name: doc.name,
+                    message: `Bill due in ${daysUntilBill} days`,
+                    type: 'warning',
                     documentId: doc.id,
                 });
             }
@@ -75,7 +100,7 @@ export const generateAlerts = (documents: VaultDocument[]): VaultAlert[] => {
             if (daysUntilExpiry <= 30 && daysUntilExpiry > 0) {
                 alerts.push({
                     id: `${doc.id}-renewal`,
-                    icon: doc.icon,
+                    icon: doc.icon || 'file',
                     name: doc.name,
                     message: `Renewal due in ${daysUntilExpiry} days`,
                     type: 'info',

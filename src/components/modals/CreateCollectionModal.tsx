@@ -9,7 +9,6 @@ import {
     ScrollView,
     Pressable,
 } from "react-native";
-import { recipes as staticRecipes } from "../../data/recipes";
 import { AppIcon } from "../ui/AppIcon";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { useRecipes } from "../../contexts/RecipeContext";

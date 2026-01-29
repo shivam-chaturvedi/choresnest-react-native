@@ -1,5 +1,5 @@
 import { pick, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
-import { launchCamera, CameraOptions, Asset } from 'react-native-image-picker';
+import { launchCamera, CameraOptions } from 'react-native-image-picker';
 import RNFS from 'react-native-fs';
 import { PermissionsAndroid, Platform, Alert } from 'react-native';
 

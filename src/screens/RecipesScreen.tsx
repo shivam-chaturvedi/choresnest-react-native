@@ -1,5 +1,6 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import {
+  Alert,
   View,
   Text,
   StyleSheet,
@@ -18,13 +19,15 @@ import { useFamily } from "../contexts/FamilyContext";
 import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { AppIcon } from "../components/ui/AppIcon";
 import { useRecipes } from "../contexts/RecipeContext";
+import { useCountry } from "../contexts/CountryContext";
 import { RecipeImage } from "../components/recipes/RecipeImage";
-import { Recipe } from "../data/recipes";
+import { Recipe } from "../types/recipes";
 import { RecipeDetailModal } from "../components/modals/RecipeDetailModal";
 import { AddNewRecipeModal } from "../components/modals/AddNewRecipeModal";
 import { CreateCollectionModal } from "../components/modals/CreateCollectionModal";
 import { CollectionDetailModal } from "../components/modals/CollectionDetailModal";
 import { useToast } from "../components/ui/Toast";
+import { ScreenErrorView } from "../components/ui/ScreenErrorView";
 import { Linking } from "react-native";
 import { ImageGalleryModal } from "../components/modals/ImageGalleryModal";
 import { AudioPlayerModal } from "../components/modals/AudioPlayerModal";
@@ -49,11 +52,23 @@ export const RecipesScreen: React.FC = () => {
   const { addGroceryItem } = useFamily();
   const colors = useThemeColors();
   const radius = useThemeRadius();
-  const { recipes, collections, toggleBookmark } = useRecipes();
+  const { recipes, collections, toggleBookmark, removeRecipe } = useRecipes();
+  const { currentCountry } = useCountry();
+  const { showToast } = useToast();
+
+  const [screenError, setScreenError] = useState<string | null>(null);
+  const handleScreenError = useCallback((context: string, error: unknown) => {
+    console.error(`RecipesScreen - ${context}`, error);
+    const message =
+      error instanceof Error ? error.message : typeof error === "string" ? error : "Something went wrong";
+    setScreenError(message);
+  }, []);
+  const resetScreenError = useCallback(() => setScreenError(null), []);
 
   const [showSearch, setShowSearch] = useState(false);
   const [activeTab, setActiveTab] = useState("For You");
   const [query, setQuery] = useState("");
+  const [recipeToEdit, setRecipeToEdit] = useState<Recipe | null>(null);
 
   // Auto-switch to "All Recipes" when searching
   useEffect(() => {
@@ -87,17 +102,21 @@ export const RecipesScreen: React.FC = () => {
     );
   };
 
+  const locationAwareRecipes = useMemo(() => {
+    return recipes.filter(recipe => !recipe.countryCode || recipe.countryCode === currentCountry.code);
+  }, [recipes, currentCountry.code]);
+
   const filteredRecipes = useMemo(() => {
     const lowerQuery = query.toLowerCase();
-    return recipes.filter(
+    return locationAwareRecipes.filter(
       (recipe) =>
         recipe.name.toLowerCase().includes(lowerQuery) ||
         recipe.tags.some((tag) => tag.toLowerCase().includes(lowerQuery))
     );
-  }, [query, recipes]);
+  }, [query, locationAwareRecipes]);
 
   const quickMeals = useMemo(() => {
-    return recipes
+    return locationAwareRecipes
       .filter((r) => {
         const timeVal = parseInt(r.time.split(" ")[0]);
         return timeVal <= 25;
@@ -107,15 +126,15 @@ export const RecipesScreen: React.FC = () => {
         const timeB = parseInt(b.time.split(" ")[0]);
         return timeA - timeB;
       });
-  }, [recipes]);
+  }, [locationAwareRecipes]);
 
-  const favorites = recipes.filter(r => r.saved);
+  const favorites = locationAwareRecipes.filter(r => r.saved);
 
   const recommended = useMemo(() => {
     if (activePreferences.length === 0) {
-      return recipes.slice(0, 4);
+      return locationAwareRecipes.slice(0, 4);
     }
-    return recipes.filter(r =>
+    return locationAwareRecipes.filter(r =>
       r.tags.some(tag => activePreferences.includes(tag)) ||
       activePreferences.some(pref => {
         if (pref === "Quick Meals") return parseInt(r.time) <= 25;
@@ -127,7 +146,7 @@ export const RecipesScreen: React.FC = () => {
         return false;
       })
     );
-  }, [recipes, activePreferences]);
+  }, [locationAwareRecipes, activePreferences]);
 
   // Handle Recipe Click
   const [showImageGallery, setShowImageGallery] = useState(false);
@@ -135,37 +154,55 @@ export const RecipesScreen: React.FC = () => {
 
   // ... (handleRecipePress, toast, handleAddToGroceryList, handleAddCollectionToGrocery, render helpers)
 
-  const handleRecipePress = (recipe: Recipe) => {
-    setSelectedRecipe(recipe);
-
-    if (recipe.url) {
-      let targetUrl = recipe.url;
+  const openRecipeLink = useCallback(async (rawUrl: string) => {
+    try {
+      let targetUrl = rawUrl;
       if (!/^https?:\/\//i.test(targetUrl)) {
         targetUrl = `https://${targetUrl}`;
       }
+      const supported = await Linking.canOpenURL(targetUrl);
+      if (!supported) {
+        showToast({ title: "Error", description: "Invalid link format", type: "warning" });
+        throw new Error("Link cannot be handled");
+      }
+      await Linking.openURL(targetUrl);
+    } catch (error) {
+      handleScreenError("openRecipeLink", error);
+    }
+  }, [handleScreenError, showToast]);
 
-      Linking.canOpenURL(targetUrl).then(supported => {
-        if (supported) {
-          Linking.openURL(targetUrl).catch(err => {
-            console.error("Failed to open URL:", err);
-            showToast({ title: "Error", description: "Could not open link", type: "warning" });
-          });
-        } else {
-          console.warn("Cannot handle URL:", targetUrl);
-          showToast({ title: "Error", description: "Invalid link format", type: "warning" });
-        }
-      }).catch(err => console.error("An error occurred", err));
+  const handleRecipePress = (recipe: Recipe) => {
+    try {
+      const updated = recipes.find((r) => r.id === recipe.id) ?? recipe;
+      setSelectedRecipe(updated);
 
-    } else if (recipe.audio) {
-      setShowAudioPlayer(true);
-    } else if (recipe.images && recipe.images.length > 0) {
-      setShowImageGallery(true);
-    } else {
-      setShowRecipeDetail(true);
+      if (recipe.url) {
+        void openRecipeLink(recipe.url);
+      } else if (recipe.audio) {
+        setShowAudioPlayer(true);
+      } else if (recipe.images && recipe.images.length > 0) {
+        setShowImageGallery(true);
+      } else {
+        setShowRecipeDetail(true);
+      }
+    } catch (error) {
+      handleScreenError("handleRecipePress", error);
     }
   };
 
-  const { showToast } = useToast();
+
+
+  const handleBookmark = (recipe: Recipe) => {
+    try {
+      const nextSaved = toggleBookmark(recipe.id);
+      const updated = recipes.find((r) => r.id === recipe.id) ?? { ...recipe, saved: nextSaved };
+      setSelectedRecipe(updated);
+      return nextSaved;
+    } catch (error) {
+      handleScreenError("handleBookmark", error);
+      return recipe.saved;
+    }
+  };
 
   const handleAddToGroceryList = (recipe: Recipe) => {
     try {
@@ -181,19 +218,23 @@ export const RecipesScreen: React.FC = () => {
       });
       showToast({ title: "Success", description: "Ingredients added to grocery list", type: "success" });
     } catch (error) {
-      console.error(error);
+      handleScreenError("handleAddToGroceryList", error);
       showToast({ title: "Error", description: "Failed to add ingredients", type: "warning" });
     }
   };
 
   const handleAddCollectionToGrocery = (collectionId: number) => {
-    const collection = collections.find(c => c.id === collectionId);
-    if (collection && collection.recipeIds) {
-      const recipesInCollection = recipes.filter(r => collection.recipeIds?.includes(r.id));
-      recipesInCollection.forEach(r => handleAddToGroceryList(r));
-      showToast({ title: "Success", description: `Added recipes from ${collection.name} to list`, type: "success" });
-    } else {
-      showToast({ title: "Info", description: "No recipes in this collection yet", type: "default" });
+    try {
+      const collection = collections.find(c => c.id === collectionId);
+      if (collection && collection.recipeIds) {
+        const recipesInCollection = recipes.filter(r => collection.recipeIds?.includes(r.id));
+        recipesInCollection.forEach(r => handleAddToGroceryList(r));
+        showToast({ title: "Success", description: `Added recipes from ${collection.name} to list`, type: "success" });
+      } else {
+        showToast({ title: "Info", description: "No recipes in this collection yet", type: "default" });
+      }
+    } catch (error) {
+      handleScreenError("handleAddCollectionToGrocery", error);
     }
   };
 
@@ -229,176 +270,213 @@ export const RecipesScreen: React.FC = () => {
     </Pressable>
   );
 
-  const renderForYou = () => (
-    // ... kept same
-    <>
-      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
-        <View style={styles.sectionHeader}>
-          <AppIcon name="sparkles" size={20} color={colors.primary} style={{ marginRight: 8 }} />
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Your Preferences</Text>
+  const renderForYou = () => {
+    if (recipes.length === 0) {
+      return (
+        <View style={[styles.emptyContentCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+          <Text style={[styles.emptyContentTitle, { color: colors.foreground }]}>Add a recipe to unlock this space</Text>
+          <Text style={[styles.emptyContentSubtitle, { color: colors.mutedForeground }]}>
+            Your For You, Quick Meals, and Favorites are generated from recipes and bookmarks you create. Tap + to add your first one.
+          </Text>
         </View>
+      );
+    }
 
-        <View style={styles.tagGroup}>
-          {preferences.map((tag) => {
-            const isActive = activePreferences.includes(tag);
-            return (
-              <Pressable
-                key={tag}
-                style={[
-                  styles.prefTag,
-                  {
-                    backgroundColor: isActive ? colors.primary : colors.muted,
-                    borderRadius: radius.md
-                  }
-                ]}
-                onPress={() => togglePreference(tag)}
-              >
-                <View style={styles.prefIcon}>
-                  <AppIcon
-                    name={
-                      tag === "Vegetarian" ? "leaf" :
-                        tag.includes("Protein") ? "biceps" :
-                          tag.includes("Sugar") ? "droplet" :
-                            tag.includes("Quick") ? "clock" :
-                              tag.includes("Kids") ? "smile" : "heart"
+    return (
+      <>
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+          <View style={styles.sectionHeader}>
+            <AppIcon name="sparkles" size={20} color={colors.primary} style={{ marginRight: 8 }} />
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Your Preferences</Text>
+          </View>
+
+          <View style={styles.tagGroup}>
+            {preferences.map((tag) => {
+              const isActive = activePreferences.includes(tag);
+              return (
+                <Pressable
+                  key={tag}
+                  style={[
+                    styles.prefTag,
+                    {
+                      backgroundColor: isActive ? colors.primary : colors.muted,
+                      borderRadius: radius.md
                     }
-                    size={14}
-                    color={isActive ? colors.primaryForeground : colors.mutedForeground}
-                  />
+                  ]}
+                  onPress={() => togglePreference(tag)}
+                >
+                  <View style={styles.prefIcon}>
+                    <AppIcon
+                      name={
+                        tag === "Vegetarian" ? "leaf" :
+                          tag.includes("Protein") ? "biceps" :
+                            tag.includes("Sugar") ? "droplet" :
+                              tag.includes("Quick") ? "clock" :
+                                tag.includes("Kids") ? "smile" : "heart"
+                      }
+                      size={14}
+                      color={isActive ? colors.primaryForeground : colors.mutedForeground}
+                    />
+                  </View>
+                  <Text style={[styles.prefText, { color: isActive ? colors.primaryForeground : colors.mutedForeground }]}>{tag}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <View style={styles.groceryNoteRow}>
+            <Text style={{ fontSize: 16, marginRight: 8 }}>📦</Text>
+            <Text style={[styles.groceryNote, { color: colors.mutedForeground }]}>4 ingredients available from your grocery list</Text>
+          </View>
+        </View>
+
+        {/* ... keeping other sections ... */}
+        {activePreferences.length > 0 && (
+          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+            <View style={styles.sectionHeader}>
+              <AppIcon name="star" size={20} color={colors.primary} style={{ marginRight: 8 }} />
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+                Recommended For You
+              </Text>
+            </View>
+            {recommended.length > 0 ? recommended.map(renderRecommendedItem) : (
+              <Text style={{ color: colors.mutedForeground, padding: 8 }}>No recipes match these preferences.</Text>
+            )}
+          </View>
+        )}
+
+        {/* Favorites Section */}
+        {favorites.length > 0 && (
+          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+            <View style={styles.sectionHeader}>
+              <AppIcon name="heart" size={20} color={colors.danger} style={{ marginRight: 8 }} />
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+                Your Favorites
+              </Text>
+            </View>
+            {favorites.map(renderRecommendedItem)}
+          </View>
+        )}
+
+        {/* Quick Meals */}
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+          <View style={styles.sectionHeader}>
+            <AppIcon name="clock" size={20} color={colors.primary} style={{ marginRight: 8 }} />
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Quick Meals (Under 25 min)</Text>
+          </View>
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
+            {quickMeals.map((recipe) => (
+              <Pressable
+                key={recipe.id}
+                style={[styles.quickCard, { backgroundColor: colors.muted, borderRadius: radius.lg }]}
+                onPress={() => handleRecipePress(recipe)}
+              >
+                <View style={{ marginBottom: 12, height: 40, justifyContent: 'center' }}>
+                  {renderRecipeImage(recipe.image)}
                 </View>
-                <Text style={[styles.prefText, { color: isActive ? colors.primaryForeground : colors.mutedForeground }]}>{tag}</Text>
+                <Text style={[styles.quickTitle, { color: colors.foreground }]} numberOfLines={2}>{recipe.name}</Text>
+                <Text style={[styles.quickMeta, { color: colors.mutedForeground }]}>{recipe.time}</Text>
               </Pressable>
-            );
-          })}
+            ))}
+          </ScrollView>
         </View>
-        <View style={styles.groceryNoteRow}>
-          <Text style={{ fontSize: 16, marginRight: 8 }}>📦</Text>
-          <Text style={[styles.groceryNote, { color: colors.mutedForeground }]}>4 ingredients available from your grocery list</Text>
-        </View>
-      </View>
 
-      {/* ... keeping other sections ... */}
-      {activePreferences.length > 0 && (
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
-          <View style={styles.sectionHeader}>
-            <AppIcon name="star" size={20} color={colors.primary} style={{ marginRight: 8 }} />
-            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-              Recommended For You
-            </Text>
+        <View style={[styles.planBanner, { backgroundColor: colors.card, borderRadius: radius.card }]}>
+          <View style={styles.planContent}>
+            <Text style={[styles.planTitle, { color: colors.foreground }]}>Plan your week's meals</Text>
+            <Text style={[styles.planMeta, { color: colors.mutedForeground }]}>Auto-generate grocery lists from recipes</Text>
           </View>
-          {recommended.length > 0 ? recommended.map(renderRecommendedItem) : (
-            <Text style={{ color: colors.mutedForeground, padding: 8 }}>No recipes match these preferences.</Text>
-          )}
+          <Pressable
+            style={[styles.planButton, { backgroundColor: colors.primary, borderRadius: radius.md }]}
+            onPress={() => (navigation as any).navigate("home", { screen: "MealPlan" })}
+          >
+            <Text style={[styles.planButtonText, { color: colors.primaryForeground }]}>Plan Now</Text>
+          </Pressable>
         </View>
-      )}
+      </>
+    );
 
-      {/* Favorites Section */}
-      {favorites.length > 0 && (
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
-          <View style={styles.sectionHeader}>
-            <AppIcon name="heart" size={20} color={colors.danger} style={{ marginRight: 8 }} />
-            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-              Your Favorites
-            </Text>
-          </View>
-          {favorites.map(renderRecommendedItem)}
-        </View>
-      )}
-
-      {/* Quick Meals */}
-      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
-        <View style={styles.sectionHeader}>
-          <AppIcon name="clock" size={20} color={colors.primary} style={{ marginRight: 8 }} />
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Quick Meals (Under 25 min)</Text>
-        </View>
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
-          {quickMeals.map((recipe) => (
-            <Pressable
-              key={recipe.id}
-              style={[styles.quickCard, { backgroundColor: colors.muted, borderRadius: radius.lg }]}
-              onPress={() => handleRecipePress(recipe)}
-            >
-              <View style={{ marginBottom: 12, height: 40, justifyContent: 'center' }}>
-                {renderRecipeImage(recipe.image)}
-              </View>
-              <Text style={[styles.quickTitle, { color: colors.foreground }]} numberOfLines={2}>{recipe.name}</Text>
-              <Text style={[styles.quickMeta, { color: colors.mutedForeground }]}>{recipe.time}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      </View>
-
-      <View style={[styles.planBanner, { backgroundColor: colors.card, borderRadius: radius.card }]}>
-        <View style={styles.planContent}>
-          <Text style={[styles.planTitle, { color: colors.foreground }]}>Plan your week's meals</Text>
-          <Text style={[styles.planMeta, { color: colors.mutedForeground }]}>Auto-generate grocery lists from recipes</Text>
-        </View>
-        <Pressable
-          style={[styles.planButton, { backgroundColor: colors.primary, borderRadius: radius.md }]}
-          onPress={() => (navigation as any).navigate("home", { screen: "MealPlan" })}
-        >
-          <Text style={[styles.planButtonText, { color: colors.primaryForeground }]}>Plan Now</Text>
-        </Pressable>
-      </View>
-    </>
-  );
+  };
 
   // ... (renderAllRecipes and renderCollections same)
   const renderAllRecipes = () => (
     <View style={styles.listContainer}>
       {filteredRecipes.map((recipe) => (
-        <Pressable
-          key={recipe.id}
-          style={[styles.recipeCard, { backgroundColor: colors.card, borderRadius: radius.lg }]}
-          onPress={() => handleRecipePress(recipe)}
-        >
-          <View style={[styles.recipeImage, { backgroundColor: colors.muted, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' }]}>
-            {renderRecipeImage(recipe.image)}
-          </View>
-          <View style={styles.recipeInfo}>
-            <View style={styles.recipeHeader}>
-              <Text style={[styles.recipeName, { color: colors.foreground }]}>{recipe.name}</Text>
-              <Pressable onPress={(e) => {
-                e.stopPropagation();
-                toggleBookmark(recipe.id);
-              }}>
+        <View key={recipe.id} style={{ marginBottom: 16 }}>
+          {/* Main Card */}
+          <Pressable
+            style={[styles.recipeCard, { backgroundColor: colors.card, borderRadius: radius.lg }]}
+            onPress={() => handleRecipePress(recipe)}
+          >
+            <View style={[styles.recipeImage, { backgroundColor: colors.muted, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }]}>
+              {renderRecipeImage(recipe.image)}
+              {/* Bookmark Overlay - Top Left */}
+              <Pressable
+                style={{ position: 'absolute', top: 8, left: 8, backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 20, padding: 6 }}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  toggleBookmark(recipe.id);
+                }}
+              >
                 <AppIcon
                   name="bookmark"
-                  size={20}
-                  color={recipe.saved ? colors.primary : colors.mutedForeground}
-                  style={recipe.saved ? { opacity: 1 } : { opacity: 0.5 }}
+                  size={16}
+                  color={recipe.saved ? colors.primary : "#fff"}
+                  style={{ opacity: 1 }}
                 />
               </Pressable>
             </View>
+            <View style={styles.recipeInfo}>
+              <View style={styles.recipeHeader}>
+                <Text style={[styles.recipeName, { color: colors.foreground }]}>{recipe.name}</Text>
+              </View>
 
-            <View style={styles.recipeMetaRow}>
-              {recipe.time ? (
-                <View style={styles.metaItem}>
-                  <AppIcon name="clock" size={14} color={colors.mutedForeground} />
-                  <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.time}</Text>
-                </View>
-              ) : null}
-              {recipe.image !== "AUDIO_ICON" && recipe.image !== "mic" && (
-                <>
+              <View style={styles.recipeMetaRow}>
+                {recipe.time ? (
                   <View style={styles.metaItem}>
-                    <AppIcon name="users" size={14} color={colors.mutedForeground} />
-                    <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.servings}</Text>
+                    <AppIcon name="clock" size={14} color={colors.mutedForeground} />
+                    <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.time}</Text>
                   </View>
-                  <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.ingredients.length} items</Text>
-                </>
-              )}
-            </View>
+                ) : null}
+                {recipe.image !== "AUDIO_ICON" && recipe.image !== "mic" && (
+                  <>
+                    <View style={styles.metaItem}>
+                      <AppIcon name="users" size={14} color={colors.mutedForeground} />
+                      <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.servings}</Text>
+                    </View>
+                    <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.ingredients.length} items</Text>
+                  </>
+                )}
+              </View>
 
-            <View style={styles.tagsRow}>
-              {recipe.tags.map((tag) => (
-                <View key={tag} style={[styles.smallTag, { backgroundColor: 'rgba(46, 94, 153, 0.1)', borderRadius: radius.xs }]}>
-                  <Text style={[styles.smallTagText, { color: colors.primary }]}>{tag}</Text>
-                </View>
-              ))}
+              <View style={styles.tagsRow}>
+                {recipe.tags.map((tag) => (
+                  <View key={tag} style={[styles.smallTag, { backgroundColor: 'rgba(46, 94, 153, 0.1)', borderRadius: radius.xs }]}>
+                    <Text style={[styles.smallTagText, { color: colors.primary }]}>{tag}</Text>
+                  </View>
+                ))}
+              </View>
             </View>
+          </Pressable>
+
+          {/* Action Buttons - Outside the Card */}
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8, gap: 12, paddingHorizontal: 4 }}>
+            <Pressable
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+              onPress={() => handleEditRecipe(recipe)}
+            >
+              <AppIcon name="edit" size={16} color={colors.mutedForeground} />
+              <Text style={{ fontSize: 13, color: colors.mutedForeground, fontWeight: '500' }}>Edit</Text>
+            </Pressable>
+            <Pressable
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+              onPress={() => handleDeleteRecipe(recipe)}
+            >
+              <AppIcon name="trash" size={16} color={colors.danger} />
+              <Text style={{ fontSize: 13, color: colors.danger, fontWeight: '500' }}>Delete</Text>
+            </Pressable>
           </View>
-        </Pressable>
+        </View>
       ))}
       {filteredRecipes.length === 0 && (
         <View style={styles.emptyState}>
@@ -410,27 +488,36 @@ export const RecipesScreen: React.FC = () => {
 
   const renderCollections = () => (
     <>
-      <View style={styles.gridContainer}>
-        {collections.map((collection) => (
-          <Pressable
-            key={collection.id}
-            style={[styles.collectionCard, { backgroundColor: collection.color, borderRadius: radius.card }]}
-            onPress={() => setSelectedCollection(collection)}
-          >
-            <Text style={styles.collectionEmoji}>{collection.name.split(' ')[0]}</Text>
-            <Text style={styles.collectionTitle}>{collection.name.substring(2)}</Text>
-            <Text style={styles.collectionCount}>{collection.count} recipes</Text>
+      {collections.length === 0 ? (
+        <View style={[styles.emptyContentCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+          <Text style={[styles.emptyContentTitle, { color: colors.foreground }]}>No collections yet</Text>
+          <Text style={[styles.emptyContentSubtitle, { color: colors.mutedForeground }]}>
+            Collections group the recipes you add. Tap “Create Collection” below to start curating your own sets.
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.gridContainer}>
+          {collections.map((collection) => (
+            <Pressable
+              key={collection.id}
+              style={[styles.collectionCard, { backgroundColor: collection.color, borderRadius: radius.card }]}
+              onPress={() => setSelectedCollection(collection)}
+            >
+              <Text style={styles.collectionEmoji}>{collection.name.split(' ')[0]}</Text>
+              <Text style={styles.collectionTitle}>{collection.name.substring(2)}</Text>
+              <Text style={styles.collectionCount}>{collection.count} recipes</Text>
 
-            <View style={styles.collectionFooter}>
-              <AppIcon name="chevronRight" size={20} color={colors.mutedForeground} />
-              <Pressable style={[styles.addAllButton, { borderRadius: radius.sm }]} onPress={() => handleAddCollectionToGrocery(collection.id)}>
-                <AppIcon name="shoppingCart" size={14} color={colors.foreground} style={{ marginRight: 4 }} />
-                <Text style={styles.addAllText}>Add All</Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        ))}
-      </View>
+              <View style={styles.collectionFooter}>
+                <AppIcon name="chevronRight" size={20} color={colors.mutedForeground} />
+                <Pressable style={[styles.addAllButton, { borderRadius: radius.sm }]} onPress={() => handleAddCollectionToGrocery(collection.id)}>
+                  <AppIcon name="shoppingCart" size={14} color={colors.foreground} style={{ marginRight: 4 }} />
+                  <Text style={styles.addAllText}>Add All</Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          ))}
+        </View>
+      )}
 
       <Pressable
         style={[styles.createCollectionButton, { backgroundColor: colors.card, borderColor: colors.muted, borderRadius: radius.card }]}
@@ -469,13 +556,66 @@ export const RecipesScreen: React.FC = () => {
       }
     });
 
+  if (screenError) {
+    return (
+      <>
+        <AppLayout showNav={false}>
+          <ScreenErrorView message={screenError} onRetry={resetScreenError} actionLabel="Reload" />
+        </AppLayout>
+        <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} />
+      </>
+    );
+  }
+
+  const handleEditRecipe = (recipe: Recipe) => {
+    setRecipeToEdit(recipe);
+    setShowRecipeDetail(false);
+    setShowAddRecipeModal(true);
+  };
+
+  const handleDeleteRecipe = (recipe: Recipe) => {
+    Alert.alert(
+      "Delete recipe",
+      `Delete ${recipe.name}? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            removeRecipe(recipe.id);
+            showToast({ title: "Deleted", description: `${recipe.name} removed`, type: "default" });
+            setShowRecipeDetail(false);
+            setRecipeToEdit(null);
+          }
+        }
+      ]
+    );
+  };
+
+  const handleOpenAddModal = () => {
+    setRecipeToEdit(null);
+    setShowAddRecipeModal(true);
+  };
+
+  if (screenError) {
+    return (
+      <>
+        <AppLayout showNav={false}>
+          <ScreenErrorView message={screenError} onRetry={resetScreenError} actionLabel="Reload" />
+        </AppLayout>
+        <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} />
+      </>
+    );
+  }
+
   return (
     <>
       <AppLayout showNav={false} onAddPress={() => {
         if (activeTab === "Collections") {
           setShowCreateCollectionModal(true);
         } else {
-          setShowAddRecipeModal(true);
+          handleOpenAddModal();
         }
       }}>
         <GestureDetector gesture={panGesture}>
@@ -564,12 +704,19 @@ export const RecipesScreen: React.FC = () => {
         onOpenChange={setShowRecipeDetail}
         recipe={selectedRecipe}
         onAddToGroceryList={handleAddToGroceryList}
+        onBookmark={(recipe) => handleBookmark(recipe)}
+        onEdit={handleEditRecipe}
+        onDelete={handleDeleteRecipe}
       />
 
       {showAddRecipeModal && (
         <AddNewRecipeModal
           open={showAddRecipeModal}
-          onClose={() => setShowAddRecipeModal(false)}
+          recipe={recipeToEdit ?? undefined}
+          onClose={() => {
+            setShowAddRecipeModal(false);
+            setRecipeToEdit(null);
+          }}
         />
       )}
 
@@ -826,6 +973,24 @@ const styles = StyleSheet.create({
   planButtonText: {
     fontWeight: '700',
     fontSize: 14,
+  },
+  emptyContentCard: {
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+  },
+  emptyContentTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  emptyContentSubtitle: {
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
   },
   // All Recipes
   listContainer: {

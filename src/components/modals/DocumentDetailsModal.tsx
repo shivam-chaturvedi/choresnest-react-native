@@ -13,15 +13,23 @@ import {
 import { X, Edit2, Save } from "lucide-react-native";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { VaultDocument } from "../../contexts/FamilyContext";
-import { useToast } from "../ui/Toast";
+import { NotificationCenter } from "../../services/NotificationCenter";
 import { DateTimePicker } from "../ui/SimpleDatePicker";
+import {
+  formatReminderRuleSummary,
+  getPrimaryReminderField,
+  normalizeReminderOffsets,
+  normalizeReminderTime,
+  REMINDER_OFFSET_OPTIONS,
+  VaultReminderRule,
+} from "../../utils/VaultReminderUtils";
 import FileViewer from 'react-native-file-viewer';
 
 interface DocumentDetailsModalProps {
     visible: boolean;
     onClose: () => void;
     document: VaultDocument | null;
-    onUpdate: (docId: string, memberId: string, updates: Partial<Omit<VaultDocument, "id">>) => void;
+    onUpdate: (docId: string, updates: Partial<Omit<VaultDocument, "id">>) => void;
     onViewImage?: (uri: string) => void;
 }
 
@@ -44,8 +52,29 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
 }) => {
     const colors = useThemeColors();
     const radius = useThemeRadius();
-    const { showToast } = useToast();
+    const pushNotification = (title: string, detail: string, severity: "success" | "warning" | "default" = "default") => {
+        NotificationCenter.addNotification({
+            title,
+            detail,
+            tone:
+                severity === "success"
+                    ? colors.success + "20"
+                    : severity === "warning"
+                        ? colors.warning + "20"
+                        : colors.muted + "50",
+            textColor:
+                severity === "success"
+                    ? colors.success
+                    : severity === "warning"
+                        ? colors.warning
+                        : colors.foreground,
+            icon: severity === "warning" ? "alertCircle" : "file",
+            route: { tab: "home", screen: "Vault" },
+        });
+    };
     const [isEditMode, setIsEditMode] = useState(false);
+
+    const viewUri = document?.uri || document?.filePath || document?.fileUri;
 
     // Form fields
     const [documentName, setDocumentName] = useState('');
@@ -60,6 +89,8 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
     const [serviceDate, setServiceDate] = useState('');
     const [nextServiceDate, setNextServiceDate] = useState('');
     const [cost, setCost] = useState('');
+    const [reminderOffsets, setReminderOffsets] = useState<number[]>([]);
+    const [reminderTime, setReminderTime] = useState('09:00');
     const [nameError, setNameError] = useState('');
 
     useEffect(() => {
@@ -70,14 +101,18 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
             setWarrantyTillDate(document.warrantyTillDate || '');
             setBillAmount(document.billAmount || '');
             setBillDate(document.billDate || '');
-            setProvider(document.provider || '');
-            setPolicyNumber(document.policyNumber || '');
-            setPremiumAmount(document.premiumAmount || '');
-            setServiceDate(document.serviceDate || '');
-            setNextServiceDate(document.nextServiceDate || '');
-            setCost(document.cost || '');
-        }
-    }, [document]);
+        setProvider(document.provider || '');
+        setPolicyNumber(document.policyNumber || '');
+        setPremiumAmount(document.premiumAmount || '');
+        setServiceDate(document.serviceDate || '');
+        setNextServiceDate(document.nextServiceDate || '');
+        setCost(document.cost || '');
+        const reminderField = getPrimaryReminderField(document.type);
+        const reminderRule = reminderField ? (document.reminderRules || []).find(rule => rule.field === reminderField) : undefined;
+        setReminderOffsets(reminderRule?.offsets ? normalizeReminderOffsets(reminderRule.offsets) : [1]);
+        setReminderTime(reminderRule?.timeOfDay || '09:00');
+    }
+}, [document]);
 
     useEffect(() => {
         if (visible) {
@@ -105,7 +140,7 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
         };
 
         try {
-            onUpdate(document.id, document.memberId, {
+            onUpdate(document.id, {
                 name: documentName,
                 type: selectedCategory as any,
                 icon: categoryIcons[selectedCategory] || '📄',
@@ -119,40 +154,106 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                 serviceDate,
                 nextServiceDate,
                 cost,
+                reminderRules: buildReminderRules(),
             });
 
-            showToast({ title: "Success", description: "Document updated successfully.", type: "success" });
+            pushNotification("Document updated", `${documentName} details saved successfully.`, "success");
             setIsEditMode(false);
         } catch (error) {
             console.error("Failed to update document:", error);
-            showToast({ title: "Error", description: "Failed to update document.", type: "warning" });
+            pushNotification("Error", "Failed to update document.", "warning");
         }
 
     };
 
+    const buildReminderRules = (): VaultReminderRule[] => {
+        const field = getPrimaryReminderField(selectedCategory);
+        const normalizedOffsets = normalizeReminderOffsets(reminderOffsets);
+        if (!field || normalizedOffsets.length === 0) {
+            return [];
+        }
+        return [{
+            field,
+            offsets: normalizedOffsets,
+            timeOfDay: normalizeReminderTime(reminderTime),
+        }];
+    };
+
+    const toggleReminderOffset = (value: number) => {
+        setReminderOffsets(prev => {
+            if (prev.includes(value)) {
+                return prev.filter(offset => offset !== value);
+            }
+            return normalizeReminderOffsets([...prev, value]);
+        });
+    };
+
+    const renderReminderSettings = () => {
+        const rules = buildReminderRules();
+        const summary = formatReminderRuleSummary(rules[0]);
+        return (
+            <View style={styles.formGroup}>
+                <Text style={[styles.label, { color: colors.foreground, marginBottom: 8 }]}>Reminder preferences</Text>
+                <View style={styles.reminderSlider}>
+                    {REMINDER_OFFSET_OPTIONS.map(offset => {
+                        const selected = reminderOffsets.includes(offset);
+                        return (
+                            <Pressable
+                                key={offset}
+                                onPress={() => toggleReminderOffset(offset)}
+                                style={[
+                                    styles.reminderOption,
+                                    {
+                                        borderColor: selected ? colors.primary : colors.border,
+                                        backgroundColor: selected ? colors.primary + "20" : colors.background,
+                                        borderRadius: radius.md,
+                                    },
+                                ]}
+                            >
+                                <Text style={{ color: selected ? colors.primary : colors.foreground }}>{offset}d</Text>
+                            </Pressable>
+                        );
+                    })}
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12 }}>
+                    <Text style={{ color: colors.foreground }}>Time</Text>
+                    <TextInput
+                        style={[styles.input, { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.background }]}
+                        value={reminderTime}
+                        onChangeText={setReminderTime}
+                        placeholder="HH:MM"
+                        placeholderTextColor={colors.mutedForeground}
+                        keyboardType="numbers-and-punctuation"
+                    />
+                </View>
+                <Text style={[styles.reminderSummary, { color: colors.mutedForeground }]}>{summary}</Text>
+            </View>
+        );
+    };
+
     const handleViewFile = async () => {
-        if (!document.uri) return;
+        if (!viewUri) return;
 
         const isImage = (uri: string) => {
             const lower = uri.toLowerCase();
             return lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png') || lower.endsWith('.webp') || lower.endsWith('.heic');
         };
 
-        if (!isImage(document.uri)) {
+        if (!isImage(viewUri)) {
             try {
-                await FileViewer.open(document.uri, { showOpenWithDialog: true });
+                await FileViewer.open(viewUri, { showOpenWithDialog: true });
             } catch (e) {
                 console.log('Error opening file:', e);
-                showToast({ title: "Error", description: "Could not open this file.", type: "warning" });
+                pushNotification("Error", "Could not open this file.", "warning");
             }
         } else {
             // It is an image
             if (onViewImage) {
-                onViewImage(document.uri);
+                onViewImage(viewUri);
             } else {
                 // Fallback to FileViewer if no handler provided
                 try {
-                    await FileViewer.open(document.uri);
+                    await FileViewer.open(viewUri);
                 } catch (e) {
                     console.log('Error opening image:', e);
                 }
@@ -160,11 +261,20 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
         }
     };
 
+    const getViewButtonLabel = () => {
+        if (!viewUri) return 'View File';
+        const lower = viewUri.toLowerCase();
+        if (lower.endsWith('.pdf')) return 'View PDF';
+        if (lower.match(/\.(jpg|jpeg|png|webp|heic)$/i)) return 'View Image';
+        return 'View File';
+    };
+
     const renderCategoryFields = () => {
         if (isEditMode) {
+            let editableFields: React.ReactNode = null;
             switch (selectedCategory) {
                 case 'warranty':
-                    return (
+                    editableFields = (
                         <>
                             <View style={styles.formGroup}>
                                 <Text style={[styles.label, { color: colors.foreground }]}>Purchase Date</Text>
@@ -184,8 +294,9 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                             </View>
                         </>
                     );
+                    break;
                 case 'bill':
-                    return (
+                    editableFields = (
                         <>
                             <View style={styles.formGroup}>
                                 <Text style={[styles.label, { color: colors.foreground }]}>Bill Date</Text>
@@ -208,8 +319,9 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                             </View>
                         </>
                     );
+                    break;
                 case 'insurance':
-                    return (
+                    editableFields = (
                         <>
                             <View style={styles.formGroup}>
                                 <Text style={[styles.label, { color: colors.foreground }]}>Insurance Provider</Text>
@@ -244,8 +356,9 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                             </View>
                         </>
                     );
+                    break;
                 case 'service':
-                    return (
+                    editableFields = (
                         <>
                             <View style={styles.formGroup}>
                                 <Text style={[styles.label, { color: colors.foreground }]}>Service Date</Text>
@@ -276,36 +389,50 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                             </View>
                         </>
                     );
+                    break;
                 default:
-                    return null;
+                    editableFields = null;
             }
-        } else {
-            // View mode - show data
-            const fields: Array<{ label: string; value: string | undefined }> = [];
-
-            if (selectedCategory === 'warranty') {
-                if (purchaseDate) fields.push({ label: 'Purchase Date', value: new Date(purchaseDate).toLocaleDateString() });
-                if (warrantyTillDate) fields.push({ label: 'Warranty Valid Till', value: new Date(warrantyTillDate).toLocaleDateString() });
-            } else if (selectedCategory === 'bill') {
-                if (billDate) fields.push({ label: 'Bill Date', value: new Date(billDate).toLocaleDateString() });
-                if (billAmount) fields.push({ label: 'Amount', value: `$${billAmount}` });
-            } else if (selectedCategory === 'insurance') {
-                if (provider) fields.push({ label: 'Provider', value: provider });
-                if (policyNumber) fields.push({ label: 'Policy Number', value: policyNumber });
-                if (premiumAmount) fields.push({ label: 'Premium', value: `$${premiumAmount}` });
-            } else if (selectedCategory === 'service') {
-                if (serviceDate) fields.push({ label: 'Service Date', value: new Date(serviceDate).toLocaleDateString() });
-                if (nextServiceDate) fields.push({ label: 'Next Service', value: new Date(nextServiceDate).toLocaleDateString() });
-                if (cost) fields.push({ label: 'Cost', value: `$${cost}` });
-            }
-
-            return fields.map((field, index) => (
-                <View key={index} style={styles.detailRow}>
-                    <Text style={[styles.detailLabel, { color: colors.mutedForeground }]}>{field.label}</Text>
-                    <Text style={[styles.detailValue, { color: colors.foreground }]}>{field.value}</Text>
-                </View>
-            ));
+            return (
+                <>
+                    {editableFields}
+                    {renderReminderSettings()}
+                </>
+            );
         }
+        const fields: Array<{ label: string; value: string | undefined }> = [];
+
+        if (selectedCategory === 'warranty') {
+            if (purchaseDate) fields.push({ label: 'Purchase Date', value: new Date(purchaseDate).toLocaleDateString() });
+            if (warrantyTillDate) fields.push({ label: 'Warranty Valid Till', value: new Date(warrantyTillDate).toLocaleDateString() });
+        } else if (selectedCategory === 'bill') {
+            if (billDate) fields.push({ label: 'Bill Date', value: new Date(billDate).toLocaleDateString() });
+            if (billAmount) fields.push({ label: 'Amount', value: `$${billAmount}` });
+        } else if (selectedCategory === 'insurance') {
+            if (provider) fields.push({ label: 'Provider', value: provider });
+            if (policyNumber) fields.push({ label: 'Policy Number', value: policyNumber });
+            if (premiumAmount) fields.push({ label: 'Premium', value: `$${premiumAmount}` });
+        } else if (selectedCategory === 'service') {
+            if (serviceDate) fields.push({ label: 'Service Date', value: new Date(serviceDate).toLocaleDateString() });
+            if (nextServiceDate) fields.push({ label: 'Next Service', value: new Date(nextServiceDate).toLocaleDateString() });
+            if (cost) fields.push({ label: 'Cost', value: `$${cost}` });
+        }
+
+        const reminderField = getPrimaryReminderField(selectedCategory);
+        const reminderRule = reminderField ? (document.reminderRules || []).find(rule => rule.field === reminderField) : undefined;
+        if (reminderRule) {
+            fields.push({
+                label: 'Reminders',
+                value: formatReminderRuleSummary(reminderRule),
+            });
+        }
+
+        return fields.map((field, index) => (
+            <View key={index} style={styles.detailRow}>
+                <Text style={[styles.detailLabel, { color: colors.mutedForeground }]}>{field.label}</Text>
+                <Text style={[styles.detailValue, { color: colors.foreground }]}>{field.value}</Text>
+            </View>
+        ));
     };
 
     return (
@@ -421,15 +548,13 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
 
                                 {renderCategoryFields()}
 
-                                {document.uri && (
+                                {viewUri && (
                                     <Pressable
                                         style={[styles.viewFileButton, { backgroundColor: colors.primary, borderRadius: radius.md }]}
                                         onPress={handleViewFile}
                                     >
                                         <Text style={[styles.viewFileButtonText, { color: colors.primaryForeground }]}>
-                                            {document.uri.toLowerCase().endsWith('.pdf') ? 'View PDF' :
-                                                document.uri.match(/\.(jpg|jpeg|png|webp|heic)$/i) ? 'View Image' :
-                                                    'View File'}
+                                            {getViewButtonLabel()}
                                         </Text>
                                     </Pressable>
                                 )}
@@ -582,5 +707,19 @@ const styles = StyleSheet.create({
     saveButtonText: {
         fontSize: 14,
         fontWeight: '600',
+    },
+    reminderSlider: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    reminderOption: {
+        paddingHorizontal: 8,
+        paddingVertical: 6,
+        borderWidth: 1,
+    },
+    reminderSummary: {
+        fontSize: 12,
+        marginTop: 8,
     },
 });

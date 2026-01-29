@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Pressable, Text, View, StyleSheet, Platform } from "react-native";
+import { Pressable, Text, View, StyleSheet, Platform, ViewStyle, TextStyle } from "react-native";
 import RNDateTimePicker from "@react-native-community/datetimepicker";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { Calendar } from "lucide-react-native";
@@ -8,12 +8,16 @@ interface SimpleDatePickerProps {
     value: string; // ISO date string YYYY-MM-DD
     onChange: (date: string) => void;
     placeholder?: string;
+    buttonStyle?: ViewStyle;
+    textStyle?: TextStyle;
 }
 
 export const DateTimePicker: React.FC<SimpleDatePickerProps> = ({
     value,
     onChange,
     placeholder = "Select date",
+    buttonStyle,
+    textStyle,
 }) => {
     const colors = useThemeColors();
     const radius = useThemeRadius();
@@ -44,11 +48,19 @@ export const DateTimePicker: React.FC<SimpleDatePickerProps> = ({
     return (
         <View>
             <Pressable
-                style={[styles.button, { backgroundColor: colors.background, borderColor: colors.border, borderRadius: radius.md }]}
+                style={[
+                    styles.button,
+                    { backgroundColor: colors.background, borderColor: colors.border, borderRadius: radius.md },
+                    buttonStyle,
+                ]}
                 onPress={() => setShow(true)}
             >
                 <Calendar size={16} color={colors.mutedForeground} style={styles.icon} />
-                <Text style={[styles.buttonText, { color: value ? colors.foreground : colors.mutedForeground }]}>
+                <Text style={[
+                    styles.buttonText,
+                    { color: value ? colors.foreground : colors.mutedForeground },
+                    textStyle,
+                ]}>
                     {value ? formatDate(value) : placeholder}
                 </Text>
             </Pressable>

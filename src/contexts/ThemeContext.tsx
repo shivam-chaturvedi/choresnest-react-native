@@ -71,14 +71,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 }
 
                 if (savedShape && (savedShape === 'rounded' || savedShape === 'squared')) {
-                    // Force squared as default - override old 'rounded' preferences
-                    // TODO: Remove this override after all users have migrated
-                    setShapeMode('squared');
-                    AsyncStorage.setItem(THEME_SHAPE_STORAGE_KEY, 'squared').catch(console.error);
+                    setShapeMode(savedShape as ShapeMode);
                 } else {
-                    // No saved preference - set default to 'squared' and save it
-                    setShapeMode('squared');
-                    AsyncStorage.setItem(THEME_SHAPE_STORAGE_KEY, 'squared').catch(console.error);
+                    // Default to 'rounded' as per new design requirement
+                    setShapeMode('rounded');
+                    AsyncStorage.setItem(THEME_SHAPE_STORAGE_KEY, 'rounded').catch(console.error);
                 }
 
                 if (savedMode !== null) {

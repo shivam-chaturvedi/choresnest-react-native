@@ -70,14 +70,22 @@ export const NoteDetailScreen: React.FC = () => {
     // Create new note logic
     useEffect(() => {
         if (folderIdParam && !noteId) {
-            // Check if we already created one in this session to avoid dupes? 
-            // Ideally we create it immediately or wait for first edit.
-            // Let's create immediately so we have an ID to save to.
-            const newId = Date.now().toString();
-            addNote(folderIdParam, { id: newId, title: "Untitled", blocks: [{ id: '1', type: 'text', content: '' }] });
-            setNoteId(newId);
+            let isActive = true;
+            const createNote = async () => {
+                const createdId = await addNote(folderIdParam, {
+                    title: "Untitled",
+                    blocks: [{ id: '1', type: 'text', content: '' }]
+                });
+                if (isActive && createdId) {
+                    setNoteId(createdId);
+                }
+            };
+            createNote();
+            return () => {
+                isActive = false;
+            };
         }
-    }, [folderIdParam]);
+    }, [folderIdParam, noteId, addNote]);
 
     // Auto-save effect
     useEffect(() => {

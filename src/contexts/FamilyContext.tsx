@@ -1,7 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { PROFILE_COLORS } from "../constants/profileColors";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { FamilyService } from "../services/FamilyService";
+import { TaskService } from "../services/TaskService";
+import { VaultService } from "../services/VaultService";
+import { Q } from '@nozbe/watermelondb';
+import { safeParseDate, safeFormat, ensureDate } from "../utils/SafeDateUtils";
 
+// Re-export interfaces (keeping compatibility or updating as needed)
 export interface FamilyMember {
   id: string;
   name: string;
@@ -11,57 +16,36 @@ export interface FamilyMember {
   role?: string;
 }
 
-
-export interface VaultDocument {
-  id: string;
-  name: string;
-  type: "bill" | "warranty" | "insurance" | "service" | "certificate" | "receipt" | "other";
-  icon: string;
-  date: string;
-  expiryDate?: string;
-  memberId: string;
-  sharedWith: string[];
-  uri?: string;
-  // Warranty-specific fields
-  purchaseDate?: string;
-  warrantyTillDate?: string;
-  // Bill-specific fields
-  billAmount?: string;
-  billDate?: string;
-  // Insurance-specific fields
-  provider?: string;
-  policyNumber?: string;
-  premiumAmount?: string;
-  // Service-specific fields
-  serviceDate?: string;
-  nextServiceDate?: string;
-  cost?: string;
-}
-
 export interface CalendarEvent {
   id: string;
   title: string;
-  icon: string;
+  icon?: string;
   date: string;
   time: string;
   endTime?: string;
-  memberId: string;
-  location?: string;
+  memberId?: string;
   description?: string;
   notes?: string;
-  visibility?: "default" | "public" | "private";
-  timeZone?: string;
+  recurrenceRule?: string;
+  recurrenceEndDate?: string;
+  endDate?: string;
   isRecurring?: boolean;
-  recurrenceRule?: string; // "daily", "weekly", etc.
-  recurrenceEndDate?: string; // YYYY-MM-DD
-  endDate?: string; // YYYY-MM-DD for multi-day events
+  location?: string;
+  notificationId?: string;
+  reminderOffsetMinutes?: number;
+  timeZone?: string;
 }
 
-export interface GroceryCategory {
+export interface Task {
   id: string;
   name: string;
-  icon: string;
-  color: string;
+  status: string;
+  priority: string;
+  due: string;
+  date?: string;
+  assignee?: string;
+  tab?: string;
+  icon?: string;
 }
 
 export interface GroceryItem {
@@ -69,364 +53,396 @@ export interface GroceryItem {
   name: string;
   quantity: number;
   unit: string;
-  categoryId: string;
-  addedBy: string;
   completed: boolean;
-  purchasedAt?: string; // ISO string for history tracking
+  addedBy?: string;
+  categoryId?: string;
+  purchasedAt?: string;
 }
 
-export interface Task {
+export interface GroceryCategory {
   id: string;
-  icon: string;
   name: string;
-  status: "pending" | "done";
-  priority: "high" | "medium" | "low";
-  due: string; // Display string like "Today"
-  date: string; // ISO Date YYYY-MM-DD for Calendar
-  assignee: string; // memberId
-  tab: string; // "My Tasks" | "Family Tasks"
+  icon?: string;
+  color?: string;
 }
 
-// ... existing interfaces ...
+import { VaultReminderRule } from "../utils/VaultReminderUtils";
 
-interface FamilyContextType {
-  familyName: string;
-  setFamilyName: (name: string) => void;
-  members: FamilyMember[];
-  activeMember: FamilyMember | null;
-  setActiveMember: (member: FamilyMember) => void;
-  addMember: (member: Omit<FamilyMember, "id">) => void;
-  removeMember: (id: string) => void;
-  updateMemberColor: (id: string, color: string) => void;
-  updateMember: (id: string, updates: Partial<FamilyMember>) => void;
-  globalVault: VaultDocument[];
-  memberVaults: Record<string, VaultDocument[]>;
-  addDocument: (doc: Omit<VaultDocument, "id">) => void;
-  updateDocument: (docId: string, memberId: string, updates: Partial<Omit<VaultDocument, "id">>) => void;
-  shareDocument: (docId: string, memberId: string, targetMemberIds: string[]) => void;
-  events: CalendarEvent[];
-  addEvent: (event: Omit<CalendarEvent, "id">) => void;
-  updateEvent: (id: string, updates: Partial<Omit<CalendarEvent, "id">>) => void;
-  deleteEvent: (id: string) => void;
-  categories: GroceryCategory[];
-  addCategory: (category: Omit<GroceryCategory, "id">) => void;
-  removeCategory: (id: string) => void; // Fixed: was removeGroceryCategory in some versions? No, checking implementation.
-  updateCategory: (id: string, updates: Partial<Omit<GroceryCategory, "id">>) => void;
-  groceryList: GroceryItem[];
-  addGroceryItem: (item: Omit<GroceryItem, "id">) => void;
-  toggleGroceryItem: (id: string) => void;
-  removeGroceryItem: (id: string) => void;
-  tasks: Task[];
-  addTask: (task: Omit<Task, "id">) => void;
-  updateTask: (id: string, updates: Partial<Omit<Task, "id">>) => void;
-  deleteTask: (id: string) => void;
+export interface VaultDocument {
+  id: string;
+  name: string;
+  type: string;
+  icon?: string;
+  date: string;
+  memberId: string;
+  category?: string;
+  expiryDate?: string;
+  fileUri?: string;
+  uri?: string;
+  purchaseDate?: string;
+  warrantyTillDate?: string;
+  billAmount?: string;
+  billDate?: string;
+  provider?: string;
+  policyNumber?: string;
+  premiumAmount?: string;
+  serviceDate?: string;
+  nextServiceDate?: string;
+  cost?: string;
+  reminderRules?: VaultReminderRule[];
 }
 
-const defaultMembers: FamilyMember[] = [
-  { id: "1", name: "Me", symbol: "👤", color: "member-blue", isActive: true },
-];
-
-const defaultGlobalVault: VaultDocument[] = [];
-
-const defaultMemberVaults: Record<string, VaultDocument[]> = {
-  "1": [],
+const formatIsoDate = (value: string | Date | undefined): string => {
+  const fallback = new Date().toISOString().split('T')[0];
+  return safeFormat(value, "yyyy-MM-dd", fallback);
 };
 
-const defaultEvents: CalendarEvent[] = [];
+const mapEventModelToCalendarEvent = (eventModel: any): CalendarEvent => ({
+  id: eventModel.id,
+  title: eventModel.title,
+  icon: eventModel.icon,
+  date: formatIsoDate(eventModel.dateString),
+  time: eventModel.time,
+  endTime: eventModel.endTime,
+  memberId: eventModel.memberId,
+  description: eventModel.description,
+  notes: eventModel.notes,
+  recurrenceRule: eventModel.recurrenceRule,
+  recurrenceEndDate: eventModel.recurrenceEndDate,
+  endDate: eventModel.endDate,
+  isRecurring: eventModel.isRecurring,
+  location: eventModel.location,
+  notificationId: eventModel.notificationId,
+  reminderOffsetMinutes: eventModel.reminderOffsetMinutes,
+  timeZone: eventModel.timeZone,
+});
 
-const defaultCategories: GroceryCategory[] = [
-  { id: "cat1", name: "Dairy", icon: "🥛", color: "#FFE5B4" },
-  { id: "cat2", name: "Bakery", icon: "🍞", color: "#F4A460" },
-  { id: "cat3", name: "Produce", icon: "🥬", color: "#90EE90" },
-  { id: "cat4", name: "Meat & Protein", icon: "🍖", color: "#FFB6C1" },
-  { id: "cat5", name: "Pantry", icon: "🍝", color: "#DDA0DD" },
-  { id: "cat6", name: "Other", icon: "📦", color: "#D3D3D3" },
-];
+const mapTaskModelToTask = (taskModel: any): Task => ({
+  id: taskModel.id,
+  name: taskModel.name,
+  status: taskModel.status,
+  priority: taskModel.priority,
+  due: taskModel.dueDisplay,
+  date: formatIsoDate(taskModel.dateString),
+  assignee: taskModel.assigneeId,
+  tab: taskModel.tab,
+  icon: taskModel.icon,
+});
 
-const defaultGroceryList: GroceryItem[] = [];
-
-const defaultTasks: Task[] = [];
-
-const FamilyContext = createContext<FamilyContextType | undefined>(undefined);
+export const FamilyContext = createContext<any>(undefined);
 
 export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [familyName, setFamilyName] = useState("Family Chores");
-  const [members, setMembers] = useState<FamilyMember[]>(defaultMembers);
-  const [globalVault, setGlobalVault] = useState<VaultDocument[]>(defaultGlobalVault);
-  const [memberVaults, setMemberVaults] = useState<Record<string, VaultDocument[]>>(defaultMemberVaults);
-  const [events, setEvents] = useState<CalendarEvent[]>(defaultEvents);
-  const [groceryList, setGroceryList] = useState<GroceryItem[]>(defaultGroceryList);
-  const [categories, setCategories] = useState<GroceryCategory[]>(defaultCategories);
-  const [tasks, setTasks] = useState<Task[]>(defaultTasks);
+  const [familyName, setFamilyNameState] = useState("Family Chores");
+  const [members, setMembers] = useState<FamilyMember[]>([]);
+  const [events, setEvents] = useState<any[]>([]);
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [globalVault, setGlobalVault] = useState<any[]>([]);
+  const [memberVaults, setMemberVaults] = useState<Record<string, any[]>>({});
+  const [groceryList, setGroceryList] = useState<GroceryItem[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
 
-  const activeMember = members.find((m) => m.isActive) || null;
-
-  // ... useEffect ...
-
-  // ... other functions ...
-
-  const addTask = (task: Omit<Task, "id">) => {
-    const newTask = { ...task, id: Date.now().toString() };
-    setTasks(prev => [...prev, newTask]);
+  const upsertEvent = (eventModel: any) => {
+    const normalized = mapEventModelToCalendarEvent(eventModel);
+    setEvents(prev => {
+      const filtered = prev.filter(ev => ev.id !== normalized.id);
+      return [...filtered, normalized];
+    });
   };
 
-  const updateTask = (id: string, updates: Partial<Omit<Task, "id">>) => {
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+  const removeEvent = (id: string) => {
+    setEvents(prev => prev.filter(ev => ev.id !== id));
   };
 
-  const deleteTask = (id: string) => {
-    setTasks(prev => prev.filter(t => t.id !== id));
+  const upsertTask = (taskModel: any) => {
+    const normalized = mapTaskModelToTask(taskModel);
+    setTasks(prev => {
+      const filtered = prev.filter(tsk => tsk.id !== normalized.id);
+      return [...filtered, normalized];
+    });
   };
 
+  const removeTask = (id: string) => {
+    setTasks(prev => prev.filter(tsk => tsk.id !== id));
+  };
+
+  // --- Load Family Name ---
   useEffect(() => {
-    const loadActiveMember = async () => {
-      try {
-        const savedId = await AsyncStorage.getItem("ACTIVE_MEMBER_ID");
-        if (savedId) {
-          setMembers((prev) => prev.map((m) => ({ ...m, isActive: m.id === savedId })));
-        }
-      } catch (e) {
-        console.error("Failed to load active member", e);
-      }
-    };
-    loadActiveMember();
+    FamilyService.getFamilyName().then(setFamilyNameState);
   }, []);
 
-  const setActiveMember = (member: FamilyMember) => {
+  const setFamilyName = (name: string) => {
     try {
-      if (!member || !member.id) {
-        console.warn("Attempted to set invalid member active");
-        return;
-      }
-      setMembers((prev) => prev.map((m) => ({ ...m, isActive: m.id === member.id })));
-      AsyncStorage.setItem("ACTIVE_MEMBER_ID", member.id).catch(err => {
-        console.error("Failed to save active member ID to storage:", err);
+      setFamilyNameState(name);
+      FamilyService.setFamilyName(name).catch(error => {
+        console.error('Failed to save family name:', error);
+        // Don't throw - name is updated in memory
       });
     } catch (error) {
-      console.error("Error in setActiveMember:", error);
+      console.error('Error setting family name:', error);
     }
   };
 
-  const updateMemberColor = (memberId: string, colorValue: string) => {
+  // --- Observe Members ---
+  useEffect(() => {
     try {
-      if (!memberId || !colorValue) return;
-      setMembers((prev) => prev.map((m) =>
-        m.id === memberId ? { ...m, color: colorValue } : m
-      ));
-    } catch (error) {
-      console.error("Error in updateMemberColor:", error);
-    }
-  };
-
-  const updateMember = (id: string, updates: Partial<Omit<FamilyMember, "id" | "isActive">>) => {
-    try {
-      if (!id || !updates) return;
-      setMembers((prev) => prev.map((m) =>
-        m.id === id ? { ...m, ...updates } : m
-      ));
-    } catch (error) {
-      console.error("Error in updateMember:", error);
-    }
-  };
-
-  const addMember = (member: Omit<FamilyMember, "id" | "isActive">) => {
-    try {
-      if (!member || !member.name) {
-        console.warn("Attempted to add member without name");
-        return;
-      }
-
-      // Attempt to auto-assign a color
-      const usedColors = new Set(members.map(m => m.color));
-      const availableColor = PROFILE_COLORS.find(c => !usedColors.has(c.value))?.value || PROFILE_COLORS[0].value;
-
-      const newMember: FamilyMember = {
-        ...member,
-        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-        color: member.color || availableColor,
-        isActive: false,
-      };
-      setMembers((prev) => [...prev, newMember]);
-      setMemberVaults((prev) => ({ ...prev, [newMember.id]: [] }));
-    } catch (error) {
-      console.error("Error in addMember:", error);
-    }
-  };
-
-  const removeMember = (id: string) => {
-    try {
-      if (!id) return;
-      setMembers((prev) => prev.filter((m) => m.id !== id));
-      setMemberVaults((prev) => {
-        const { [id]: removed, ...rest } = prev;
-        return rest;
-      });
-    } catch (error) {
-      console.error("Error in removeMember:", error);
-    }
-  };
-
-  const addDocument = (doc: Omit<VaultDocument, "id">) => {
-    try {
-      if (!doc || !doc.name) return;
-      const newDoc: VaultDocument = { ...doc, id: Date.now().toString() + Math.random().toString(36).substr(2, 9) };
-      if (doc.memberId === "global") {
-        setGlobalVault((prev) => [...prev, newDoc]);
-      } else {
-        setMemberVaults((prev) => ({
-          ...prev,
-          [doc.memberId]: [...(prev[doc.memberId] || []), newDoc],
-        }));
-      }
-    } catch (error) {
-      console.error("Error in addDocument:", error);
-    }
-  };
-
-  const updateDocument = (docId: string, memberId: string, updates: Partial<Omit<VaultDocument, "id">>) => {
-    try {
-      if (!docId || !memberId || !updates) return;
-      if (memberId === "global") {
-        setGlobalVault((prev) =>
-          prev.map((doc) => (doc.id === docId ? { ...doc, ...updates } : doc))
-        );
-      } else {
-        setMemberVaults((prev) => ({
-          ...prev,
-          [memberId]: (prev[memberId] || []).map((doc) =>
-            doc.id === docId ? { ...doc, ...updates } : doc
-          ),
-        }));
-      }
-    } catch (error) {
-      console.error("Error in updateDocument:", error);
-    }
-  };
-
-  const shareDocument = (docId: string, memberId: string, targetMemberIds: string[]) => {
-    try {
-      if (!docId || !memberId || !targetMemberIds) return;
-      if (memberId === "global") {
-        setGlobalVault((prev) =>
-          prev.map((doc) => (doc.id === docId ? { ...doc, sharedWith: targetMemberIds } : doc))
-        );
-      } else {
-        setMemberVaults((prev) => ({
-          ...prev,
-          [memberId]: (prev[memberId] || []).map((doc) =>
-            doc.id === docId ? { ...doc, sharedWith: targetMemberIds } : doc
-          ),
-        }));
-      }
-    } catch (error) {
-      console.error("Error in shareDocument:", error);
-    }
-  };
-
-  const addEvent = (event: Omit<CalendarEvent, "id">) => {
-    try {
-      if (!event || !event.title) return;
-      const newEvent: CalendarEvent = { ...event, id: Date.now().toString() + Math.random().toString(36).substr(2, 9) };
-      setEvents((prev) => [...prev, newEvent]);
-    } catch (error) {
-      console.error("Error in addEvent:", error);
-    }
-  };
-
-  const updateEvent = (id: string, updates: Partial<Omit<CalendarEvent, "id">>) => {
-    try {
-      if (!id || !updates) return;
-      setEvents((prev) => prev.map((event) =>
-        event.id === id ? { ...event, ...updates } : event
-      ));
-    } catch (error) {
-      console.error("Error in updateEvent:", error);
-    }
-  };
-
-  const deleteEvent = (id: string) => {
-    try {
-      if (!id) return;
-      setEvents((prev) => prev.filter((event) => event.id !== id));
-    } catch (error) {
-      console.error("Error in deleteEvent:", error);
-    }
-  };
-
-  const addGroceryItem = (item: Omit<GroceryItem, "id">) => {
-    try {
-      if (!item || !item.name) return;
-      const newItem: GroceryItem = { ...item, id: Date.now().toString() + Math.random().toString(36).substr(2, 9) };
-      setGroceryList((prev) => [...prev, newItem]);
-    } catch (error) {
-      console.error("Error in addGroceryItem:", error);
-    }
-  };
-
-  const toggleGroceryItem = (id: string) => {
-    try {
-      if (!id) return;
-      setGroceryList((prev) => prev.map((item) => {
-        if (item.id === id) {
-          const isCompleting = !item.completed;
-          return {
-            ...item,
-            completed: isCompleting,
-            purchasedAt: isCompleting ? new Date().toISOString() : undefined
-          };
+      const sub = FamilyService.observeMembers().subscribe({
+        next: (rawMembers) => {
+          try {
+            const mapped = rawMembers.map(m => ({
+              id: m.id,
+              name: m.name,
+              symbol: m.symbol,
+              color: m.color,
+              isActive: m.isActive,
+              role: m.role
+            }));
+            setMembers(mapped);
+          } catch (error) {
+            console.error('Error mapping members:', error);
+          }
+        },
+        error: (error) => {
+          console.error('Error observing members:', error);
         }
-        return item;
+      });
+      return () => sub.unsubscribe();
+    } catch (error) {
+      console.error('Error setting up members subscription:', error);
+    }
+  }, []);
+
+  // --- Active Member Helper ---
+  const activeMember = members.find((m) => m.isActive) || null;
+
+  const setActiveMember = async (member: FamilyMember) => {
+    try {
+      console.log('FamilyContext: Setting active member to:', member.name, member.id);
+      await FamilyService.setActiveMember(member.id);
+      console.log('FamilyContext: Active member updated in database');
+
+      // Force immediate re-fetch to update UI
+      const updatedMembers = await FamilyService.getAllMembers();
+      const mapped = updatedMembers.map(m => ({
+        id: m.id,
+        name: m.name,
+        symbol: m.symbol,
+        color: m.color,
+        isActive: m.isActive,
+        role: m.role
       }));
+      setMembers(mapped);
+      console.log('FamilyContext: Members state updated, new active:', mapped.find(m => m.isActive)?.name);
     } catch (error) {
-      console.error("Error in toggleGroceryItem:", error);
+      console.error('FamilyContext: Error setting active member:', error);
+      throw error;
     }
   };
 
-  const removeGroceryItem = (id: string) => {
+  // --- Observe Events ---
+  useEffect(() => {
     try {
-      if (!id) return;
-      setGroceryList((prev) => prev.filter((item) => item.id !== id));
+      const sub = TaskService.observeEvents().subscribe({
+        next: (rawEvents) => {
+          console.log(`FamilyContext: Received ${rawEvents.length} events from DB`);
+          try {
+            const mapped = rawEvents
+              .filter(e => {
+                const isValid = safeParseDate(e.dateString);
+                if (!isValid) console.warn(`FamilyContext: Invalid date for event ${e.id}: ${e.dateString}`);
+                return isValid;
+              })
+              .map(mapEventModelToCalendarEvent);
+            console.log(`FamilyContext: Updating events state with ${mapped.length} items`);
+            setEvents(mapped);
+          } catch (error) {
+            console.error('Error mapping events:', error);
+          }
+        },
+        error: (error) => {
+          console.error('Error observing events:', error);
+        }
+      });
+      return () => sub.unsubscribe();
     } catch (error) {
-      console.error("Error in removeGroceryItem:", error);
+      console.error('Error setting up events subscription:', error);
+    }
+  }, []);
+
+  // ... (inside observeTasks)
+  useEffect(() => {
+    try {
+      const sub = TaskService.observeTasks().subscribe({
+        next: (rawTasks) => {
+          try {
+            const mapped = rawTasks.map(mapTaskModelToTask);
+            setTasks(mapped);
+          } catch (error) {
+            console.error('Error mapping tasks:', error);
+          }
+        },
+        error: (error) => {
+          console.error('Error observing tasks:', error);
+        }
+      });
+      return () => sub.unsubscribe();
+    } catch (error) {
+      console.error('Error setting up tasks subscription:', error);
+    }
+  }, []);
+
+  const addTask = async (t: any) => {
+    try {
+      const task = await TaskService.addTask(t);
+      upsertTask(task);
+      return task;
+    } catch (error) {
+      console.error('Failed to add task:', error);
+      throw new Error('Failed to add task. Please try again.');
     }
   };
 
-  const addCategory = (category: Omit<GroceryCategory, "id">) => {
+  const updateTask = async (id: string, updates: any) => {
     try {
-      if (!category || !category.name) return;
-      const newCategory: GroceryCategory = { ...category, id: Date.now().toString() + Math.random().toString(36).substr(2, 9) };
-      setCategories((prev) => [...prev, newCategory]);
-    } catch (error) {
-      console.error("Error in addCategory:", error);
-    }
-  };
-
-  const removeCategory = (id: string) => {
-    try {
-      if (!id) return;
-      // Move items from deleted category to "Other" category
-      const otherCategory = categories.find(c => c.name === "Other");
-      if (otherCategory) {
-        setGroceryList((prev) => prev.map((item) =>
-          item.categoryId === id ? { ...item, categoryId: otherCategory.id } : item
-        ));
+      const task = await TaskService.updateTask(id, updates);
+      if (task) {
+        upsertTask(task);
       }
-      setCategories((prev) => prev.filter((cat) => cat.id !== id));
+      return task;
     } catch (error) {
-      console.error("Error in removeCategory:", error);
+      console.error('Failed to update task:', error);
+      throw new Error('Failed to update task. Please try again.');
     }
   };
 
-  const updateCategory = (id: string, updates: Partial<Omit<GroceryCategory, "id">>) => {
+  const deleteTask = async (id: string) => {
     try {
-      if (!id || !updates) return;
-      setCategories((prev) => prev.map((cat) =>
-        cat.id === id ? { ...cat, ...updates } : cat
-      ));
+      return await TaskService.deleteTask(id);
     } catch (error) {
-      console.error("Error in updateCategory:", error);
+      console.error('Failed to delete task:', error);
+      throw new Error('Failed to delete task. Please try again.');
+    } finally {
+      removeTask(id);
     }
   };
+
+  const addEvent = async (e: any) => {
+    try {
+      const event = await TaskService.addEvent(e);
+      upsertEvent(event);
+      return event;
+    } catch (error) {
+      console.error('Failed to add event:', error);
+      throw new Error('Failed to add event. Please try again.');
+    }
+  };
+
+  const updateEvent = async (id: string, updates: any) => {
+    try {
+      const event = await TaskService.updateEvent(id, updates);
+      if (event) {
+        upsertEvent(event);
+      }
+      return event;
+    } catch (error) {
+      console.error('Failed to update event:', error);
+      throw new Error('Failed to update event. Please try again.');
+    }
+  };
+
+  const deleteEvent = async (id: string) => {
+    try {
+      return await TaskService.deleteEvent(id);
+    } catch (error) {
+      console.error('Failed to delete event:', error);
+      throw new Error('Failed to delete event. Please try again.');
+    } finally {
+      removeEvent(id);
+    }
+  };
+
+  // --- Observe Vault ---
+  useEffect(() => {
+    try {
+      const sub = VaultService.observeAllDocuments().subscribe({
+        next: (docs) => {
+          try {
+            const g: any[] = [];
+            const m: Record<string, any[]> = {};
+
+            docs.forEach(d => {
+              const meta = d.meta || {};
+              const docObj = {
+                id: d.id,
+                name: d.name,
+                type: d.type,
+                icon: d.icon,
+                date: d.date,
+                memberId: d.memberId,
+                filePath: d.filePath,
+                uri: d.filePath, // Map for VaultUtils
+                fileUri: d.filePath, // Alias
+                ...meta,  // Merge meta fields (expiryDate, etc.) to top level
+              };
+              if (d.memberId === 'global') {
+                g.push(docObj);
+              } else {
+                if (!m[d.memberId]) m[d.memberId] = [];
+                m[d.memberId].push(docObj);
+              }
+            });
+            setGlobalVault(g);
+            setMemberVaults(m);
+          } catch (error) {
+            console.error('Error processing vault documents:', error);
+          }
+        },
+        error: (error) => {
+          console.error('Error observing vault:', error);
+        }
+      });
+      return () => sub.unsubscribe();
+    } catch (error) {
+      console.error('Error setting up vault subscription:', error);
+    }
+  }, []);
+
+  // --- Observe Grocery List ---
+  useEffect(() => {
+    try {
+      const sub = TaskService.observeShoppingListItems().subscribe({
+        next: (items) => {
+          try {
+            // Map to grocery list format
+            const mapped = items.map(i => {
+              const purchasedAtIso = typeof i.purchasedAt === 'number' ? new Date(i.purchasedAt).toISOString() : undefined;
+              return {
+                id: i.id,
+                name: i.name,
+                quantity: i.quantity,
+                unit: i.unit,
+                completed: i.isCompleted,
+                categoryId: i.categoryId,
+                addedBy: i.addedById,
+                purchasedAt: purchasedAtIso,
+              };
+            });
+            setGroceryList(mapped);
+          } catch (error) {
+            console.error('Error mapping grocery items:', error);
+          }
+        },
+        error: (error) => {
+          console.error('Error observing grocery list:', error);
+        }
+      });
+      return () => sub.unsubscribe();
+    } catch (error) {
+      console.error('Error setting up grocery list subscription:', error);
+    }
+  }, []);
+
+
+  // ... Expose methods ...
 
   return (
     <FamilyContext.Provider
@@ -436,31 +452,34 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         members,
         activeMember,
         setActiveMember,
-        addMember,
-        removeMember,
-        updateMemberColor,
-        updateMember,
+        addMember: (m: any) => FamilyService.addMember(m.name, m.symbol, m.color, m.isActive ?? false),
+        removeMember: (id: string) => FamilyService.deleteMember(id),
+        updateMember: (id: string, u: any) => FamilyService.updateMember(id, u),
+        updateMemberColor: (id: string, c: string) => FamilyService.updateMember(id, { color: c }),
+
         globalVault,
         memberVaults,
-        addDocument,
-        updateDocument,
-        shareDocument,
+        addDocument: VaultService.addDocument,
+        updateDocument: VaultService.updateDocument,
+        // shareDocument
+
         events,
         addEvent,
         updateEvent,
         deleteEvent,
-        categories,
-        addCategory,
-        removeCategory,
-        updateCategory,
+
         groceryList,
-        addGroceryItem,
-        toggleGroceryItem,
-        removeGroceryItem,
+        addGroceryItem: TaskService.addGroceryItem,
+        toggleGroceryItem: TaskService.toggleGroceryItem,
+        removeGroceryItem: TaskService.removeGroceryItem,
+
         tasks,
         addTask,
         updateTask,
         deleteTask,
+
+        categories: [], // TODO: ListCategoryService
+        addCategory: () => { },
       }}
     >
       {children}

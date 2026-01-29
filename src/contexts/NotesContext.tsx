@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import { database } from '../database';
+import { Folder as DbFolder, Note as DbNote } from '../database/models/Note';
+import { Q } from '@nozbe/watermelondb';
 
 // Types
 export interface NoteBlock {
@@ -18,6 +20,7 @@ export interface Note {
     updatedAt: string;
     blocks: NoteBlock[];
     isStarred?: boolean;
+    folderId: string;
 }
 
 export interface Folder {
@@ -29,165 +32,187 @@ export interface Folder {
 
 interface NotesContextType {
     folders: Folder[];
-    addFolder: (title: string) => void;
-    deleteFolder: (id: string) => void;
-    addNote: (folderId: string, note?: Partial<Note>) => void;
-    updateNote: (noteId: string, updates: Partial<Note>) => void;
-    deleteNote: (noteId: string) => void;
+    addFolder: (title: string) => Promise<void>;
+    deleteFolder: (id: string) => Promise<void>;
+    addNote: (folderId: string, note?: Partial<Note>) => Promise<string | null>;
+    updateNote: (noteId: string, updates: Partial<Note>) => Promise<void>;
+    deleteNote: (noteId: string) => Promise<void>;
     getNote: (noteId: string) => Note | undefined;
 }
 
 const NotesContext = createContext<NotesContextType | undefined>(undefined);
 
-const STORAGE_KEY = '@familychore:notes_data_v1';
-
-const initialFolders: Folder[] = [
-    {
-        id: "f1",
-        title: "Personal",
-        icon: "user",
-        notes: [
-            {
-                id: "1",
-                title: "Grocery List Ideas",
-                preview: "Milk, almond butter...",
-                tag: "Personal",
-                color: "#FEF3C7",
-                updatedAt: new Date().toISOString(),
-                blocks: [
-                    { id: 'b1', type: 'text', content: 'Milk' },
-                    { id: 'b2', type: 'text', content: 'Almond Butter' },
-                ]
-            },
-        ]
-    },
-    {
-        id: "f2",
-        title: "Work Projects",
-        icon: "briefcase",
-        notes: []
-    },
-];
-
 export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [folders, setFolders] = useState<Folder[]>(initialFolders);
+    const [folderMeta, setFolderMeta] = useState<{ id: string; title: string; icon: string }[]>([]);
+    const [notes, setNotes] = useState<Note[]>([]);
 
-    // Load from storage
-    useEffect(() => {
-        const loadNotes = async () => {
-            try {
-                const json = await AsyncStorage.getItem(STORAGE_KEY);
-                if (json) {
-                    setFolders(JSON.parse(json));
-                }
-            } catch (error) {
-                console.error("Failed to load notes from storage:", error);
+    const folders = useMemo(() => {
+        return folderMeta.map(folder => ({
+            ...folder,
+            notes: notes.filter(note => note.folderId === folder.id),
+        }));
+    }, [folderMeta, notes]);
+
+    const ensureDefaultFolder = useCallback(async () => {
+        try {
+            const collection = database.get<DbFolder>('folders');
+            const existing = await collection.query().fetch();
+            if (existing.length === 0) {
+                await database.write(async () => {
+                    await collection.create(folder => {
+                        folder.title = 'Notes';
+                        folder.icon = 'file';
+                    });
+                });
             }
-        };
-        loadNotes();
+        } catch (error) {
+            console.error("Failed to ensure notes folder:", error);
+        }
     }, []);
 
-    // Save to storage
     useEffect(() => {
-        const saveNotes = async () => {
-            try {
-                await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(folders));
-            } catch (error) {
-                console.error("Failed to save notes to storage:", error);
-            }
-        };
-        saveNotes();
-    }, [folders]);
+        ensureDefaultFolder();
+    }, [ensureDefaultFolder]);
 
-    const addFolder = (title: string) => {
+    useEffect(() => {
+        const collection = database.get<DbFolder>('folders');
+        const subscription = collection.query().observe().subscribe({
+            next: (records) => {
+                setFolderMeta(records.map(record => ({
+                    id: record.id,
+                    title: record.title,
+                    icon: record.icon,
+                })));
+            },
+            error: (error) => console.error("Notes folder subscription failed", error),
+        });
+        return () => subscription.unsubscribe();
+    }, []);
+
+    useEffect(() => {
+        const collection = database.get<DbNote>('notes');
+        const subscription = collection.query().observe().subscribe({
+            next: (records) => {
+                const mapped = records
+                    .map(record => ({
+                        id: record.id,
+                        title: record.title,
+                        preview: record.preview || 'No content',
+                        tag: record.tag || 'General',
+                        color: record.color,
+                        updatedAt: new Date(record.updatedAt).toISOString(),
+                        blocks: Array.isArray(record.blocks) ? record.blocks : [],
+                        isStarred: record.isStarred,
+                        folderId: record.folderId,
+                    }))
+                    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+                setNotes(mapped);
+            },
+            error: (error) => console.error("Notes subscription failed", error),
+        });
+        return () => subscription.unsubscribe();
+    }, []);
+
+    const addFolder = useCallback(async (title: string) => {
         try {
             if (!title) return;
-            const newFolder: Folder = {
-                id: Date.now().toString(),
-                title,
-                icon: 'folder',
-                notes: []
-            };
-            setFolders(prev => [...prev, newFolder]);
+            await database.write(async () => {
+                await database.get<DbFolder>('folders').create(folder => {
+                    folder.title = title;
+                    folder.icon = 'folder';
+                });
+            });
         } catch (error) {
             console.error("Error adding folder:", error);
         }
-    };
+    }, []);
 
-    const deleteFolder = (id: string) => {
+    const deleteFolder = useCallback(async (id: string) => {
         try {
             if (!id) return;
-            setFolders(prev => prev.filter(f => f.id !== id));
+            await database.write(async () => {
+                const notesCollection = database.get<DbNote>('notes');
+                const folderNotes = await notesCollection.query(Q.where('folder_id', id)).fetch();
+                await Promise.all(folderNotes.map(note => note.destroyPermanently()));
+                const folder = await database.get<DbFolder>('folders').find(id);
+                await folder.destroyPermanently();
+            });
         } catch (error) {
             console.error("Error deleting folder:", error);
         }
+    }, []);
+
+    const computePreview = (noteData?: Partial<Note>) => {
+        const candidate = noteData?.blocks?.find(block => block.content?.trim());
+        if (candidate && candidate.content) {
+            return candidate.content.trim().slice(0, 80);
+        }
+        if (noteData?.preview) return noteData.preview;
+        return 'No content';
     };
 
-    const addNote = (folderId: string, noteData?: Partial<Note>) => {
+    const addNote = useCallback(async (folderId: string, noteData?: Partial<Note>) => {
+        if (!folderId) return null;
         try {
-            if (!folderId) return;
-            const newNote: Note = {
-                id: Date.now().toString(),
-                title: noteData?.title || 'Untitled',
-                preview: noteData?.preview || 'No content',
-                tag: 'General',
-                color: '#fff',
-                updatedAt: new Date().toISOString(),
-                blocks: noteData?.blocks || [{ id: '1', type: 'text', content: '' }]
-            };
-
-            setFolders(prev => prev.map(folder => {
-                if (folder.id === folderId) {
-                    return { ...folder, notes: [newNote, ...folder.notes] };
-                }
-                return folder;
-            }));
+            let createdId: string | null = null;
+            await database.write(async () => {
+                const note = await database.get<DbNote>('notes').create(record => {
+                    record.title = noteData?.title || 'Untitled';
+                    record.preview = computePreview(noteData);
+                    record.tag = noteData?.tag || 'General';
+                    record.color = noteData?.color || '#fff';
+                    record.isStarred = noteData?.isStarred || false;
+                    record.updatedAt = Date.now();
+                    record.folderId = folderId;
+                    record.blocks = noteData?.blocks || [{ id: '1', type: 'text', content: '' }];
+                });
+                createdId = note.id;
+            });
+            return createdId;
         } catch (error) {
             console.error("Error adding note:", error);
+            return null;
         }
-    };
+    }, []);
 
-    const updateNote = (noteId: string, updates: Partial<Note>) => {
+    const updateNote = useCallback(async (noteId: string, updates: Partial<Note>) => {
+        if (!noteId) return;
         try {
-            if (!noteId || !updates) return;
-            setFolders(prev => prev.map(folder => ({
-                ...folder,
-                notes: folder.notes.map(note => {
-                    if (note.id === noteId) {
-                        return { ...note, ...updates, updatedAt: new Date().toISOString() };
+            await database.write(async () => {
+                const note = await database.get<DbNote>('notes').find(noteId);
+                await note.update(record => {
+                    if (updates.title !== undefined) record.title = updates.title;
+                    if (updates.preview !== undefined) record.preview = updates.preview;
+                    if (updates.tag !== undefined) record.tag = updates.tag;
+                    if (updates.color !== undefined) record.color = updates.color;
+                    if (updates.blocks !== undefined) {
+                        record.blocks = updates.blocks;
                     }
-                    return note;
-                })
-            })));
+                    if (updates.isStarred !== undefined) record.isStarred = updates.isStarred;
+                    record.updatedAt = Date.now();
+                });
+            });
         } catch (error) {
             console.error("Error updating note:", error);
         }
-    };
+    }, []);
 
-    const deleteNote = (noteId: string) => {
+    const deleteNote = useCallback(async (noteId: string) => {
+        if (!noteId) return;
         try {
-            if (!noteId) return;
-            setFolders(prev => prev.map(folder => ({
-                ...folder,
-                notes: folder.notes.filter(n => n.id !== noteId)
-            })));
+            await database.write(async () => {
+                const note = await database.get<DbNote>('notes').find(noteId);
+                await note.destroyPermanently();
+            });
         } catch (error) {
             console.error("Error deleting note:", error);
         }
-    };
+    }, []);
 
-    const getNote = (noteId: string) => {
-        try {
-            if (!noteId) return undefined;
-            for (const folder of folders) {
-                const note = folder.notes.find(n => n.id === noteId);
-                if (note) return note;
-            }
-        } catch (error) {
-            console.error("Error getting note:", error);
-        }
-        return undefined;
-    };
+    const getNote = useCallback((noteId: string) => {
+        if (!noteId) return undefined;
+        return notes.find(note => note.id === noteId);
+    }, [notes]);
 
     return (
         <NotesContext.Provider value={{ folders, addFolder, deleteFolder, addNote, updateNote, deleteNote, getNote }}>

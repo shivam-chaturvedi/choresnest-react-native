@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { AppIcon } from '../ui/AppIcon';
 import { useThemeColors } from '../../contexts/ThemeContext';
-import { recipes } from '../../data/recipes';
+import { useRecipes } from '../../contexts/RecipeContext';
 
 interface AddMealModalProps {
     open: boolean;
@@ -23,6 +23,7 @@ export const AddMealModal: React.FC<AddMealModalProps> = ({
     onSelectRecipe,
 }) => {
     const colors = useThemeColors();
+    const { recipes } = useRecipes();
 
     return (
         <Modal

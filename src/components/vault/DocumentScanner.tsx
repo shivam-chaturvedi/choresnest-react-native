@@ -13,8 +13,16 @@ import {
 import { Camera, Upload, X } from "lucide-react-native";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { captureImage, pickDocument, SavedDocument } from "../../utils/DocumentUtils";
-import { useToast } from "../ui/Toast";
+import { NotificationCenter } from "../../services/NotificationCenter";
 import { DateTimePicker } from "../ui/SimpleDatePicker";
+import {
+  formatReminderRuleSummary,
+  getPrimaryReminderField,
+  normalizeReminderOffsets,
+  normalizeReminderTime,
+  REMINDER_OFFSET_OPTIONS,
+  VaultReminderRule,
+} from "../../utils/VaultReminderUtils";
 
 interface DocumentScannerProps {
     open: boolean;
@@ -46,16 +54,15 @@ const CATEGORIES = [
 ];
 
 const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
-    open,
-    onOpenChange,
-    onDocumentSaved,
+  open,
+  onOpenChange,
+  onDocumentSaved,
 }) => {
-    const colors = useThemeColors();
-    const radius = useThemeRadius();
-    const { showToast } = useToast();
-    const [loading, setLoading] = useState(false);
-    const [step, setStep] = useState<'upload' | 'form'>('upload');
-    const [selectedFile, setSelectedFile] = useState<SavedDocument | null>(null);
+  const colors = useThemeColors();
+  const radius = useThemeRadius();
+  const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState<'upload' | 'form'>('upload');
+  const [selectedFile, setSelectedFile] = useState<SavedDocument | null>(null);
 
     // Form fields
     const [documentName, setDocumentName] = useState('');
@@ -79,8 +86,10 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
     const [serviceDate, setServiceDate] = useState('');
     const [nextServiceDate, setNextServiceDate] = useState('');
     const [cost, setCost] = useState('');
+    const [reminderOffsets, setReminderOffsets] = useState<number[]>([1]);
+    const [reminderTime, setReminderTime] = useState('09:00');
 
-    const resetForm = () => {
+  const resetForm = () => {
         setStep('upload');
         setSelectedFile(null);
         setDocumentName('');
@@ -96,11 +105,37 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
         setServiceDate('');
         setNextServiceDate('');
         setCost('');
+        setReminderOffsets([1]);
+        setReminderTime('09:00');
     };
+
+    const pushNotification = (title: string, detail: string, severity: "success" | "warning" | "default") => {
+    NotificationCenter.addNotification({
+      title,
+      detail,
+      tone:
+        severity === "success"
+          ? colors.success + "20"
+          : severity === "warning"
+            ? colors.warning + "20"
+            : colors.muted + "50",
+      textColor:
+        severity === "success"
+          ? colors.success
+          : severity === "warning"
+            ? colors.warning
+            : colors.foreground,
+      icon: severity === "warning" ? "alertCircle" : "file",
+      route: { tab: "home", screen: "Vault" },
+    });
+  };
 
     // if (!open) return null; // Logic handled by wrapper
 
     const handleCamera = async () => {
+        if (loading) {
+            return;
+        }
         setLoading(true);
         try {
             const doc = await captureImage();
@@ -111,13 +146,16 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
             }
         } catch (error) {
             console.error(error);
-            showToast({ title: "Error", description: "Failed to capture image.", type: "warning" });
+            pushNotification("Error", "Failed to capture image.", "warning");
         } finally {
             setLoading(false);
         }
     };
 
     const handleUpload = async () => {
+        if (loading) {
+            return;
+        }
         setLoading(true);
         try {
             const doc = await pickDocument();
@@ -128,7 +166,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
             }
         } catch (error) {
             console.error(error);
-            showToast({ title: "Error", description: "Failed to upload document.", type: "warning" });
+            pushNotification("Error", "Failed to upload document.", "warning");
         } finally {
             setLoading(false);
         }
@@ -140,31 +178,28 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
             return;
         }
         if (!selectedCategory) {
-            showToast({
-                title: "Category Required",
-                description: "Please select a category for your document.",
-                type: "warning"
-            });
+            pushNotification("Category Required", "Please select a category for your document.", "warning");
             return;
         }
 
-        if (selectedFile) {
-            onDocumentSaved?.({
-                ...selectedFile,
-                documentName,
-                category: selectedCategory,
-                purchaseDate,
-                warrantyTillDate,
-                billAmount,
-                billDate,
-                provider,
-                policyNumber,
-                premiumAmount,
-                serviceDate,
-                nextServiceDate,
-                cost,
-            });
-            showToast({ title: "Success", description: "Document saved successfully.", type: "success" });
+    if (selectedFile) {
+        onDocumentSaved?.({
+            ...selectedFile,
+            documentName,
+            category: selectedCategory,
+            purchaseDate,
+            warrantyTillDate,
+            billAmount,
+            billDate,
+            provider,
+            policyNumber,
+            premiumAmount,
+            serviceDate,
+            nextServiceDate,
+            cost,
+            reminderRules: buildReminderRules(),
+        });
+        pushNotification("Document saved", `${documentName} added to the vault.`, "success");
             resetForm();
             onOpenChange(false);
         }
@@ -172,7 +207,29 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
 
     const handleClose = () => {
         resetForm();
-        onOpenChange(false);
+    onOpenChange(false);
+};
+
+    const buildReminderRules = (): VaultReminderRule[] => {
+        const field = getPrimaryReminderField(selectedCategory);
+        const normalizedOffsets = normalizeReminderOffsets(reminderOffsets);
+        if (!field || normalizedOffsets.length === 0) {
+            return [];
+        }
+        return [{
+            field,
+            offsets: normalizedOffsets,
+            timeOfDay: normalizeReminderTime(reminderTime),
+        }];
+    };
+
+    const toggleReminderOffset = (value: number) => {
+        setReminderOffsets(prev => {
+            if (prev.includes(value)) {
+                return prev.filter(offset => offset !== value);
+            }
+            return normalizeReminderOffsets([...prev, value]);
+        });
     };
 
     const renderCategoryFields = () => {
@@ -295,6 +352,49 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
         }
     };
 
+    const renderReminderSettings = () => {
+        const rules = buildReminderRules();
+        const summary = formatReminderRuleSummary(rules[0]);
+        return (
+            <View style={styles.formGroup}>
+                <Text style={[styles.label, { color: colors.foreground, marginBottom: 8 }]}>Reminder preferences</Text>
+                <View style={styles.reminderSlider}>
+                    {REMINDER_OFFSET_OPTIONS.map(offset => {
+                        const selected = reminderOffsets.includes(offset);
+                        return (
+                            <Pressable
+                                key={offset}
+                                onPress={() => toggleReminderOffset(offset)}
+                                style={[
+                                    styles.reminderOption,
+                                    {
+                                        borderColor: selected ? colors.primary : colors.border,
+                                        backgroundColor: selected ? colors.primary + "20" : colors.background,
+                                        borderRadius: radius.md,
+                                    },
+                                ]}
+                            >
+                                <Text style={{ color: selected ? colors.primary : colors.foreground }}>{offset}d</Text>
+                            </Pressable>
+                        );
+                    })}
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12 }}>
+                    <Text style={{ color: colors.foreground }}>Time</Text>
+                    <TextInput
+                        style={[styles.input, { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.background }]}
+                        value={reminderTime}
+                        onChangeText={setReminderTime}
+                        placeholder="HH:MM"
+                        placeholderTextColor={colors.mutedForeground}
+                        keyboardType="numbers-and-punctuation"
+                    />
+                </View>
+                <Text style={[styles.reminderSummary, { color: colors.mutedForeground }]}>{summary}</Text>
+            </View>
+        );
+    };
+
     return (
         <Modal
             visible={open}
@@ -397,6 +497,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
                             </View>
 
                             {renderCategoryFields()}
+                            {renderReminderSettings()}
 
                             <View style={styles.buttonGroup}>
                                 <Pressable
@@ -554,5 +655,19 @@ const styles = StyleSheet.create({
     saveButtonText: {
         fontSize: 14,
         fontWeight: '600',
+    },
+    reminderSlider: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    reminderOption: {
+        paddingHorizontal: 8,
+        paddingVertical: 6,
+        borderWidth: 1,
+    },
+    reminderSummary: {
+        fontSize: 12,
+        marginTop: 8,
     },
 });

@@ -129,6 +129,14 @@ export const MoreScreen: React.FC = () => {
           route: "Theme"
         },
         {
+          label: "Localization",
+          description: "Country, currency & time zone",
+          icon: "globe",
+          color: colors.info + '25',
+          iconColor: colors.info,
+          route: "Settings"
+        },
+        {
           label: "Data Export",
           description: "Backup your data",
           icon: "download",
@@ -331,7 +339,7 @@ export const MoreScreen: React.FC = () => {
               </Pressable>
             </View>
             <ScrollView contentContainerStyle={{ gap: 12 }}>
-              {members?.map(member => {
+              {members?.map((member: FamilyMember) => {
                 const isActive = member.id === activeMember?.id;
                 const memColor = PROFILE_COLORS.find(c => c.value === member.color)?.hex || colors.primary;
 

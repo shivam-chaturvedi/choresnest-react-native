@@ -55,59 +55,97 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     const login = async (email: string, pass: string) => {
-        setIsLoading(true);
-        // Simulate API call
-        await new Promise<void>(resolve => setTimeout(resolve, 1000));
+        try {
+            setIsLoading(true);
+            // Simulate API call
+            await new Promise<void>(resolve => setTimeout(resolve, 1000));
 
-        // Mock user
-        const newUser: User = { id: "u1", email, name: "User" };
-        setUser(newUser);
-        setIsGuest(false);
-        setHasCompletedOnboarding(true); // Ensure this is true on login
+            // Mock user
+            const newUser: User = { id: "u1", email, name: "User" };
+            setUser(newUser);
+            setIsGuest(false);
+            setHasCompletedOnboarding(true); // Ensure this is true on login
 
-        await AsyncStorage.setItem("AUTH_USER", JSON.stringify(newUser));
-        await AsyncStorage.removeItem("IS_GUEST");
-        await AsyncStorage.setItem("HAS_COMPLETED_ONBOARDING", "true");
-        setIsLoading(false);
+            await AsyncStorage.setItem("AUTH_USER", JSON.stringify(newUser));
+            await AsyncStorage.removeItem("IS_GUEST");
+            await AsyncStorage.setItem("HAS_COMPLETED_ONBOARDING", "true");
+        } catch (error) {
+            console.error("Login failed:", error);
+            // Re-throw with user-friendly message
+            throw new Error("Failed to log in. Please try again.");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const loginAsGuest = async () => {
-        setIsLoading(true);
-        setIsGuest(true);
-        setUser(null);
-        setHasCompletedOnboarding(true); // Ensure this is true on login
+        try {
+            setIsLoading(true);
+            setIsGuest(true);
+            setUser(null);
+            setHasCompletedOnboarding(true); // Ensure this is true on login
 
-        await AsyncStorage.setItem("IS_GUEST", "true");
-        await AsyncStorage.removeItem("AUTH_USER");
-        await AsyncStorage.setItem("HAS_COMPLETED_ONBOARDING", "true");
-        setIsLoading(false);
+            await AsyncStorage.setItem("IS_GUEST", "true");
+            await AsyncStorage.removeItem("AUTH_USER");
+            await AsyncStorage.setItem("HAS_COMPLETED_ONBOARDING", "true");
+        } catch (error) {
+            console.error("Guest login failed:", error);
+            // Re-throw with user-friendly message
+            throw new Error("Failed to continue as guest. Please try again.");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const logout = async () => {
-        setIsLoading(true);
-        setUser(null);
-        setIsGuest(false);
+        try {
+            setIsLoading(true);
+            setUser(null);
+            setIsGuest(false);
 
-        // We DO NOT clear HAS_COMPLETED_ONBOARDING here
-        await AsyncStorage.removeItem("AUTH_USER");
-        await AsyncStorage.removeItem("IS_GUEST");
-        setIsLoading(false);
+            // We DO NOT clear HAS_COMPLETED_ONBOARDING here
+            await AsyncStorage.removeItem("AUTH_USER");
+            await AsyncStorage.removeItem("IS_GUEST");
+        } catch (error) {
+            console.error("Logout failed:", error);
+            // Don't throw - logout should always succeed from UI perspective
+            // Even if storage fails, we clear the state
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const completeOnboarding = async () => {
-        setHasCompletedOnboarding(true);
-        await AsyncStorage.setItem("HAS_COMPLETED_ONBOARDING", "true");
+        try {
+            setHasCompletedOnboarding(true);
+            await AsyncStorage.setItem("HAS_COMPLETED_ONBOARDING", "true");
+        } catch (error) {
+            console.error("Failed to save onboarding completion:", error);
+            // Don't throw - onboarding is complete in memory even if storage fails
+        }
     };
 
     const deleteAccount = async () => {
         setIsLoading(true);
-        setUser(null);
-        setIsGuest(false);
-        setHasCompletedOnboarding(false); // Reset onboarding for deleted account if desired, or keep it. 
-        // Usually delete account means fresh start, so let's clear everything.
+        try {
+            // Import DataCleanupService dynamically to avoid circular dependencies
+            const { DataCleanupService } = await import('../services/DataCleanupService');
 
-        await AsyncStorage.clear(); // Clear all data
-        setIsLoading(false);
+            // Delete all data from all storage mechanisms
+            await DataCleanupService.deleteAllData();
+
+            // Reset auth state
+            setUser(null);
+            setIsGuest(false);
+            setHasCompletedOnboarding(false);
+
+            console.log('Account deleted successfully');
+        } catch (error) {
+            console.error('Error deleting account:', error);
+            throw error;
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (

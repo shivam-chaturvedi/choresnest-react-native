@@ -1,54 +1,99 @@
-import React, { useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
+import React, { useState, useEffect, useCallback } from "react";
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { AppLayout } from "../components/layout/AppLayout";
 import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
-import { useSidebar } from "../contexts/SidebarContext";
 import {
   ChevronLeft,
   Download,
   FileJson,
   FileSpreadsheet,
-  Cloud,
   Check,
-  Loader2
+  Loader2,
+  Share2
 } from "lucide-react-native";
+import { exportService, ExportFormat, ExportStats } from "../services/ExportService";
 
-const exportFormats = [
-  { id: 'json', label: "JSON", description: "Full data export", size: "~2.4 MB", icon: FileJson },
-  { id: 'csv', label: "CSV", description: "Spreadsheet compatible", size: "~1.8 MB", icon: FileSpreadsheet },
-  { id: 'cloud', label: "Cloud Backup", description: "Secure cloud storage", size: "Automatic", icon: Cloud },
+const exportFormats: { id: ExportFormat; label: string; description: string; icon: any }[] = [
+  { id: 'json', label: "JSON", description: "Full data export", icon: FileJson },
+  { id: 'csv', label: "CSV", description: "Spreadsheet compatible", icon: FileSpreadsheet },
 ];
 
-const dataOptions = [
-  { id: 'events', label: "Calendar Events", items: 156, selected: true },
-  { id: 'tasks', label: "Tasks & Chores", items: 89, selected: true },
-  { id: 'lists', label: "Shopping Lists", items: 234, selected: true },
-  { id: 'recipes', label: "Recipes", items: 45, selected: true },
-  { id: 'documents', label: "Documents", items: 58, selected: false },
-  { id: 'expenses', label: "Expenses", items: 312, selected: true },
+const initialDataOptions = [
+  { id: 'events', label: "Calendar Events", items: 0, selected: true },
+  { id: 'tasks', label: "Tasks & Chores", items: 0, selected: true },
+  { id: 'lists', label: "Shopping Lists", items: 0, selected: true },
+  { id: 'recipes', label: "Recipes", items: 0, selected: true },
+  { id: 'documents', label: "Documents", items: 0, selected: false },
+  { id: 'expenses', label: "Expenses", items: 0, selected: true },
 ];
 
 export const DataExportScreen: React.FC = () => {
   const navigation = useNavigation();
   const colors = useThemeColors();
   const radius = useThemeRadius();
-  const [format, setFormat] = useState("json");
-  const { openSidebar } = useSidebar();
-  const [selectedData, setSelectedData] = useState(
-    dataOptions.filter((option) => option.selected).map((option) => option.id)
-  );
+  const [format, setFormat] = useState<ExportFormat>("json");
+
+  const [dataOptions, setDataOptions] = useState(initialDataOptions);
+  const [stats, setStats] = useState<ExportStats | null>(null);
+  const [estimatedSize, setEstimatedSize] = useState<string>("Calculating...");
+
   const [isExporting, setIsExporting] = useState(false);
 
-  const toggleData = (id: string) => {
-    setSelectedData((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
+  // Load live stats on mount
+  useEffect(() => {
+    loadStats();
+  }, []);
+
+  const loadStats = async () => {
+    const liveStats = await exportService.getStats();
+    setStats(liveStats);
+
+    // Update options with live counts
+    setDataOptions(prev => prev.map(opt => ({
+      ...opt,
+      items: liveStats[opt.id as keyof ExportStats] || 0
+    })));
   };
 
-  const handleExport = () => {
+  // Recalculate size when selection or format changes
+  useEffect(() => {
+    if (!stats) return;
+
+    // Create a temporary stats object reflecting only SELECTED items
+    const selectedStats = { ...stats };
+    dataOptions.forEach(opt => {
+      if (!opt.selected) {
+        selectedStats[opt.id as keyof ExportStats] = 0;
+      }
+    });
+
+    exportService.calculateEstimatedSize(selectedStats, format).then(setEstimatedSize);
+  }, [stats, format, dataOptions]);
+
+  const toggleData = (id: string) => {
+    setDataOptions(prev => prev.map(opt =>
+      opt.id === id ? { ...opt, selected: !opt.selected } : opt
+    ));
+  };
+
+  const handleExport = async () => {
+    const selectedIds = dataOptions.filter(o => o.selected).map(o => o.id);
+    if (selectedIds.length === 0) {
+      Alert.alert("No Data Selected", "Please select at least one data type to export.");
+      return;
+    }
+
     setIsExporting(true);
-    setTimeout(() => setIsExporting(false), 2000);
+    try {
+      const filePath = await exportService.generateBackup(format, selectedIds);
+      await exportService.shareBackup(filePath);
+    } catch (error) {
+      Alert.alert("Export Failed", "Could not generate or share backup file.");
+      console.error(error);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -100,14 +145,17 @@ export const DataExportScreen: React.FC = () => {
                 <Text style={[styles.optionLabel, { color: colors.foreground }]}>{option.label}</Text>
                 <Text style={[styles.optionSubtitle, { color: colors.mutedForeground }]}>{option.description}</Text>
               </View>
-              <Text style={[styles.optionSize, { color: colors.mutedForeground }]}>{option.size}</Text>
               {format === option.id && <Check size={20} color={colors.primary} />}
             </Pressable>
           ))}
         </View>
 
         {/* Select Data */}
-        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Select Data</Text>
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: colors.foreground, marginBottom: 0 }]}>Select Data</Text>
+          <Text style={[styles.sizeEstimate, { color: colors.mutedForeground }]}>Est. Size: {estimatedSize}</Text>
+        </View>
+
         <View style={[styles.dataCard, { backgroundColor: colors.card, shadowColor: colors.shadow, borderRadius: radius.card }]}>
           {dataOptions.map((option) => (
             <Pressable
@@ -118,28 +166,18 @@ export const DataExportScreen: React.FC = () => {
               <View style={[
                 styles.checkbox,
                 { borderColor: colors.border, borderRadius: radius.sm },
-                selectedData.includes(option.id) && { backgroundColor: colors.primary, borderColor: colors.primary }
+                option.selected && { backgroundColor: colors.primary, borderColor: colors.primary }
               ]}>
-                {selectedData.includes(option.id) && <Check size={14} color="#fff" />}
+                {option.selected && <Check size={14} color="#fff" />}
               </View>
               <View style={styles.dataText}>
                 <Text style={[styles.dataLabel, { color: colors.foreground }]}>{option.label}</Text>
               </View>
-              <Text style={[styles.dataCount, { color: colors.mutedForeground }]}>{option.items} items</Text>
+              <Text style={[styles.dataCount, { color: colors.mutedForeground }]}>
+                {stats ? `${option.items} items` : '...'}
+              </Text>
             </Pressable>
           ))}
-        </View>
-
-        {/* Last Backup */}
-        <View style={[styles.lastBackup, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
-          <View>
-            <Text style={[styles.lastBackupLabel, { color: colors.foreground }]}>Last Backup</Text>
-            <Text style={[styles.lastBackupTime, { color: colors.mutedForeground }]}>December 28, 2025 at 3:45 PM</Text>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Check size={14} color={colors.success} />
-            <Text style={[styles.backupStatus, { color: colors.success }]}>Up to date</Text>
-          </View>
         </View>
 
         {/* Export Button */}
@@ -155,8 +193,8 @@ export const DataExportScreen: React.FC = () => {
             </View>
           ) : (
             <>
-              <Download size={20} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={[styles.exportText, { color: colors.primaryForeground }]}>Export Data</Text>
+              <Share2 size={20} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={[styles.exportText, { color: colors.primaryForeground }]}>Export & Share</Text>
             </>
           )}
         </Pressable>
@@ -214,6 +252,16 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     marginTop: 8,
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    marginTop: 8,
+  },
+  sizeEstimate: {
+    fontSize: 12,
+  },
   optionCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -242,12 +290,9 @@ const styles = StyleSheet.create({
   optionSubtitle: {
     fontSize: 12,
   },
-  optionSize: {
-    fontSize: 12,
-    marginRight: 12,
-  },
   dataCard: {
     padding: 12,
+    marginBottom: 24,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
@@ -277,26 +322,6 @@ const styles = StyleSheet.create({
   dataCount: {
     fontSize: 12,
   },
-  lastBackup: {
-    padding: 16,
-    marginTop: 24,
-    marginBottom: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-  },
-  lastBackupLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  lastBackupTime: {
-    fontSize: 12,
-  },
-  backupStatus: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
   exportButton: {
     height: 56,
     flexDirection: 'row',
@@ -312,3 +337,4 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 });
+

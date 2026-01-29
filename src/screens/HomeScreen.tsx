@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useMemo } from "react";
-import { setupNotifications, displayImmediateNotification, scheduleDailyNotification } from "../utils/notifications";
+import React, { useEffect, useState, useMemo, useRef } from "react";
+import { setupNotifications } from "../utils/notifications";
 import {
   View,
   Text,
@@ -11,12 +11,13 @@ import {
   Image,
   Alert,
   StatusBar,
-  Dimensions
+  Dimensions,
+  Modal,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppLayout } from "../components/layout/AppLayout";
 import { useNavigation } from "@react-navigation/native";
-import { useFamily } from "../contexts/FamilyContext";
+import { useFamily, CalendarEvent, Task } from "../contexts/FamilyContext";
 import { MealType, useMealPlan } from "../contexts/MealPlanContext";
 import { theme } from "../theme";
 import { useThemeColors } from "../contexts/ThemeContext";
@@ -27,11 +28,13 @@ import { AddMemberModal } from "../components/modals/AddMemberModal";
 import { FamilyOnboarding } from "../components/family/FamilyOnboarding";
 import { FamilyDashboard } from "../components/dashboard/FamilyDashboard";
 import { NotificationPanel } from "../components/notifications/NotificationPanel";
+import { AppNotification, NotificationCenter, NotificationRoute } from "../services/NotificationCenter";
 import { GettingStartedTutorial } from "../components/tutorial/GettingStartedTutorial";
 import { GlobalSearch } from "../components/search/GlobalSearch";
 import { useSidebar } from "../contexts/SidebarContext";
 import { AppIcon, AppIconName } from "../components/ui/AppIcon";
 import { PROFILE_COLORS } from "../constants/profileColors";
+import { safeParseDate } from "../utils/SafeDateUtils";
 
 
 const STORAGE_TUTORIAL_KEY = "@familychore:firstSignUp";
@@ -47,9 +50,9 @@ const MEAL_TYPES: { key: MealType; label: string; icon: string }[] = [
 export const HomeScreen: React.FC = () => {
   const colors = useThemeColors();
   const radius = theme.radius; // Dynamic radius
-  const { members, activeMember, events, groceryList, setActiveMember, addGroceryItem, tasks } = useFamily();
+  const { members, activeMember, events, groceryList, setActiveMember, addGroceryItem, tasks, globalVault, memberVaults, familyName } = useFamily();
   const { getMealsForDay, getRecipeById } = useMealPlan();
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const { openSidebar } = useSidebar();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -61,9 +64,12 @@ export const HomeScreen: React.FC = () => {
   const [showAddItem, setShowAddItem] = useState(false);
   const [showMemberModal, setShowMemberModal] = useState(false);
   const [showFamilyOnboarding, setShowFamilyOnboarding] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
 
   // Dashboard Toggle
   const [showDashboard, setShowDashboard] = useState(false);
+  const navTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const NAV_MARK_DELAY = 3000;
 
   // Tutorial logic
   // Key: '@familychore:firstSignUp'
@@ -111,14 +117,19 @@ export const HomeScreen: React.FC = () => {
         // Immediate notification removed as per user request to stop spam
         // await displayImmediateNotification("Welcome Back! 👋", "Notifications are working correctly. Daily reminder set for 10 PM.");
 
-        // Schedule Daily Notification
-        await scheduleDailyNotification();
       } catch (e) {
         console.error("Notification setup failed", e);
       }
     };
     initNotifications();
 
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      navTimers.current.forEach((timer) => clearTimeout(timer));
+      navTimers.current = [];
+    };
   }, []);
 
   const handleTutorialClose = async () => {
@@ -133,22 +144,120 @@ export const HomeScreen: React.FC = () => {
   };
 
   // Dynamic Alerts derived from real data
-  const alerts: {
+  const [notificationAlerts, setNotificationAlerts] = useState<AppNotification[]>([]);
+  const [manualNotifications, setManualNotifications] = useState<AppNotification[]>(NotificationCenter.getNotifications());
+
+  useEffect(() => {
+    const unsubscribe = NotificationCenter.subscribe((items) => {
+      setManualNotifications(items);
+    });
+    return unsubscribe;
+  }, []);
+
+  const todaysDateLabel = useMemo(() => new Date().toISOString().split("T")[0], []);
+  const todaysEvents = useMemo(() => events.filter((event: any) => event.date === todaysDateLabel), [events, todaysDateLabel]);
+  const parseEventDateTime = (event: any): { dateTime: Date | null; isAllDay: boolean } => {
+    const baseDate = safeParseDate(event?.date);
+    if (!baseDate) return { dateTime: null, isAllDay: false };
+
+    const normalized = new Date(baseDate.getTime());
+    normalized.setHours(0, 0, 0, 0);
+
+    const timeString = event?.time;
+    if (!timeString || timeString === "All Day") {
+      return { dateTime: normalized, isAllDay: true };
+    }
+
+    const match = timeString.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);
+    if (!match) {
+      return { dateTime: normalized, isAllDay: true };
+    }
+
+    let hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2] ?? "0", 10);
+    const period = match[3].toUpperCase();
+
+    if (period === "PM" && hours !== 12) hours += 12;
+    if (period === "AM" && hours === 12) hours = 0;
+
+    normalized.setHours(hours, minutes, 0, 0);
+    return { dateTime: normalized, isAllDay: false };
+  };
+
+  const parseTimeToMinutes = (time?: string | null): number | null => {
+    if (!time) return null;
+    const match = time.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);
+    if (!match) return null;
+
+    let hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2] ?? "0", 10);
+    const period = match[3].toUpperCase();
+
+    if (period === "PM" && hours !== 12) hours += 12;
+    if (period === "AM" && hours === 12) hours = 0;
+
+    return (hours * 60) + minutes;
+  };
+
+  type ScheduleItem = {
     id: string;
+    type: "event" | "task";
     title: string;
-    detail: string;
-    tone: string;
-    textColor: string;
-    icon: AppIconName;
-    time: string;
-    read: boolean;
-  }[] = React.useMemo(() => {
-    const newAlerts: any[] = [];
-    const todayStr = new Date().toISOString().split("T")[0];
+    timeLabel: string;
+    minutes: number | null;
+    icon?: string;
+    source: CalendarEvent | Task;
+  };
+
+  const SCHEDULE_ITEM_HEIGHT = 80;
+
+  const todaysScheduleItems = useMemo<ScheduleItem[]>(() => {
+    const scheduleItems: ScheduleItem[] = [];
+
+    todaysEvents.forEach((event: CalendarEvent) => {
+      const minutes = parseTimeToMinutes(event.time);
+      scheduleItems.push({
+        id: event.id,
+        type: "event",
+        title: event.title || "Untitled Event",
+        timeLabel: event.time || "All Day",
+        minutes,
+        icon: event.icon,
+        source: event,
+      });
+    });
+
+    tasks
+      .filter((task: Task) => task.date === todaysDateLabel)
+      .forEach((task: Task) => {
+        const dueLabel = task.due || "All Day";
+        const minutes = parseTimeToMinutes(dueLabel);
+        scheduleItems.push({
+          id: task.id,
+          type: "task",
+          title: task.name,
+          timeLabel: dueLabel,
+          minutes,
+          icon: task.icon,
+          source: task,
+        });
+      });
+
+    return scheduleItems.sort((a, b) => {
+      const aValue = a.minutes !== null ? a.minutes : -1;
+      const bValue = b.minutes !== null ? b.minutes : -1;
+      return aValue - bValue;
+    });
+  }, [tasks, todaysDateLabel, todaysEvents]);
+
+  useEffect(() => {
+    const previousRead = new Map(notificationAlerts.map(alert => [alert.id, alert.read]));
+    const newAlerts: AppNotification[] = [];
+    const todayStr = todaysDateLabel;
 
     // 1. Events Today
-    const eventsToday = events.filter(e => e.date === todayStr);
-    eventsToday.forEach(e => {
+    todaysEvents.forEach((e: any) => {
+      const prevRead = previousRead.get(`evt-${e.id}`);
       newAlerts.push({
         id: `evt-${e.id}`,
         title: "Event Today",
@@ -157,13 +266,15 @@ export const HomeScreen: React.FC = () => {
         textColor: colors.primary,
         icon: "calendar",
         time: "Today",
-        read: false,
+        read: prevRead ?? false,
+        route: { tab: "calendar" },
       });
     });
 
     // 2. Pending Tasks (High Priority)
-    const highPriorityTasks = tasks.filter(t => t.priority === 'high' && t.status === 'pending');
-    highPriorityTasks.forEach(t => {
+    const highPriorityTasks = tasks.filter((t: any) => t.priority === 'high' && t.status === 'pending');
+    highPriorityTasks.forEach((t: any) => {
+      const prevRead = previousRead.get(`task-${t.id}`);
       newAlerts.push({
         id: `task-${t.id}`,
         title: "High Priority Task",
@@ -172,13 +283,15 @@ export const HomeScreen: React.FC = () => {
         textColor: colors.danger,
         icon: "checkSquare",
         time: t.due, // "Today" or ISO date
-        read: false,
+        read: prevRead ?? false,
+        route: { tab: "more", screen: "Tasks" },
       })
     });
 
     // 3. Pending Grocery Items
-    const pendingItems = groceryList.filter(i => !i.completed);
+    const pendingItems = groceryList.filter((i: any) => !i.completed);
     if (pendingItems.length > 0) {
+      const prevRead = previousRead.get("grocery-pending");
       newAlerts.push({
         id: "grocery-pending",
         title: "Grocery Needed",
@@ -187,12 +300,118 @@ export const HomeScreen: React.FC = () => {
         textColor: colors.warning,
         icon: "shoppingCart",
         time: "Now",
-        read: false,
+        read: prevRead ?? false,
+        route: { tab: "lists" },
       });
     }
 
-    return newAlerts;
-  }, [events, groceryList, tasks, colors]);
+    setNotificationAlerts(newAlerts);
+  }, [todaysEvents, groceryList, tasks, colors]);
+
+  const alerts = [...manualNotifications, ...notificationAlerts];
+  const visibleAlerts = useMemo(() => alerts.filter((alert) => !alert.read), [alerts]);
+
+  const markDynamicAlertRead = (id: string) => {
+    setNotificationAlerts(prev =>
+      prev.map((alert) => (alert.id === id ? { ...alert, read: true } : alert))
+    );
+  };
+
+  const navigateForNotification = (route?: NotificationRoute) => {
+    if (!route) return;
+    const { tab, screen, params } = route;
+    navigation.navigate("MainTabs", {
+      screen: tab,
+      params: screen ? { screen, params } : params,
+    } as any);
+  };
+
+  const finalizeNotification = (notification: AppNotification, isManual: boolean) => {
+    if (!isManual) {
+      setNotificationAlerts((prev) => prev.filter((item) => item.id !== notification.id));
+    }
+  };
+
+  const scheduleNotificationFinalization = (notification: AppNotification, isManual: boolean) => {
+    const timer = setTimeout(() => {
+      finalizeNotification(notification, isManual);
+      navTimers.current = navTimers.current.filter((t) => t !== timer);
+    }, NAV_MARK_DELAY);
+    navTimers.current.push(timer);
+  };
+
+  const markReadImmediate = (notification: AppNotification, isManual: boolean) => {
+    if (isManual) {
+      NotificationCenter.markRead(notification.id);
+    } else {
+      markDynamicAlertRead(notification.id);
+    }
+  };
+
+  const handleNotificationPress = (notification: AppNotification) => {
+    const isManual = manualNotifications.some((n) => n.id === notification.id);
+    markReadImmediate(notification, isManual);
+    if (notification.route) {
+      navigateForNotification(notification.route);
+    }
+    scheduleNotificationFinalization(notification, isManual);
+    setShowNotifications(false);
+  };
+
+  const handleAlertPress = (alert: AppNotification) => {
+    handleNotificationPress(alert);
+  };
+
+  const formatDateTimeValue = (date?: string, time?: string) => {
+    if (!date && !time) return null;
+    return [date, time].filter(Boolean).join(" · ");
+  };
+
+  const renderDetailRow = (label: string, value?: string | number | null) => (
+    <View style={[styles.detailRow, { borderColor: colors.border, backgroundColor: colors.card + "10", borderRadius: radius.md }]}>
+      <Text style={[styles.detailLabel, { color: colors.foreground }]}>{label}</Text>
+      <Text style={[styles.detailValue, { color: colors.primary }]} numberOfLines={2}>
+        {value ? value : "No Info Available"}
+      </Text>
+    </View>
+  );
+
+  const renderPairRow = (
+    leftLabel: string,
+    leftValue?: string | number | null,
+    rightLabel?: string,
+    rightValue?: string | number | null
+  ) => (
+    <View style={styles.detailPairRow}>
+      <View style={[styles.detailRowHalf, { borderColor: colors.border, backgroundColor: colors.card + "05", borderRadius: radius.md }]}>
+        <Text style={[styles.detailLabel, { color: colors.foreground }]}>{leftLabel}</Text>
+        <Text style={[styles.detailValue, { color: colors.primary }]} numberOfLines={2}>
+          {leftValue ? leftValue : "No Info Available"}
+        </Text>
+      </View>
+      {rightLabel && (
+        <View style={[styles.detailRowHalf, { borderColor: colors.border, backgroundColor: colors.card + "05", borderRadius: radius.md }]}>
+          <Text style={[styles.detailLabel, { color: colors.foreground }]}>{rightLabel}</Text>
+          <Text style={[styles.detailValue, { color: colors.primary }]} numberOfLines={2}>
+            {rightValue ? rightValue : "No Info Available"}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+
+  const closeEventDetail = () => setSelectedEvent(null);
+
+  const handleClearAllNotifications = () => {
+    setNotificationAlerts([]);
+    NotificationCenter.clearNotifications();
+    setShowNotifications(false);
+  };
+
+  const handleMarkAllAsRead = () => {
+    setNotificationAlerts(prev => prev.map(alert => ({ ...alert, read: true })));
+    NotificationCenter.markAllRead();
+  };
 
   const quickActions: { label: string; iconName: AppIconName; action: () => void; color: string; bg: string }[] = [
     { label: "Event", iconName: "calendar", action: () => setShowAddEvent(true), color: colors.info, bg: colors.info + '25' },
@@ -203,8 +422,14 @@ export const HomeScreen: React.FC = () => {
 
   const todayKey = new Date().toISOString().split("T")[0];
   const todayMeals = getMealsForDay(todayKey) || [];
-  const pendingGroceries = (groceryList || []).filter((item) => !item.completed).length;
-  const documentsCount = Math.max(28, (groceryList || []).length * 6 + 18); // Mock dynamic count
+  const pendingGroceries = (groceryList || []).filter((item: any) => !item.completed).length;
+
+  // Calculate actual vault document count dynamically
+  const documentsCount = useMemo(() => {
+    const globalCount = (globalVault || []).length;
+    const memberCount = Object.values(memberVaults || {}).reduce((total: number, docs: any) => total + docs.length, 0);
+    return globalCount + memberCount;
+  }, [globalVault, memberVaults]);
 
   const mealSummary = MEAL_TYPES.map((mealType) => {
     try {
@@ -229,9 +454,9 @@ export const HomeScreen: React.FC = () => {
   });
 
   const glanceMetrics = [
-    { label: "Events", value: (events || []).filter(e => e.date === todayKey).length },
-    { label: "Tasks", value: (tasks || []).filter(t => t.status === 'pending').length },
-    { label: "Shopping", value: (groceryList || []).filter(item => !item.completed).length },
+    { label: "Events", value: (events || []).filter((e: any) => e.date === todayKey).length },
+    { label: "Tasks", value: (tasks || []).filter((t: any) => t.status === 'pending').length },
+    { label: "Shopping", value: (groceryList || []).filter((item: any) => !item.completed).length },
   ];
 
   return (
@@ -252,7 +477,7 @@ export const HomeScreen: React.FC = () => {
               </Pressable>
               <Pressable onPress={() => setShowNotifications(true)} style={[styles.iconButton, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radius.sm }]}>
                 <AppIcon name="bell" size={24} color={colors.foreground} />
-                {alerts.length > 0 && <View style={[styles.notificationDot, { backgroundColor: colors.danger }]} />}
+                {visibleAlerts.length > 0 && <View style={[styles.notificationDot, { backgroundColor: colors.danger }]} />}
               </Pressable>
             </View>
           </View>
@@ -278,7 +503,7 @@ export const HomeScreen: React.FC = () => {
             <View style={styles.cardHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <AppIcon name="users" size={20} color={colors.primary} style={{ marginRight: 8 }} />
-                <Text style={{ fontSize: 18, fontWeight: "700", color: colors.foreground }}>Family Chores</Text>
+                <Text style={{ fontSize: 18, fontWeight: "700", color: colors.foreground }}>{familyName}</Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Pressable onPress={() => setShowFamilyOnboarding(true)} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 4 }}>
@@ -288,18 +513,26 @@ export const HomeScreen: React.FC = () => {
               </View>
             </View>
             <View style={styles.membersRow}>
-              {(members || []).map((member) => {
-                const profileColor = PROFILE_COLORS.find(c => c.value === member.color)?.hex || colors.primary;
+              {(members || []).map((member: any) => {
+                const profileColor = PROFILE_COLORS.find((c: any) => c.value === member.color)?.hex || colors.primary;
                 return (
                   <Pressable
                     key={member?.id || Math.random().toString()}
                     onPress={() => {
+                      console.log('=== Profile Pressed ===');
+                      console.log('Member:', member.name, 'ID:', member.id, 'isActive:', member.isActive);
                       try {
-                        if (member) setActiveMember(member);
+                        if (member && member.id) {
+                          console.log('Calling setActiveMember with ID:', member.id);
+                          setActiveMember(member);
+                        } else {
+                          console.error('Invalid member object:', member);
+                        }
                       } catch (e) {
                         console.error("Error switching member:", e);
                       }
                     }}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     style={[styles.memberCard]}
                   >
                     <View style={[styles.memberIconWrapper, {
@@ -401,27 +634,52 @@ export const HomeScreen: React.FC = () => {
                 <Text style={[styles.linkText, { color: colors.primary }]}>View All ›</Text>
               </Pressable>
             </View>
-            {(!events || events.length === 0) ? (
-              <Text style={{ color: colors.mutedForeground, fontStyle: 'italic', marginVertical: 8 }}>No events for today</Text>
+            {todaysScheduleItems.length === 0 ? (
+              <Text style={{ color: colors.mutedForeground, fontStyle: 'italic', marginVertical: 8 }}>Nothing on the calendar for today</Text>
             ) : (
-              events.slice(0, 3).map((event) => (
-                <View key={event?.id || Math.random().toString()} style={[styles.scheduleRow, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                    <View style={[styles.scheduleIconBox, { backgroundColor: colors.card, borderRadius: radius.xs }]}>
-                      <Text style={{ fontSize: 18 }}>{event?.icon || "📅"}</Text>
+              <ScrollView
+                style={{ maxHeight: SCHEDULE_ITEM_HEIGHT * 3 }}
+                contentContainerStyle={{ paddingBottom: 4 }}
+                showsVerticalScrollIndicator
+              >
+                {todaysScheduleItems.map((item) => (
+                  <Pressable
+                    key={`${item.type}-${item.id}`}
+                    style={({ pressed }) => [
+                      styles.scheduleRow,
+                      {
+                        backgroundColor: colors.muted,
+                        borderRadius: radius.md,
+                        opacity: pressed ? 0.85 : 1,
+                        marginBottom: 6,
+                      },
+                    ]}
+                    onPress={() => {
+                      if (item.type === "event") {
+                        setSelectedEvent(item.source as CalendarEvent);
+                        setShowAddEvent(true);
+                      } else {
+                        (navigation as any).navigate("MainTabs", { screen: "more", params: { screen: "Tasks" } });
+                      }
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                      <View style={[styles.scheduleIconBox, { backgroundColor: colors.card, borderRadius: radius.xs }]}>
+                        <Text style={{ fontSize: 18 }}>{item.icon || (item.type === "task" ? "📝" : "📅")}</Text>
+                      </View>
+                      <View style={{ marginLeft: 12 }}>
+                        <Text style={{ fontSize: 16, fontWeight: "600", color: colors.foreground }}>{item.title}</Text>
+                        <Text style={{ fontSize: 13, color: colors.mutedForeground, marginTop: 2 }}>
+                          <AppIcon name="clock" size={12} color={colors.mutedForeground} /> {item.timeLabel}
+                        </Text>
+                      </View>
                     </View>
-                    <View style={{ marginLeft: 12 }}>
-                      <Text style={{ fontSize: 16, fontWeight: "600", color: colors.foreground }}>{event?.title || "Untitled Event"}</Text>
-                      <Text style={{ fontSize: 13, color: colors.mutedForeground, marginTop: 2 }}>
-                        <AppIcon name="clock" size={12} color={colors.mutedForeground} /> {event?.time || "No time"}
-                      </Text>
+                    <View style={[styles.scheduleAvatar, { backgroundColor: colors.primary, borderRadius: radius.xs }]}>
+                      <AppIcon name={item.type === "task" ? "checkSquare" : "user"} size={14} color={colors.primaryForeground} />
                     </View>
-                  </View>
-                  <View style={[styles.scheduleAvatar, { backgroundColor: colors.primary, borderRadius: radius.xs }]}>
-                    <AppIcon name="user" size={14} color={colors.primaryForeground} />
-                  </View>
-                </View>
-              ))
+                  </Pressable>
+                ))}
+              </ScrollView>
             )}
           </View>
 
@@ -439,8 +697,9 @@ export const HomeScreen: React.FC = () => {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 16 }}>
               <View style={{ flexDirection: 'row', gap: 12 }}>
                 {mealSummary.map((meal) => (
-                  <View
+                  <Pressable
                     key={meal.label}
+                    onPress={() => (navigation as any).navigate("MealPlan")}
                     style={[styles.mealItem, { backgroundColor: meal.hasMeal ? colors.success + '20' : colors.muted, borderRadius: radius.md }]}
                   >
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -449,7 +708,7 @@ export const HomeScreen: React.FC = () => {
                     </View>
                     <Text style={{ fontSize: 16, fontWeight: "700", color: colors.foreground, marginTop: "auto" }}>{meal.label}</Text>
                     <Text style={{ fontSize: 12, color: colors.mutedForeground }} numberOfLines={2}>{meal.detail}</Text>
-                  </View>
+                  </Pressable>
                 ))}
               </View>
             </ScrollView>
@@ -457,12 +716,36 @@ export const HomeScreen: React.FC = () => {
 
           {/* Alerts */}
           <View style={{ marginBottom: 24 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              marginBottom: 12,
+              justifyContent: 'space-between',
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
               <AppIcon name="alert" size={18} color={colors.warning} style={{ marginRight: 8 }} />
               <Text style={{ fontSize: 18, fontWeight: "700", color: colors.foreground }}>Alerts & Reminders</Text>
             </View>
-            {alerts.map((alert) => (
-              <View key={alert.id} style={[styles.alertRow, { backgroundColor: alert.tone, borderColor: colors.border, borderRadius: radius.md }]}>
+            <Pressable onPress={() => setShowNotifications(true)}>
+              <Text style={{ fontSize: 12, color: colors.primary, fontWeight: "600" }}>Show all</Text>
+            </Pressable>
+          </View>
+            {visibleAlerts.slice(0, 3).map((alert) => (
+              <Pressable
+                key={alert.id}
+                style={({ pressed }) => [
+                  styles.alertRow,
+                  {
+                    backgroundColor: alert.tone,
+                    borderColor: colors.border,
+                    borderRadius: radius.md,
+                    opacity: pressed ? 0.8 : 1,
+                  },
+                ]}
+                onPress={() => handleAlertPress(alert)}
+              >
                 <View style={[styles.alertIconBox]}>
                   <AppIcon name={alert.icon} size={20} color={alert.textColor} />
                 </View>
@@ -471,8 +754,16 @@ export const HomeScreen: React.FC = () => {
                   <Text style={{ marginTop: 2, fontSize: 13, color: alert.textColor }}>{alert.detail}</Text>
                 </View>
                 <AppIcon name="chevronRight" size={16} color={alert.textColor} />
-              </View>
+              </Pressable>
             ))}
+            {visibleAlerts.length > 3 && (
+              <Pressable
+                style={{ alignSelf: "flex-start", marginTop: 8 }}
+                onPress={() => setShowNotifications(true)}
+              >
+                <Text style={{ fontSize: 14, color: colors.primary }}>Show all alerts</Text>
+              </Pressable>
+            )}
           </View>
 
           {/* Stats Grid */}
@@ -503,7 +794,81 @@ export const HomeScreen: React.FC = () => {
         </ScrollView>
       </AppLayout>
 
-      <NotificationPanel open={showNotifications} onClose={() => setShowNotifications(false)} notifications={alerts} />
+      {selectedEvent && (
+        <Modal visible transparent animationType="slide" onRequestClose={closeEventDetail}>
+          <Pressable style={styles.detailOverlay} onPress={closeEventDetail}>
+            <Pressable
+              style={[
+                styles.detailModal,
+                {
+                  backgroundColor: colors.background,
+                  borderRadius: radius.card,
+                  borderColor: colors.border,
+                  shadowColor: colors.shadow,
+                },
+              ]}
+              onPress={() => {}}
+              onStartShouldSetResponder={() => true}
+            >
+              <View style={styles.detailModalHeader}>
+                <View style={{ flexDirection: "row", alignItems: "center", flex: 1, gap: 12 }}>
+                  <View style={[styles.detailIconBox, { backgroundColor: colors.primary + "15" }]}>
+                    <Text style={[styles.detailIcon, { color: colors.primary }]}>{selectedEvent.icon || "📅"}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.detailHeaderTitle, { color: colors.foreground }]}>
+                      {selectedEvent.title || "Untitled Event"}
+                    </Text>
+                    <Text style={[styles.detailHeaderSubtitle, { color: colors.mutedForeground }]}>
+                      {formatDateTimeValue(selectedEvent.dateString || selectedEvent.date, selectedEvent.time) || "No Info Available"}
+                    </Text>
+                  </View>
+                </View>
+                <Pressable onPress={closeEventDetail} style={styles.detailCloseButton}>
+                  <AppIcon name="x" size={20} color={colors.mutedForeground} />
+                </Pressable>
+              </View>
+              <ScrollView contentContainerStyle={styles.detailContent}>
+                {renderDetailRow("Description", selectedEvent.description)}
+                {renderPairRow(
+                  "Schedule Start",
+                  formatDateTimeValue(selectedEvent.dateString || selectedEvent.date, selectedEvent.time),
+                  "Schedule End",
+                  formatDateTimeValue(selectedEvent.endDate, selectedEvent.endTime)
+                )}
+                {renderPairRow(
+                  "Repeat",
+                  selectedEvent.isRecurring ? (selectedEvent.recurrenceRule || "Recurring schedule") : null,
+                  "Reminder",
+                  selectedEvent.reminderOffsetMinutes !== undefined && selectedEvent.reminderOffsetMinutes !== null
+                    ? `${selectedEvent.reminderOffsetMinutes} minute${selectedEvent.reminderOffsetMinutes === 1 ? "" : "s"} before`
+                    : null
+                )}
+                {renderPairRow(
+                  "Location",
+                  selectedEvent.location,
+                  "Assigned to",
+                  (() => {
+                    if (!selectedEvent.memberId) return null;
+                    const member = members.find((m: any) => m.id === selectedEvent.memberId);
+                    return member?.name ?? null;
+                  })()
+                )}
+                {renderDetailRow("Notes", selectedEvent.notes)}
+              </ScrollView>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
+
+      <NotificationPanel
+        open={showNotifications}
+        onClose={() => setShowNotifications(false)}
+        notifications={alerts}
+        onClearAll={handleClearAllNotifications}
+        onMarkAllRead={handleMarkAllAsRead}
+        onNotificationPress={handleNotificationPress}
+      />
       <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} />
       <GettingStartedTutorial open={showTutorial} onClose={handleTutorialClose} />
 
@@ -584,6 +949,8 @@ const styles = StyleSheet.create({
   memberCard: {
     alignItems: "center",
     justifyContent: "center",
+    padding: 4,
+    minWidth: 64,
   },
   memberIconWrapper: {
     width: 56,
@@ -704,6 +1071,86 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: "center",
     marginBottom: 12,
+  },
+  detailOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    padding: 16,
+    zIndex: 2,
+  },
+  detailModal: {
+    width: "100%",
+    maxHeight: "70%",
+    overflow: "hidden",
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  detailModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 16,
+  },
+  detailIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  detailIcon: {
+    fontSize: 24,
+  },
+  detailHeaderTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  detailHeaderSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  detailCloseButton: {
+    padding: 8,
+  },
+  detailContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+    flexGrow: 1,
+  },
+  detailRow: {
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 12,
+    alignItems: "center",
+  },
+  detailLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  detailValue: {
+    fontSize: 14,
+    marginTop: 6,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  detailPairRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 12,
+  },
+  detailRowHalf: {
+    flex: 1,
+    borderWidth: 1,
+    padding: 10,
+    alignItems: "center",
   },
 });
 
