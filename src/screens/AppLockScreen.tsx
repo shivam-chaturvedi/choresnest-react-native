@@ -35,6 +35,7 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({
     const [biometricTriggered, setBiometricTriggered] = useState(false);
     const [isBiometricBusy, setIsBiometricBusy] = useState(false);
 
+    // Optimized: Trigger logic extracted to function
     const triggerBiometric = useCallback(async () => {
         setIsBiometricBusy(true);
         const success = await unlockWithBiometrics();
@@ -44,18 +45,15 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({
         setIsBiometricBusy(false);
     }, [unlockWithBiometrics]);
 
-    useEffect(() => {
-        if (isLocked) {
-            setBiometricTriggered(false);
-        }
-    }, [isLocked]);
-
+    // On Mount/Update: Immediate check
     useEffect(() => {
         if (isLocked && isBiometricEnabled && isBiometricAvailable && !biometricTriggered) {
             setBiometricTriggered(true);
-            triggerBiometric();
+            // Small delay to ensure UI is ready, but fast enough to feel "instant"
+            setTimeout(triggerBiometric, 100);
         }
     }, [isLocked, isBiometricEnabled, isBiometricAvailable, biometricTriggered, triggerBiometric]);
+
 
     const handleSubmit = async () => {
         setError('');
@@ -78,7 +76,7 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({
         >
             <View style={[styles.card, { backgroundColor: colors.card, borderRadius: radius.card }]}>
                 <Text style={[styles.title, { color: colors.foreground }]}>Secure Access</Text>
-                <Text style={[styles.subtitle, { color: colors.mutedForeground }]}> 
+                <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
                     {isBiometricEnabled && isBiometricAvailable
                         ? `Use ${biometryType ?? 'biometric'} or enter your PIN`
                         : 'Enter your PIN to continue'}

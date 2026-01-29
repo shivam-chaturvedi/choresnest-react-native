@@ -623,14 +623,22 @@ export const NotificationScheduler = {
         category: NotificationCategory,
         data: NotificationData,
         triggerDate: Date,
-        options?: {
+        options: {
             repeatType?: RepeatType | string;
             repeatMeta?: RepeatMeta;
             notifyCenter?: boolean;
             promptForPermission?: boolean;
             promptForAlarm?: boolean;
-        }
+        } = {}
     ): Promise<string | null> {
+        // Validation: Events and Tasks must have IDs for deduplication to work
+        if ((category === 'events' && !data.data?.eventId)) {
+            throw new Error("Event notifications must include eventId");
+        }
+        if ((category === 'tasks' && !data.data?.taskId)) {
+            throw new Error("Task notifications must include taskId");
+        }
+
         try {
             const hasPermission = await checkPermission('notification');
             if (!hasPermission) {
@@ -718,27 +726,27 @@ export const NotificationScheduler = {
 
             // Schedule notification
             const notificationId = await notifee.createTriggerNotification(
-                    {
-                        title: data.title,
-                        body: data.body,
-                        data: {
-                            ...(data.data ?? {}),
-                            __repeatType: repeatType,
-                            ...(repeatMeta ? { __repeatMeta: repeatMeta } : {}),
-                            __lastTrigger: finalTrigger.toISOString(),
-                            __category: category,
-                        },
-                        android: {
-                            channelId,
-                            pressAction: {
-                                id: 'default',
-                            },
-                            smallIcon: 'ic_launcher',
-                        },
-                        ios: {
-                            ...(iosSound ? { sound: iosSound } : {}),
-                        },
+                {
+                    title: data.title,
+                    body: data.body,
+                    data: {
+                        ...(data.data ?? {}),
+                        __repeatType: repeatType,
+                        ...(repeatMeta ? { __repeatMeta: repeatMeta } : {}),
+                        __lastTrigger: finalTrigger.toISOString(),
+                        __category: category,
                     },
+                    android: {
+                        channelId,
+                        pressAction: {
+                            id: 'default',
+                        },
+                        smallIcon: 'ic_launcher',
+                    },
+                    ios: {
+                        ...(iosSound ? { sound: iosSound } : {}),
+                    },
+                },
                 trigger
             );
 
@@ -822,15 +830,22 @@ export const NotificationScheduler = {
     /**
      * Cancel a notification
      */
-    async cancelNotification(notificationId: string): Promise<void> {
-        try {
-            if (!notificationId) return;
+    async cancelNotification(id: string): Promise<void> {
+        if (!id) return;
 
-            await notifee.cancelNotification(notificationId);
-            console.log(`✓ Cancelled notification: ${notificationId}`);
+        try {
+            await notifee.cancelTriggerNotification(id);
         } catch (error) {
-            console.error(`Failed to cancel notification ${notificationId}:`, error);
+            // Ignore error if trigger doesn't exist
         }
+
+        try {
+            await notifee.cancelDisplayedNotification(id);
+        } catch (error) {
+            // Ignore error if notification not displayed
+        }
+
+        console.log(`✓ Cancelled notification (trigger/display): ${id}`);
     },
 
     /**
@@ -961,9 +976,25 @@ export const NotificationScheduler = {
     /**
      * Ensure all reminders for a document are aligned with its metadata
      */
-    async syncDocumentReminders(document: Document): Promise<void> {
+    async syncDocumentReminders(document: Document, options?: { checkExisting?: boolean; activeNotificationIds?: Set<string>; notifyCenter?: boolean }): Promise<void> {
         if (!document) return;
         try {
+            // Optimization: If doing a safety check, skip if notifications already exist
+            if (options?.checkExisting && options?.activeNotificationIds && document.notificationIdsJson) {
+                try {
+                    const ids = JSON.parse(document.notificationIdsJson);
+                    if (Array.isArray(ids) && ids.length > 0) {
+                        const allExist = ids.every(id => options.activeNotificationIds!.has(id));
+                        if (allExist) {
+                            // console.log(`Skipping document ${document.id} - reminders already active`);
+                            return;
+                        }
+                    }
+                } catch (e) {
+                    // Ignore parse error, proceed to sync
+                }
+            }
+
             await this.cancelDocumentNotifications(document);
             const candidates = buildDocumentReminderCandidates(document);
             if (candidates.length === 0) {
@@ -997,7 +1028,7 @@ export const NotificationScheduler = {
                             },
                             triggerDate,
                             {
-                                notifyCenter: true,
+                                notifyCenter: options?.notifyCenter ?? false, // Configurable, default to false
                                 promptForPermission: true,
                                 promptForAlarm: true,
                             }
@@ -1022,17 +1053,86 @@ export const NotificationScheduler = {
         try {
             console.log('Running notification safety check...');
 
+            // 1. Get ALL currently scheduled notifications from Notifee (Source of Truth)
+            const existingTriggers = await notifee.getTriggerNotifications();
+            console.log(`Found ${existingTriggers.length} active triggers`);
+
             const [defaultEventReminder, defaultTaskReminder] = await Promise.all([
                 NotificationPreferencesService.getReminderTime('events'),
                 NotificationPreferencesService.getReminderTime('tasks'),
             ]);
 
-            const eventCollection = database.get<Event>('events');
-            const events = await eventCollection.query().fetch();
+            // Fetch all Events and Tasks for comparison
+            const events = await database.collections.get<Event>('events').query().fetch();
+            const tasks = await database.collections.get<Task>('tasks').query().fetch();
 
+            const eventIdMap = new Set(events.map(e => e.id));
+            const taskIdMap = new Set(tasks.map(t => t.id));
+
+            // === CLEANUP PASS: Remove Orphans and Duplicates ===
+            const eventTriggerMap = new Map<string, string>();
+            const taskTriggerMap = new Map<string, string>();
+
+            for (const trigger of existingTriggers) {
+                const data = trigger.notification.data;
+                const id = trigger.notification.id;
+                if (!id) continue;
+
+                if (data?.eventId) {
+                    const eventId = data.eventId as string;
+                    // Orphan Check: Event no longer exists in DB
+                    if (!eventIdMap.has(eventId)) {
+                        await notifee.cancelTriggerNotification(id);
+                        continue;
+                    }
+                    // Duplicate Check: Already saw a trigger for this event
+                    if (eventTriggerMap.has(eventId)) {
+                        await notifee.cancelTriggerNotification(id);
+                        continue;
+                    }
+                    eventTriggerMap.set(eventId, id);
+                }
+                else if (data?.taskId) {
+                    const taskId = data.taskId as string;
+                    if (!taskIdMap.has(taskId)) {
+                        await notifee.cancelTriggerNotification(id);
+                        continue;
+                    }
+                    if (taskTriggerMap.has(taskId)) {
+                        await notifee.cancelTriggerNotification(id);
+                        continue;
+                    }
+                    taskTriggerMap.set(taskId, id);
+                }
+            }
+
+            // === SCHEDULE PASS: Events ===
             for (const event of events) {
                 if (event.reminderOffsetMinutes !== undefined && event.reminderOffsetMinutes < 0) continue;
 
+                // Check if already scheduled (from our clean map)
+                if (eventTriggerMap.has(event.id)) {
+                    const correctId = eventTriggerMap.get(event.id)!;
+
+                    // Self-healing: Update DB if ID mismatch
+                    if (event.notificationId !== correctId) {
+                        console.log(`[Scheduler] Healing Event ${event.id}: DB ID ${event.notificationId} -> Notifee ID ${correctId}`);
+                        await database.write(async () => {
+                            await event.update(e => { e.notificationId = correctId; });
+                        });
+                    }
+                    continue;
+                }
+
+                // If DB has an ID but it's not in Notifee (and not in our map check above), it's stale.
+                // We clear it to be clean, though scheduleNotification would overwrite it usually.
+                if (event.notificationId) {
+                    await database.write(async () => {
+                        await event.update(e => { e.notificationId = null as any; });
+                    });
+                }
+
+                // Original Logic for Date & Recurrence
                 const eventDate = parseReminderDateTime(event.dateString, event.time);
                 if (!eventDate) continue;
 
@@ -1041,11 +1141,6 @@ export const NotificationScheduler = {
                 const repeatMeta = event.isRecurring ? buildRepeatMetaFromRule(repeatRule) : undefined;
                 const reminderMinutes = event.reminderOffsetMinutes ?? defaultEventReminder;
                 const manualRepeat = isManualRepeatType(repeatType);
-
-                const shouldSkipBecauseScheduled = !!event.notificationId && !manualRepeat;
-                if (shouldSkipBecauseScheduled) {
-                    continue;
-                }
 
                 let targetEventDate = eventDate;
                 if (manualRepeat) {
@@ -1058,10 +1153,6 @@ export const NotificationScheduler = {
                 if (!manualRepeat && triggerDate <= new Date() && !event.isRecurring) continue;
                 if (manualRepeat && triggerDate <= new Date()) continue;
 
-                if (manualRepeat && event.notificationId) {
-                    await this.cancelNotification(event.notificationId);
-                }
-
                 const notificationId = await this.scheduleNotification(
                     'events',
                     {
@@ -1071,28 +1162,40 @@ export const NotificationScheduler = {
                     },
                     triggerDate,
                     {
-                        repeatType,
                         repeatMeta,
+                        notifyCenter: true, // Visible in Bell icon list
+                        promptForAlarm: true // Explicitly ensure exact alarm permission
                     }
                 );
 
                 if (notificationId) {
                     await database.write(async () => {
-                        await event.update(e => {
-                            e.notificationId = notificationId;
-                        });
+                        await event.update(e => { e.notificationId = notificationId; });
                     });
                 }
             }
 
-            const taskCollection = database.get<Task>('tasks');
-            const tasks = await taskCollection.query().fetch();
-
+            // === SCHEDULE PASS: Tasks ===
             for (const task of tasks) {
-                if (task.status === 'done' || task.notificationId || !task.reminderEnabled) {
+                if (task.status === 'done' || !task.reminderEnabled) continue;
+
+                if (taskTriggerMap.has(task.id)) {
+                    const correctId = taskTriggerMap.get(task.id)!;
+                    if (task.notificationId !== correctId) {
+                        await database.write(async () => {
+                            await task.update(t => { t.notificationId = correctId; });
+                        });
+                    }
                     continue;
                 }
 
+                if (task.notificationId) {
+                    await database.write(async () => {
+                        await task.update(t => { t.notificationId = null as any; });
+                    });
+                }
+
+                // Standard Scheduling Logic
                 const taskDate = parseReminderDateTime(task.dateString, task.dueDisplay);
                 if (!taskDate) continue;
 
@@ -1104,24 +1207,34 @@ export const NotificationScheduler = {
                     {
                         title: `Task: ${task.name}`,
                         body: `Due ${task.dueDisplay || 'today'}! Priority: ${task.priority}`,
-                        data: { taskId: task.id },
+                        data: { taskId: task.id }
                     },
-                    triggerDate
+                    triggerDate,
+                    {
+                        notifyCenter: true, // Visible in Bell icon list
+                        promptForAlarm: true // Explicitly ensure exact alarm permission
+                    }
                 );
 
                 if (notificationId) {
                     await database.write(async () => {
-                        await task.update(t => {
-                            t.notificationId = notificationId;
-                        });
+                        await task.update(t => { t.notificationId = notificationId; });
                     });
                 }
             }
 
-            const documentCollection = database.get<Document>('documents');
-            const documents = await documentCollection.query().fetch();
+            // 4. Reschedule Document Reminders
+            const documents = await database.collections.get<Document>('documents').query().fetch();
+            // Allow lookup of valid notification IDs (for self-healing DB check)
+            // This set is needed for syncDocumentReminders's checkExisting optimization
+            const activeNotificationIds = new Set(existingTriggers.map(t => t.notification.id).filter(Boolean) as string[]);
+
             for (const document of documents) {
-                await this.syncDocumentReminders(document);
+                await this.syncDocumentReminders(document, {
+                    checkExisting: true,
+                    activeNotificationIds,
+                    notifyCenter: true // Enable to populate Notification Center list on launch
+                });
             }
 
             console.log('✓ Notification safety check complete');

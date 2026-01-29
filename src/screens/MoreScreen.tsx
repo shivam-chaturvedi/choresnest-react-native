@@ -339,7 +339,7 @@ export const MoreScreen: React.FC = () => {
               </Pressable>
             </View>
             <ScrollView contentContainerStyle={{ gap: 12 }}>
-              {members?.map(member => {
+              {members?.map((member: FamilyMember) => {
                 const isActive = member.id === activeMember?.id;
                 const memColor = PROFILE_COLORS.find(c => c.value === member.color)?.hex || colors.primary;
 
