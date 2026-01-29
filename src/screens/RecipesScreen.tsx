@@ -54,6 +54,7 @@ export const RecipesScreen: React.FC = () => {
   const radius = useThemeRadius();
   const { recipes, collections, toggleBookmark, removeRecipe } = useRecipes();
   const { currentCountry } = useCountry();
+  const { showToast } = useToast();
 
   const [screenError, setScreenError] = useState<string | null>(null);
   const handleScreenError = useCallback((context: string, error: unknown) => {
@@ -189,7 +190,7 @@ export const RecipesScreen: React.FC = () => {
     }
   };
 
-  const { showToast } = useToast();
+
 
   const handleBookmark = (recipe: Recipe) => {
     try {
@@ -290,37 +291,37 @@ export const RecipesScreen: React.FC = () => {
           </View>
 
           <View style={styles.tagGroup}>
-          {preferences.map((tag) => {
-            const isActive = activePreferences.includes(tag);
-            return (
-              <Pressable
-                key={tag}
-                style={[
-                  styles.prefTag,
-                  {
-                    backgroundColor: isActive ? colors.primary : colors.muted,
-                    borderRadius: radius.md
-                  }
-                ]}
-                onPress={() => togglePreference(tag)}
-              >
-                <View style={styles.prefIcon}>
-                  <AppIcon
-                    name={
-                      tag === "Vegetarian" ? "leaf" :
-                        tag.includes("Protein") ? "biceps" :
-                          tag.includes("Sugar") ? "droplet" :
-                            tag.includes("Quick") ? "clock" :
-                              tag.includes("Kids") ? "smile" : "heart"
+            {preferences.map((tag) => {
+              const isActive = activePreferences.includes(tag);
+              return (
+                <Pressable
+                  key={tag}
+                  style={[
+                    styles.prefTag,
+                    {
+                      backgroundColor: isActive ? colors.primary : colors.muted,
+                      borderRadius: radius.md
                     }
-                    size={14}
-                    color={isActive ? colors.primaryForeground : colors.mutedForeground}
-                  />
-                </View>
-                <Text style={[styles.prefText, { color: isActive ? colors.primaryForeground : colors.mutedForeground }]}>{tag}</Text>
-              </Pressable>
-            );
-          })}
+                  ]}
+                  onPress={() => togglePreference(tag)}
+                >
+                  <View style={styles.prefIcon}>
+                    <AppIcon
+                      name={
+                        tag === "Vegetarian" ? "leaf" :
+                          tag.includes("Protein") ? "biceps" :
+                            tag.includes("Sugar") ? "droplet" :
+                              tag.includes("Quick") ? "clock" :
+                                tag.includes("Kids") ? "smile" : "heart"
+                      }
+                      size={14}
+                      color={isActive ? colors.primaryForeground : colors.mutedForeground}
+                    />
+                  </View>
+                  <Text style={[styles.prefText, { color: isActive ? colors.primaryForeground : colors.mutedForeground }]}>{tag}</Text>
+                </Pressable>
+              );
+            })}
           </View>
           <View style={styles.groceryNoteRow}>
             <Text style={{ fontSize: 16, marginRight: 8 }}>📦</Text>
@@ -328,72 +329,72 @@ export const RecipesScreen: React.FC = () => {
           </View>
         </View>
 
-      {/* ... keeping other sections ... */}
-      {activePreferences.length > 0 && (
+        {/* ... keeping other sections ... */}
+        {activePreferences.length > 0 && (
+          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+            <View style={styles.sectionHeader}>
+              <AppIcon name="star" size={20} color={colors.primary} style={{ marginRight: 8 }} />
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+                Recommended For You
+              </Text>
+            </View>
+            {recommended.length > 0 ? recommended.map(renderRecommendedItem) : (
+              <Text style={{ color: colors.mutedForeground, padding: 8 }}>No recipes match these preferences.</Text>
+            )}
+          </View>
+        )}
+
+        {/* Favorites Section */}
+        {favorites.length > 0 && (
+          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+            <View style={styles.sectionHeader}>
+              <AppIcon name="heart" size={20} color={colors.danger} style={{ marginRight: 8 }} />
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+                Your Favorites
+              </Text>
+            </View>
+            {favorites.map(renderRecommendedItem)}
+          </View>
+        )}
+
+        {/* Quick Meals */}
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
           <View style={styles.sectionHeader}>
-            <AppIcon name="star" size={20} color={colors.primary} style={{ marginRight: 8 }} />
-            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-              Recommended For You
-            </Text>
+            <AppIcon name="clock" size={20} color={colors.primary} style={{ marginRight: 8 }} />
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Quick Meals (Under 25 min)</Text>
           </View>
-          {recommended.length > 0 ? recommended.map(renderRecommendedItem) : (
-            <Text style={{ color: colors.mutedForeground, padding: 8 }}>No recipes match these preferences.</Text>
-          )}
-        </View>
-      )}
 
-      {/* Favorites Section */}
-      {favorites.length > 0 && (
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
-          <View style={styles.sectionHeader}>
-            <AppIcon name="heart" size={20} color={colors.danger} style={{ marginRight: 8 }} />
-            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-              Your Favorites
-            </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
+            {quickMeals.map((recipe) => (
+              <Pressable
+                key={recipe.id}
+                style={[styles.quickCard, { backgroundColor: colors.muted, borderRadius: radius.lg }]}
+                onPress={() => handleRecipePress(recipe)}
+              >
+                <View style={{ marginBottom: 12, height: 40, justifyContent: 'center' }}>
+                  {renderRecipeImage(recipe.image)}
+                </View>
+                <Text style={[styles.quickTitle, { color: colors.foreground }]} numberOfLines={2}>{recipe.name}</Text>
+                <Text style={[styles.quickMeta, { color: colors.mutedForeground }]}>{recipe.time}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+
+        <View style={[styles.planBanner, { backgroundColor: colors.card, borderRadius: radius.card }]}>
+          <View style={styles.planContent}>
+            <Text style={[styles.planTitle, { color: colors.foreground }]}>Plan your week's meals</Text>
+            <Text style={[styles.planMeta, { color: colors.mutedForeground }]}>Auto-generate grocery lists from recipes</Text>
           </View>
-          {favorites.map(renderRecommendedItem)}
+          <Pressable
+            style={[styles.planButton, { backgroundColor: colors.primary, borderRadius: radius.md }]}
+            onPress={() => (navigation as any).navigate("home", { screen: "MealPlan" })}
+          >
+            <Text style={[styles.planButtonText, { color: colors.primaryForeground }]}>Plan Now</Text>
+          </Pressable>
         </View>
-      )}
-
-      {/* Quick Meals */}
-      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
-        <View style={styles.sectionHeader}>
-          <AppIcon name="clock" size={20} color={colors.primary} style={{ marginRight: 8 }} />
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Quick Meals (Under 25 min)</Text>
-        </View>
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
-          {quickMeals.map((recipe) => (
-            <Pressable
-              key={recipe.id}
-              style={[styles.quickCard, { backgroundColor: colors.muted, borderRadius: radius.lg }]}
-              onPress={() => handleRecipePress(recipe)}
-            >
-              <View style={{ marginBottom: 12, height: 40, justifyContent: 'center' }}>
-                {renderRecipeImage(recipe.image)}
-              </View>
-              <Text style={[styles.quickTitle, { color: colors.foreground }]} numberOfLines={2}>{recipe.name}</Text>
-              <Text style={[styles.quickMeta, { color: colors.mutedForeground }]}>{recipe.time}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      </View>
-
-      <View style={[styles.planBanner, { backgroundColor: colors.card, borderRadius: radius.card }]}>
-        <View style={styles.planContent}>
-          <Text style={[styles.planTitle, { color: colors.foreground }]}>Plan your week's meals</Text>
-          <Text style={[styles.planMeta, { color: colors.mutedForeground }]}>Auto-generate grocery lists from recipes</Text>
-        </View>
-        <Pressable
-          style={[styles.planButton, { backgroundColor: colors.primary, borderRadius: radius.md }]}
-          onPress={() => (navigation as any).navigate("home", { screen: "MealPlan" })}
-        >
-          <Text style={[styles.planButtonText, { color: colors.primaryForeground }]}>Plan Now</Text>
-        </Pressable>
-      </View>
-    </>
-  );
+      </>
+    );
 
   };
 
@@ -401,57 +402,81 @@ export const RecipesScreen: React.FC = () => {
   const renderAllRecipes = () => (
     <View style={styles.listContainer}>
       {filteredRecipes.map((recipe) => (
-        <Pressable
-          key={recipe.id}
-          style={[styles.recipeCard, { backgroundColor: colors.card, borderRadius: radius.lg }]}
-          onPress={() => handleRecipePress(recipe)}
-        >
-          <View style={[styles.recipeImage, { backgroundColor: colors.muted, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' }]}>
-            {renderRecipeImage(recipe.image)}
-          </View>
-          <View style={styles.recipeInfo}>
-            <View style={styles.recipeHeader}>
-              <Text style={[styles.recipeName, { color: colors.foreground }]}>{recipe.name}</Text>
-              <Pressable onPress={(e) => {
-                e.stopPropagation();
-                toggleBookmark(recipe.id);
-              }}>
+        <View key={recipe.id} style={{ marginBottom: 16 }}>
+          {/* Main Card */}
+          <Pressable
+            style={[styles.recipeCard, { backgroundColor: colors.card, borderRadius: radius.lg }]}
+            onPress={() => handleRecipePress(recipe)}
+          >
+            <View style={[styles.recipeImage, { backgroundColor: colors.muted, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }]}>
+              {renderRecipeImage(recipe.image)}
+              {/* Bookmark Overlay - Top Left */}
+              <Pressable
+                style={{ position: 'absolute', top: 8, left: 8, backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 20, padding: 6 }}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  toggleBookmark(recipe.id);
+                }}
+              >
                 <AppIcon
                   name="bookmark"
-                  size={20}
-                  color={recipe.saved ? colors.primary : colors.mutedForeground}
-                  style={recipe.saved ? { opacity: 1 } : { opacity: 0.5 }}
+                  size={16}
+                  color={recipe.saved ? colors.primary : "#fff"}
+                  style={{ opacity: 1 }}
                 />
               </Pressable>
             </View>
+            <View style={styles.recipeInfo}>
+              <View style={styles.recipeHeader}>
+                <Text style={[styles.recipeName, { color: colors.foreground }]}>{recipe.name}</Text>
+              </View>
 
-            <View style={styles.recipeMetaRow}>
-              {recipe.time ? (
-                <View style={styles.metaItem}>
-                  <AppIcon name="clock" size={14} color={colors.mutedForeground} />
-                  <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.time}</Text>
-                </View>
-              ) : null}
-              {recipe.image !== "AUDIO_ICON" && recipe.image !== "mic" && (
-                <>
+              <View style={styles.recipeMetaRow}>
+                {recipe.time ? (
                   <View style={styles.metaItem}>
-                    <AppIcon name="users" size={14} color={colors.mutedForeground} />
-                    <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.servings}</Text>
+                    <AppIcon name="clock" size={14} color={colors.mutedForeground} />
+                    <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.time}</Text>
                   </View>
-                  <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.ingredients.length} items</Text>
-                </>
-              )}
-            </View>
+                ) : null}
+                {recipe.image !== "AUDIO_ICON" && recipe.image !== "mic" && (
+                  <>
+                    <View style={styles.metaItem}>
+                      <AppIcon name="users" size={14} color={colors.mutedForeground} />
+                      <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.servings}</Text>
+                    </View>
+                    <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.ingredients.length} items</Text>
+                  </>
+                )}
+              </View>
 
-            <View style={styles.tagsRow}>
-              {recipe.tags.map((tag) => (
-                <View key={tag} style={[styles.smallTag, { backgroundColor: 'rgba(46, 94, 153, 0.1)', borderRadius: radius.xs }]}>
-                  <Text style={[styles.smallTagText, { color: colors.primary }]}>{tag}</Text>
-                </View>
-              ))}
+              <View style={styles.tagsRow}>
+                {recipe.tags.map((tag) => (
+                  <View key={tag} style={[styles.smallTag, { backgroundColor: 'rgba(46, 94, 153, 0.1)', borderRadius: radius.xs }]}>
+                    <Text style={[styles.smallTagText, { color: colors.primary }]}>{tag}</Text>
+                  </View>
+                ))}
+              </View>
             </View>
+          </Pressable>
+
+          {/* Action Buttons - Outside the Card */}
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8, gap: 12, paddingHorizontal: 4 }}>
+            <Pressable
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+              onPress={() => handleEditRecipe(recipe)}
+            >
+              <AppIcon name="edit" size={16} color={colors.mutedForeground} />
+              <Text style={{ fontSize: 13, color: colors.mutedForeground, fontWeight: '500' }}>Edit</Text>
+            </Pressable>
+            <Pressable
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+              onPress={() => handleDeleteRecipe(recipe)}
+            >
+              <AppIcon name="trash" size={16} color={colors.danger} />
+              <Text style={{ fontSize: 13, color: colors.danger, fontWeight: '500' }}>Delete</Text>
+            </Pressable>
           </View>
-        </Pressable>
+        </View>
       ))}
       {filteredRecipes.length === 0 && (
         <View style={styles.emptyState}>
@@ -685,14 +710,14 @@ export const RecipesScreen: React.FC = () => {
       />
 
       {showAddRecipeModal && (
-      <AddNewRecipeModal
-        open={showAddRecipeModal}
-        recipe={recipeToEdit ?? undefined}
-        onClose={() => {
-          setShowAddRecipeModal(false);
-          setRecipeToEdit(null);
-        }}
-      />
+        <AddNewRecipeModal
+          open={showAddRecipeModal}
+          recipe={recipeToEdit ?? undefined}
+          onClose={() => {
+            setShowAddRecipeModal(false);
+            setRecipeToEdit(null);
+          }}
+        />
       )}
 
       <CreateCollectionModal
