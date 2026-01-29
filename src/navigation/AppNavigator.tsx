@@ -122,11 +122,7 @@ const AppNavigatorInner = () => {
           <>
             {!hasCompletedOnboarding ? (
               <Stack.Screen name="Onboarding">
-<<<<<<< HEAD
-                {({ navigation }: { navigation: NativeStackNavigationProp<any> }) => (
-=======
                 {({ navigation }: any) => (
->>>>>>> feature-storage
                   <OnboardingScreen
                     onSkip={() => {
                       completeOnboarding();
@@ -141,11 +137,7 @@ const AppNavigatorInner = () => {
               </Stack.Screen>
             ) : null}
             <Stack.Screen name="Auth">
-<<<<<<< HEAD
-              {({ navigation }: { navigation: NativeStackNavigationProp<any> }) => (
-=======
               {({ navigation }: any) => (
->>>>>>> feature-storage
                 <AuthScreen
                   onAuthenticated={() => {
                     // MainTabs or InitialSetup will render automatically due to state change

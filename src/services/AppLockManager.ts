@@ -30,7 +30,7 @@ class AppLockManager {
      * Whether authentication is currently required.
      */
     shouldRequireAuth(): boolean {
-        return this.settings.enabled && this.authRequired;
+        return (this.settings.enabled || this.settings.biometricEnabled) && this.authRequired;
     }
 
     /**
@@ -40,7 +40,7 @@ class AppLockManager {
         const prevEnabled = this.settings.enabled;
         this.settings = snapshot;
 
-        if (!snapshot.enabled) {
+        if (!snapshot.enabled && !snapshot.biometricEnabled) {
             this.authRequired = false;
         } else if (snapshot.enabled && !prevEnabled) {
             // Newly enabled → require auth immediately next time.
@@ -49,7 +49,7 @@ class AppLockManager {
     }
 
     prefersBiometric(): boolean {
-        return this.settings.biometricEnabled && this.settings.hasPin;
+        return this.settings.biometricEnabled;
     }
 }
 

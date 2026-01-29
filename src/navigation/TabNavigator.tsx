@@ -51,13 +51,13 @@ const HomeStack = () => (
 );
 
 const MoreStack = () => (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="MoreMain" component={MoreScreen} />
-      <Stack.Screen name="Notifications" component={NotificationsScreen} />
-      <Stack.Screen name="Privacy" component={PrivacyScreen} />
-      <Stack.Screen name="Theme" component={ThemeScreen} />
-      <Stack.Screen name="Settings" component={SettingsScreen} />
-      <Stack.Screen name="Export" component={ExportScreen} />
+  <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Screen name="MoreMain" component={MoreScreen} />
+    <Stack.Screen name="Notifications" component={NotificationsScreen} />
+    <Stack.Screen name="Privacy" component={PrivacyScreen} />
+    <Stack.Screen name="Theme" component={ThemeScreen} />
+    <Stack.Screen name="Settings" component={SettingsScreen} />
+    <Stack.Screen name="Export" component={ExportScreen} />
     <Stack.Screen name="DataExport" component={DataExportScreen} />
     <Stack.Screen name="Help" component={HelpScreen} />
     <Stack.Screen name="Tasks" component={TasksScreen} />
@@ -69,11 +69,7 @@ export const TabNavigator = () => (
     screenOptions={{
       headerShown: false,
     }}
-<<<<<<< HEAD
-    tabBar={(props: BottomTabBarProps) => {
-=======
     tabBar={(props: any) => {
->>>>>>> feature-storage
       // Get the current route name for the 'home' tab
       // We need to check if we are on the 'home' tab AND specifically on the 'HomeMain' screen
       // If we are deeper in the stack (Recipes, etc), we don't want to show 'active' state
@@ -98,17 +94,10 @@ export const TabNavigator = () => (
           onNavigate={(route) => {
             if (route === 'more') {
               const state = props.navigation.getState();
-<<<<<<< HEAD
-              const targetIndex = state.routes.findIndex(r => r.name === 'more');
-
-              if (targetIndex !== -1) {
-                const routes = state.routes.map((routeItem) => {
-=======
               const targetIndex = state.routes.findIndex((r: any) => r.name === 'more');
 
               if (targetIndex !== -1) {
                 const routes = state.routes.map((routeItem: any) => {
->>>>>>> feature-storage
                   if (routeItem.name === 'more') {
                     return {
                       ...routeItem,

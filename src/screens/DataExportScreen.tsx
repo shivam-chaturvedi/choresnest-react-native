@@ -14,11 +14,6 @@ import {
 } from "lucide-react-native";
 import { exportService, ExportFormat, ExportStats } from "../services/ExportService";
 
-const exportFormats: { id: ExportFormat; label: string; description: string; icon: any }[] = [
-  { id: 'json', label: "JSON", description: "Full data export", icon: FileJson },
-  { id: 'csv', label: "CSV", description: "Spreadsheet compatible", icon: FileSpreadsheet },
-];
-
 const initialDataOptions = [
   { id: 'events', label: "Calendar Events", items: 0, selected: true },
   { id: 'tasks', label: "Tasks & Chores", items: 0, selected: true },
@@ -26,13 +21,14 @@ const initialDataOptions = [
   { id: 'recipes', label: "Recipes", items: 0, selected: true },
   { id: 'documents', label: "Documents", items: 0, selected: false },
   { id: 'expenses', label: "Expenses", items: 0, selected: true },
+  { id: 'system', label: "System & Settings", items: 0, selected: true },
 ];
 
 export const DataExportScreen: React.FC = () => {
   const navigation = useNavigation();
   const colors = useThemeColors();
   const radius = useThemeRadius();
-  const [format, setFormat] = useState<ExportFormat>("json");
+  // Format is always 'json' now
 
   const [dataOptions, setDataOptions] = useState(initialDataOptions);
   const [stats, setStats] = useState<ExportStats | null>(null);
@@ -56,7 +52,7 @@ export const DataExportScreen: React.FC = () => {
     })));
   };
 
-  // Recalculate size when selection or format changes
+  // Recalculate size when selection changes
   useEffect(() => {
     if (!stats) return;
 
@@ -68,8 +64,8 @@ export const DataExportScreen: React.FC = () => {
       }
     });
 
-    exportService.calculateEstimatedSize(selectedStats, format).then(setEstimatedSize);
-  }, [stats, format, dataOptions]);
+    exportService.calculateEstimatedSize(selectedStats).then(setEstimatedSize);
+  }, [stats, dataOptions]);
 
   const toggleData = (id: string) => {
     setDataOptions(prev => prev.map(opt =>
@@ -86,7 +82,7 @@ export const DataExportScreen: React.FC = () => {
 
     setIsExporting(true);
     try {
-      const filePath = await exportService.generateBackup(format, selectedIds);
+      const filePath = await exportService.generateBackup(selectedIds);
       await exportService.shareBackup(filePath);
     } catch (error) {
       Alert.alert("Export Failed", "Could not generate or share backup file.");
@@ -113,42 +109,11 @@ export const DataExportScreen: React.FC = () => {
             <Download size={32} color={colors.primaryForeground} />
           </View>
           <View>
-            <Text style={[styles.heroTitle, { color: colors.primaryForeground }]}>Backup Your Data</Text>
-            <Text style={[styles.heroSubtitle, { color: 'rgba(255,255,255,0.9)' }]}>Export all your family data securely</Text>
+            <Text style={[styles.heroTitle, { color: colors.primaryForeground }]}>Full Backup</Text>
+            <Text style={[styles.heroSubtitle, { color: 'rgba(255,255,255,0.9)' }]}>Export your family data as a JSON file</Text>
           </View>
         </View>
 
-        {/* Export Format */}
-        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Export Format</Text>
-        <View style={{ gap: 8 }}>
-          {exportFormats.map((option) => (
-            <Pressable
-              key={option.id}
-              style={[
-                styles.optionCard,
-                { backgroundColor: colors.card, shadowColor: colors.shadow, borderRadius: radius.card },
-                format === option.id && { borderColor: colors.primary, borderWidth: 2 }
-              ]}
-              onPress={() => setFormat(option.id)}
-            >
-              <View style={[
-                styles.optionIcon,
-                { backgroundColor: colors.muted, borderRadius: radius.md },
-                format === option.id && { backgroundColor: colors.primary + '1A' } // Light blue
-              ]}>
-                <option.icon
-                  size={24}
-                  color={format === option.id ? colors.primary : colors.mutedForeground}
-                />
-              </View>
-              <View style={styles.optionText}>
-                <Text style={[styles.optionLabel, { color: colors.foreground }]}>{option.label}</Text>
-                <Text style={[styles.optionSubtitle, { color: colors.mutedForeground }]}>{option.description}</Text>
-              </View>
-              {format === option.id && <Check size={20} color={colors.primary} />}
-            </Pressable>
-          ))}
-        </View>
 
         {/* Select Data */}
         <View style={styles.sectionHeader}>

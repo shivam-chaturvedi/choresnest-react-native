@@ -732,6 +732,11 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         fontSize: 16,
     },
+    error: {
+        fontSize: 14,
+        marginTop: 8,
+        textAlign: 'center',
+    },
     saveButton: {
         paddingVertical: 14,
         alignItems: 'center',
