@@ -77,6 +77,7 @@ export interface VaultDocument {
   memberId: string;
   category?: string;
   expiryDate?: string;
+  filePath?: string;
   fileUri?: string;
   uri?: string;
   purchaseDate?: string;

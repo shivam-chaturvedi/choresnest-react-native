@@ -25,6 +25,7 @@ import { NotificationPanel } from "../components/notifications/NotificationPanel
 import { calculateTotalStorage, formatStorageSize } from "../utils/StorageUtils";
 import { generateAlerts, getCategoryCounts } from "../utils/VaultUtils";
 import { formatReminderRulesSummary, getPrimaryReminderField } from "../utils/VaultReminderUtils";
+import { SavedDocument } from "../utils/DocumentUtils";
 import {
   Menu,
   Camera,
@@ -144,11 +145,12 @@ export const VaultScreen: React.FC = () => {
     );
   };
 
-  // Combine global and active member docs
+  // Combine global vault and ALL member vaults (not just active member)
+  // This matches the count shown on the home screen
   const allDocs = useMemo(() => {
-    const memberDocs = activeMember ? (memberVaults[activeMember.id] || []) : [];
-    return [...globalVault, ...memberDocs];
-  }, [globalVault, memberVaults, activeMember]);
+    const allMemberDocs = Object.values(memberVaults || {}).flat();
+    return [...(globalVault || []), ...allMemberDocs];
+  }, [globalVault, memberVaults]);
 
   useEffect(() => {
     if (!selectedDocument) return;
@@ -440,15 +442,15 @@ export const VaultScreen: React.FC = () => {
                   <View style={[styles.docIconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
                     <Text style={{ fontSize: 20 }}>{doc.icon}</Text>
                   </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.docName, { color: colors.foreground }]}>{doc.name}</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                    {docDateLabel ? (
-                      <Text style={[styles.docDate, { color: colors.mutedForeground }]}>{docDateLabel}</Text>
-                    ) : null}
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.docName, { color: colors.foreground }]}>{doc.name}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                      {docDateLabel ? (
+                        <Text style={[styles.docDate, { color: colors.mutedForeground }]}>{docDateLabel}</Text>
+                      ) : null}
+                    </View>
+                    {renderDocMeta(doc)}
                   </View>
-                  {renderDocMeta(doc)}
-                </View>
                   <ChevronRight size={16} color={colors.mutedForeground} />
                 </Pressable>
               );
@@ -482,27 +484,27 @@ export const VaultScreen: React.FC = () => {
                 const docDateLabel = getDocumentDateLabel(doc);
                 return (
                   <Pressable
-                  key={doc.id}
-                  style={[styles.docRow, { backgroundColor: colors.card, borderRadius: radius.md }]}
-                  onPress={() => {
-                    setSelectedDocument(doc);
-                    setShowDetailsModal(true);
-                  }}
-                >
-                  <View style={[styles.docIconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
-                    <Text style={{ fontSize: 20 }}>{doc.icon}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.docName, { color: colors.foreground }]}>{doc.name}</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                      {docDateLabel ? (
-                        <Text style={[styles.docDate, { color: colors.mutedForeground }]}>{docDateLabel}</Text>
-                      ) : null}
+                    key={doc.id}
+                    style={[styles.docRow, { backgroundColor: colors.card, borderRadius: radius.md }]}
+                    onPress={() => {
+                      setSelectedDocument(doc);
+                      setShowDetailsModal(true);
+                    }}
+                  >
+                    <View style={[styles.docIconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
+                      <Text style={{ fontSize: 20 }}>{doc.icon}</Text>
                     </View>
-                    {renderDocMeta(doc)}
-                  </View>
-                  <ChevronRight size={16} color={colors.mutedForeground} />
-                </Pressable>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.docName, { color: colors.foreground }]}>{doc.name}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                        {docDateLabel ? (
+                          <Text style={[styles.docDate, { color: colors.mutedForeground }]}>{docDateLabel}</Text>
+                        ) : null}
+                      </View>
+                      {renderDocMeta(doc)}
+                    </View>
+                    <ChevronRight size={16} color={colors.mutedForeground} />
+                  </Pressable>
                 );
               })}
             </View>
@@ -620,18 +622,18 @@ export const VaultScreen: React.FC = () => {
                 <View style={[styles.docIconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
                   <Text style={{ fontSize: 20 }}>{doc.icon}</Text>
                 </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.docName, { color: colors.foreground }]}>{doc.name}</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                  <View style={[styles.docBadge, { backgroundColor: colors.muted, borderRadius: radius.xs }]}>
-                    <Text style={[styles.docBadgeText, { color: colors.mutedForeground }]}>{doc.type}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.docName, { color: colors.foreground }]}>{doc.name}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                    <View style={[styles.docBadge, { backgroundColor: colors.muted, borderRadius: radius.xs }]}>
+                      <Text style={[styles.docBadgeText, { color: colors.mutedForeground }]}>{doc.type}</Text>
+                    </View>
+                    {docDateLabel ? (
+                      <Text style={[styles.docDate, { color: colors.mutedForeground }]}>{docDateLabel}</Text>
+                    ) : null}
                   </View>
-                  {docDateLabel ? (
-                    <Text style={[styles.docDate, { color: colors.mutedForeground }]}>{docDateLabel}</Text>
-                  ) : null}
+                  {renderDocMeta(doc)}
                 </View>
-                {renderDocMeta(doc)}
-              </View>
                 <ChevronRight size={16} color={colors.mutedForeground} />
               </Pressable>
             );

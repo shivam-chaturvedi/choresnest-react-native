@@ -118,7 +118,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
         }));
       case "document": {
         const memberDocs = Object.entries(memberVaults || {}).flatMap(([memberId, docs]) =>
-          (docs || []).map((doc: any) => ({ ...doc, memberId }))
+          ((docs as any[]) || []).map((doc: any) => ({ ...doc, memberId }))
         );
         const allDocs = [...(globalVault || []), ...memberDocs];
         return allDocs.slice(0, PREVIEW_LIMIT).map(doc => ({

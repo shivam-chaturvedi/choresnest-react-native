@@ -16,12 +16,12 @@ import { VaultDocument } from "../../contexts/FamilyContext";
 import { NotificationCenter } from "../../services/NotificationCenter";
 import { DateTimePicker } from "../ui/SimpleDatePicker";
 import {
-  formatReminderRuleSummary,
-  getPrimaryReminderField,
-  normalizeReminderOffsets,
-  normalizeReminderTime,
-  REMINDER_OFFSET_OPTIONS,
-  VaultReminderRule,
+    formatReminderRuleSummary,
+    getPrimaryReminderField,
+    normalizeReminderOffsets,
+    normalizeReminderTime,
+    REMINDER_OFFSET_OPTIONS,
+    VaultReminderRule,
 } from "../../utils/VaultReminderUtils";
 import FileViewer from 'react-native-file-viewer';
 
@@ -101,18 +101,18 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
             setWarrantyTillDate(document.warrantyTillDate || '');
             setBillAmount(document.billAmount || '');
             setBillDate(document.billDate || '');
-        setProvider(document.provider || '');
-        setPolicyNumber(document.policyNumber || '');
-        setPremiumAmount(document.premiumAmount || '');
-        setServiceDate(document.serviceDate || '');
-        setNextServiceDate(document.nextServiceDate || '');
-        setCost(document.cost || '');
-        const reminderField = getPrimaryReminderField(document.type);
-        const reminderRule = reminderField ? (document.reminderRules || []).find(rule => rule.field === reminderField) : undefined;
-        setReminderOffsets(reminderRule?.offsets ? normalizeReminderOffsets(reminderRule.offsets) : [1]);
-        setReminderTime(reminderRule?.timeOfDay || '09:00');
-    }
-}, [document]);
+            setProvider(document.provider || '');
+            setPolicyNumber(document.policyNumber || '');
+            setPremiumAmount(document.premiumAmount || '');
+            setServiceDate(document.serviceDate || '');
+            setNextServiceDate(document.nextServiceDate || '');
+            setCost(document.cost || '');
+            const reminderField = getPrimaryReminderField(document.type);
+            const reminderRule = reminderField ? (document.reminderRules || []).find(rule => rule.field === reminderField) : undefined;
+            setReminderOffsets(reminderRule?.offsets ? normalizeReminderOffsets(reminderRule.offsets) : [1]);
+            setReminderTime(reminderRule?.timeOfDay || '09:00');
+        }
+    }, [document]);
 
     useEffect(() => {
         if (visible) {

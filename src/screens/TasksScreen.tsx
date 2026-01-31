@@ -50,21 +50,26 @@ export const TasksScreen: React.FC = () => {
   const { openSidebar } = useSidebar();
   const colors = useThemeColors();
   const radius = useThemeRadius();
-  const { tasks, addTask, updateTask, members } = useFamily();
+  const { tasks, addTask, updateTask, members, activeMember } = useFamily();
 
-  const filteredTasks = useMemo(
-    () => tasks.filter((task) => task.tab === activeTab),
-    [activeTab, tasks]
-  );
+  const filteredTasks = useMemo(() => {
+    if (activeTab === "My Tasks") {
+      // Show tasks assigned to the currently active member
+      return tasks.filter((task: Task) => task.assignee === activeMember?.id);
+    } else {
+      // "Family Tasks" - Show tasks assigned to all OTHER members (not the active one)
+      return tasks.filter((task: Task) => task.assignee !== activeMember?.id);
+    }
+  }, [activeTab, tasks, activeMember]);
 
-  const completedCount = filteredTasks.filter((task) => task.status === "done").length;
+  const completedCount = filteredTasks.filter((task: Task) => task.status === "done").length;
   const totalCount = filteredTasks.length;
   const progress = totalCount ? Math.round((completedCount / totalCount) * 100) : 0;
 
   const toggleTask = (taskId: string) => {
     try {
       if (!taskId) return;
-      const task = tasks.find(t => t.id === taskId);
+      const task = tasks.find((t: Task) => t.id === taskId);
       if (task) {
         updateTask(taskId, { status: task.status === "done" ? "pending" : "done" });
       }
@@ -96,7 +101,7 @@ export const TasksScreen: React.FC = () => {
         dateString: formattedDate,
         dueDisplay: formattedTime,
         assigneeId: taskData.person,
-        tab: activeTab,
+        // Removed static tab property - filtering now done dynamically based on assignee
       };
 
       if (editingTask) {
@@ -178,7 +183,7 @@ export const TasksScreen: React.FC = () => {
               </View>
 
               <View style={styles.taskList}>
-                {filteredTasks.map((task) => {
+                {filteredTasks.map((task: Task) => {
                   const priorityStyle = getPriorityStyle(task.priority, colors);
                   const assignee = members.find((m: any) => m.id === task.assignee)?.name || "Unassigned";
 
@@ -246,6 +251,7 @@ export const TasksScreen: React.FC = () => {
         open={showAddTask}
         onClose={() => setShowAddTask(false)}
         onSave={handleSaveTask}
+        taskToEdit={editingTask}
       />
     </>
   );

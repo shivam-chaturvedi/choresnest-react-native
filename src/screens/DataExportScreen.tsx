@@ -84,9 +84,10 @@ export const DataExportScreen: React.FC = () => {
     try {
       const filePath = await exportService.generateBackup(selectedIds);
       await exportService.shareBackup(filePath);
-    } catch (error) {
-      Alert.alert("Export Failed", "Could not generate or share backup file.");
-      console.error(error);
+    } catch (error: any) {
+      const errorMessage = error?.message || "Could not generate or share backup file.";
+      Alert.alert("Export Failed", errorMessage);
+      console.error('Export error:', error);
     } finally {
       setIsExporting(false);
     }

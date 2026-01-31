@@ -110,6 +110,7 @@ const ROUTE_FOR_CATEGORY: Record<NotificationCategory, NotificationRoute> = {
 
 export type RepeatType =
     | 'none'
+    | 'hourly'
     | 'daily'
     | 'weekly'
     | 'biweekly'
@@ -234,6 +235,8 @@ const findNextManualEventDate = (
 
 const repeatFrequencyForType = (repeatType: RepeatType): RepeatFrequency | undefined => {
     switch (repeatType) {
+        case 'hourly':
+            return RepeatFrequency.HOURLY;
         case 'daily':
             return RepeatFrequency.DAILY;
         case 'weekly':
@@ -433,6 +436,8 @@ const normalizeRepeatType = (rule?: string | RepeatType): RepeatType => {
         return rule;
     }
     switch (rule.toLowerCase()) {
+        case 'hourly':
+            return 'hourly';
         case 'daily':
             return 'daily';
         case 'weekly':

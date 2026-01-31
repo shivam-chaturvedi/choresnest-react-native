@@ -21,6 +21,7 @@ import { useFamily, CalendarEvent, Task } from "../contexts/FamilyContext";
 import { MealType, useMealPlan } from "../contexts/MealPlanContext";
 import { theme } from "../theme";
 import { useThemeColors } from "../contexts/ThemeContext";
+import { useCountry } from "../contexts/CountryContext";
 import { AddEventModal } from "../components/modals/AddEventModal";
 import { AddTaskModal } from "../components/modals/AddTaskModal";
 import { AddShoppingItemModal } from "../components/modals/AddShoppingItemModal";
@@ -54,6 +55,7 @@ export const HomeScreen: React.FC = () => {
   const { getMealsForDay, getRecipeById } = useMealPlan();
   const navigation = useNavigation<any>();
   const { openSidebar } = useSidebar();
+  const { formatDateTime } = useCountry();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
@@ -484,7 +486,7 @@ export const HomeScreen: React.FC = () => {
 
           <View style={{ marginBottom: 24, paddingHorizontal: 4 }}>
             <Text style={{ fontSize: 14, color: colors.mutedForeground, fontWeight: "500" }}>
-              {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+              {formatDateTime(new Date(), { weekday: "long", month: "long", day: "numeric" })}
             </Text>
             <Text style={{ fontSize: 24, fontWeight: "800", color: colors.foreground, marginTop: 4 }}>
               {(() => {
@@ -716,22 +718,22 @@ export const HomeScreen: React.FC = () => {
 
           {/* Alerts */}
           <View style={{ marginBottom: 24 }}>
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              marginBottom: 12,
-              justifyContent: 'space-between',
-            }}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-              <AppIcon name="alert" size={18} color={colors.warning} style={{ marginRight: 8 }} />
-              <Text style={{ fontSize: 18, fontWeight: "700", color: colors.foreground }}>Alerts & Reminders</Text>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                marginBottom: 12,
+                justifyContent: 'space-between',
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <AppIcon name="alert" size={18} color={colors.warning} style={{ marginRight: 8 }} />
+                <Text style={{ fontSize: 18, fontWeight: "700", color: colors.foreground }}>Alerts & Reminders</Text>
+              </View>
+              <Pressable onPress={() => setShowNotifications(true)}>
+                <Text style={{ fontSize: 12, color: colors.primary, fontWeight: "600" }}>Show all</Text>
+              </Pressable>
             </View>
-            <Pressable onPress={() => setShowNotifications(true)}>
-              <Text style={{ fontSize: 12, color: colors.primary, fontWeight: "600" }}>Show all</Text>
-            </Pressable>
-          </View>
             {visibleAlerts.slice(0, 3).map((alert) => (
               <Pressable
                 key={alert.id}
@@ -770,7 +772,7 @@ export const HomeScreen: React.FC = () => {
           <View style={styles.statsGrid}>
             <Pressable
               style={[styles.statCard, { marginRight: 12, backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.foreground, borderRadius: radius.card }]}
-              onPress={() => (navigation as any).navigate("Recipes")}
+              onPress={() => (navigation as any).navigate("MainTabs", { screen: "lists" })}
             >
               <View style={[styles.statIconCircle, { backgroundColor: colors.info + '25' }]}>
                 <AppIcon name="shoppingCart" size={20} color={colors.info} />
@@ -807,7 +809,7 @@ export const HomeScreen: React.FC = () => {
                   shadowColor: colors.shadow,
                 },
               ]}
-              onPress={() => {}}
+              onPress={() => { }}
               onStartShouldSetResponder={() => true}
             >
               <View style={styles.detailModalHeader}>
@@ -942,7 +944,7 @@ const styles = StyleSheet.create({
   },
   membersRow: {
     flexDirection: "row",
-    gap: 12,
+    gap: 8,
     flexWrap: "wrap",
     justifyContent: "flex-start",
   },
@@ -950,7 +952,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: 4,
-    minWidth: 64,
+    width: "22%",
+    marginBottom: 8,
   },
   memberIconWrapper: {
     width: 56,

@@ -16,12 +16,12 @@ import { captureImage, pickDocument, SavedDocument } from "../../utils/DocumentU
 import { NotificationCenter } from "../../services/NotificationCenter";
 import { DateTimePicker } from "../ui/SimpleDatePicker";
 import {
-  formatReminderRuleSummary,
-  getPrimaryReminderField,
-  normalizeReminderOffsets,
-  normalizeReminderTime,
-  REMINDER_OFFSET_OPTIONS,
-  VaultReminderRule,
+    formatReminderRuleSummary,
+    getPrimaryReminderField,
+    normalizeReminderOffsets,
+    normalizeReminderTime,
+    REMINDER_OFFSET_OPTIONS,
+    VaultReminderRule,
 } from "../../utils/VaultReminderUtils";
 
 interface DocumentScannerProps {
@@ -54,15 +54,15 @@ const CATEGORIES = [
 ];
 
 const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
-  open,
-  onOpenChange,
-  onDocumentSaved,
+    open,
+    onOpenChange,
+    onDocumentSaved,
 }) => {
-  const colors = useThemeColors();
-  const radius = useThemeRadius();
-  const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState<'upload' | 'form'>('upload');
-  const [selectedFile, setSelectedFile] = useState<SavedDocument | null>(null);
+    const colors = useThemeColors();
+    const radius = useThemeRadius();
+    const [loading, setLoading] = useState(false);
+    const [step, setStep] = useState<'upload' | 'form'>('upload');
+    const [selectedFile, setSelectedFile] = useState<SavedDocument | null>(null);
 
     // Form fields
     const [documentName, setDocumentName] = useState('');
@@ -89,7 +89,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
     const [reminderOffsets, setReminderOffsets] = useState<number[]>([1]);
     const [reminderTime, setReminderTime] = useState('09:00');
 
-  const resetForm = () => {
+    const resetForm = () => {
         setStep('upload');
         setSelectedFile(null);
         setDocumentName('');
@@ -110,25 +110,25 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
     };
 
     const pushNotification = (title: string, detail: string, severity: "success" | "warning" | "default") => {
-    NotificationCenter.addNotification({
-      title,
-      detail,
-      tone:
-        severity === "success"
-          ? colors.success + "20"
-          : severity === "warning"
-            ? colors.warning + "20"
-            : colors.muted + "50",
-      textColor:
-        severity === "success"
-          ? colors.success
-          : severity === "warning"
-            ? colors.warning
-            : colors.foreground,
-      icon: severity === "warning" ? "alertCircle" : "file",
-      route: { tab: "home", screen: "Vault" },
-    });
-  };
+        NotificationCenter.addNotification({
+            title,
+            detail,
+            tone:
+                severity === "success"
+                    ? colors.success + "20"
+                    : severity === "warning"
+                        ? colors.warning + "20"
+                        : colors.muted + "50",
+            textColor:
+                severity === "success"
+                    ? colors.success
+                    : severity === "warning"
+                        ? colors.warning
+                        : colors.foreground,
+            icon: severity === "warning" ? "alertCircle" : "file",
+            route: { tab: "home", screen: "Vault" },
+        });
+    };
 
     // if (!open) return null; // Logic handled by wrapper
 
@@ -182,24 +182,24 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
             return;
         }
 
-    if (selectedFile) {
-        onDocumentSaved?.({
-            ...selectedFile,
-            documentName,
-            category: selectedCategory,
-            purchaseDate,
-            warrantyTillDate,
-            billAmount,
-            billDate,
-            provider,
-            policyNumber,
-            premiumAmount,
-            serviceDate,
-            nextServiceDate,
-            cost,
-            reminderRules: buildReminderRules(),
-        });
-        pushNotification("Document saved", `${documentName} added to the vault.`, "success");
+        if (selectedFile) {
+            onDocumentSaved?.({
+                ...selectedFile,
+                documentName,
+                category: selectedCategory,
+                purchaseDate,
+                warrantyTillDate,
+                billAmount,
+                billDate,
+                provider,
+                policyNumber,
+                premiumAmount,
+                serviceDate,
+                nextServiceDate,
+                cost,
+                reminderRules: buildReminderRules(),
+            });
+            pushNotification("Document saved", `${documentName} added to the vault.`, "success");
             resetForm();
             onOpenChange(false);
         }
@@ -207,8 +207,8 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
 
     const handleClose = () => {
         resetForm();
-    onOpenChange(false);
-};
+        onOpenChange(false);
+    };
 
     const buildReminderRules = (): VaultReminderRule[] => {
         const field = getPrimaryReminderField(selectedCategory);

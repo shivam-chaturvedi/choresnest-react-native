@@ -1,6 +1,6 @@
 import { database } from '../database';
 import RNFS from 'react-native-fs';
-import { Share } from 'react-native';
+import Share from 'react-native-share';
 
 export type ExportFormat = 'json';
 
@@ -112,11 +112,10 @@ export const exportService = {
         const addTableData = async (tableName: string, key: string) => {
             try {
                 const records = await database.collections.get(tableName).query().fetch();
-                if (records.length > 0) {
-                    data[key] = records.map(r => (r as any)._raw);
-                }
+                data[key] = records.map(r => (r as any)._raw);
             } catch (e) {
                 console.warn(`Failed to export table ${tableName}`, e);
+                data[key] = []; // Ensure key exists even on failure
             }
         };
 
@@ -159,11 +158,20 @@ export const exportService = {
 
         // 2. Format Data
         const content = JSON.stringify({ meta, data }, null, 2);
-        const filename = `backup_${new Date().toISOString().split('T')[0]}_${new Date().getTime()}.json`;
+
+        // Validate that we have some data
+        const totalRecords = Object.values(data).reduce((sum, arr) => sum + arr.length, 0);
+        if (totalRecords === 0) {
+            throw new Error('No data to export. Please ensure you have data in the selected categories.');
+        }
+
+        const filename = `backup_${new Date().toISOString().split('T')[0]}_${new Date().getTime()}.txt`;
 
         // 3. Write File
         const path = `${RNFS.CachesDirectoryPath}/${filename}`;
         await RNFS.writeFile(path, content, 'utf8');
+
+        console.log(`Backup created: ${path}, ${totalRecords} records, ${(content.length / 1024).toFixed(1)} KB`);
         return path;
     },
 
@@ -172,12 +180,23 @@ export const exportService = {
      */
     async shareBackup(filePath: string): Promise<void> {
         try {
-            await Share.share({
-                url: `file://${filePath}`,
-                title: 'Export Data',
+            console.log("Sharing file:", filePath);
+            const filename = filePath.split("/").pop();
+
+            // MUST use urls array (Android fix)
+            await Share.open({
+                title: "Family Backup",
+                urls: [`file://${filePath}`],
+                type: "text/plain",
+                filename: filename, // Force filename for Android
+                failOnCancel: false,
             });
-        } catch (error) {
-            console.error('Share failed:', error);
+
+        } catch (error: any) {
+            console.error("Share failed:", error);
+
+            if (error?.error === "User did not share") return;
+
             throw error;
         }
     }

@@ -20,6 +20,7 @@ interface AddTaskModalProps {
   open: boolean;
   onClose: () => void;
   onSave?: (task: TaskData) => void;
+  taskToEdit?: any; // Task being edited
 }
 
 interface TaskData {
@@ -32,7 +33,7 @@ interface TaskData {
 
 const taskIcons = ["📝", "📞", "💊", "📧", "🏫", "🔧", "📦", "🧹", "🧺", "🍽️", "🛏️", "🐕"];
 
-export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSave }) => {
+export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSave, taskToEdit }) => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
   const { members, activeMember } = useFamily();
@@ -59,8 +60,44 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
 
   useEffect(() => {
     if (!open) return;
-    setFormData(createDefaultTaskData());
-  }, [open, createDefaultTaskData]);
+
+    if (taskToEdit) {
+      // Prefill form with existing task data
+      const dueDate = new Date();
+
+      // Parse date if available
+      if (taskToEdit.date) {
+        const [year, month, day] = taskToEdit.date.split('-').map(Number);
+        dueDate.setFullYear(year, month - 1, day);
+      }
+
+      // Parse time if available (format: "HH:MM AM/PM")
+      if (taskToEdit.due) {
+        const timeMatch = taskToEdit.due.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+        if (timeMatch) {
+          let hours = parseInt(timeMatch[1], 10);
+          const minutes = parseInt(timeMatch[2], 10);
+          const period = timeMatch[3].toUpperCase();
+
+          if (period === 'PM' && hours !== 12) hours += 12;
+          if (period === 'AM' && hours === 12) hours = 0;
+
+          dueDate.setHours(hours, minutes, 0, 0);
+        }
+      }
+
+      setFormData({
+        name: taskToEdit.name || '',
+        icon: taskToEdit.icon || '📝',
+        priority: taskToEdit.priority || 'medium',
+        dueDate: dueDate,
+        person: taskToEdit.assignee || activeMember?.id || defaultMemberId || '1',
+      });
+    } else {
+      // Reset to default for new task
+      setFormData(createDefaultTaskData());
+    }
+  }, [open, taskToEdit, createDefaultTaskData, activeMember?.id, defaultMemberId]);
 
 
   const handleSave = () => {
@@ -185,7 +222,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
                 <Text style={[styles.label, { color: colors.mutedForeground }]}>Assign to</Text>
               </View>
               <View style={styles.assigneeRow}>
-                {members.map((member) => {
+                {members.map((member: any) => {
                   const profileColor = PROFILE_COLORS.find(c => c.value === member.color)?.hex || colors.primary;
                   const isSelected = formData.person === member.id;
                   return (
@@ -230,7 +267,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
                 ]}
                 onPress={handleSave}
               >
-                <Text style={[styles.saveButtonText, { color: colors.primaryForeground }]}>Add Task</Text>
+                <Text style={[styles.saveButtonText, { color: colors.primaryForeground }]}>{taskToEdit ? 'Update Task' : 'Add Task'}</Text>
               </Pressable>
             </View>
 

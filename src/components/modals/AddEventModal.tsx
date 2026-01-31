@@ -45,6 +45,7 @@ const eventColors = [
 
 const repeatOptions = [
   { value: "never", label: "Never repeats" },
+  { value: "hourly", label: "Every hour" },
   { value: "daily", label: "Every day" },
   { value: "weekly", label: "Every week" },
   { value: "biweekly", label: "Every 2 weeks" },
@@ -841,6 +842,13 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                         </View>
                         {repeatType !== 'never' && (
                           <View style={{ marginTop: 12 }}>
+                            <View style={styles.labelRow}>
+                              <AppIcon name="calendar" size={14} color={colors.mutedForeground} />
+                              <Text style={[styles.label, { color: colors.mutedForeground }]}>Repeat Until</Text>
+                            </View>
+                            <Text style={{ fontSize: 12, color: colors.mutedForeground, marginBottom: 8, marginLeft: 2 }}>
+                              Select when this recurring event should stop
+                            </Text>
                             <CustomDateTimePicker
                               mode="date"
                               value={repeatEndDate || new Date()}
@@ -970,7 +978,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                     <Text style={[styles.label, { color: colors.mutedForeground }]}>Assign to</Text>
                   </View>
                   <View style={styles.chipsContainer}>
-                    {members.map((member) => {
+                    {members.map((member: any) => {
                       const profileColor = PROFILE_COLORS.find(c => c.value === member.color)?.hex || colors.primary;
                       return (
                         <Pressable

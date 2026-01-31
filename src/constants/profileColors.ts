@@ -14,4 +14,9 @@ export const PROFILE_COLORS: ProfileColor[] = [
     { id: "red", name: "Red", value: "member-red", hex: "#ef4444" },
     { id: "cyan", name: "Cyan", value: "member-cyan", hex: "#06b6d4" },
     { id: "yellow", name: "Yellow", value: "member-yellow", hex: "#eab308" },
+    { id: "teal", name: "Teal", value: "member-teal", hex: "#14b8a6" },
+    { id: "lime", name: "Lime", value: "member-lime", hex: "#84cc16" },
+    { id: "brown", name: "Brown", value: "member-brown", hex: "#795548" },
+    { id: "slate", name: "Slate", value: "member-slate", hex: "#64748B" },
+    { id: "navy", name: "Navy", value: "member-navy", hex: "#1e3a8a" },
 ];
