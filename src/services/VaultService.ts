@@ -2,6 +2,7 @@ import { database } from '../database';
 import Document from '../database/models/Document';
 import { Q } from '@nozbe/watermelondb';
 import { NotificationScheduler } from './NotificationScheduler';
+import { DocumentInput } from './DocumentInput';
 
 export const VaultService = {
     observeGlobalDocuments: () => {
@@ -16,7 +17,7 @@ export const VaultService = {
         return database.get<Document>('documents').query().observe();
     },
 
-    addDocument: async (data: Partial<Document>) => {
+    addDocument: async (data: DocumentInput) => {
         try {
             const createdDoc = await database.write(async () => {
                 return await database.get<Document>('documents').create(d => {
@@ -67,7 +68,7 @@ export const VaultService = {
         }
     },
 
-    updateDocument: async (id: string, updates: Partial<Document> | any) => {
+    updateDocument: async (id: string, updates: DocumentInput) => {
         try {
             let updatedDoc: Document | null = null;
             await database.write(async () => {

@@ -8,6 +8,7 @@ import {
   Download,
   FileJson,
   FileSpreadsheet,
+  FileText,
   Check,
   Loader2,
   Share2
@@ -161,6 +162,37 @@ export const DataExportScreen: React.FC = () => {
             <>
               <Share2 size={20} color="#fff" style={{ marginRight: 8 }} />
               <Text style={[styles.exportText, { color: colors.primaryForeground }]}>Export & Share</Text>
+            </>
+          )}
+        </Pressable>
+
+        {/* Export PDF Button */}
+        <Pressable
+          style={[styles.exportButton, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, marginTop: 12, borderRadius: radius.card }, isExporting && { opacity: 0.8 }]}
+          onPress={async () => {
+            const selectedIds = dataOptions.filter(o => o.selected).map(o => o.id);
+            if (selectedIds.length === 0) {
+              Alert.alert("No Data Selected", "Please select at least one data type to export.");
+              return;
+            }
+
+            setIsExporting(true);
+            try {
+              await exportService.exportAsPDF(selectedIds);
+            } catch (error: any) {
+              Alert.alert("Export Failed", error?.message || "Could not generate PDF.");
+            } finally {
+              setIsExporting(false);
+            }
+          }}
+          disabled={isExporting}
+        >
+          {isExporting ? (
+            <ActivityIndicator color={colors.foreground} />
+          ) : (
+            <>
+              <FileText size={20} color={colors.foreground} style={{ marginRight: 8 }} />
+              <Text style={[styles.exportText, { color: colors.foreground }]}>Export as PDF</Text>
             </>
           )}
         </Pressable>

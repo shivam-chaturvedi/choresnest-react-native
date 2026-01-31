@@ -1,6 +1,7 @@
-import { database } from '../database';
-import RNFS from 'react-native-fs';
-import Share from 'react-native-share';
+import Share from "react-native-share";
+import RNFS from "react-native-fs";
+import * as RNHTMLtoPDF from "react-native-html-to-pdf";
+import { database } from "../database";
 
 export type ExportFormat = 'json';
 
@@ -197,6 +198,237 @@ export const exportService = {
 
             if (error?.error === "User did not share") return;
 
+            throw error;
+        }
+    },
+
+    /**
+     * Generate styled HTML content for PDF
+     */
+    generateHTML(data: Record<string, any[]>): string {
+        const date = new Date().toLocaleDateString();
+        const time = new Date().toLocaleTimeString();
+
+        // CSS for a professional, printable look
+        const css = `
+            <style>
+                body { font-family: 'Helvetica', 'Arial', sans-serif; padding: 20px; color: #333; line-height: 1.6; }
+                h1 { color: #2563eb; border-bottom: 2px solid #2563eb; padding-bottom: 10px; margin-bottom: 20px; }
+                h2 { color: #1e40af; margin-top: 30px; margin-bottom: 15px; border-left: 4px solid #1e40af; padding-left: 10px; background: #f3f4f6; padding: 8px; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; }
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: top; }
+                th { background-color: #f8fafc; font-weight: bold; color: #475569; }
+                tr:nth-child(even) { background-color: #f9fafb; }
+                .meta { margin-bottom: 30px; font-size: 14px; color: #666; }
+                .empty { font-style: italic; color: #999; padding: 10px; }
+                .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; text-transform: uppercase; }
+                .badge-high { background: #fee2e2; color: #991b1b; }
+                .badge-medium { background: #fef3c7; color: #92400e; }
+                .badge-low { background: #d1fae5; color: #065f46; }
+            </style>
+        `;
+
+        let html = `
+            <html>
+            <head>${css}</head>
+            <body>
+                <h1>Family Chores Export</h1>
+                <div class="meta">
+                    <strong>Generated:</strong> ${date} at ${time}<br/>
+                    <strong>Total Items:</strong> ${Object.values(data).reduce((acc, arr) => acc + arr.length, 0)}
+                </div>
+        `;
+
+        // Helper to generate tables dynamically specifically tuned for each type
+        const renderTable = (title: string, items: any[], columns: { header: string, key: string, render?: (item: any) => string }[]) => {
+            if (!items || items.length === 0) return `<h2>${title}</h2><div class="empty">No data available</div>`;
+
+            const headers = columns.map(c => `<th>${c.header}</th>`).join('');
+            const rows = items.map(item => `
+                <tr>
+                    ${columns.map(c => `<td>${c.render ? c.render(item) : (item[c.key] || '-')}</td>`).join('')}
+                </tr>
+            `).join('');
+
+            return `
+                <h2>${title} (${items.length})</h2>
+                <table>
+                    <thead><tr>${headers}</tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
+        };
+
+        // EVENTS
+        if (data.events) {
+            html += renderTable('Calendar Events', data.events, [
+                { header: 'Title', key: 'title' },
+                {
+                    header: 'Date',
+                    key: 'start_date',
+                    render: (i) => {
+                        const d = i.start_date || i.date;
+                        return d ? new Date(d).toLocaleDateString() : '-';
+                    }
+                },
+                { header: 'Type', key: 'type' },
+                { header: 'Status', key: 'status' }
+            ]);
+        }
+
+        // TASKS
+        if (data.tasks) {
+            html += renderTable('Tasks & Chores', data.tasks, [
+                { header: 'Title', key: 'title' },
+                { header: 'Assigned To', key: 'assigned_to', render: (i) => i.assigned_to || 'Unassigned' },
+                { header: 'Frequency', key: 'frequency' },
+                {
+                    header: 'Priority',
+                    key: 'priority',
+                    render: (i) => {
+                        const p = (i.priority || "low").toLowerCase();
+                        return `<span class="badge badge-${p}">${p}</span>`;
+                    }
+                },
+                { header: 'Status', key: 'status' }
+            ]);
+        }
+
+        // SHOPPING LISTS
+        if (data.lists) {
+            html += renderTable('Shopping Lists', data.lists, [
+                { header: 'Name', key: 'name' },
+                { header: 'Icon', key: 'icon' },
+                {
+                    header: 'Review Items',
+                    key: 'id',
+                    render: (list) => {
+                        const items = data.list_items?.filter(item => item.list_id === list.id) || [];
+                        return items.length > 0
+                            ? items.map(item => `• ${item.name} (${item.quantity || 1})`).join('<br/>')
+                            : '<i>No items</i>';
+                    }
+                }
+            ]);
+        }
+
+        // RECIPES
+        if (data.recipes) {
+            html += renderTable('Recipes', data.recipes, [
+                { header: 'Name', key: 'name' },
+                { header: 'Prep Time', key: 'prep_time', render: (i) => i.prep_time ? `${i.prep_time} min` : '-' },
+                { header: 'Servings', key: 'servings' },
+                { header: 'Category', key: 'category' }
+            ]);
+        }
+
+        // DOCUMENTS
+        if (data.documents) {
+            html += renderTable('Documents', data.documents, [
+                { header: 'Name', key: 'name' },
+                { header: 'Type', key: 'type' },
+                { header: 'Member', key: 'member_id' },
+                {
+                    header: 'Expiry',
+                    key: 'expiry_date',
+                    render: (i) => i.expiry_date ? new Date(i.expiry_date).toLocaleDateString() : '-'
+                }
+            ]);
+        }
+
+        // EXPENSES
+        if (data.transactions) {
+            html += renderTable('Expenses', data.transactions, [
+                { header: 'Description', key: 'description' },
+                { header: 'Amount', key: 'amount', render: (i) => `$${Number(i.amount).toFixed(2)}` },
+                { header: 'Category', key: 'category' },
+                {
+                    header: 'Date',
+                    key: 'date',
+                    render: (i) => i.date ? new Date(i.date).toLocaleDateString() : '-'
+                }
+            ]);
+        }
+
+        html += `</body></html>`;
+        return html;
+    },
+
+    /**
+     * Generate PDF and share it
+     */
+    async exportAsPDF(selectedData: string[]): Promise<void> {
+        try {
+            const data: Record<string, any[]> = {};
+
+            // Re-use logic to fetch data (inline here for now to avoid refactoring generateBackup too much)
+            const fetchTable = async (tableName: string, key: string) => {
+                try {
+                    const records = await database.collections.get(tableName).query().fetch();
+                    data[key] = records.map(r => (r as any)._raw);
+                } catch { data[key] = []; }
+            };
+
+            // Fetch based on selection - MATCHING JSON EXPORT LOGIC
+            if (selectedData.includes('events')) {
+                await fetchTable('events', 'events');
+            }
+            if (selectedData.includes('tasks')) {
+                await fetchTable('tasks', 'tasks');
+            }
+            if (selectedData.includes('lists')) {
+                await fetchTable('lists', 'lists');
+                await fetchTable('list_items', 'list_items');
+            }
+            if (selectedData.includes('recipes')) {
+                await fetchTable('recipes', 'recipes');
+            }
+            if (selectedData.includes('documents')) {
+                await fetchTable('documents', 'documents');
+            }
+            if (selectedData.includes('expenses')) {
+                await fetchTable('transactions', 'transactions');
+                await fetchTable('budgets', 'budgets');
+            }
+            if (selectedData.includes('system')) {
+                await fetchTable('users', 'users');
+            }
+
+            const html = this.generateHTML(data);
+
+            const fileName = `FamilyExport_${Date.now()}`;
+            const options = {
+                html,
+                fileName,
+                directory: 'Documents',
+                base64: false
+            };
+
+            // Generate PDF using the imported library
+            const file = await RNHTMLtoPDF.generatePDF(options);
+
+            if (!file || !file.filePath) throw new Error('PDF generation failed');
+
+            console.log('PDF Generated:', file.filePath);
+
+            // Copy to Downloads folder so social apps can access it
+            const destPath = `${RNFS.DownloadDirectoryPath}/${fileName}.pdf`;
+            await RNFS.copyFile(file.filePath, destPath);
+
+            console.log('Copied to Downloads:', destPath);
+
+            // Share from Downloads directory
+            await Share.open({
+                title: "Family Chores PDF Export",
+                message: "Family Chores Data Export",
+                urls: [`file://${destPath}`],
+                type: "application/pdf",
+                subject: "Family Chores Export",
+                failOnCancel: false,
+            });
+
+        } catch (error) {
+            console.error('PDF Export failed:', error);
             throw error;
         }
     }
