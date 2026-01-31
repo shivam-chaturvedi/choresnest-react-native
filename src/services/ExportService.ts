@@ -262,45 +262,86 @@ export const exportService = {
         // EVENTS
         if (data.events) {
             html += renderTable('Calendar Events', data.events, [
-                { header: 'Title', key: 'title' },
+                {
+                    header: 'Title',
+                    key: 'title',
+                    render: (e) => `${e.icon || '📅'} ${e.title || '-'}`
+                },
                 {
                     header: 'Date',
-                    key: 'start_date',
-                    render: (i) => {
-                        const d = i.start_date || i.date;
-                        return d ? new Date(d).toLocaleDateString() : '-';
-                    }
+                    key: 'date',
+                    render: (e) => e.date || '-'
                 },
-                { header: 'Type', key: 'type' },
-                { header: 'Status', key: 'status' }
+                {
+                    header: 'Time',
+                    key: 'time',
+                    render: (e) => `${e.time || '-'} → ${e.end_time || '-'}`
+                },
+                {
+                    header: 'Recurring',
+                    key: 'is_recurring',
+                    render: (e) => e.is_recurring ? 'Yes' : 'No'
+                }
             ]);
         }
 
         // TASKS
         if (data.tasks) {
             html += renderTable('Tasks & Chores', data.tasks, [
-                { header: 'Title', key: 'title' },
-                { header: 'Assigned To', key: 'assigned_to', render: (i) => i.assigned_to || 'Unassigned' },
-                { header: 'Frequency', key: 'frequency' },
+                {
+                    header: 'Task',
+                    key: 'name',
+                    render: (t) => `${t.icon || '📝'} ${t.name || '-'}`
+                },
+                {
+                    header: 'Status',
+                    key: 'status',
+                    render: (t) => t.status || '-'
+                },
                 {
                     header: 'Priority',
                     key: 'priority',
-                    render: (i) => {
-                        const p = (i.priority || "low").toLowerCase();
+                    render: (t) => {
+                        const p = (t.priority || "low").toLowerCase();
                         return `<span class="badge badge-${p}">${p}</span>`;
                     }
                 },
-                { header: 'Status', key: 'status' }
+                {
+                    header: 'Due',
+                    key: 'due_display',
+                    render: (t) => t.due_display ? `${t.date} at ${t.due_display}` : (t.date || '-')
+                }
+            ]);
+        }
+
+        // MEMBERS
+        if (data.members) {
+            html += renderTable('Family Members', data.members, [
+                {
+                    header: 'Name',
+                    key: 'name',
+                    render: (m) => `${m.symbol || '👤'} ${m.name}`
+                },
+                {
+                    header: 'Color',
+                    key: 'color',
+                    render: (m) => m.color || '-'
+                },
+                {
+                    header: 'Active',
+                    key: 'is_active',
+                    render: (m) => m.is_active ? 'Yes' : 'No'
+                }
             ]);
         }
 
         // SHOPPING LISTS
-        if (data.lists) {
+        if (data.lists && data.lists.length > 0) {
             html += renderTable('Shopping Lists', data.lists, [
                 { header: 'Name', key: 'name' },
                 { header: 'Icon', key: 'icon' },
                 {
-                    header: 'Review Items',
+                    header: 'Items',
                     key: 'id',
                     render: (list) => {
                         const items = data.list_items?.filter(item => item.list_id === list.id) || [];
@@ -313,7 +354,7 @@ export const exportService = {
         }
 
         // RECIPES
-        if (data.recipes) {
+        if (data.recipes && data.recipes.length > 0) {
             html += renderTable('Recipes', data.recipes, [
                 { header: 'Name', key: 'name' },
                 { header: 'Prep Time', key: 'prep_time', render: (i) => i.prep_time ? `${i.prep_time} min` : '-' },
@@ -322,22 +363,8 @@ export const exportService = {
             ]);
         }
 
-        // DOCUMENTS
-        if (data.documents) {
-            html += renderTable('Documents', data.documents, [
-                { header: 'Name', key: 'name' },
-                { header: 'Type', key: 'type' },
-                { header: 'Member', key: 'member_id' },
-                {
-                    header: 'Expiry',
-                    key: 'expiry_date',
-                    render: (i) => i.expiry_date ? new Date(i.expiry_date).toLocaleDateString() : '-'
-                }
-            ]);
-        }
-
-        // EXPENSES
-        if (data.transactions) {
+        // TRANSACTIONS (Expenses)
+        if (data.transactions && data.transactions.length > 0) {
             html += renderTable('Expenses', data.transactions, [
                 { header: 'Description', key: 'description' },
                 { header: 'Amount', key: 'amount', render: (i) => `$${Number(i.amount).toFixed(2)}` },
@@ -346,6 +373,93 @@ export const exportService = {
                     header: 'Date',
                     key: 'date',
                     render: (i) => i.date ? new Date(i.date).toLocaleDateString() : '-'
+                }
+            ]);
+        }
+
+        // BUDGETS
+        if (data.budgets && data.budgets.length > 0) {
+            html += renderTable('Budgets', data.budgets, [
+                { header: 'Name', key: 'name' },
+                { header: 'Limit', key: 'limit', render: (b) => `$${Number(b.limit).toFixed(2)}` }
+            ]);
+        }
+
+        // SETTINGS
+        if (data.settings && data.settings.length > 0) {
+            html += renderTable('App Settings', data.settings, [
+                { header: 'Key', key: 'key' },
+                { header: 'Value', key: 'value' }
+            ]);
+        }
+
+        // NOTIFICATION PREFERENCES
+        if (data.notification_preferences && data.notification_preferences.length > 0) {
+            html += renderTable('Notification Preferences', data.notification_preferences, [
+                { header: 'Category', key: 'category' },
+                {
+                    header: 'Enabled',
+                    key: 'enabled',
+                    render: (n) => n.enabled ? 'Yes' : 'No'
+                },
+                {
+                    header: 'Reminder',
+                    key: 'reminder_offset_minutes',
+                    render: (n) => `${n.reminder_offset_minutes} min before`
+                }
+            ]);
+        }
+
+        // QUIET HOURS
+        if (data.quiet_hours && data.quiet_hours.length > 0) {
+            html += renderTable('Quiet Hours', data.quiet_hours, [
+                {
+                    header: 'Enabled',
+                    key: 'enabled',
+                    render: (q) => q.enabled ? 'Yes' : 'No'
+                },
+                {
+                    header: 'Start',
+                    key: 'start_hour',
+                    render: (q) => `${q.start_hour}:${String(q.start_minute).padStart(2, '0')}`
+                },
+                {
+                    header: 'End',
+                    key: 'end_hour',
+                    render: (q) => `${q.end_hour}:${String(q.end_minute).padStart(2, '0')}`
+                }
+            ]);
+        }
+
+        // APP LOCK
+        if (data.app_lock && data.app_lock.length > 0) {
+            html += renderTable('App Lock', data.app_lock, [
+                {
+                    header: 'Enabled',
+                    key: 'enabled',
+                    render: (a) => a.enabled ? 'Yes' : 'No'
+                },
+                {
+                    header: 'Biometric',
+                    key: 'biometric_enabled',
+                    render: (a) => a.biometric_enabled ? 'Yes' : 'No'
+                },
+                {
+                    header: 'Updated',
+                    key: 'updated_at',
+                    render: (a) => a.updated_at ? new Date(a.updated_at).toLocaleString() : '-'
+                }
+            ]);
+        }
+
+        // USER PREFERENCES
+        if (data.user_preferences && data.user_preferences.length > 0) {
+            html += renderTable('User Preferences', data.user_preferences, [
+                { header: 'Country', key: 'country_code' },
+                {
+                    header: 'Updated',
+                    key: 'updated_at',
+                    render: (u) => u.updated_at ? new Date(u.updated_at).toLocaleString() : '-'
                 }
             ]);
         }
@@ -361,12 +475,22 @@ export const exportService = {
         try {
             const data: Record<string, any[]> = {};
 
-            // Re-use logic to fetch data (inline here for now to avoid refactoring generateBackup too much)
+            // Clean WatermelonDB internal fields
+            const cleanRow = (row: any) => {
+                const copy = { ...row };
+                delete copy._status;
+                delete copy._changed;
+                return copy;
+            };
+
+            // Fetch table data
             const fetchTable = async (tableName: string, key: string) => {
                 try {
                     const records = await database.collections.get(tableName).query().fetch();
-                    data[key] = records.map(r => (r as any)._raw);
-                } catch { data[key] = []; }
+                    data[key] = records.map(r => cleanRow((r as any)._raw));
+                } catch {
+                    data[key] = [];
+                }
             };
 
             // Fetch based on selection - MATCHING JSON EXPORT LOGIC
@@ -379,9 +503,13 @@ export const exportService = {
             if (selectedData.includes('lists')) {
                 await fetchTable('lists', 'lists');
                 await fetchTable('list_items', 'list_items');
+                await fetchTable('list_categories', 'list_categories');
             }
             if (selectedData.includes('recipes')) {
                 await fetchTable('recipes', 'recipes');
+                await fetchTable('collections', 'collections');
+                await fetchTable('collection_recipes', 'collection_recipes');
+                await fetchTable('meal_plans', 'meal_plans');
             }
             if (selectedData.includes('documents')) {
                 await fetchTable('documents', 'documents');
@@ -392,6 +520,12 @@ export const exportService = {
             }
             if (selectedData.includes('system')) {
                 await fetchTable('users', 'users');
+                await fetchTable('members', 'members');
+                await fetchTable('settings', 'settings');
+                await fetchTable('notification_preferences', 'notification_preferences');
+                await fetchTable('quiet_hours', 'quiet_hours');
+                await fetchTable('app_lock', 'app_lock');
+                await fetchTable('user_preferences', 'user_preferences');
             }
 
             const html = this.generateHTML(data);
