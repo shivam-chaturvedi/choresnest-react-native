@@ -2,6 +2,7 @@ import Share from "react-native-share";
 import RNFS from "react-native-fs";
 import { generatePDF } from 'react-native-html-to-pdf';
 import { database } from "../database";
+import { Platform } from "react-native";
 
 export type ExportFormat = 'json';
 
@@ -213,6 +214,8 @@ export const exportService = {
             const html = this.generateHTML(data);
 
             // 3. Create PDF
+            // Note: react-native-html-to-pdf typically saves to Documents/ or Cache depending on OS
+            // We'll let it save where it wants, then move it if needed.
             const options = {
                 html,
                 fileName: `FamilyChores_Export_${new Date().getTime()}`,
@@ -220,12 +223,27 @@ export const exportService = {
             };
 
             const file = await generatePDF(options);
-            console.log('PDF Generated:', file.filePath);
+            console.log('PDF Generated initially at:', file.filePath);
 
-            // Check if file exists and return path
             if (!file.filePath) throw new Error('PDF generation failed: No file path returned');
 
-            return file.filePath;
+            // 4. Move to Cache Directory (Crucial for consistent sharing on Android)
+            const filename = file.filePath.split('/').pop();
+            const destPath = `${RNFS.CachesDirectoryPath}/${filename}`;
+
+            // On Android, the file might already be in a cache-like area or Documents.
+            // Explicitly move/copy it to our app's safe cache directory.
+            if (file.filePath !== destPath) {
+                // Remove destination if exists
+                if (await RNFS.exists(destPath)) {
+                    await RNFS.unlink(destPath);
+                }
+                // Copy file
+                await RNFS.copyFile(file.filePath, destPath);
+                console.log('PDF copied to cache:', destPath);
+            }
+
+            return destPath;
         } catch (error) {
             console.error('PDF Generation Error:', error);
             throw error;
@@ -246,43 +264,48 @@ export const exportService = {
             console.log("Original filePath:", filePath);
 
             const exists = await RNFS.exists(filePath);
-            console.log("File exists:", exists);
-
             if (!exists) {
                 throw new Error(`File not found at path: ${filePath}`);
             }
 
             const filename = filePath.split("/").pop();
-            console.log("Filename:", filename);
-
-            // Determine mime type based on extension
             const isPdf = filename?.toLowerCase().endsWith('.pdf');
             const mimeType = isPdf ? 'application/pdf' : 'text/plain';
             const title = isPdf ? "Family Chores PDF Export" : "Family Backup";
 
-            console.log("Is PDF:", isPdf);
+            // Ensure path has file:// prefix for proper file sharing
+            let shareUrl = filePath;
+            if (!filePath.startsWith('file://') && !filePath.startsWith('content://')) {
+                shareUrl = `file://${filePath}`;
+            }
+
+            console.log("Final Share URL:", shareUrl);
             console.log("MIME type:", mimeType);
 
-            // For Android file sharing, react-native-share handles file:// prefix internally
-            // So we need to pass the raw path without file:// prefix
-            const cleanPath = filePath.replace(/^file:\/\//, '');
-            console.log("Clean path (no prefix):", cleanPath);
-            console.log("=== SHARE DEBUG END ===");
-
-            // Use Share.open() with urls array for file attachment
-            await Share.open({
+            // Prepare share options
+            // Use 'url' for single file sharing. This is the most standard way to trigger 
+            // the "Share 1 file" sheet on Android.
+            const shareOptions: any = {
                 title: title,
-                message: isPdf ? "Family Chores PDF Export" : "Family Chores Data Backup",
-                urls: [cleanPath],
+                url: shareUrl,
                 type: mimeType,
                 failOnCancel: false,
-            });
+                subject: title,
+            };
+
+            // Only add message if it's NOT a PDF/File share, or if we want to be safe.
+            // Often adding a message converts it to a "text share" with attachment, 
+            // rather than a "file share". For backups, we want clean file sharing.
+            if (!isPdf) {
+                shareOptions.message = "Family Chores Data Backup";
+            }
+
+            console.log("Share options prepared");
+            await Share.open(shareOptions);
 
         } catch (error: any) {
             console.error("Share failed:", error);
-
             if (error?.error === "User did not share") return;
-
             throw error;
         }
     },
