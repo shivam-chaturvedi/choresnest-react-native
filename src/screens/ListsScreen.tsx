@@ -158,16 +158,17 @@ export const ListsScreen: React.FC = () => {
 
   const handleToggleItem = async (id: string) => {
     try {
+      console.log(`Toggling grocery item: ${id}`);
       await toggleGroceryItem(id);
-    } catch (e) {
-      console.error("Toggle failed", e);
-      Alert.alert("Error", "Could not update item");
+      console.log(`Successfully toggled item: ${id}`);
+    } catch (error) {
+      console.error("Failed to toggle grocery item:", error);
+      Alert.alert("Error", "Could not update item. Please try again.");
     }
   };
 
   const renderItemCard = (item: GroceryItem, index: number, isPurchased: boolean) => {
     const category = categories.find((c: any) => c.id === item.categoryId);
-    const categoryColor = category?.color || colors.primary;
 
     const renderRightActions = (progress: any, dragX: any) => {
       return (
@@ -209,7 +210,7 @@ export const ListsScreen: React.FC = () => {
         ]}
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-          <View style={[styles.categoryIconSmall, { backgroundColor: categoryColor + '20' }]}>
+          <View style={[styles.categoryIconSmall, { backgroundColor: category?.color + '20' }]}>
             <Text style={{ fontSize: 16 }}>{category?.icon || "📦"}</Text>
           </View>
           <View style={{ flex: 1, marginLeft: 12 }}>

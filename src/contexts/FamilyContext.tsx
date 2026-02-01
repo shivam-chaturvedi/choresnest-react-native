@@ -427,6 +427,8 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                 purchasedAt: purchasedAtIso,
               };
             });
+            console.log(`FamilyContext: Grocery list updated with ${mapped.length} items`);
+            console.log(`FamilyContext: Completed items: ${mapped.filter(i => i.completed).length}`);
             setGroceryList(mapped);
           } catch (error) {
             console.error('Error mapping grocery items:', error);

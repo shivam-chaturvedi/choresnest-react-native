@@ -455,7 +455,9 @@ export const TaskService = {
     observeLists: () => database.get<List>('lists').query().observe(),
 
     observeShoppingListItems: () => {
-        return database.get<ListItem>('list_items').query().observe();
+        return database.get<ListItem>('list_items')
+            .query()
+            .observeWithColumns(['is_completed', 'purchased_at', 'name', 'quantity']);
     },
 
     addGroceryItem: async (data: GroceryItemPayload) => {

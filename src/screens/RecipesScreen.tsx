@@ -431,13 +431,15 @@ export const RecipesScreen: React.FC = () => {
                     <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.time}</Text>
                   </View>
                 ) : null}
-                <>
-                  <View style={styles.metaItem}>
-                    <AppIcon name="users" size={14} color={colors.mutedForeground} />
-                    <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.servings}</Text>
-                  </View>
-                  <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.ingredients.length} items</Text>
-                </>
+                {recipe.image !== "AUDIO_ICON" && recipe.image !== "mic" && (
+                  <>
+                    <View style={styles.metaItem}>
+                      <AppIcon name="users" size={14} color={colors.mutedForeground} />
+                      <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.servings}</Text>
+                    </View>
+                    <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.ingredients.length} items</Text>
+                  </>
+                )}
               </View>
 
               <View style={styles.tagsRow}>
