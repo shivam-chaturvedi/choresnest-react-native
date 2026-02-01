@@ -8,6 +8,7 @@ import {
     ScrollView,
 } from 'react-native';
 import { AppIcon } from '../ui/AppIcon';
+import { RecipeImage } from '../recipes/RecipeImage';
 import { useThemeColors } from '../../contexts/ThemeContext';
 import { useRecipes } from '../../contexts/RecipeContext';
 
@@ -55,7 +56,7 @@ export const AddMealModal: React.FC<AddMealModalProps> = ({
                                     onPress={() => onSelectRecipe(recipe.id)}
                                     style={[styles.recipeCard, { backgroundColor: colors.muted }]}
                                 >
-                                    <Text style={styles.recipeEmoji}>{recipe.image}</Text>
+                                    <RecipeImage image={recipe.image} size={40} />
                                     <View style={styles.recipeInfo}>
                                         <Text style={[styles.recipeName, { color: colors.foreground }]}>{recipe.name}</Text>
                                         <Text style={[styles.recipeMeta, { color: colors.mutedForeground }]}>

@@ -129,7 +129,7 @@ export const TaskService = {
         (async () => {
             try {
                 const oldNotificationId = task.notificationId;
-            const shouldNotify = (task.status !== 'done') && (task.reminderEnabled);
+                const shouldNotify = (task.status !== 'done') && (task.reminderEnabled);
 
                 if (shouldNotify) {
                     const triggerDate = parseReminderDateTime(task.dateString, task.dueDisplay);
@@ -179,12 +179,12 @@ export const TaskService = {
                         await task.update(t => { t.notificationId = undefined; });
                     });
 
-                        pushHomeNotification(
-                            "Task reminder cancelled",
-                            `${task.name} will no longer trigger reminders.`,
-                            "warning",
-                            TASKS_ROUTE
-                        );
+                    pushHomeNotification(
+                        "Task reminder cancelled",
+                        `${task.name} will no longer trigger reminders.`,
+                        "warning",
+                        TASKS_ROUTE
+                    );
                     await NotificationScheduler.notifyImmediateUpdate(
                         'tasks',
                         `Task reminder cancelled: ${task.name}`,
@@ -252,15 +252,15 @@ export const TaskService = {
         // However, the DB write is already done.
         (async () => {
             try {
-            const eventDate = parseReminderDateTime(event.dateString, event.time);
-            if (eventDate) {
-                if (event.reminderOffsetMinutes !== undefined && event.reminderOffsetMinutes < 0) {
-                    return;
-                }
+                const eventDate = parseReminderDateTime(event.dateString, event.time);
+                if (eventDate) {
+                    if (event.reminderOffsetMinutes !== undefined && event.reminderOffsetMinutes < 0) {
+                        return;
+                    }
 
-                const preferredReminderMinutes = await NotificationPreferencesService.getReminderTime('events');
-                const reminderMinutes = event.reminderOffsetMinutes ?? preferredReminderMinutes;
-                const triggerDate = new Date(eventDate.getTime() - reminderMinutes * 60000);
+                    const preferredReminderMinutes = await NotificationPreferencesService.getReminderTime('events');
+                    const reminderMinutes = event.reminderOffsetMinutes ?? preferredReminderMinutes;
+                    const triggerDate = new Date(eventDate.getTime() - reminderMinutes * 60000);
 
                     if (triggerDate > new Date() || event.isRecurring) {
                         const repeatRule = event.isRecurring ? event.recurrenceRule : undefined;
@@ -283,13 +283,13 @@ export const TaskService = {
                             }
                         );
 
-                    if (notificationId) {
-                        await database.write(async () => {
-                            await event.update(e => { e.notificationId = notificationId; });
-                        });
+                        if (notificationId) {
+                            await database.write(async () => {
+                                await event.update(e => { e.notificationId = notificationId; });
+                            });
+                        }
                     }
                 }
-            }
             } catch (err) {
                 console.error('Failed to schedule background notification for event:', err);
             }

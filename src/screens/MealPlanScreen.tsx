@@ -36,6 +36,10 @@ const parseDuration = (timeStr: string): number => {
   return match ? parseInt(match[1], 10) : 30; // default 30
 };
 
+import { Linking } from "react-native";
+import { ImageGalleryModal } from "../components/modals/ImageGalleryModal";
+import { AudioPlayerModal } from "../components/modals/AudioPlayerModal";
+
 export const MealPlanScreen: React.FC = () => {
   const navigation = useNavigation();
   const colors = useThemeColors();
@@ -104,10 +108,29 @@ export const MealPlanScreen: React.FC = () => {
     }
   };
 
+  const [showImageGallery, setShowImageGallery] = useState(false);
+  const [showAudioPlayer, setShowAudioPlayer] = useState(false);
+
   const handleOpenRecipe = (recipeId: number) => {
     const recipe = getRecipeById(recipeId);
-    if (recipe) {
-      setSelectedRecipe(recipe);
+    if (!recipe) return;
+
+    setSelectedRecipe(recipe);
+
+    if (recipe.url) {
+      let targetUrl = recipe.url;
+      if (!/^https?:\/\//i.test(targetUrl)) {
+        targetUrl = `https://${targetUrl}`;
+      }
+      Linking.openURL(targetUrl).catch(err => {
+        console.error("Failed to open URL", err);
+        showToast({ title: "Error", description: "Could not open link", type: "warning" });
+      });
+    } else if (recipe.audio) {
+      setShowAudioPlayer(true);
+    } else if (recipe.images && recipe.images.length > 0) {
+      setShowImageGallery(true);
+    } else {
       setShowRecipeDetail(true);
     }
   };
@@ -488,6 +511,21 @@ export const MealPlanScreen: React.FC = () => {
         open={showRecipeDetail}
         onOpenChange={setShowRecipeDetail}
         onBookmark={handleBookmark}
+      />
+
+      <ImageGalleryModal
+        open={showImageGallery}
+        onClose={() => setShowImageGallery(false)}
+        images={selectedRecipe?.images || (selectedRecipe?.image ? [selectedRecipe.image] : [])}
+        title={selectedRecipe?.name}
+      />
+
+      <AudioPlayerModal
+        open={showAudioPlayer}
+        onClose={() => setShowAudioPlayer(false)}
+        audioSrc={selectedRecipe?.audio || ""}
+        title={selectedRecipe?.name}
+        duration={selectedRecipe?.duration || 0}
       />
     </>
   );

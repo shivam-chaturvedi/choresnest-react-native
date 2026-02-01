@@ -1,18 +1,110 @@
 import React from "react";
-import { View, Text, StyleSheet, Pressable } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
 import { theme } from "../../theme";
 import { useFamily } from "../../contexts/FamilyContext";
 import { useMealPlan } from "../../contexts/MealPlanContext";
 import { AppIcon } from "../ui/AppIcon";
 
-export const FamilyDashboard: React.FC = () => {
-    const { events, groceryList, familyName, tasks } = useFamily();
-    const { plannedMeals } = useMealPlan();
+interface FamilyDashboardProps {
+    activeMemberId?: string;
+}
 
-    const totalEvents = events.length;
-    const pendingTasks = tasks.filter((t: any) => t.status === 'pending').length;
-    const totalMealsPlanned = plannedMeals.length;
-    const pendingGroceries = groceryList.filter((i: any) => !i.completed).length;
+export const FamilyDashboard: React.FC<FamilyDashboardProps> = ({ activeMemberId }) => {
+    // Safely get context data with fallbacks
+    let events: any[] = [];
+    let groceryList: any[] = [];
+    let familyName = "Family";
+    let tasks: any[] = [];
+    let plannedMeals: any[] = [];
+
+    try {
+        const familyContext = useFamily();
+        events = Array.isArray(familyContext?.events) ? familyContext.events : [];
+        groceryList = Array.isArray(familyContext?.groceryList) ? familyContext.groceryList : [];
+        familyName = familyContext?.familyName || "Family";
+        tasks = Array.isArray(familyContext?.tasks) ? familyContext.tasks : [];
+    } catch (error) {
+        console.error("FamilyDashboard: Error loading family context", error);
+    }
+
+    try {
+        const mealContext = useMealPlan();
+        plannedMeals = Array.isArray(mealContext?.plannedMeals) ? mealContext.plannedMeals : [];
+    } catch (error) {
+        console.error("FamilyDashboard: Error loading meal plan context", error);
+    }
+
+    // Safely filter data by active member with error handling
+    let filteredEvents: any[] = [];
+    let filteredTasks: any[] = [];
+    let totalEvents = 0;
+    let pendingTasks = 0;
+    let totalMealsPlanned = 0;
+    let pendingGroceries = 0;
+
+    try {
+        filteredEvents = activeMemberId
+            ? events.filter((e: any) => {
+                try {
+                    return e?.memberId === activeMemberId;
+                } catch {
+                    return false;
+                }
+            })
+            : events;
+
+        totalEvents = filteredEvents.length || 0;
+    } catch (error) {
+        console.error("FamilyDashboard: Error filtering events", error);
+        filteredEvents = [];
+        totalEvents = 0;
+    }
+
+    try {
+        filteredTasks = activeMemberId
+            ? tasks.filter((t: any) => {
+                try {
+                    const isAssigned = t?.assignee === activeMemberId;
+                    const isPending = t?.status === 'pending';
+                    return isAssigned && isPending;
+                } catch {
+                    return false;
+                }
+            })
+            : tasks.filter((t: any) => {
+                try {
+                    return t?.status === 'pending';
+                } catch {
+                    return false;
+                }
+            });
+
+        pendingTasks = filteredTasks.length || 0;
+    } catch (error) {
+        console.error("FamilyDashboard: Error filtering tasks", error);
+        filteredTasks = [];
+        pendingTasks = 0;
+    }
+
+    try {
+        totalMealsPlanned = plannedMeals.length || 0;
+    } catch (error) {
+        console.error("FamilyDashboard: Error counting meals", error);
+        totalMealsPlanned = 0;
+    }
+
+    try {
+        pendingGroceries = groceryList.filter((i: any) => {
+            try {
+                return !i?.completed;
+            } catch {
+                return false;
+            }
+        }).length || 0;
+    } catch (error) {
+        console.error("FamilyDashboard: Error filtering groceries", error);
+        pendingGroceries = 0;
+    }
 
     return (
         <View style={styles.container}>
@@ -23,7 +115,9 @@ export const FamilyDashboard: React.FC = () => {
                         <AppIcon name="trendingUp" size={24} color={theme.colors.primary} />
                     </View>
                     <View>
-                        <Text style={styles.activityTitle}>{familyName} Activity</Text>
+                        <Text style={styles.activityTitle}>
+                            {activeMemberId ? "My Activity" : `${familyName} Activity`}
+                        </Text>
                         <Text style={styles.activitySubtitle}>Weekly summary</Text>
                     </View>
                 </View>

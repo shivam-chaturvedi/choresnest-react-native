@@ -156,8 +156,18 @@ export const ListsScreen: React.FC = () => {
     return member ? member.symbol : "👤";
   };
 
+  const handleToggleItem = async (id: string) => {
+    try {
+      await toggleGroceryItem(id);
+    } catch (e) {
+      console.error("Toggle failed", e);
+      Alert.alert("Error", "Could not update item");
+    }
+  };
+
   const renderItemCard = (item: GroceryItem, index: number, isPurchased: boolean) => {
     const category = categories.find((c: any) => c.id === item.categoryId);
+    const categoryColor = category?.color || colors.primary;
 
     const renderRightActions = (progress: any, dragX: any) => {
       return (
@@ -176,7 +186,7 @@ export const ListsScreen: React.FC = () => {
         <Pressable
           style={[styles.swipedAction, styles.leftAction, { backgroundColor: colors.success }]}
           onPress={() => {
-            if (!item.completed) toggleGroceryItem(item.id);
+            if (!item.completed) handleToggleItem(item.id);
           }}
         >
           <AppIcon name="check" size={20} color="#fff" />
@@ -199,7 +209,7 @@ export const ListsScreen: React.FC = () => {
         ]}
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-          <View style={[styles.categoryIconSmall, { backgroundColor: category?.color + '20' }]}>
+          <View style={[styles.categoryIconSmall, { backgroundColor: categoryColor + '20' }]}>
             <Text style={{ fontSize: 16 }}>{category?.icon || "📦"}</Text>
           </View>
           <View style={{ flex: 1, marginLeft: 12 }}>
@@ -207,7 +217,7 @@ export const ListsScreen: React.FC = () => {
             <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
               <Text style={[styles.itemDetail, { color: colors.mutedForeground }]}>{item.quantity} {item.unit}</Text>
               <View style={[styles.addedByBadge, { backgroundColor: colors.muted, borderRadius: radius.sm, marginLeft: 8 }]}>
-                <Text style={{ fontSize: 10 }}>{getMemberIcon(item.addedBy)}</Text>
+                <Text style={{ fontSize: 10 }}>{getMemberIcon(item.addedBy || "")}</Text>
               </View>
               {isPurchased && item.purchasedAt && (
                 <Text style={[styles.itemDetail, { color: colors.mutedForeground, marginLeft: 8 }]}>
@@ -227,7 +237,7 @@ export const ListsScreen: React.FC = () => {
               <AppIcon name="trash" size={18} color={colors.danger} />
             </Pressable>
             <Pressable
-              onPress={() => toggleGroceryItem(item.id)}
+              onPress={() => handleToggleItem(item.id)}
               style={[styles.doneBtn, { backgroundColor: colors.success, borderRadius: radius.sm }]}
             >
               <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Done</Text>
@@ -235,7 +245,7 @@ export const ListsScreen: React.FC = () => {
           </View>
         ) : (
           <Pressable
-            onPress={() => toggleGroceryItem(item.id)}
+            onPress={() => handleToggleItem(item.id)}
             style={[styles.actionIconBtn, { backgroundColor: colors.muted }]}
           >
             <AppIcon name="rotateCw" size={18} color={colors.mutedForeground} />
@@ -250,7 +260,7 @@ export const ListsScreen: React.FC = () => {
         renderRightActions={renderRightActions}
         renderLeftActions={renderLeftActions}
         onSwipeableRightOpen={() => removeGroceryItem(item.id)}
-        onSwipeableLeftOpen={() => !item.completed && toggleGroceryItem(item.id)}
+        onSwipeableLeftOpen={() => !item.completed && handleToggleItem(item.id)}
         containerStyle={{ marginBottom: 10 }}
       >
         {cardContent}

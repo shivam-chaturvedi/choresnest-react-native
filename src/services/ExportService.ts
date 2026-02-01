@@ -3,6 +3,7 @@ import RNFS from "react-native-fs";
 import { generatePDF } from 'react-native-html-to-pdf';
 import { database } from "../database";
 import { Platform } from "react-native";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type ExportFormat = 'json';
 
@@ -17,40 +18,64 @@ export interface ExportStats {
     system: number;
 }
 
+const ASYNC_KEYS = {
+    recipes: '@family_chores_recipes',
+    collections: '@family_chores_collections',
+    transactions: 'FINANCE_TRANSACTIONS',
+    budgets: 'FINANCE_BUDGETS',
+};
+
 export const exportService = {
     isPdfGenerating: false,
 
     /**
-     * Get live counts of items in the database
+     * Get stats for data selection
      */
     async getStats(): Promise<ExportStats> {
         try {
+            // Helper to get count from Async Storage arrays with error handling
+            const getAsyncCount = async (key: string): Promise<number> => {
+                try {
+                    if (!key) return 0;
+                    const json = await AsyncStorage.getItem(key);
+                    if (!json) return 0;
+                    const parsed = JSON.parse(json);
+                    return Array.isArray(parsed) ? parsed.length : 0;
+                } catch (error) {
+                    console.error(`getStats: Error reading AsyncStorage key ${key}`, error);
+                    return 0;
+                }
+            };
+
             const [
                 events,
                 tasks,
                 lists,
                 listItems,
-                recipes,
-                collections,
-                recipeCollections,
+                listCategories,
+                // WatermelonDB returns 0 for these if unused, so we fetch from Async Storage too
+                wmRecipes,
+                wmCollections,
+                wmRel,
                 mealPlans,
                 documents,
                 folders,
                 notes,
-                transactions,
-                budgets,
+                wmTransactions,
+                wmBudgets,
                 users,
                 members,
                 settings,
-                notificationPreferences,
+                notifPrefs,
                 quietHours,
                 appLock,
-                userPreferences
+                userPrefs
             ] = await Promise.all([
                 database.collections.get('events').query().fetchCount(),
                 database.collections.get('tasks').query().fetchCount(),
                 database.collections.get('lists').query().fetchCount(),
                 database.collections.get('list_items').query().fetchCount(),
+                database.collections.get('list_categories').query().fetchCount(),
                 database.collections.get('recipes').query().fetchCount(),
                 database.collections.get('collections').query().fetchCount(),
                 database.collections.get('collection_recipes').query().fetchCount(),
@@ -69,19 +94,44 @@ export const exportService = {
                 database.collections.get('user_preferences').query().fetchCount(),
             ]);
 
+            // Fetch AsyncStorage counts with error handling
+            const [asRecipes, asCollections, asTransactions, asBudgets] = await Promise.all([
+                getAsyncCount(ASYNC_KEYS.recipes),
+                getAsyncCount(ASYNC_KEYS.collections),
+                getAsyncCount(ASYNC_KEYS.transactions),
+                (async () => {
+                    // Budgets is an object in Async Storage, not array
+                    try {
+                        const json = await AsyncStorage.getItem(ASYNC_KEYS.budgets);
+                        if (!json) return 0;
+                        const parsed = JSON.parse(json);
+                        return parsed && typeof parsed === 'object' ? Object.keys(parsed).length : 0;
+                    } catch (error) {
+                        console.error('getStats: Error reading budgets from AsyncStorage', error);
+                        return 0;
+                    }
+                })(),
+            ]);
+
             return {
                 events,
                 tasks,
-                lists: lists + listItems,
-                recipes: recipes + collections + recipeCollections + mealPlans,
-                documents: documents,
+                lists: lists + listItems + listCategories,
+                // Combine DB + Async Storage just in case (though likely mutually exclusive)
+                recipes: wmRecipes + wmCollections + wmRel + mealPlans + asRecipes + asCollections,
+                documents,
                 notes: notes + folders,
-                expenses: transactions + budgets,
-                system: users + members + settings + notificationPreferences + quietHours + appLock + userPreferences,
+                // Combine DB + Async Storage
+                expenses: wmTransactions + wmBudgets + asTransactions + asBudgets,
+                system: users + members + settings + notifPrefs + quietHours + appLock + userPrefs,
             };
         } catch (error) {
-            console.warn('Failed to fetch export stats:', error);
-            return { events: 0, tasks: 0, lists: 0, recipes: 0, documents: 0, notes: 0, expenses: 0, system: 0 };
+            console.error('Failed to get export stats:', error);
+            // Return zeros on error
+            return {
+                events: 0, tasks: 0, lists: 0, recipes: 0,
+                documents: 0, notes: 0, expenses: 0, system: 0
+            };
         }
     },
 
@@ -110,14 +160,50 @@ export const exportService = {
     async collectExportData(selectedData: string[]): Promise<Record<string, any[]>> {
         const data: Record<string, any[]> = {};
 
-        // Helper to fetch and add table data
+        // Helper to fetch and add table data with comprehensive error handling
         const addTableData = async (tableName: string, key: string) => {
             try {
-                const records = await database.collections.get(tableName).query().fetch();
-                data[key] = records.map(r => (r as any)._raw);
+                if (!tableName || !key) {
+                    console.warn('addTableData: Invalid tableName or key');
+                    data[key] = [];
+                    return;
+                }
+                const collection = database?.collections?.get(tableName);
+                if (!collection) {
+                    console.warn(`addTableData: Collection ${tableName} not found`);
+                    data[key] = [];
+                    return;
+                }
+                const records = await collection.query().fetch();
+                data[key] = Array.isArray(records) ? records.map(r => {
+                    try {
+                        return (r as any)?._raw || {};
+                    } catch {
+                        return {};
+                    }
+                }) : [];
             } catch (e) {
-                console.warn(`Failed to export table ${tableName}`, e);
+                console.error(`Failed to export table ${tableName}:`, e);
                 data[key] = []; // Ensure key exists even on failure
+            }
+        };
+
+        // Helper to fetch from Async Storage
+        const addAsyncData = async (asyncKey: string, key: string) => {
+            try {
+                const json = await AsyncStorage.getItem(asyncKey);
+                if (json) {
+                    const parsed = JSON.parse(json);
+                    // If it's an object (budgets), wrap in array or keep as is?
+                    // Standard export format usually expects arrays of rows.
+                    // For budgets (object), we might want to normalize it or export as single object in array.
+                    data[key] = Array.isArray(parsed) ? parsed : [parsed];
+                } else {
+                    data[key] = [];
+                }
+            } catch (e) {
+                console.warn(`Failed to export async key ${asyncKey}`, e);
+                data[key] = [];
             }
         };
 
@@ -138,6 +224,9 @@ export const exportService = {
             await addTableData('collections', 'collections');
             await addTableData('collection_recipes', 'collection_recipes');
             await addTableData('meal_plans', 'meal_plans');
+            // Add Async Storage Data
+            await addAsyncData(ASYNC_KEYS.recipes, 'recipes_async');
+            await addAsyncData(ASYNC_KEYS.collections, 'collections_async');
         }
         if (selectedData.includes('documents')) {
             await addTableData('documents', 'documents');
@@ -149,6 +238,9 @@ export const exportService = {
         if (selectedData.includes('expenses')) {
             await addTableData('transactions', 'transactions');
             await addTableData('budgets', 'budgets');
+            // Add Async Storage Data
+            await addAsyncData(ASYNC_KEYS.transactions, 'transactions_async');
+            await addAsyncData(ASYNC_KEYS.budgets, 'budgets_async');
         }
         if (selectedData.includes('system')) {
             await addTableData('users', 'users');
@@ -349,22 +441,51 @@ export const exportService = {
 
         // Helper to generate tables dynamically specifically tuned for each type
         const renderTable = (title: string, items: any[], columns: { header: string, key: string, render?: (item: any) => string }[]) => {
-            if (!items || items.length === 0) return `<h2>${title}</h2><div class="empty">No data available</div>`;
+            try {
+                if (!items || !Array.isArray(items) || items.length === 0) {
+                    return `<h2>${title || 'Data'}</h2><div class="empty">No data available</div>`;
+                }
+                if (!columns || !Array.isArray(columns) || columns.length === 0) {
+                    return `<h2>${title || 'Data'}</h2><div class="empty">No columns defined</div>`;
+                }
 
-            const headers = columns.map(c => `<th>${c.header}</th>`).join('');
-            const rows = items.map(item => `
-                <tr>
-                    ${columns.map(c => `<td>${c.render ? c.render(item) : (item[c.key] || '-')}</td>`).join('')}
-                </tr>
-            `).join('');
+                const headers = columns.map(c => {
+                    try {
+                        return `<th>${c?.header || 'N/A'}</th>`;
+                    } catch {
+                        return '<th>N/A</th>';
+                    }
+                }).join('');
 
-            return `
-                <h2>${title} (${items.length})</h2>
-                <table>
-                    <thead><tr>${headers}</tr></thead>
-                    <tbody>${rows}</tbody>
-                </table>
-            `;
+                const rows = items.map(item => {
+                    try {
+                        const cells = columns.map(c => {
+                            try {
+                                const value = c?.render ? c.render(item) : (item?.[c?.key] || '-');
+                                return `<td>${value || '-'}</td>`;
+                            } catch (error) {
+                                console.error('renderTable: Error rendering cell', error);
+                                return '<td>-</td>';
+                            }
+                        }).join('');
+                        return `<tr>${cells}</tr>`;
+                    } catch (error) {
+                        console.error('renderTable: Error rendering row', error);
+                        return '';
+                    }
+                }).filter(row => row).join('');
+
+                return `
+                    <h2>${title || 'Data'} (${items.length})</h2>
+                    <table>
+                        <thead><tr>${headers}</tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                `;
+            } catch (error) {
+                console.error(`renderTable: Error rendering table ${title}`, error);
+                return `<h2>${title || 'Data'}</h2><div class="empty">Error rendering table</div>`;
+            }
         };
 
         // EVENTS
@@ -461,9 +582,9 @@ export const exportService = {
             ]);
         }
 
-        // RECIPES
+        // RECIPES (from WatermelonDB)
         if (data.recipes && data.recipes.length > 0) {
-            html += renderTable('Recipes', data.recipes, [
+            html += renderTable('Recipes (Database)', data.recipes, [
                 { header: 'Name', key: 'name' },
                 { header: 'Prep Time', key: 'prep_time', render: (i) => i.prep_time ? `${i.prep_time} min` : '-' },
                 { header: 'Cook Time', key: 'cook_time', render: (i) => i.cook_time ? `${i.cook_time} min` : '-' },
@@ -472,12 +593,32 @@ export const exportService = {
             ]);
         }
 
-        // RECIPE COLLECTIONS
+        // RECIPES (from AsyncStorage)
+        if (data.recipes_async && data.recipes_async.length > 0) {
+            html += renderTable('Recipes (App Storage)', data.recipes_async, [
+                { header: 'Name', key: 'name' },
+                { header: 'Prep Time', key: 'prepTime', render: (i) => i.prepTime || '-' },
+                { header: 'Cook Time', key: 'cookTime', render: (i) => i.cookTime || '-' },
+                { header: 'Servings', key: 'servings' },
+                { header: 'Description', key: 'description', render: (i) => i.description || '-' }
+            ]);
+        }
+
+        // RECIPE COLLECTIONS (from WatermelonDB)
         if (data.collections && data.collections.length > 0) {
-            html += renderTable('Recipe Collections', data.collections, [
+            html += renderTable('Recipe Collections (Database)', data.collections, [
                 { header: 'Name', key: 'name' },
                 { header: 'Description', key: 'description', render: (c) => c.description || '-' },
                 { header: 'Color', key: 'color' }
+            ]);
+        }
+
+        // RECIPE COLLECTIONS (from AsyncStorage)
+        if (data.collections_async && data.collections_async.length > 0) {
+            html += renderTable('Recipe Collections (App Storage)', data.collections_async, [
+                { header: 'Name', key: 'name' },
+                { header: 'Description', key: 'description', render: (c) => c.description || '-' },
+                { header: 'Recipes', key: 'recipeIds', render: (c) => c.recipeIds ? c.recipeIds.length.toString() : '0' }
             ]);
         }
 
@@ -491,9 +632,9 @@ export const exportService = {
             ]);
         }
 
-        // TRANSACTIONS (Expenses)
+        // TRANSACTIONS/EXPENSES (from WatermelonDB)
         if (data.transactions && data.transactions.length > 0) {
-            html += renderTable('Expenses', data.transactions, [
+            html += renderTable('Expenses (Database)', data.transactions, [
                 { header: 'Name', key: 'name' },
                 { header: 'Amount', key: 'amount', render: (i) => `$${Number(i.amount).toFixed(2)}` },
                 { header: 'Type', key: 'type' },
@@ -506,13 +647,39 @@ export const exportService = {
             ]);
         }
 
-        // BUDGETS
+        // TRANSACTIONS/EXPENSES (from AsyncStorage)
+        if (data.transactions_async && data.transactions_async.length > 0) {
+            html += renderTable('Expenses (App Storage)', data.transactions_async, [
+                { header: 'Name', key: 'name' },
+                { header: 'Amount', key: 'amount', render: (i) => `$${Number(i.amount).toFixed(2)}` },
+                { header: 'Type', key: 'type' },
+                { header: 'Category', key: 'category' },
+                { header: 'Date', key: 'date' }
+            ]);
+        }
+
+        // BUDGETS (from WatermelonDB)
         if (data.budgets && data.budgets.length > 0) {
-            html += renderTable('Budgets', data.budgets, [
+            html += renderTable('Budgets (Database)', data.budgets, [
                 { header: 'Category', key: 'category' },
                 { header: 'Amount', key: 'amount', render: (b) => `$${Number(b.amount).toFixed(2)}` },
                 { header: 'Month', key: 'month' }
             ]);
+        }
+
+        // BUDGETS (from AsyncStorage - stored as object)
+        if (data.budgets_async && data.budgets_async.length > 0) {
+            const budgetObj = data.budgets_async[0]; // It's wrapped in array
+            if (budgetObj && typeof budgetObj === 'object') {
+                const budgetEntries = Object.entries(budgetObj).map(([category, amount]) => ({
+                    category,
+                    amount
+                }));
+                html += renderTable('Budgets (App Storage)', budgetEntries, [
+                    { header: 'Category', key: 'category', render: (b) => b.category.charAt(0).toUpperCase() + b.category.slice(1) },
+                    { header: 'Amount', key: 'amount', render: (b) => `$${Number(b.amount).toFixed(2)}` }
+                ]);
+            }
         }
 
         // SETTINGS

@@ -608,7 +608,7 @@ export const HomeScreen: React.FC = () => {
             </View>
           </View>
 
-          {showDashboard && <FamilyDashboard />}
+          {showDashboard && <FamilyDashboard activeMemberId={activeMember?.id} />}
 
           {/* Quick Actions */}
           <View style={{ marginTop: 8, marginBottom: 24 }}>
