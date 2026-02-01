@@ -9,7 +9,7 @@ import {
     View,
     Platform,
 } from "react-native";
-import { useFamily } from "../../contexts/FamilyContext";
+import { useFamily, FamilyMember } from "../../contexts/FamilyContext";
 import { AppIcon } from "../ui/AppIcon";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { PROFILE_COLORS } from "../../constants/profileColors";
@@ -135,7 +135,7 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
         // Apply changes
         // 1. Members to remove (in context but not in local)
         const localIds = new Set(localMembers.filter(m => m.id).map((m: any) => m.id));
-        members.forEach(m => {
+        members.forEach((m: FamilyMember) => {
             if (!localIds.has(m.id)) removeMember(m.id);
         });
 

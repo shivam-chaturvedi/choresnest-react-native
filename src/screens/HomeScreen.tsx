@@ -30,6 +30,7 @@ import { FamilyOnboarding } from "../components/family/FamilyOnboarding";
 import { FamilyDashboard } from "../components/dashboard/FamilyDashboard";
 import { NotificationPanel } from "../components/notifications/NotificationPanel";
 import { AppNotification, NotificationCenter, NotificationRoute } from "../services/NotificationCenter";
+import { useAuth } from "../contexts/AuthContext";
 import { GettingStartedTutorial } from "../components/tutorial/GettingStartedTutorial";
 import { GlobalSearch } from "../components/search/GlobalSearch";
 import { useSidebar } from "../contexts/SidebarContext";
@@ -58,6 +59,7 @@ export const HomeScreen: React.FC = () => {
   const colors = useThemeColors();
   const radius = theme.radius; // Dynamic radius
   const { members, activeMember, events, groceryList, setActiveMember, addGroceryItem, tasks, globalVault, memberVaults, familyName } = useFamily();
+  const { isGuest } = useAuth();
   const { getMealsForDay, getRecipeById } = useMealPlan();
   const navigation = useNavigation<any>();
   const { openSidebar } = useSidebar();
@@ -751,6 +753,47 @@ export const HomeScreen: React.FC = () => {
                 <Text style={{ fontSize: 12, color: colors.primary, fontWeight: "600" }}>Show all</Text>
               </Pressable>
             </View>
+
+            {/* Persistent Guest Mode Alert */}
+            {isGuest && (
+              <Pressable
+                style={[
+                  styles.alertRow,
+                  {
+                    backgroundColor: '#fff3cd',
+                    borderColor: '#ffeeba',
+                    borderRadius: radius.md,
+                    marginBottom: 8,
+                  },
+                ]}
+                onPress={() => {
+                  Alert.alert(
+                    "Guest Mode",
+                    "You are currently using the app as a guest. All data is stored locally on this device. Create an account to backup your data.",
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      {
+                        text: "Login / Sign Up",
+                        onPress: () => {
+                          // Ideally navigate to auth, but for now just info
+                          // setAuthStack? or simple alert
+                        }
+                      }
+                    ]
+                  );
+                }}
+              >
+                <View style={[styles.alertIconBox, { backgroundColor: 'transparent' }]}>
+                  <AppIcon name="alertCircle" size={20} color="#856404" />
+                </View>
+                <View style={styles.alertText}>
+                  <Text style={{ fontWeight: "600", fontSize: 15, color: "#856404" }}>Guest Mode Active</Text>
+                  <Text style={{ marginTop: 2, fontSize: 13, color: "#856404" }}>Data is local only (not backed up)</Text>
+                </View>
+                <AppIcon name="chevronRight" size={16} color="#856404" />
+              </Pressable>
+            )}
+
             {visibleAlerts.slice(0, 3).map((alert) => (
               <Pressable
                 key={alert.id}

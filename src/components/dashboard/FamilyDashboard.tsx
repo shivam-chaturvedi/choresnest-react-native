@@ -4,6 +4,7 @@ import { theme } from "../../theme";
 import { useFamily } from "../../contexts/FamilyContext";
 import { useMealPlan } from "../../contexts/MealPlanContext";
 import { AppIcon } from "../ui/AppIcon";
+import { useAuth } from "../../contexts/AuthContext";
 
 interface FamilyDashboardProps {
     activeMemberId?: string;
@@ -11,6 +12,7 @@ interface FamilyDashboardProps {
 
 export const FamilyDashboard: React.FC<FamilyDashboardProps> = ({ activeMemberId }) => {
     // Safely get context data with fallbacks
+    const { isGuest } = useAuth();
     let events: any[] = [];
     let groceryList: any[] = [];
     let familyName = "Family";
@@ -108,6 +110,15 @@ export const FamilyDashboard: React.FC<FamilyDashboardProps> = ({ activeMemberId
 
     return (
         <View style={styles.container}>
+            {isGuest && (
+                <View style={styles.guestNotice}>
+                    <AppIcon name="alertCircle" size={20} color="#856404" />
+                    <Text style={styles.guestNoticeText}>
+                        Guest Mode Active: Your data is stored locally on this device and is not backed up to the cloud.
+                    </Text>
+                </View>
+            )}
+
             {/* Family Activity Summary */}
             <View style={[styles.card, styles.activityCard]}>
                 <View style={styles.headerRow}>
@@ -202,5 +213,22 @@ const styles = StyleSheet.create({
     statLabel: {
         fontSize: 12,
         color: "rgba(255,255,255,0.7)",
+    },
+    guestNotice: {
+        backgroundColor: '#fff3cd',
+        borderColor: '#ffeeba',
+        borderWidth: 1,
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    guestNoticeText: {
+        flex: 1,
+        color: '#856404',
+        fontSize: 14,
+        lineHeight: 20,
     },
 });

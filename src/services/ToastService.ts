@@ -5,6 +5,7 @@ export interface ToastRequest {
   description?: string;
   type?: ToastType;
   duration?: number;
+  id?: string;
 }
 
 let toastHandler: ((options: ToastRequest) => void) | null = null;

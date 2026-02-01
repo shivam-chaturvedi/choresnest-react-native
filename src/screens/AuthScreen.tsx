@@ -220,11 +220,23 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             <Text style={[styles.googleButtonText, { color: theme.colors.foreground }]}>Continue with Google</Text>
           </Pressable>
 
-          <Pressable style={{ marginTop: 16, alignItems: 'center' }} onPress={handleGuestLogin}>
-            <Text style={{ fontSize: 14, color: theme.colors.mutedForeground }}>
-              Skip for now? <Text style={{ color: theme.colors.primary, fontWeight: '600' }}>Continue as Guest</Text>
+          <View style={{ marginTop: 24, alignItems: 'center', width: '100%' }}>
+            <Text style={{ fontSize: 14, color: theme.colors.mutedForeground, marginBottom: 12 }}>
+              Skip for now?
             </Text>
-          </Pressable>
+            <Pressable
+              style={[styles.guestButton, {
+                backgroundColor: theme.colors.primary,
+                borderRadius: radius.lg,
+                shadowColor: theme.colors.primary,
+              }]}
+              onPress={handleGuestLogin}
+            >
+              <Text style={[styles.guestButtonText, { color: theme.colors.primaryForeground }]}>
+                Continue as Guest
+              </Text>
+            </Pressable>
+          </View>
         </View>
 
         <View style={[styles.infoCard, {
@@ -450,6 +462,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   linkText: {
+    fontWeight: "600",
+  },
+  guestButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    width: '100%',
+    alignItems: 'center',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  guestButtonText: {
+    fontSize: 16,
     fontWeight: "600",
   },
 });
