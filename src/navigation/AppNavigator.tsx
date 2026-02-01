@@ -161,11 +161,7 @@ const AppNavigatorInner = () => {
 const AppLockOverlay = () => {
   const {
     isLocked,
-    isBiometricEnabled,
-    isBiometricAvailable,
-    biometryType,
     unlockWithPin,
-    unlockWithBiometrics,
   } = useAppLock();
 
   if (!isLocked) {
@@ -175,11 +171,7 @@ const AppLockOverlay = () => {
   return (
     <AppLockScreen
       isLocked={isLocked}
-      isBiometricEnabled={isBiometricEnabled}
-      isBiometricAvailable={isBiometricAvailable}
-      biometryType={biometryType}
       unlockWithPin={unlockWithPin}
-      unlockWithBiometrics={unlockWithBiometrics}
     />
   );
 };

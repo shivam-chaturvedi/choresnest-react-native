@@ -17,22 +17,39 @@ import { PROFILE_COLORS } from "../../constants/profileColors";
 interface AddMemberModalProps {
   open: boolean;
   onClose: () => void;
+  memberToEdit?: any; // FamilyMember
 }
 
 const AVATARS = ["👤", "👩", "👨", "👶", "👧", "👦", "🧒", "👴", "👵", "👱", "👱‍♀️", "🧔", "👩‍🦰", "👨‍🦱", "👨‍🦳", "👩‍🦲"];
 
-export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose }) => {
+export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, memberToEdit }) => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
-  const { addMember, members } = useFamily();
+  const { addMember, updateMember, members } = useFamily();
 
-  const availableColors = PROFILE_COLORS.filter(c => !members.some(m => m.color === c.value));
+  const availableColors = PROFILE_COLORS.filter(c => !members.some((m: any) => m.color === c.value && m.id !== memberToEdit?.id));
   const initialColor = availableColors.length > 0 ? availableColors[0].value : PROFILE_COLORS[0].value;
 
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [selectedAvatar, setSelectedAvatar] = useState(AVATARS[0]);
   const [selectedColor, setSelectedColor] = useState(initialColor);
+
+  // Initialize form when modal opens or memberToEdit changes
+  React.useEffect(() => {
+    if (open) {
+      if (memberToEdit) {
+        setName(memberToEdit.name);
+        setSelectedAvatar(memberToEdit.symbol);
+        setSelectedColor(memberToEdit.color);
+      } else {
+        setName("");
+        setSelectedAvatar(AVATARS[0]);
+        setSelectedColor(initialColor);
+      }
+      setError("");
+    }
+  }, [open, memberToEdit]);
 
   const handleSave = () => {
     try {
@@ -41,27 +58,25 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose })
         return;
       }
 
-      addMember({
-        name: name.trim(),
-        symbol: selectedAvatar,
-        color: selectedColor,
-        isActive: false, // Default to inactive until switched to
-      });
+      if (memberToEdit) {
+        updateMember(memberToEdit.id, {
+          name: name.trim(),
+          symbol: selectedAvatar,
+          color: selectedColor,
+        });
+      } else {
+        addMember({
+          name: name.trim(),
+          symbol: selectedAvatar,
+          color: selectedColor,
+          isActive: false,
+        });
+      }
 
-      // Reset
-      setName("");
-      setError("");
-      setSelectedAvatar(AVATARS[0]);
-      // Re-calculate available colors for next time (optimistic)
-      // Actually, since modal closes, state resets on next mount? No, it's controlled by 'open' prop but component might remain mounted?
-      // React Native Modal usually keeps component mounted if it's cleaner. 
-      // But let's just assume we reset to whatever. 
-      // Better to rely on the re-render when 'members' changes.
-      setSelectedColor(initialColor); // Reset to a safe default
       onClose();
     } catch (error) {
-      console.error("Failed to add member:", error);
-      Alert.alert("Error", "Failed to add member. Please try again.");
+      console.error("Failed to save member:", error);
+      Alert.alert("Error", "Failed to save member. Please try again.");
     }
   };
 
@@ -79,7 +94,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose })
           ]}
           onPress={(e) => e.stopPropagation()}
         >
-          <Text style={[styles.heading, { color: colors.foreground }]}>Add New Member</Text>
+          <Text style={[styles.heading, { color: colors.foreground }]}>{memberToEdit ? "Edit Member" : "Add New Member"}</Text>
           {error ? <Text style={{ color: colors.danger, marginBottom: 12 }}>{error}</Text> : null}
 
           <TextInput
@@ -160,7 +175,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose })
               ]}
               onPress={handleSave}
             >
-              <Text style={[styles.addButtonText, { color: colors.foreground }]}>Add Member</Text>
+              <Text style={[styles.addButtonText, { color: colors.foreground }]}>{memberToEdit ? "Update Member" : "Add Member"}</Text>
             </Pressable>
           </View>
 

@@ -318,7 +318,7 @@ export const NoteDetailScreen: React.FC = () => {
                 <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
                     {saveStatus !== 'idle' && (
                         <Text style={[styles.saveStatus, { color: colors.mutedForeground }]}>
-                            {saveStatus === 'saving' ? 'Saving...' : '✓ Saved'}
+                            {saveStatus === 'saving' ? 'Saving...' : '✓ Saved (2s)'}
                         </Text>
                     )}
                 </View>

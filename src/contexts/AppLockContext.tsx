@@ -9,33 +9,25 @@ import React, {
     ReactNode,
 } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
-import ReactNativeBiometrics from 'react-native-biometrics';
 import { useAuth } from './AuthContext';
 import { appLockService, hashPin } from '../services/AppLockService';
 import AppLock from '../database/models/AppLock';
 import { database } from '../database';
-import { markBiometricPromptShown } from '../services/biometricLifecycle';
 import { appLockManager } from '../services/AppLockManager';
 
 export interface AppLockContextType {
     isReady: boolean;
     isLocked: boolean;
     isAppLockEnabled: boolean;
-    isBiometricEnabled: boolean;
-    isBiometricAvailable: boolean;
-    biometryType: string | null;
     hasPin: boolean;
     enableAppLock: () => Promise<void>;
     disableAppLock: () => Promise<void>;
     setPin: (pin: string) => Promise<void>;
     toggleAppLock: () => Promise<void>;
-    toggleBiometric: (enabled: boolean) => Promise<void>;
     unlockWithPin: (pin: string) => Promise<boolean>;
-    unlockWithBiometrics: () => Promise<boolean>;
 }
 
 const AppLockContext = createContext<AppLockContextType | undefined>(undefined);
-const biometricClient = new ReactNativeBiometrics();
 
 type AppLockProviderProps = {
     children: ReactNode;
@@ -50,7 +42,6 @@ export const AppLockProvider: React.FC<AppLockProviderProps> = ({
     type AppLockSnapshot = {
         id: string;
         enabled: boolean;
-        biometricEnabled: boolean;
         pinHash: string;
         createdAt: number;
         updatedAt: number;
@@ -60,8 +51,6 @@ export const AppLockProvider: React.FC<AppLockProviderProps> = ({
     const [isReady, setIsReady] = useState(false);
     const [isLocked, setIsLocked] = useState(false);
     const [sessionUnlocked, setSessionUnlocked] = useState(false);
-    const [biometricAvailable, setBiometricAvailable] = useState(false);
-    const [biometryType, setBiometryType] = useState<string | null>(null);
 
     const mapToSnapshot = useCallback((lock: AppLock | null): AppLockSnapshot => {
         if (!lock) {
@@ -70,7 +59,6 @@ export const AppLockProvider: React.FC<AppLockProviderProps> = ({
         return {
             id: lock.id,
             enabled: lock.enabled,
-            biometricEnabled: lock.biometricEnabled,
             pinHash: lock.pinHash,
             createdAt: lock.createdAt,
             updatedAt: lock.updatedAt,
@@ -96,10 +84,9 @@ export const AppLockProvider: React.FC<AppLockProviderProps> = ({
     useEffect(() => {
         appLockManager.updateSettings({
             enabled: !!record?.enabled,
-            biometricEnabled: !!record?.biometricEnabled,
             hasPin: !!record?.pinHash,
         });
-    }, [record?.enabled, record?.biometricEnabled, record?.pinHash]);
+    }, [record?.enabled, record?.pinHash]);
 
     useEffect(() => {
         (async () => {
@@ -113,22 +100,7 @@ export const AppLockProvider: React.FC<AppLockProviderProps> = ({
         })();
     }, [refreshRecord]);
 
-    useEffect(() => {
-        (async () => {
-            try {
-                const result = await biometricClient.isSensorAvailable();
-                setBiometricAvailable(!!result.available);
-                setBiometryType(result.biometryType || null);
-            } catch (error) {
-                console.warn('Biometric availability check failed', error);
-                setBiometricAvailable(false);
-                setBiometryType(null);
-            }
-        })();
-    }, []);
-
     const prevEnabledRef = useRef<boolean | null>(null);
-    const biometricPromptRunning = useRef(false);
     useEffect(() => {
         if (record?.enabled) {
             if (prevEnabledRef.current !== true) {
@@ -144,50 +116,21 @@ export const AppLockProvider: React.FC<AppLockProviderProps> = ({
         const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
             if (nextAppState === 'active') {
                 // App came to foreground
-                // The lock check happens in the other useEffect automatically
             } else if (nextAppState === 'background') {
                 // App went to background
-
-                // MODIFIED: We no longer invalidate session on background to support "Cold Start Only" lock.
-                // setSessionUnlocked(false);
-                // appLockManager.requestFreshAuth();
-
-                // Force lock state update immediately to ensure UI covers content
-                // const shouldLock = record?.enabled || record?.biometricEnabled;
-                // if (shouldLock) {
-                //    setIsLocked(true);
-                // }
             }
         });
 
         return () => {
             subscription.remove();
         };
-    }, [record?.enabled, record?.biometricEnabled]);
+    }, [record?.enabled]);
 
     const handleUnlockSuccess = useCallback(() => {
         setSessionUnlocked(true);
         setIsLocked(false);
-        markBiometricPromptShown();
         appLockManager.markAuthenticated();
     }, []);
-
-    const unlockWithBiometrics = useCallback(async () => {
-        if (!record?.biometricEnabled) {
-            return false;
-        }
-        try {
-            const result = await biometricClient.simplePrompt({ promptMessage: 'Confirm identity' });
-            if (result.success) {
-                handleUnlockSuccess();
-                return true;
-            }
-            return false;
-        } catch (error) {
-            console.warn('Biometric unlock failed', error);
-            return false;
-        }
-    }, [handleUnlockSuccess, record?.biometricEnabled]);
 
     // Startup Lock Effect
     useEffect(() => {
@@ -199,24 +142,11 @@ export const AppLockProvider: React.FC<AppLockProviderProps> = ({
         }
         const requiresStartupLock =
             shouldRequireAuthOnStartup &&
-            (!!record?.enabled || !!record?.biometricEnabled) &&
+            !!record?.enabled &&
             !sessionUnlocked &&
             appLockManager.shouldRequireAuth();
         setIsLocked(!!requiresStartupLock);
-    }, [isReady, record?.enabled, isAuthenticated, sessionUnlocked, shouldRequireAuthOnStartup, record?.biometricEnabled]);
-
-    // Auto-trigger Biometrics Effect
-    useEffect(() => {
-        if (!isLocked) return;
-        if (!record?.biometricEnabled) return;
-        if (biometricPromptRunning.current) return;
-
-        biometricPromptRunning.current = true;
-
-        unlockWithBiometrics().finally(() => {
-            biometricPromptRunning.current = false;
-        });
-    }, [isLocked, record?.biometricEnabled, unlockWithBiometrics]);
+    }, [isReady, record?.enabled, isAuthenticated, sessionUnlocked, shouldRequireAuthOnStartup]);
 
     const hasPin = Boolean(record?.pinHash);
 
@@ -248,28 +178,6 @@ export const AppLockProvider: React.FC<AppLockProviderProps> = ({
         }
     }, [disableAppLock, enableAppLock, record?.enabled]);
 
-    const toggleBiometric = useCallback(async (enabled: boolean) => {
-        if (enabled && !biometricAvailable) {
-            throw new Error('Biometric sensors are not available on this device');
-        }
-        if (enabled) {
-            const result = await biometricClient.simplePrompt({ promptMessage: 'Enable biometric lock' });
-            if (!result.success) {
-                throw new Error('Biometric setup was cancelled');
-            }
-        }
-        await appLockService.setBiometric(enabled);
-        await refreshRecord();
-
-        if (enabled) {
-            // User requested behavior: immediately require auth next time (or effectively now if we locked)
-            // Invalidating session so next resume/startup requires auth.
-            setSessionUnlocked(false);
-            appLockManager.requestFreshAuth();
-            setIsLocked(true);
-        }
-    }, [biometricAvailable, refreshRecord]);
-
     const unlockWithPin = useCallback(async (pin: string) => {
         if (!record?.pinHash) {
             return false;
@@ -282,38 +190,27 @@ export const AppLockProvider: React.FC<AppLockProviderProps> = ({
     }, [handleUnlockSuccess, record?.pinHash]);
 
     const appLockEnabled = !!record?.enabled;
-    const biometricLockEnabled = !!record?.biometricEnabled;
 
     const value = useMemo<AppLockContextType>(() => ({
         isReady,
         isLocked,
         isAppLockEnabled: appLockEnabled,
-        isBiometricEnabled: biometricLockEnabled,
-        isBiometricAvailable: biometricAvailable,
-        biometryType,
         hasPin,
         enableAppLock,
         disableAppLock,
         setPin,
         toggleAppLock,
-        toggleBiometric,
         unlockWithPin,
-        unlockWithBiometrics,
     }), [
         isReady,
         isLocked,
         appLockEnabled,
-        biometricLockEnabled,
-        biometricAvailable,
-        biometryType,
         hasPin,
         enableAppLock,
         disableAppLock,
         setPin,
         toggleAppLock,
-        toggleBiometric,
         unlockWithPin,
-        unlockWithBiometrics
     ]);
 
     return <AppLockContext.Provider value={value}>{children}</AppLockContext.Provider>;

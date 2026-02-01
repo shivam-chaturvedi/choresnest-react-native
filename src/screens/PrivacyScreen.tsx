@@ -22,7 +22,6 @@ import {
     Shield,
     Lock,
     Eye,
-    Fingerprint,
     Key,
     Trash2,
     ChevronRight
@@ -30,7 +29,6 @@ import {
 
 // --- Data ---
 const securitySettings = [
-    { id: 'bio', icon: Fingerprint, label: 'Biometric Lock' },
     { id: 'app', icon: Lock, label: 'App Lock' },
 ];
 
@@ -40,18 +38,13 @@ export const PrivacyScreen: React.FC = () => {
     const { deleteAccount } = useAuth();
     const {
         isAppLockEnabled,
-        isBiometricEnabled,
-        isBiometricAvailable,
-        biometryType,
         hasPin,
         enableAppLock,
         disableAppLock,
         setPin: persistPin,
-        toggleBiometric,
         unlockWithPin,
     } = useAppLock();
     const [pendingAppLockRequest, setPendingAppLockRequest] = useState<boolean | null>(null);
-    const [pendingBiometricRequest, setPendingBiometricRequest] = useState<boolean | null>(null);
     const colors = useThemeColors();
     const radius = useThemeRadius();
 
@@ -86,7 +79,6 @@ export const PrivacyScreen: React.FC = () => {
     const [pin, setPin] = useState("");
     const [confirmPin, setConfirmPin] = useState("");
     const [appLockBusy, setAppLockBusy] = useState(false);
-    const [biometricBusy, setBiometricBusy] = useState(false);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [confirmValue, setConfirmValue] = useState("");
     const [confirmError, setConfirmError] = useState("");
@@ -98,14 +90,9 @@ export const PrivacyScreen: React.FC = () => {
         }
     }, [pendingAppLockRequest, isAppLockEnabled]);
 
-    useEffect(() => {
-        if (pendingBiometricRequest !== null && pendingBiometricRequest === isBiometricEnabled) {
-            setPendingBiometricRequest(null);
-        }
-    }, [pendingBiometricRequest, isBiometricEnabled]);
+
 
     const appLockSwitchValue = pendingAppLockRequest ?? isAppLockEnabled;
-    const biometricSwitchValue = pendingBiometricRequest ?? isBiometricEnabled;
 
     const handleSavePassword = () => {
         if (!currentPassword || !newPassword || !confirmPassword) {
@@ -143,7 +130,6 @@ export const PrivacyScreen: React.FC = () => {
             setShowPinModal(false);
             Alert.alert("Success", "PIN code saved and app lock is now enabled.");
             setPendingAppLockRequest(null);
-            setPendingBiometricRequest(null);
         } catch (error) {
             console.error("Failed to save PIN", error);
             Alert.alert("Error", "We couldn't save your PIN. Please try again.");
@@ -179,39 +165,7 @@ export const PrivacyScreen: React.FC = () => {
         }
     };
 
-    const handleBiometricToggle = async (value: boolean) => {
-        if (value && !isBiometricAvailable) {
-            Alert.alert("Biometric Lock", "Biometric sensors are not available on this device.");
-            return;
-        }
 
-        setPendingBiometricRequest(value);
-        setBiometricBusy(true);
-        if (value && isAppLockEnabled) {
-            setPendingAppLockRequest(false);
-            setAppLockBusy(true);
-            try {
-                await disableAppLock();
-            } catch (error) {
-                console.error("Failed to disable App Lock before enabling biometrics", error);
-                Alert.alert("App Lock", "Please disable App Lock before turning on biometrics.");
-                setBiometricBusy(false);
-                setPendingBiometricRequest(null);
-                return;
-            } finally {
-                setAppLockBusy(false);
-            }
-        }
-        try {
-            await toggleBiometric(value);
-        } catch (error: any) {
-            console.error("Biometric toggle failed", error);
-            Alert.alert("Biometric Lock", error?.message || "Unable to update biometric settings.");
-        } finally {
-            setBiometricBusy(false);
-            setPendingBiometricRequest(null);
-        }
-    };
 
     const handleConfirmSubmit = async () => {
         if (confirmValue.length !== 4) {
@@ -232,7 +186,6 @@ export const PrivacyScreen: React.FC = () => {
             setShowConfirmModal(false);
             setConfirmValue("");
             setPendingAppLockRequest(null);
-            setPendingBiometricRequest(null);
         } catch (error) {
             console.error("Confirm PIN failed", error);
             setConfirmError("Failed to verify PIN.");
@@ -246,7 +199,6 @@ export const PrivacyScreen: React.FC = () => {
         setConfirmValue("");
         setConfirmError("");
         setPendingAppLockRequest(null);
-        setPendingBiometricRequest(null);
     };
     return (
         <AppLayout>
@@ -279,12 +231,7 @@ export const PrivacyScreen: React.FC = () => {
                     <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Security</Text>
                     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
                         {securitySettings.map((item, index) => {
-                            const isBio = item.id === 'bio';
-                            const description = isBio
-                                ? isBiometricAvailable
-                                    ? `Use ${biometryType ?? 'biometric'} credentials to unlock`
-                                    : 'Biometric sensors unavailable on this device'
-                                : 'Require a PIN when opening the app';
+                            const description = 'Require a PIN when opening the app';
 
                             return (
                                 <View key={item.id}>
@@ -297,10 +244,10 @@ export const PrivacyScreen: React.FC = () => {
                                             <Text style={[styles.settingDesc, { color: colors.mutedForeground }]}>{description}</Text>
                                         </View>
                                         <Switch
-                                            value={isBio ? biometricSwitchValue : appLockSwitchValue}
-                                            onValueChange={value => isBio ? handleBiometricToggle(value) : handleAppLockToggle(value)}
+                                            value={appLockSwitchValue}
+                                            onValueChange={handleAppLockToggle}
                                             trackColor={{ false: colors.muted, true: colors.primary }}
-                                            disabled={isBio ? (!isBiometricAvailable || biometricBusy) : (appLockBusy || showConfirmModal || showPinModal)}
+                                            disabled={appLockBusy || showConfirmModal || showPinModal}
                                         />
                                     </View>
                                     {index !== securitySettings.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
@@ -515,9 +462,6 @@ export const PrivacyScreen: React.FC = () => {
                         <View style={styles.tagsRow}>
                             <View style={[styles.tag, { backgroundColor: '#dcfce7', borderRadius: radius.full }]}>
                                 <Text style={[styles.tagText, { color: '#166534' }]}>🔐 End-to-end encrypted</Text>
-                            </View>
-                            <View style={[styles.tag, { backgroundColor: '#e0f2fe', borderRadius: radius.full }]}>
-                                <Text style={[styles.tagText, { color: '#075985' }]}>☁️ Secure cloud backup</Text>
                             </View>
                         </View>
                     </View>

@@ -27,7 +27,7 @@ interface ToastContextValue {
 
 const ToastContext = createContext<ToastContextValue | undefined>(undefined);
 
-const DEFAULT_DURATION = 4000;
+const DEFAULT_DURATION = 2000; // 2 seconds
 const ENABLE_TOAST_OVERLAY = false;
 
 const toneForType = (type: ToastType) => {
@@ -115,8 +115,8 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
                 toast.type === "warning"
                   ? styles.toastWarning
                   : toast.type === "success"
-                  ? styles.toastSuccess
-                  : styles.toastDefault,
+                    ? styles.toastSuccess
+                    : styles.toastDefault,
               ]}
             >
               <Text style={styles.title}>{toast.title}</Text>

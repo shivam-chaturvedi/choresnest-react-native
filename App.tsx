@@ -26,21 +26,20 @@ import {
   RepeatMeta,
   RepeatType,
 } from "./src/services/NotificationScheduler";
-import { shouldShowBiometricOnStartup } from "./src/services/biometricLifecycle";
 import { CountryProvider } from "./src/contexts/CountryContext";
 import { appLockManager } from "./src/services/AppLockManager";
 
 const App = () => {
   useEffect(() => {
-        const initDB = async () => {
-          try {
-            await databaseService.init();
-            await NotificationScheduler.initialize();
-            await NotificationScheduler.rescheduleAllMissing();
-          } catch (e) {
-            console.error("Failed to init DB/Notifications on launch", e);
-          }
-        };
+    const initDB = async () => {
+      try {
+        await databaseService.init();
+        await NotificationScheduler.initialize();
+        await NotificationScheduler.rescheduleAllMissing();
+      } catch (e) {
+        console.error("Failed to init DB/Notifications on launch", e);
+      }
+    };
     initDB();
   }, []);
 
@@ -127,7 +126,7 @@ const App = () => {
     return () => unsubscribe();
   }, []);
 
-  const [shouldRequireStartupAuth] = useState(() => shouldShowBiometricOnStartup());
+  const [shouldRequireStartupAuth] = useState(false);
 
   useEffect(() => {
     appLockManager.requestFreshAuth();
@@ -137,33 +136,33 @@ const App = () => {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <CountryProvider>
         <SafeAreaProvider>
-        <ThemeProvider>
-          <FamilyProvider>
-            <FinanceProvider>
-              <RecipeProvider>
-                <MealPlanProvider>
-                  <SidebarProvider>
-                    <ToastProvider>
-                      <StatusBar
-                        barStyle="dark-content"
-                        backgroundColor={theme.colors.background}
-                        animated
-                      />
-                      <SafeAreaView style={styles.appWrapper} edges={["top", "bottom", "left", "right"]}>
-                        <ErrorBoundary>
-                          <AppNavigator shouldRequireAuthOnStartup={shouldRequireStartupAuth} />
-                        </ErrorBoundary>
-                      </SafeAreaView>
-                    </ToastProvider>
-                  </SidebarProvider>
-                </MealPlanProvider>
-              </RecipeProvider>
-            </FinanceProvider>
-          </FamilyProvider>
-        </ThemeProvider>
-      </SafeAreaProvider>
-    </CountryProvider>
-  </GestureHandlerRootView>
+          <ThemeProvider>
+            <FamilyProvider>
+              <FinanceProvider>
+                <RecipeProvider>
+                  <MealPlanProvider>
+                    <SidebarProvider>
+                      <ToastProvider>
+                        <StatusBar
+                          barStyle="dark-content"
+                          backgroundColor={theme.colors.background}
+                          animated
+                        />
+                        <SafeAreaView style={styles.appWrapper} edges={["top", "bottom", "left", "right"]}>
+                          <ErrorBoundary>
+                            <AppNavigator shouldRequireAuthOnStartup={shouldRequireStartupAuth} />
+                          </ErrorBoundary>
+                        </SafeAreaView>
+                      </ToastProvider>
+                    </SidebarProvider>
+                  </MealPlanProvider>
+                </RecipeProvider>
+              </FinanceProvider>
+            </FamilyProvider>
+          </ThemeProvider>
+        </SafeAreaProvider>
+      </CountryProvider>
+    </GestureHandlerRootView>
   );
 };
 

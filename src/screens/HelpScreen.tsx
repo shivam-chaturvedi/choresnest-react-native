@@ -188,15 +188,13 @@ const featureGuides = [
     icon: Shield,
     title: 'Security & App Lock',
     path: 'Privacy',
-    description: 'Protect your family data with PIN and Biometrics.',
+    description: 'Protect your family data with a secure PIN.',
     howToUse: [
       'Enable "App Lock" in Settings',
       'Set a 4-digit secure PIN',
-      'Enable FaceID / TouchID for instant unlock',
       'App locks immediately upon closing',
     ],
     tips: [
-      'Biometrics are faster and more secure than PIN',
       'Use a PIN that is not easily guessable',
       'If you forget PIN, you may need to reset app data',
     ]
@@ -227,7 +225,7 @@ const faqItems = [
     questions: [
       {
         q: "How do I secure the app?",
-        a: "Go to Settings > Privacy. Enable 'App Lock' and set a PIN. You can also turn on Biometric unlock (FaceID/Fingerprint) for faster access on startup.",
+        a: "Go to Settings > Privacy. Enable 'App Lock' and set a PIN.",
       },
       {
         q: "Is my data stored in the cloud?",
@@ -235,7 +233,7 @@ const faqItems = [
       },
       {
         q: "What if I forget my App Lock PIN?",
-        a: "For security, there is no 'forgot password' backdoor. You would need to reinstall the app, which resets secure data. We recommend enabling Biometrics as a backup.",
+        a: "For security, there is no 'forgot password' backdoor. You would need to reinstall the app, which resets secure data.",
       },
     ],
   },

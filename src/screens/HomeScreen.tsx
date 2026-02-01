@@ -36,6 +36,12 @@ import { useSidebar } from "../contexts/SidebarContext";
 import { AppIcon, AppIconName } from "../components/ui/AppIcon";
 import { PROFILE_COLORS } from "../constants/profileColors";
 import { safeParseDate } from "../utils/SafeDateUtils";
+import ReactNativeHapticFeedback from "react-native-haptic-feedback";
+
+const hapticOptions = {
+  enableVibrateFallback: true,
+  ignoreAndroidSystemSettings: false,
+};
 
 
 const STORAGE_TUTORIAL_KEY = "@familychore:firstSignUp";
@@ -65,6 +71,7 @@ export const HomeScreen: React.FC = () => {
   const [showAddTask, setShowAddTask] = useState(false);
   const [showAddItem, setShowAddItem] = useState(false);
   const [showMemberModal, setShowMemberModal] = useState(false);
+  const [editingMember, setEditingMember] = useState<any>(null); // FamilyMember
   const [showFamilyOnboarding, setShowFamilyOnboarding] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
 
@@ -514,6 +521,9 @@ export const HomeScreen: React.FC = () => {
                 </Pressable>
               </View>
             </View>
+            <Text style={{ fontSize: 11, color: colors.mutedForeground, marginBottom: 12, marginLeft: 4, fontStyle: 'italic' }}>
+              Keep pressing any profile (1s) to edit
+            </Text>
             <View style={styles.membersRow}>
               {(members || []).map((member: any) => {
                 const profileColor = PROFILE_COLORS.find((c: any) => c.value === member.color)?.hex || colors.primary;
@@ -533,6 +543,13 @@ export const HomeScreen: React.FC = () => {
                       } catch (e) {
                         console.error("Error switching member:", e);
                       }
+                    }}
+                    delayLongPress={1000}
+                    onLongPress={() => {
+                      console.log('=== Profile Long Pressed ===');
+                      ReactNativeHapticFeedback.trigger("impactHeavy", hapticOptions);
+                      setEditingMember(member);
+                      setShowMemberModal(true);
                     }}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     style={[styles.memberCard]}
@@ -794,7 +811,7 @@ export const HomeScreen: React.FC = () => {
             </Pressable>
           </View>
         </ScrollView>
-      </AppLayout>
+      </AppLayout >
 
       {selectedEvent && (
         <Modal visible transparent animationType="slide" onRequestClose={closeEventDetail}>
@@ -861,7 +878,8 @@ export const HomeScreen: React.FC = () => {
             </Pressable>
           </Pressable>
         </Modal>
-      )}
+      )
+      }
 
       <NotificationPanel
         open={showNotifications}
@@ -881,7 +899,14 @@ export const HomeScreen: React.FC = () => {
         onClose={() => setShowAddItem(false)}
         onAdd={handleAddItem}
       />
-      <AddMemberModal open={showMemberModal} onClose={() => setShowMemberModal(false)} />
+      <AddMemberModal
+        open={showMemberModal}
+        onClose={() => {
+          setShowMemberModal(false);
+          setEditingMember(null);
+        }}
+        memberToEdit={editingMember}
+      />
       <FamilyOnboarding open={showFamilyOnboarding} onClose={() => setShowFamilyOnboarding(false)} />
     </>
   );

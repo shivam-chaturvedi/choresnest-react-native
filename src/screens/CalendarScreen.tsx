@@ -20,6 +20,12 @@ import { AppIcon } from "../components/ui/AppIcon";
 import { PROFILE_COLORS } from "../constants/profileColors";
 import { useSidebar } from "../contexts/SidebarContext";
 import { useCountry } from "../contexts/CountryContext";
+import ReactNativeHapticFeedback from "react-native-haptic-feedback";
+
+const hapticOptions = {
+  enableVibrateFallback: true,
+  ignoreAndroidSystemSettings: false,
+};
 import { addMonths, subMonths, addDays, subDays, startOfWeek, endOfWeek, isSameMonth, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval, addYears, startOfDay, isAfter } from "date-fns";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { getEventsForDate } from "../utils/EventUtils";
@@ -419,6 +425,7 @@ export const CalendarScreen: React.FC = () => {
   };
 
   const showPermissionToast = (type: 'event' | 'task') => {
+    ReactNativeHapticFeedback.trigger("notificationError", hapticOptions);
     const message = type === 'task'
       ? "You cannot update another user's task"
       : "You cannot update another user's event";

@@ -737,11 +737,6 @@ export const exportService = {
                     render: (a) => a.enabled ? 'Yes' : 'No'
                 },
                 {
-                    header: 'Biometric',
-                    key: 'biometric_enabled',
-                    render: (a) => a.biometric_enabled ? 'Yes' : 'No'
-                },
-                {
                     header: 'Updated',
                     key: 'updated_at',
                     render: (a) => a.updated_at ? new Date(a.updated_at).toLocaleString() : '-'

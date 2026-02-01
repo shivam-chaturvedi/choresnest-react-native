@@ -12,48 +12,18 @@ import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 
 interface AppLockScreenProps {
     isLocked: boolean;
-    isBiometricEnabled: boolean;
-    isBiometricAvailable: boolean;
-    biometryType: string | null;
     unlockWithPin: (pin: string) => Promise<boolean>;
-    unlockWithBiometrics: () => Promise<boolean>;
 }
 
 export const AppLockScreen: React.FC<AppLockScreenProps> = ({
     isLocked,
-    isBiometricEnabled,
-    isBiometricAvailable,
-    biometryType,
     unlockWithPin,
-    unlockWithBiometrics,
 }) => {
     const colors = useThemeColors();
     const radius = useThemeRadius();
 
     const [pin, setPin] = useState('');
     const [error, setError] = useState('');
-    const [biometricTriggered, setBiometricTriggered] = useState(false);
-    const [isBiometricBusy, setIsBiometricBusy] = useState(false);
-
-    // Optimized: Trigger logic extracted to function
-    const triggerBiometric = useCallback(async () => {
-        setIsBiometricBusy(true);
-        const success = await unlockWithBiometrics();
-        if (!success) {
-            setError('Biometric verification failed. Please use your PIN.');
-        }
-        setIsBiometricBusy(false);
-    }, [unlockWithBiometrics]);
-
-    // On Mount/Update: Immediate check
-    useEffect(() => {
-        if (isLocked && isBiometricEnabled && isBiometricAvailable && !biometricTriggered) {
-            setBiometricTriggered(true);
-            // Small delay to ensure UI is ready, but fast enough to feel "instant"
-            setTimeout(triggerBiometric, 100);
-        }
-    }, [isLocked, isBiometricEnabled, isBiometricAvailable, biometricTriggered, triggerBiometric]);
-
 
     const handleSubmit = async () => {
         setError('');
@@ -77,9 +47,7 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({
             <View style={[styles.card, { backgroundColor: colors.card, borderRadius: radius.card }]}>
                 <Text style={[styles.title, { color: colors.foreground }]}>Secure Access</Text>
                 <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-                    {isBiometricEnabled && isBiometricAvailable
-                        ? `Use ${biometryType ?? 'biometric'} or enter your PIN`
-                        : 'Enter your PIN to continue'}
+                    Enter your PIN to continue
                 </Text>
                 {error ? <Text style={[styles.error, { color: colors.danger }]}>{error}</Text> : null}
                 <TextInput
@@ -104,24 +72,6 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({
                 >
                     <Text style={{ color: colors.primaryForeground, fontWeight: '600' }}>Unlock</Text>
                 </Pressable>
-                {isBiometricEnabled && isBiometricAvailable ? (
-                    <Pressable
-                        onPress={triggerBiometric}
-                        disabled={isBiometricBusy}
-                        style={({ pressed }) => [
-                            styles.secondaryButton,
-                            {
-                                borderColor: colors.border,
-                                borderRadius: radius.sm,
-                                opacity: isBiometricBusy ? 0.6 : pressed ? 0.8 : 1,
-                            },
-                        ]}
-                    >
-                        <Text style={{ color: colors.foreground }}>
-                            {isBiometricBusy ? 'Checking…' : `Use ${biometryType ?? 'biometric'}`}
-                        </Text>
-                    </Pressable>
-                ) : null}
             </View>
         </KeyboardAvoidingView>
     );
