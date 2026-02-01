@@ -67,10 +67,10 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
                 avatar: m.symbol,
                 color: m.color
             })));
-        setNewFamilyName(familyName);
-        setStep(1);
-        setSelectedCountryCode(currentCountry.code);
-    }
+            setNewFamilyName(familyName);
+            setStep(1);
+            setSelectedCountryCode(currentCountry.code);
+        }
     }, [open, members, familyName, currentCountry.code]);
 
     React.useEffect(() => {
@@ -194,54 +194,56 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
                             <View style={[styles.iconCircle, { backgroundColor: colors.muted }]}>
                                 <AppIcon name="users" size={40} color={colors.primary} />
                             </View>
-                    <Text style={[styles.stepTitle, { color: colors.foreground }]}>Name Your Family</Text>
-                    <Text style={[styles.stepDesc, { color: colors.mutedForeground }]}>This will be displayed at the top of your home screen</Text>
+                            <Text style={[styles.stepTitle, { color: colors.foreground }]}>Name Your Family</Text>
+                            <Text style={[styles.stepDesc, { color: colors.mutedForeground }]}>This will be displayed at the top of your home screen</Text>
 
-                    <Text style={[styles.inputLabel, { color: colors.foreground }]}>Country / Region</Text>
-                    <Pressable
-                        onPress={() => setCountryDropdownOpen((prev) => !prev)}
-                        style={[styles.countrySelector, {
-                            backgroundColor: colors.card,
-                            borderColor: colors.border,
-                            borderRadius: radius.md,
-                        }]}
-                    >
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                            <Text style={{ fontSize: 22 }}>{selectedCountry.flag}</Text>
-                            <View>
-                                <Text style={{ fontWeight: "600", color: colors.foreground }}>{selectedCountry.name}</Text>
-                                <Text style={{ fontSize: 12, color: colors.mutedForeground }}>{selectedCountry.locale}</Text>
-                            </View>
-                        </View>
-                        <AppIcon name={countryDropdownOpen ? "chevronUp" : "chevronDown"} size={18} color={colors.foreground} />
-                    </Pressable>
-                    {countryDropdownOpen && (
-                        <View style={[styles.countryList, { borderColor: colors.border, backgroundColor: colors.card, shadowColor: colors.shadow }]}>
-                            {countries.map((country) => (
-                                <Pressable
-                                    key={country.code}
-                                    onPress={() => {
-                                        setSelectedCountryCode(country.code);
-                                        setCountryDropdownOpen(false);
-                                    }}
-                                    style={[
-                                        styles.countryItem,
-                                        { borderBottomColor: colors.border },
-                                    ]}
-                                >
-                                    <Text style={{ fontSize: 22 }}>{country.flag}</Text>
-                                    <View style={{ flex: 1, marginLeft: 8 }}>
-                                        <Text style={{ color: colors.foreground, fontWeight: "600" }}>{country.name}</Text>
-                                        <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>{country.timeZone}</Text>
+                            <Text style={[styles.inputLabel, { color: colors.foreground }]}>Country / Region</Text>
+                            <Pressable
+                                onPress={() => setCountryDropdownOpen((prev) => !prev)}
+                                style={[styles.countrySelector, {
+                                    backgroundColor: colors.card,
+                                    borderColor: colors.border,
+                                    borderRadius: radius.md,
+                                }]}
+                            >
+                                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                                    <Text style={{ fontSize: 22 }}>{selectedCountry.flag}</Text>
+                                    <View>
+                                        <Text style={{ fontWeight: "600", color: colors.foreground }}>{selectedCountry.name}</Text>
+                                        <Text style={{ fontSize: 12, color: colors.mutedForeground }}>{selectedCountry.locale}</Text>
                                     </View>
-                                    <Text style={{ color: colors.primary }}>{country.code}</Text>
-                                </Pressable>
-                            ))}
-                        </View>
-                    )}
+                                </View>
+                                <AppIcon name={countryDropdownOpen ? "chevronUp" : "chevronDown"} size={18} color={colors.foreground} />
+                            </Pressable>
+                            {countryDropdownOpen && (
+                                <View style={[styles.countryList, { borderColor: colors.border, backgroundColor: colors.card, shadowColor: colors.shadow }]}>
+                                    <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={true}>
+                                        {countries.map((country) => (
+                                            <Pressable
+                                                key={country.code}
+                                                onPress={() => {
+                                                    setSelectedCountryCode(country.code);
+                                                    setCountryDropdownOpen(false);
+                                                }}
+                                                style={[
+                                                    styles.countryItem,
+                                                    { borderBottomColor: colors.border },
+                                                ]}
+                                            >
+                                                <Text style={{ fontSize: 22 }}>{country.flag}</Text>
+                                                <View style={{ flex: 1, marginLeft: 8 }}>
+                                                    <Text style={{ color: colors.foreground, fontWeight: "600" }}>{country.name}</Text>
+                                                    <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>{country.timeZone}</Text>
+                                                </View>
+                                                <Text style={{ color: colors.primary }}>{country.code}</Text>
+                                            </Pressable>
+                                        ))}
+                                    </ScrollView>
+                                </View>
+                            )}
 
-                    <Text style={[styles.inputLabel, { color: colors.foreground }]}>Family Name</Text>
-                    <TextInput
+                            <Text style={[styles.inputLabel, { color: colors.foreground }]}>Family Name</Text>
+                            <TextInput
                                 value={newFamilyName}
                                 onChangeText={setNewFamilyName}
                                 placeholder="e.g., The Smiths"
@@ -256,9 +258,9 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
 
                             <Pressable
                                 style={[styles.primaryButton, { backgroundColor: colors.primary, borderRadius: radius.md }, !newFamilyName.trim() && styles.disabledButton]}
-                            onPress={() => setStep(2)}
-                            disabled={!newFamilyName.trim()}
-                        >
+                                onPress={() => setStep(2)}
+                                disabled={!newFamilyName.trim()}
+                            >
                                 <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>Continue</Text>
                                 <AppIcon name="arrowRight" size={16} color={colors.primaryForeground} style={{ marginLeft: 8 }} />
                             </Pressable>
@@ -605,6 +607,7 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         marginBottom: 24,
         maxHeight: 240,
+        overflow: 'hidden',
     },
     countryItem: {
         width: '100%',

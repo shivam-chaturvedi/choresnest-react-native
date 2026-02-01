@@ -31,7 +31,7 @@ const filteredEvents = (events: any[], filterMember: string | null) => {
   return events.filter((e) => e.memberId === filterMember);
 };
 
-type CalendarListEntry = (CalendarEvent & { type: 'event'; isVirtual?: boolean; originalDate?: string }) | (Task & { type: 'task' });
+type CalendarListEntry = (CalendarEvent & { type: 'event'; isVirtual?: boolean; originalDate?: string }) | (Pick<Task, 'id' | 'icon' | 'date' | 'priority'> & { type: 'task'; title: string; time: string; memberId?: string });
 type UpcomingEntry = CalendarListEntry & { nextDate: Date };
 
 const parseTimeToDate = (date: Date, time?: string): Date => {
@@ -128,12 +128,15 @@ const DraggableEvent: React.FC<{
   colors: any;
   members: any[];
   activeView: string;
+  timeZone: string;
   onUpdate: (id: string, updates: any) => void;
   onPress: (event: any) => void;
-}> = ({ event, dayIndex, dayColumnWidth, HOUR_HEIGHT, isOwner, colors, members, activeView, onUpdate, onPress }) => {
+  onPermissionDenied: (type: 'event' | 'task') => void;
+}> = ({ event, dayIndex, dayColumnWidth, HOUR_HEIGHT, isOwner, colors, members, activeView, timeZone, onUpdate, onPress, onPermissionDenied }) => {
   const translateY = useRef(new Animated.Value(0)).current;
   const translateX = useRef(new Animated.Value(0)).current;
   const resizeY = useRef(new Animated.Value(0)).current;
+  const shakeAnim = useRef(new Animated.Value(0)).current;
 
   const member = members.find((m: any) => m.id === event.memberId);
   const profileColor = PROFILE_COLORS.find((c: any) => c.value === member?.color);
@@ -153,8 +156,35 @@ const DraggableEvent: React.FC<{
     { useNativeDriver: false }
   );
 
+  const triggerShake = () => {
+    shakeAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
+    ]).start();
+  };
+
+  const onHandlerStateChangeBegan = (eventData: PanGestureHandlerStateChangeEvent) => {
+    if (eventData.nativeEvent.state === State.BEGAN && !isOwner) {
+      triggerShake();
+      onPermissionDenied(event.type || 'event');
+      return true; // Indicate permission denied
+    }
+    return false; // Permission granted
+  };
+
   const onHandlerStateChange = (eventData: PanGestureHandlerStateChangeEvent) => {
     try {
+      // Don't process drag if permission denied
+      if (!isOwner && eventData.nativeEvent.state === State.END) {
+        translateY.setValue(0);
+        translateX.setValue(0);
+        return;
+      }
+
       if (eventData.nativeEvent.state === State.END) {
         const deltaY = eventData.nativeEvent.translationY;
         const deltaX = eventData.nativeEvent.translationX;
@@ -169,11 +199,11 @@ const DraggableEvent: React.FC<{
         if (activeView === "Week") {
           // Allow easier dragging between days (threshold: 1/3 screen width)
           const colShift = Math.round(deltaX / (Dimensions.get('window').width / 3));
-        if (colShift !== 0) {
-          const currentDate = new Date(event.date);
-          currentDate.setDate(currentDate.getDate() + colShift);
-          newDate = formatInTimeZone(currentDate, timeZone, "yyyy-MM-dd");
-        }
+          if (colShift !== 0) {
+            const currentDate = new Date(event.date);
+            currentDate.setDate(currentDate.getDate() + colShift);
+            newDate = formatInTimeZone(currentDate, timeZone, "yyyy-MM-dd");
+          }
         }
 
         // Calculate new start time in minutes
@@ -273,9 +303,14 @@ const DraggableEvent: React.FC<{
       paddingRight: isRightMost ? 1 : 1, // Only apply large gutter to the rightmost event
     }}>
       <PanGestureHandler
-        enabled={isOwner}
-        onGestureEvent={onGestureEvent}
-        onHandlerStateChange={onHandlerStateChange}
+        enabled={true}
+        onGestureEvent={isOwner ? onGestureEvent : undefined}
+        onHandlerStateChange={(e) => {
+          onHandlerStateChangeBegan(e);
+          if (isOwner) {
+            onHandlerStateChange(e);
+          }
+        }}
         activeOffsetX={[-10, 10]}
         activeOffsetY={[-10, 10]}
       >
@@ -295,7 +330,10 @@ const DraggableEvent: React.FC<{
             shadowOffset: { width: 0, height: 1 },
             shadowOpacity: 0.2,
             shadowRadius: 2,
-            transform: [{ translateY: translateY }, { translateX: translateX }]
+            transform: [
+              { translateY: translateY },
+              { translateX: Animated.add(translateX, shakeAnim) }
+            ]
           }}
         >
           <Pressable
@@ -364,6 +402,8 @@ export const CalendarScreen: React.FC = () => {
   const [selectedTime, setSelectedTime] = useState<string | undefined>(undefined);
   const [filterMember, setFilterMember] = useState<string | null>(null);
   const [showSearch, setShowSearch] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     setSelectedDate(toZonedTime(new Date(), timeZone));
@@ -377,6 +417,30 @@ export const CalendarScreen: React.FC = () => {
       return "";
     }
   };
+
+  const showPermissionToast = (type: 'event' | 'task') => {
+    const message = type === 'task'
+      ? "You cannot update another user's task"
+      : "You cannot update another user's event";
+
+    setToastMessage(message);
+    toastOpacity.setValue(0);
+
+    Animated.sequence([
+      Animated.timing(toastOpacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.delay(2000),
+      Animated.timing(toastOpacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => setToastMessage(null));
+  };
+
 
   /* New state for current time line */
   const [now, setNow] = useState(new Date());
@@ -415,12 +479,12 @@ export const CalendarScreen: React.FC = () => {
   // Unified items (Events + Tasks)
   const filteredEvents = useMemo(() => {
     if (!filterMember) return events;
-    return events.filter(e => e.memberId === filterMember);
+    return events.filter((e: CalendarEvent) => e.memberId === filterMember);
   }, [events, filterMember]);
 
   const filteredTasks = useMemo(() => {
     if (!filterMember) return tasks;
-    return tasks.filter(t => t.assignee === filterMember);
+    return tasks.filter((t: Task) => t.assignee === filterMember);
   }, [tasks, filterMember]);
 
   const zonedNow = toZonedTime(now, timeZone);
@@ -821,6 +885,7 @@ export const CalendarScreen: React.FC = () => {
                               colors={colors}
                               members={members}
                               activeView={activeView}
+                              timeZone={timeZone}
                               onUpdate={(id, updates) => {
                                 if (event.type === 'task') {
                                   const taskUpdates: any = {};
@@ -840,6 +905,7 @@ export const CalendarScreen: React.FC = () => {
                                 setSelectedEvent(e);
                                 setShowAddEventModal(true);
                               }}
+                              onPermissionDenied={showPermissionToast}
                             />
                           );
                         })}
@@ -1073,6 +1139,34 @@ export const CalendarScreen: React.FC = () => {
           onSelectEvent={setSelectedEvent}
         />
         <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} />
+
+        {/* Permission Toast Notification */}
+        {toastMessage && (
+          <Animated.View
+            style={{
+              position: 'absolute',
+              top: 190,
+              left: 20,
+              right: 20,
+              backgroundColor: colors.danger,
+              padding: 16,
+              borderRadius: radius.card,
+              shadowColor: colors.shadow,
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.25,
+              shadowRadius: 4,
+              elevation: 5,
+              opacity: toastOpacity,
+              zIndex: 9999,
+              borderWidth: 1,
+              borderColor: colors.dangerDark,
+            }}
+          >
+            <Text style={{ color: colors.primaryForeground, fontWeight: '600', textAlign: 'center', fontSize: 14 }}>
+              {toastMessage}
+            </Text>
+          </Animated.View>
+        )}
       </View>
     </AppLayout >
   );

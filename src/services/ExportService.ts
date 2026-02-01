@@ -443,16 +443,37 @@ export const exportService = {
             html += renderTable('Recipes', data.recipes, [
                 { header: 'Name', key: 'name' },
                 { header: 'Prep Time', key: 'prep_time', render: (i) => i.prep_time ? `${i.prep_time} min` : '-' },
+                { header: 'Cook Time', key: 'cook_time', render: (i) => i.cook_time ? `${i.cook_time} min` : '-' },
                 { header: 'Servings', key: 'servings' },
-                { header: 'Category', key: 'category' }
+                { header: 'Difficulty', key: 'difficulty', render: (i) => i.difficulty || '-' }
+            ]);
+        }
+
+        // RECIPE COLLECTIONS
+        if (data.collections && data.collections.length > 0) {
+            html += renderTable('Recipe Collections', data.collections, [
+                { header: 'Name', key: 'name' },
+                { header: 'Description', key: 'description', render: (c) => c.description || '-' },
+                { header: 'Color', key: 'color' }
+            ]);
+        }
+
+        // MEAL PLANS
+        if (data.meal_plans && data.meal_plans.length > 0) {
+            html += renderTable('Meal Plans', data.meal_plans, [
+                { header: 'Date', key: 'date' },
+                { header: 'Type', key: 'type' },
+                { header: 'Recipe ID', key: 'recipe_id' },
+                { header: 'Cooked', key: 'is_cooked', render: (m) => m.is_cooked ? 'Yes' : 'No' }
             ]);
         }
 
         // TRANSACTIONS (Expenses)
         if (data.transactions && data.transactions.length > 0) {
             html += renderTable('Expenses', data.transactions, [
-                { header: 'Description', key: 'description' },
+                { header: 'Name', key: 'name' },
                 { header: 'Amount', key: 'amount', render: (i) => `$${Number(i.amount).toFixed(2)}` },
+                { header: 'Type', key: 'type' },
                 { header: 'Category', key: 'category' },
                 {
                     header: 'Date',
@@ -465,8 +486,9 @@ export const exportService = {
         // BUDGETS
         if (data.budgets && data.budgets.length > 0) {
             html += renderTable('Budgets', data.budgets, [
-                { header: 'Name', key: 'name' },
-                { header: 'Limit', key: 'limit', render: (b) => `$${Number(b.limit).toFixed(2)}` }
+                { header: 'Category', key: 'category' },
+                { header: 'Amount', key: 'amount', render: (b) => `$${Number(b.amount).toFixed(2)}` },
+                { header: 'Month', key: 'month' }
             ]);
         }
 
