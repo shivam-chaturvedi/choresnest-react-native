@@ -91,8 +91,13 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     useEffect(() => {
         const collection = database.get<DbNote>('notes');
-        const subscription = collection.query().observe().subscribe({
+        // We use observeWithColumns to ensure we receive updates when these specific fields change
+        // We also add a sort to ensure the initial order is correct, though JS generic sort handles re-ordering
+        const subscription = collection.query(
+            Q.sortBy('updated_at', Q.desc)
+        ).observeWithColumns(['title', 'preview', 'is_starred', 'updated_at', 'blocks_json']).subscribe({
             next: (records) => {
+                console.log(`📥 NotesContext: Received ${records.length} notes update`);
                 const mapped = records
                     .map(record => ({
                         id: record.id,
@@ -105,6 +110,7 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                         isStarred: record.isStarred,
                         folderId: record.folderId,
                     }))
+                    // Sort again in JS to be absolutely sure the UI reflects the latest order
                     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
                 setNotes(mapped);
             },
@@ -143,11 +149,33 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }, []);
 
     const computePreview = (noteData?: Partial<Note>) => {
-        const candidate = noteData?.blocks?.find(block => block.content?.trim());
-        if (candidate && candidate.content) {
-            return candidate.content.trim().slice(0, 80);
+        // Try to find the first non-empty block with meaningful content
+        const blocks = noteData?.blocks || [];
+
+        // Filter out dividers and empty blocks
+        const contentBlocks = blocks.filter(block =>
+            block.type !== 'divider' &&
+            block.content?.trim().length > 0
+        );
+
+        if (contentBlocks.length > 0) {
+            const firstBlock = contentBlocks[0];
+            let preview = firstBlock.content.trim();
+
+            // For todo items, add checkbox indicator
+            if (firstBlock.type === 'todo') {
+                preview = `${firstBlock.checked ? '✓' : '☐'} ${preview}`;
+            }
+
+            // Limit to 100 characters for better preview
+            return preview.slice(0, 100);
         }
-        if (noteData?.preview) return noteData.preview;
+
+        // Fallback to provided preview or default
+        if (noteData?.preview && noteData.preview !== 'No content') {
+            return noteData.preview;
+        }
+
         return 'No content';
     };
 
@@ -178,6 +206,7 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const updateNote = useCallback(async (noteId: string, updates: Partial<Note>) => {
         if (!noteId) return;
         try {
+            console.log('📝 Updating note in DB:', noteId, updates);
             await database.write(async () => {
                 const note = await database.get<DbNote>('notes').find(noteId);
                 await note.update(record => {
@@ -192,8 +221,13 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     record.updatedAt = Date.now();
                 });
             });
-        } catch (error) {
-            console.error("Error updating note:", error);
+            console.log('✅ Note updated in DB successfully');
+        } catch (error: any) {
+            if (error?.message?.includes('not found')) {
+                console.warn("Update skipped: Note not found (likely deleted).");
+            } else {
+                console.error("Error updating note:", error);
+            }
         }
     }, []);
 

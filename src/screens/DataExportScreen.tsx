@@ -21,6 +21,7 @@ const initialDataOptions = [
   { id: 'lists', label: "Shopping Lists", items: 0, selected: true },
   { id: 'recipes', label: "Recipes", items: 0, selected: true },
   { id: 'documents', label: "Documents", items: 0, selected: false },
+  { id: 'notes', label: "Notes", items: 0, selected: true },
   { id: 'expenses', label: "Expenses", items: 0, selected: true },
   { id: 'system', label: "System & Settings", items: 0, selected: true },
 ];
@@ -112,7 +113,7 @@ export const DataExportScreen: React.FC = () => {
           </View>
           <View>
             <Text style={[styles.heroTitle, { color: colors.primaryForeground }]}>Full Backup</Text>
-            <Text style={[styles.heroSubtitle, { color: 'rgba(255,255,255,0.9)' }]}>Export your family data as a JSON file</Text>
+            <Text style={[styles.heroSubtitle, { color: 'rgba(255,255,255,0.9)' }]}>Export data as JSON or PDF</Text>
           </View>
         </View>
 
@@ -147,28 +148,9 @@ export const DataExportScreen: React.FC = () => {
           ))}
         </View>
 
-        {/* Export Button */}
-        <Pressable
-          style={[styles.exportButton, { backgroundColor: colors.primary, shadowColor: colors.primary, borderRadius: radius.card }, isExporting && { opacity: 0.8 }]}
-          onPress={handleExport}
-          disabled={isExporting}
-        >
-          {isExporting ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Loader2 size={24} color="#fff" style={{ transform: [{ rotate: '45deg' }] }} />
-              <Text style={[styles.exportText, { color: colors.primaryForeground }]}>Exporting...</Text>
-            </View>
-          ) : (
-            <>
-              <Share2 size={20} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={[styles.exportText, { color: colors.primaryForeground }]}>Export & Share</Text>
-            </>
-          )}
-        </Pressable>
-
         {/* Export PDF Button */}
         <Pressable
-          style={[styles.exportButton, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, marginTop: 12, borderRadius: radius.card }, isExporting && { opacity: 0.8 }]}
+          style={[styles.exportButton, { backgroundColor: colors.primary, shadowColor: colors.primary, borderRadius: radius.card }, isExporting && { opacity: 0.8 }]}
           onPress={async () => {
             const selectedIds = dataOptions.filter(o => o.selected).map(o => o.id);
             if (selectedIds.length === 0) {
@@ -178,7 +160,8 @@ export const DataExportScreen: React.FC = () => {
 
             setIsExporting(true);
             try {
-              await exportService.exportAsPDF(selectedIds);
+              const filePath = await exportService.exportAsPDF(selectedIds);
+              await exportService.shareBackup(filePath);
             } catch (error: any) {
               Alert.alert("Export Failed", error?.message || "Could not generate PDF.");
             } finally {
@@ -188,11 +171,30 @@ export const DataExportScreen: React.FC = () => {
           disabled={isExporting}
         >
           {isExporting ? (
-            <ActivityIndicator color={colors.foreground} />
+            <ActivityIndicator color="#fff" />
           ) : (
             <>
-              <FileText size={20} color={colors.foreground} style={{ marginRight: 8 }} />
-              <Text style={[styles.exportText, { color: colors.foreground }]}>Export as PDF</Text>
+              <FileText size={20} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={[styles.exportText, { color: colors.primaryForeground }]}>Export as PDF</Text>
+            </>
+          )}
+        </Pressable>
+
+        {/* Export Button (JSON) */}
+        <Pressable
+          style={[styles.exportButton, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, marginTop: 12, borderRadius: radius.card }, isExporting && { opacity: 0.8 }]}
+          onPress={handleExport}
+          disabled={isExporting}
+        >
+          {isExporting ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Loader2 size={24} color={colors.foreground} style={{ transform: [{ rotate: '45deg' }] }} />
+              <Text style={[styles.exportText, { color: colors.foreground }]}>Exporting...</Text>
+            </View>
+          ) : (
+            <>
+              <FileJson size={20} color={colors.foreground} style={{ marginRight: 8 }} />
+              <Text style={[styles.exportText, { color: colors.foreground }]}>Export as JSON</Text>
             </>
           )}
         </Pressable>
@@ -335,4 +337,3 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 });
-

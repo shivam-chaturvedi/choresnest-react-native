@@ -30,8 +30,7 @@ import {
     Quote,
     Code,
     Minus,
-    Trash,
-    Edit3
+    Trash
 } from "lucide-react-native";
 import { useNotes, Note, NoteBlock } from "../contexts/NotesContext";
 
@@ -48,11 +47,15 @@ export const NoteDetailScreen: React.FC = () => {
     const noteIdParam = route.params?.noteId; // Support both object and ID passing
 
     const [noteId, setNoteId] = useState<string | null>(initialNoteParam?.id || noteIdParam || null);
-    const [title, setTitle] = useState(initialNoteParam?.title || "Untitled");
+    const [title, setTitle] = useState(initialNoteParam?.title || "");
     const [blocks, setBlocks] = useState<NoteBlock[]>(initialNoteParam?.blocks || [
         { id: '1', type: 'text', content: '' }
     ]);
     const [isStarred, setIsStarred] = useState(initialNoteParam?.isStarred || false);
+    const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+
+    // Ref to track if we are currently deleting, to block auto-saves
+    const isDeleting = useRef(false);
 
     // If opened with ID, sync with context
     useEffect(() => {
@@ -73,7 +76,7 @@ export const NoteDetailScreen: React.FC = () => {
             let isActive = true;
             const createNote = async () => {
                 const createdId = await addNote(folderIdParam, {
-                    title: "Untitled",
+                    title: "",
                     blocks: [{ id: '1', type: 'text', content: '' }]
                 });
                 if (isActive && createdId) {
@@ -87,21 +90,76 @@ export const NoteDetailScreen: React.FC = () => {
         }
     }, [folderIdParam, noteId, addNote]);
 
-    // Auto-save effect
+    // Unified save function
+    const saveNote = async () => {
+        // Stop if not valid or if deletion is in progress
+        if (!noteId || isDeleting.current) return;
+
+        try {
+            // Generate preview from blocks
+            const contentBlocks = blocks.filter(b =>
+                b.type !== 'divider' &&
+                b.content?.trim().length > 0
+            );
+
+            let preview = 'No content';
+            if (contentBlocks.length > 0) {
+                const firstBlock = contentBlocks[0];
+                preview = firstBlock.content.trim();
+                if (firstBlock.type === 'todo') {
+                    preview = `${firstBlock.checked ? '✓' : '☐'} ${preview}`;
+                }
+                preview = preview.slice(0, 100);
+            }
+
+            console.log('💾 Saving note:', {
+                noteId,
+                title,
+                preview: preview.substring(0, 20) + '...',
+                blocksCount: blocks.length,
+                isStarred
+            });
+
+            setSaveStatus('saving');
+            await updateNote(noteId, {
+                title,
+                blocks,
+                preview,
+                isStarred
+            });
+
+            if (!isDeleting.current) {
+                console.log('✅ Note saved successfully');
+                setSaveStatus('saved');
+                // Reset to idle after 2 seconds
+                setTimeout(() => setSaveStatus('idle'), 2000);
+            }
+        } catch (error) {
+            console.error('Failed to save note:', error);
+            setSaveStatus('idle');
+        }
+    };
+
+    // Auto-save effect with debounce
     useEffect(() => {
-        if (noteId) {
-            const timer = setTimeout(() => {
-                const preview = blocks.find(b => b.content.trim().length > 0)?.content.substring(0, 50) || "No content";
-                updateNote(noteId, {
-                    title,
-                    blocks,
-                    preview,
-                    isStarred
-                });
-            }, 500); // Debounce 500ms
+        if (noteId && !isDeleting.current) {
+            setSaveStatus('saving');
+            const timer = setTimeout(saveNote, 500);
             return () => clearTimeout(timer);
         }
     }, [title, blocks, isStarred, noteId]);
+
+    // Save on unmount / navigation away
+    useEffect(() => {
+        const unsubscribe = navigation.addListener('beforeRemove', async () => {
+            // Only save if we are NOT deleting
+            if (!isDeleting.current) {
+                // Force a save before leaving
+                await saveNote();
+            }
+        });
+        return unsubscribe;
+    }, [navigation, title, blocks, isStarred, noteId]);
 
     // Menus
     const [showAddMenu, setShowAddMenu] = useState(false);
@@ -131,6 +189,8 @@ export const NoteDetailScreen: React.FC = () => {
 
     const handleDeleteNote = () => {
         if (noteId) {
+            // MARK AS DELETING to prevent auto-save
+            isDeleting.current = true;
             deleteNote(noteId);
             navigation.goBack();
         }
@@ -255,7 +315,13 @@ export const NoteDetailScreen: React.FC = () => {
                 <Pressable onPress={() => navigation.goBack()} style={[styles.iconBtn, { borderRadius: radius.sm }]}>
                     <ChevronLeft size={24} color={colors.foreground} />
                 </Pressable>
-                <View style={{ flex: 1 }} />
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                    {saveStatus !== 'idle' && (
+                        <Text style={[styles.saveStatus, { color: colors.mutedForeground }]}>
+                            {saveStatus === 'saving' ? 'Saving...' : '✓ Saved'}
+                        </Text>
+                    )}
+                </View>
                 <View style={{ flexDirection: 'row', gap: 4 }}>
                     <Pressable onPress={() => setIsStarred(!isStarred)} style={[styles.iconBtn, { borderRadius: radius.sm }]}>
                         <Star size={22} color={isStarred ? colors.warning : colors.mutedForeground} fill={isStarred ? colors.warning : "transparent"} />
@@ -270,11 +336,16 @@ export const NoteDetailScreen: React.FC = () => {
                 {/* Title Area */}
                 <TextInput
                     style={[styles.titleInput, { color: colors.foreground }]}
-                    placeholder="Untitled"
+                    placeholder="Note title"
                     placeholderTextColor={colors.mutedForeground}
                     value={title}
-                    onChangeText={setTitle}
-                    multiline
+                    onChangeText={(newTitle) => {
+                        console.log('📝 Title changed:', newTitle);
+                        setTitle(newTitle || '');
+                    }}
+                    autoFocus={!noteIdParam}
+                    returnKeyType="done"
+                    blurOnSubmit={true}
                 />
 
                 <Text style={[styles.timestamp, { color: colors.mutedForeground }]}>{lastEdited}</Text>
@@ -323,10 +394,6 @@ export const NoteDetailScreen: React.FC = () => {
                     <View style={[styles.modalOverlay, { alignItems: 'flex-end', paddingBottom: 0, justifyContent: 'flex-start', paddingTop: 60, paddingRight: 16 }]}>
                         <TouchableWithoutFeedback>
                             <View style={[styles.moreMenuCard, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.shadow, borderRadius: radius.sm }]}>
-                                <Pressable style={styles.moreMenuItem} onPress={() => setShowMoreMenu(false)}>
-                                    <Edit3 size={16} color={colors.foreground} style={{ marginRight: 10 }} />
-                                    <Text style={[styles.menuText, { color: colors.foreground }]}>Rename</Text>
-                                </Pressable>
                                 <Pressable style={styles.moreMenuItem} onPress={handleDeleteNote}>
                                     <Trash size={16} color={colors.danger} style={{ marginRight: 10 }} />
                                     <Text style={[styles.menuText, { color: colors.danger }]}>Delete</Text>
@@ -353,6 +420,10 @@ const styles = StyleSheet.create({
     },
     iconBtn: {
         padding: 8,
+    },
+    saveStatus: {
+        fontSize: 12,
+        fontWeight: '500',
     },
     content: {
         flex: 1,

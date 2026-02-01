@@ -147,15 +147,16 @@ export const AppLockProvider: React.FC<AppLockProviderProps> = ({
                 // The lock check happens in the other useEffect automatically
             } else if (nextAppState === 'background') {
                 // App went to background
-                // We invalidate the session immediately so next time it's active, it requires auth
-                setSessionUnlocked(false);
-                appLockManager.requestFreshAuth();
+
+                // MODIFIED: We no longer invalidate session on background to support "Cold Start Only" lock.
+                // setSessionUnlocked(false);
+                // appLockManager.requestFreshAuth();
 
                 // Force lock state update immediately to ensure UI covers content
-                const shouldLock = record?.enabled || record?.biometricEnabled;
-                if (shouldLock) {
-                    setIsLocked(true);
-                }
+                // const shouldLock = record?.enabled || record?.biometricEnabled;
+                // if (shouldLock) {
+                //    setIsLocked(true);
+                // }
             }
         });
 

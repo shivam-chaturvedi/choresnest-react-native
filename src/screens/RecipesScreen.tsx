@@ -410,25 +410,18 @@ export const RecipesScreen: React.FC = () => {
           >
             <View style={[styles.recipeImage, { backgroundColor: colors.muted, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }]}>
               {renderRecipeImage(recipe.image)}
-              {/* Bookmark Overlay - Top Left */}
-              <Pressable
-                style={{ position: 'absolute', top: 8, left: 8, backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 20, padding: 6 }}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  toggleBookmark(recipe.id);
-                }}
-              >
-                <AppIcon
-                  name="bookmark"
-                  size={16}
-                  color={recipe.saved ? colors.primary : "#fff"}
-                  style={{ opacity: 1 }}
-                />
-              </Pressable>
             </View>
             <View style={styles.recipeInfo}>
               <View style={styles.recipeHeader}>
                 <Text style={[styles.recipeName, { color: colors.foreground }]}>{recipe.name}</Text>
+                <Pressable onPress={() => toggleBookmark(recipe.id)}>
+                  <AppIcon
+                    name="bookmark"
+                    size={20}
+                    color={recipe.saved ? colors.primary : colors.mutedForeground}
+                    style={recipe.saved ? { opacity: 1 } : { opacity: 0.5 }}
+                  />
+                </Pressable>
               </View>
 
               <View style={styles.recipeMetaRow}>

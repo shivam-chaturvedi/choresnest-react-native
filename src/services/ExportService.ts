@@ -1,6 +1,6 @@
 import Share from "react-native-share";
 import RNFS from "react-native-fs";
-import * as RNHTMLtoPDF from "react-native-html-to-pdf";
+import { generatePDF } from 'react-native-html-to-pdf';
 import { database } from "../database";
 
 export type ExportFormat = 'json';
@@ -11,11 +11,14 @@ export interface ExportStats {
     lists: number;
     recipes: number;
     documents: number;
+    notes: number;
     expenses: number;
     system: number;
 }
 
 export const exportService = {
+    isPdfGenerating: false,
+
     /**
      * Get live counts of items in the database
      */
@@ -70,13 +73,14 @@ export const exportService = {
                 tasks,
                 lists: lists + listItems,
                 recipes: recipes + collections + recipeCollections + mealPlans,
-                documents: documents + folders + notes,
+                documents: documents,
+                notes: notes + folders,
                 expenses: transactions + budgets,
                 system: users + members + settings + notificationPreferences + quietHours + appLock + userPreferences,
             };
         } catch (error) {
             console.warn('Failed to fetch export stats:', error);
-            return { events: 0, tasks: 0, lists: 0, recipes: 0, documents: 0, expenses: 0, system: 0 };
+            return { events: 0, tasks: 0, lists: 0, recipes: 0, documents: 0, notes: 0, expenses: 0, system: 0 };
         }
     },
 
@@ -99,15 +103,11 @@ export const exportService = {
     /**
      * Generate backup file and return the path
      */
-    async generateBackup(selectedData: string[]): Promise<string> {
+    /**
+     * Collect data for export
+     */
+    async collectExportData(selectedData: string[]): Promise<Record<string, any[]>> {
         const data: Record<string, any[]> = {};
-        const meta = {
-            version: 1,
-            timestamp: Date.now(),
-            date: new Date().toISOString(),
-            app: 'Family Chores',
-            format: 'json'
-        };
 
         // Helper to fetch and add table data
         const addTableData = async (tableName: string, key: string) => {
@@ -140,6 +140,8 @@ export const exportService = {
         }
         if (selectedData.includes('documents')) {
             await addTableData('documents', 'documents');
+        }
+        if (selectedData.includes('notes')) {
             await addTableData('folders', 'folders');
             await addTableData('notes', 'notes');
         }
@@ -156,6 +158,22 @@ export const exportService = {
             await addTableData('app_lock', 'app_lock');
             await addTableData('user_preferences', 'user_preferences');
         }
+
+        return data;
+    },
+
+    /**
+     * Generate backup file and return the path
+     */
+    async generateBackup(selectedData: string[]): Promise<string> {
+        const data = await this.collectExportData(selectedData);
+        const meta = {
+            version: 1,
+            timestamp: Date.now(),
+            date: new Date().toISOString(),
+            app: 'Family Chores',
+            format: 'json'
+        };
 
         // 2. Format Data
         const content = JSON.stringify({ meta, data }, null, 2);
@@ -177,19 +195,86 @@ export const exportService = {
     },
 
     /**
+     * Export data as PDF
+     */
+    async exportAsPDF(selectedData: string[]): Promise<string> {
+        if (this.isPdfGenerating) {
+            throw new Error('A PDF export is already in progress. Please wait.');
+        }
+
+        this.isPdfGenerating = true;
+        console.log('Starting PDF Export with categories:', selectedData);
+
+        try {
+            // 1. Fetch Data
+            const data = await this.collectExportData(selectedData);
+
+            // 2. Generate HTML
+            const html = this.generateHTML(data);
+
+            // 3. Create PDF
+            const options = {
+                html,
+                fileName: `FamilyChores_Export_${new Date().getTime()}`,
+                directory: 'Documents',
+            };
+
+            const file = await generatePDF(options);
+            console.log('PDF Generated:', file.filePath);
+
+            // Check if file exists and return path
+            if (!file.filePath) throw new Error('PDF generation failed: No file path returned');
+
+            return file.filePath;
+        } catch (error) {
+            console.error('PDF Generation Error:', error);
+            throw error;
+        } finally {
+            // Add a small delay to allow native cleanup
+            setTimeout(() => {
+                this.isPdfGenerating = false;
+            }, 1000);
+        }
+    },
+
+    /**
      * Share the backup file
      */
     async shareBackup(filePath: string): Promise<void> {
         try {
-            console.log("Sharing file:", filePath);
-            const filename = filePath.split("/").pop();
+            console.log("=== SHARE DEBUG START ===");
+            console.log("Original filePath:", filePath);
 
-            // MUST use urls array (Android fix)
+            const exists = await RNFS.exists(filePath);
+            console.log("File exists:", exists);
+
+            if (!exists) {
+                throw new Error(`File not found at path: ${filePath}`);
+            }
+
+            const filename = filePath.split("/").pop();
+            console.log("Filename:", filename);
+
+            // Determine mime type based on extension
+            const isPdf = filename?.toLowerCase().endsWith('.pdf');
+            const mimeType = isPdf ? 'application/pdf' : 'text/plain';
+            const title = isPdf ? "Family Chores PDF Export" : "Family Backup";
+
+            console.log("Is PDF:", isPdf);
+            console.log("MIME type:", mimeType);
+
+            // For Android file sharing, react-native-share handles file:// prefix internally
+            // So we need to pass the raw path without file:// prefix
+            const cleanPath = filePath.replace(/^file:\/\//, '');
+            console.log("Clean path (no prefix):", cleanPath);
+            console.log("=== SHARE DEBUG END ===");
+
+            // Use Share.open() with urls array for file attachment
             await Share.open({
-                title: "Family Backup",
-                urls: [`file://${filePath}`],
-                type: "text/plain",
-                filename: filename, // Force filename for Android
+                title: title,
+                message: isPdf ? "Family Chores PDF Export" : "Family Chores Data Backup",
+                urls: [cleanPath],
+                type: mimeType,
                 failOnCancel: false,
             });
 
@@ -464,106 +549,58 @@ export const exportService = {
             ]);
         }
 
+        // FOLDERS (Note Folders)
+        if (data.folders && data.folders.length > 0) {
+            html += renderTable('Note Folders', data.folders, [
+                {
+                    header: 'Title',
+                    key: 'title',
+                    render: (f) => `${f.icon || '📁'} ${f.title || '-'}`
+                },
+                {
+                    header: 'Notes Count',
+                    key: 'id',
+                    render: (f) => {
+                        const count = data.notes?.filter(n => n.folder_id === f.id).length || 0;
+                        return count.toString();
+                    }
+                }
+            ]);
+        }
+
+        // NOTES
+        if (data.notes && data.notes.length > 0) {
+            html += renderTable('Notes', data.notes, [
+                {
+                    header: 'Title',
+                    key: 'title',
+                    render: (n) => {
+                        const starred = n.is_starred ? '⭐ ' : '';
+                        return `${starred}${n.title || 'Untitled'}`;
+                    }
+                },
+                {
+                    header: 'Preview',
+                    key: 'preview',
+                    render: (n) => n.preview || 'No content'
+                },
+                {
+                    header: 'Folder',
+                    key: 'folder_id',
+                    render: (n) => {
+                        const folder = data.folders?.find(f => f.id === n.folder_id);
+                        return folder ? folder.title : '-';
+                    }
+                },
+                {
+                    header: 'Updated',
+                    key: 'updated_at',
+                    render: (n) => n.updated_at ? new Date(n.updated_at).toLocaleDateString() : '-'
+                }
+            ]);
+        }
+
         html += `</body></html>`;
         return html;
-    },
-
-    /**
-     * Generate PDF and share it
-     */
-    async exportAsPDF(selectedData: string[]): Promise<void> {
-        try {
-            const data: Record<string, any[]> = {};
-
-            // Clean WatermelonDB internal fields
-            const cleanRow = (row: any) => {
-                const copy = { ...row };
-                delete copy._status;
-                delete copy._changed;
-                return copy;
-            };
-
-            // Fetch table data
-            const fetchTable = async (tableName: string, key: string) => {
-                try {
-                    const records = await database.collections.get(tableName).query().fetch();
-                    data[key] = records.map(r => cleanRow((r as any)._raw));
-                } catch {
-                    data[key] = [];
-                }
-            };
-
-            // Fetch based on selection - MATCHING JSON EXPORT LOGIC
-            if (selectedData.includes('events')) {
-                await fetchTable('events', 'events');
-            }
-            if (selectedData.includes('tasks')) {
-                await fetchTable('tasks', 'tasks');
-            }
-            if (selectedData.includes('lists')) {
-                await fetchTable('lists', 'lists');
-                await fetchTable('list_items', 'list_items');
-                await fetchTable('list_categories', 'list_categories');
-            }
-            if (selectedData.includes('recipes')) {
-                await fetchTable('recipes', 'recipes');
-                await fetchTable('collections', 'collections');
-                await fetchTable('collection_recipes', 'collection_recipes');
-                await fetchTable('meal_plans', 'meal_plans');
-            }
-            if (selectedData.includes('documents')) {
-                await fetchTable('documents', 'documents');
-            }
-            if (selectedData.includes('expenses')) {
-                await fetchTable('transactions', 'transactions');
-                await fetchTable('budgets', 'budgets');
-            }
-            if (selectedData.includes('system')) {
-                await fetchTable('users', 'users');
-                await fetchTable('members', 'members');
-                await fetchTable('settings', 'settings');
-                await fetchTable('notification_preferences', 'notification_preferences');
-                await fetchTable('quiet_hours', 'quiet_hours');
-                await fetchTable('app_lock', 'app_lock');
-                await fetchTable('user_preferences', 'user_preferences');
-            }
-
-            const html = this.generateHTML(data);
-
-            const fileName = `FamilyExport_${Date.now()}`;
-            const options = {
-                html,
-                fileName,
-                directory: 'Documents',
-                base64: false
-            };
-
-            // Generate PDF using the imported library
-            const file = await RNHTMLtoPDF.generatePDF(options);
-
-            if (!file || !file.filePath) throw new Error('PDF generation failed');
-
-            console.log('PDF Generated:', file.filePath);
-
-            // Copy to Downloads folder so social apps can access it
-            const destPath = `${RNFS.DownloadDirectoryPath}/${fileName}.pdf`;
-            await RNFS.copyFile(file.filePath, destPath);
-
-            console.log('Copied to Downloads:', destPath);
-
-            // Share from Downloads directory
-            await Share.open({
-                title: "Family Chores PDF Export",
-                message: "Family Chores Data Export",
-                urls: [`file://${destPath}`],
-                type: "application/pdf",
-                subject: "Family Chores Export",
-                failOnCancel: false,
-            });
-
-        } catch (error) {
-            console.error('PDF Export failed:', error);
-            throw error;
-        }
     }
 };
