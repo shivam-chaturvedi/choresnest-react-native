@@ -178,7 +178,7 @@ export const ExpensesScreen: React.FC = () => {
     // Insight 2: Category Spike
     if (categories.length > 0) {
       const topCat = categories[0];
-      insights.push({ icon: '📊', text: `Your highest spending is in ${topCat.name} (${topCat.amount}).`, type: 'tip' });
+      insights.push({ icon: '📊', text: `Your highest spending is in ${topCat.name} (${topCat.formattedAmount}).`, type: 'tip' });
     }
 
     // Insight 3: Income
@@ -673,7 +673,7 @@ export const ExpensesScreen: React.FC = () => {
                           <Text style={{ fontSize: 12, color: colors.mutedForeground }}>{cat.percent}% of total</Text>
                         </View>
                       </View>
-            <View style={{ alignItems: 'flex-end' }}>
+                      <View style={{ alignItems: 'flex-end' }}>
                         <Text style={{ fontSize: 14, fontWeight: '700', color: colors.foreground }}>{cat.formattedAmount}</Text>
                       </View>
                     </View>
@@ -731,7 +731,7 @@ export const ExpensesScreen: React.FC = () => {
                           />
                         </View>
                         {isOverBudget && (
-                        <Text style={[styles.overBudgetText, { color: colors.danger }]}>
+                          <Text style={[styles.overBudgetText, { color: colors.danger }]}>
                             ⚠️ Over budget by {formatCurrency(Math.max(cat.numAmount - cat.budget, 0))}
                           </Text>
                         )}

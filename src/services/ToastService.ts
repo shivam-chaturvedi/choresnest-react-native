@@ -1,4 +1,4 @@
-export type ToastType = "default" | "warning" | "success";
+export type ToastType = "default" | "warning" | "success" | "error";
 
 export interface ToastRequest {
   title: string;

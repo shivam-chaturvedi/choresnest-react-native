@@ -14,12 +14,76 @@ import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 type NavProp = NativeStackNavigationProp<Record<string, object | undefined>>;
 
 import { AppIcon } from "../components/ui/AppIcon";
+import { SupabaseService } from "../services/SupabaseService";
+import { useToast } from "../components/ui/Toast";
+import { getHumanReadableMessage } from "../utils/SupabaseErrorHandler";
+import { LoadingSpinner } from "../components/ui/LoadingSpinner";
+import { isValidEmail } from "../utils/validators";
 
 export const ForgotPasswordScreen: React.FC = () => {
   const navigation = useNavigation<NavProp>();
   const [email, setEmail] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [loading, setLoading] = useState(false);
   const colors = useThemeColors();
   const radius = useThemeRadius();
+  const { showToast } = useToast();
+
+  // ... inside component
+
+  const handleResetPassword = async () => {
+    setEmailError("");
+
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail) {
+      setEmailError("Email address is required.");
+      return;
+    }
+
+    if (!isValidEmail(trimmedEmail)) {
+      setEmailError("Please enter a valid email address.");
+      showToast({
+        type: 'warning',
+        title: 'Validation Error',
+        description: 'Please enter a valid email address.',
+        duration: 3000,
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await SupabaseService.resetPasswordForEmail(email);
+      if (error) {
+        const message = getHumanReadableMessage(error, 'password_reset');
+        showToast({
+          type: 'error',
+          title: 'Password Reset Failed',
+          description: message,
+          duration: 4000,
+        });
+        return;
+      }
+
+      showToast({
+        type: "success",
+        title: "Check your email",
+        description: "We've sent a password reset link to your email."
+      });
+      navigation.goBack();
+    } catch (error: any) {
+      const message = getHumanReadableMessage(error, 'password_reset');
+      showToast({
+        type: 'error',
+        title: 'Password Reset Failed',
+        description: message,
+        duration: 4000,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <ScrollView
@@ -70,9 +134,14 @@ export const ForgotPasswordScreen: React.FC = () => {
             onChangeText={setEmail}
           />
         </View>
+        {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
 
-        <Pressable style={[styles.primaryButton, { backgroundColor: colors.primary, shadowColor: colors.primary, borderRadius: radius.lg }]}>
-          <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>Send Reset Link</Text>
+        <Pressable
+          style={[styles.primaryButton, { backgroundColor: colors.primary, shadowColor: colors.primary, borderRadius: radius.lg }, loading && { opacity: 0.7 }]}
+          onPress={handleResetPassword}
+          disabled={loading}
+        >
+          <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>{loading ? "Sending..." : "Send Reset Link"}</Text>
         </Pressable>
       </View>
 
@@ -88,6 +157,7 @@ export const ForgotPasswordScreen: React.FC = () => {
           </Text>
         </View>
       </View>
+      <LoadingSpinner overlay visible={loading} />
     </ScrollView>
   );
 };
@@ -237,5 +307,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     opacity: 0.8,
+  },
+  errorText: {
+    color: '#EF4444', // Hardcoded danger color or import from theme if available, assuming danger red
+    fontSize: 12,
+    marginLeft: 4,
+    marginTop: -4,
+    marginBottom: 8,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
   },
 });

@@ -16,6 +16,7 @@ import { useSidebar } from "../contexts/SidebarContext";
 import { NotesProvider } from "../contexts/NotesContext";
 import { useTheme } from "../contexts/ThemeContext";
 import { AuthProvider, useAuth } from "../contexts/AuthContext";
+import { useToast } from "../components/ui/Toast";
 import { AppLockProvider, useAppLock } from "../contexts/AppLockContext";
 import { AppLockScreen } from "../screens/AppLockScreen";
 import { database } from "../database";
@@ -32,6 +33,16 @@ interface AppNavigatorProps {
 export const AppNavigator = ({ shouldRequireAuthOnStartup = true }: AppNavigatorProps) => {
   const { isDark } = useTheme();
   const [navState, setNavState] = React.useState<any>();
+  const { showToast } = useToast();
+
+  const handleAuthError = React.useCallback((title: string, message: string) => {
+    showToast({
+      type: 'error',
+      title,
+      description: message,
+      duration: 4000,
+    });
+  }, [showToast]);
 
   // Construct React Navigation compatible theme
   const navigationTheme = {
@@ -48,7 +59,7 @@ export const AppNavigator = ({ shouldRequireAuthOnStartup = true }: AppNavigator
   };
 
   return (
-    <AuthProvider>
+    <AuthProvider onError={handleAuthError}>
       <AppLockProvider shouldRequireAuthOnStartup={shouldRequireAuthOnStartup}>
         <NotesProvider>
           <NavigationContainer
@@ -88,7 +99,8 @@ const AppNavigatorInner = () => {
     }
   }, [isAuthenticated, isLoading]);
 
-  if (isLoading || showSplash || (isAuthenticated && hasMembersInDB === null)) {
+  // Only show splash on initial load, not during auth operations
+  if (showSplash || (isAuthenticated && hasMembersInDB === null)) {
     return (
       <SplashScreen
         onContinue={() => setShowSplash(false)}

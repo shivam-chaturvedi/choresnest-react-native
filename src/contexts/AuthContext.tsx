@@ -1,5 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { supabase } from "../config/supabase";
+import { SupabaseService } from "../services/SupabaseService";
+import { AppSettingsService } from "../services/AppSettingsService";
+import { Session, User as SupabaseUser } from "@supabase/supabase-js";
+import { getHumanReadableMessage } from "../utils/SupabaseErrorHandler";
 
 interface User {
     id: string;
@@ -13,7 +18,8 @@ interface AuthContextType {
     isAuthenticated: boolean;
     hasCompletedOnboarding: boolean;
     isLoading: boolean;
-    login: (email: string, pass: string) => Promise<void>;
+    login: (email: string, pass: string) => Promise<boolean>;
+    signup: (email: string, pass: string, name: string) => Promise<boolean>;
     loginAsGuest: () => Promise<void>;
     logout: () => Promise<void>;
     completeOnboarding: () => Promise<void>;
@@ -22,57 +28,106 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+interface AuthProviderProps {
+    children: ReactNode;
+    onError?: (title: string, message: string) => void;
+}
+
+export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError }) => {
     const [user, setUser] = useState<User | null>(null);
     const [isGuest, setIsGuest] = useState(false);
     const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        loadAuthState();
+        const initializeAuth = async () => {
+            try {
+                // Check active session
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session?.user) {
+                    setUser({
+                        id: session.user.id,
+                        email: session.user.email!,
+                        name: session.user.user_metadata?.full_name
+                    });
+                }
+
+                // Check guest mode independently
+                const guest = await AsyncStorage.getItem("IS_GUEST");
+                if (guest === "true") {
+                    setIsGuest(true);
+                }
+
+                // Check Onboarding status from AppSettingsService
+                const completed = await AppSettingsService.hasCompletedOnboarding();
+                setHasCompletedOnboarding(completed);
+
+            } catch (error) {
+                console.error("Failed to initialize auth state:", error);
+                // Default to safe states if initialization fails
+                setUser(null);
+                setIsGuest(false);
+                setHasCompletedOnboarding(false);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        initializeAuth();
+
+        // Listen for changes
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            if (session?.user) {
+                setUser({
+                    id: session.user.id,
+                    email: session.user.email!,
+                    name: session.user.user_metadata?.full_name
+                });
+                setIsGuest(false);
+                AsyncStorage.removeItem("IS_GUEST");
+            } else {
+                setUser(null);
+            }
+        });
+
+        return () => subscription.unsubscribe();
     }, []);
 
-    const loadAuthState = async () => {
+    const login = async (email: string, pass: string): Promise<boolean> => {
+        setIsLoading(true);
         try {
-            const storedGuest = await AsyncStorage.getItem("IS_GUEST");
-            const storedUser = await AsyncStorage.getItem("AUTH_USER");
-            const storedOnboarding = await AsyncStorage.getItem("HAS_COMPLETED_ONBOARDING");
-
-            if (storedGuest === "true") {
-                setIsGuest(true);
-            } else if (storedUser) {
-                setUser(JSON.parse(storedUser));
+            const { error } = await SupabaseService.signIn(email, pass);
+            if (error) {
+                const message = getHumanReadableMessage(error, 'login');
+                onError?.('Login Failed', message);
+                return false;
             }
-
-            if (storedOnboarding === "true") {
-                setHasCompletedOnboarding(true);
-            }
-        } catch (error) {
-            console.error("Failed to load auth state", error);
+            // State updates via onAuthStateChange
+            return true;
+        } catch (error: any) {
+            const message = getHumanReadableMessage(error, 'login');
+            onError?.('Login Failed', message);
+            return false;
         } finally {
             setIsLoading(false);
         }
     };
 
-    const login = async (email: string, pass: string) => {
+    const signup = async (email: string, pass: string, name: string): Promise<boolean> => {
+        setIsLoading(true);
         try {
-            setIsLoading(true);
-            // Simulate API call
-            await new Promise<void>(resolve => setTimeout(resolve, 1000));
-
-            // Mock user
-            const newUser: User = { id: "u1", email, name: "User" };
-            setUser(newUser);
-            setIsGuest(false);
-            setHasCompletedOnboarding(true); // Ensure this is true on login
-
-            await AsyncStorage.setItem("AUTH_USER", JSON.stringify(newUser));
-            await AsyncStorage.removeItem("IS_GUEST");
-            await AsyncStorage.setItem("HAS_COMPLETED_ONBOARDING", "true");
-        } catch (error) {
-            console.error("Login failed:", error);
-            // Re-throw with user-friendly message
-            throw new Error("Failed to log in. Please try again.");
+            const { error } = await SupabaseService.signUp(email, pass, name);
+            if (error) {
+                const message = getHumanReadableMessage(error, 'signup');
+                onError?.('Signup Failed', message);
+                return false;
+            }
+            // State updates via onAuthStateChange if auto-confirm is on, otherwise user waits
+            return true;
+        } catch (error: any) {
+            const message = getHumanReadableMessage(error, 'signup');
+            onError?.('Signup Failed', message);
+            return false;
         } finally {
             setIsLoading(false);
         }
@@ -98,18 +153,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     const logout = async () => {
+        setIsLoading(true);
         try {
-            setIsLoading(true);
+            await SupabaseService.signOut();
             setUser(null);
             setIsGuest(false);
-
-            // We DO NOT clear HAS_COMPLETED_ONBOARDING here
-            await AsyncStorage.removeItem("AUTH_USER");
             await AsyncStorage.removeItem("IS_GUEST");
-        } catch (error) {
-            console.error("Logout failed:", error);
-            // Don't throw - logout should always succeed from UI perspective
-            // Even if storage fails, we clear the state
+            // Supabase client handles session removal
+        } catch (error: any) {
+            const message = getHumanReadableMessage(error, 'logout');
+            onError?.('Logout Failed', message);
         } finally {
             setIsLoading(false);
         }
@@ -118,7 +171,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const completeOnboarding = async () => {
         try {
             setHasCompletedOnboarding(true);
-            await AsyncStorage.setItem("HAS_COMPLETED_ONBOARDING", "true");
+            await AppSettingsService.completeOnboarding();
         } catch (error) {
             console.error("Failed to save onboarding completion:", error);
             // Don't throw - onboarding is complete in memory even if storage fails
@@ -156,6 +209,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             hasCompletedOnboarding,
             isLoading,
             login,
+            signup,
             loginAsGuest,
             logout,
             completeOnboarding,

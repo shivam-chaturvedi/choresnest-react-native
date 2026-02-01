@@ -10,6 +10,7 @@ import {
     Platform,
 } from "react-native";
 import { useFamily, FamilyMember } from "../../contexts/FamilyContext";
+import { useAuth } from "../../contexts/AuthContext";
 import { AppIcon } from "../ui/AppIcon";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { PROFILE_COLORS } from "../../constants/profileColors";
@@ -40,6 +41,7 @@ interface NewMember {
 
 export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClose }) => {
     const { members, addMember, updateMember, removeMember, setFamilyName, familyName } = useFamily();
+    const { completeOnboarding } = useAuth();
     const { currentCountry, setCountry } = useCountry();
     const colors = useThemeColors();
     const radius = useThemeRadius();
@@ -156,6 +158,7 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
             }
         });
 
+        completeOnboarding();
         onClose();
     };
 

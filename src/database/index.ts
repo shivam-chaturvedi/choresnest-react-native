@@ -7,6 +7,7 @@ import migrations from './migrations';
 import User from './models/User';
 import Member from './models/Member';
 import Setting from './models/Setting';
+import AppSettings from './models/AppSettings';
 import Event from './models/Event';
 import Task from './models/Task';
 import { List, ListItem, ListCategory } from './models/List';
@@ -36,6 +37,7 @@ export const database = new Database({
         User,
         Member,
         Setting,
+        AppSettings,
         Event,
         Task,
         List,

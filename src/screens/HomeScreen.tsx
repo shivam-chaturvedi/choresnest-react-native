@@ -59,7 +59,7 @@ export const HomeScreen: React.FC = () => {
   const colors = useThemeColors();
   const radius = theme.radius; // Dynamic radius
   const { members, activeMember, events, groceryList, setActiveMember, addGroceryItem, tasks, globalVault, memberVaults, familyName } = useFamily();
-  const { isGuest } = useAuth();
+  const { isGuest, logout } = useAuth();
   const { getMealsForDay, getRecipeById } = useMealPlan();
   const navigation = useNavigation<any>();
   const { openSidebar } = useSidebar();
@@ -774,9 +774,12 @@ export const HomeScreen: React.FC = () => {
                       { text: "Cancel", style: "cancel" },
                       {
                         text: "Login / Sign Up",
-                        onPress: () => {
-                          // Ideally navigate to auth, but for now just info
-                          // setAuthStack? or simple alert
+                        onPress: async () => {
+                          try {
+                            await logout();
+                          } catch (error) {
+                            console.error("Error logging out from guest mode:", error);
+                          }
                         }
                       }
                     ]

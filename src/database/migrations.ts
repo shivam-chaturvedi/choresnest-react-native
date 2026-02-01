@@ -40,6 +40,20 @@ export default schemaMigrations({
                     ],
                 }),
             ],
+
+        },
+        {
+            toVersion: 5,
+            steps: [
+                createTable({
+                    name: 'app_settings',
+                    columns: [
+                        { name: 'has_completed_onboarding', type: 'boolean' },
+                        { name: 'created_at', type: 'number' },
+                        { name: 'updated_at', type: 'number' },
+                    ],
+                }),
+            ],
         },
     ],
 });

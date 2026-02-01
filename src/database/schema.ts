@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export default appSchema({
-    version: 4,
+    version: 5,
     tables: [
         tableSchema({
             name: 'users',
@@ -240,6 +240,12 @@ export default appSchema({
                 { name: 'start_minute', type: 'number' }, // 0-59
                 { name: 'end_hour', type: 'number' },
                 { name: 'end_minute', type: 'number' },
+            ],
+        }),
+        tableSchema({
+            name: 'app_settings',
+            columns: [
+                { name: 'has_completed_onboarding', type: 'boolean' },
             ],
         }),
     ],

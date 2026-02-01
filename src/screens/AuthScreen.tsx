@@ -12,6 +12,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { theme } from "../theme";
 import { AppIcon } from "../components/ui/AppIcon";
 import { useAuth } from "../contexts/AuthContext";
+import { useToast } from "../components/ui/Toast";
+import { LoadingSpinner } from "../components/ui/LoadingSpinner";
+import { isValidEmail, isStrongPassword } from "../utils/validators";
 
 interface AuthScreenProps {
   onAuthenticated: () => void;
@@ -24,7 +27,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   onForgotPassword,
   onPrivacy,
 }) => {
-  const { login, loginAsGuest } = useAuth();
+  const { login, signup, loginAsGuest } = useAuth();
+  const { showToast } = useToast();
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -32,13 +36,77 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     email: "",
     password: "",
   });
+  const [errors, setErrors] = useState({
+    name: "",
+    email: "",
+    password: "",
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const radius = theme.radius;
 
+  // ... existing imports
+
   const handleSubmit = async () => {
-    // In a real app, validate and use login(email, password)
-    await login(formData.email, formData.password);
-    onAuthenticated();
+    // Reset errors
+    setErrors({ name: "", email: "", password: "" });
+    let hasError = false;
+    const newErrors = { name: "", email: "", password: "" };
+
+    if (!formData.email) {
+      newErrors.email = "Email address is required.";
+      hasError = true;
+    } else if (!isValidEmail(formData.email)) {
+      newErrors.email = "Please enter a valid email address.";
+      hasError = true;
+    }
+
+    if (!formData.password) {
+      newErrors.password = "Password is required.";
+      hasError = true;
+    } else if (!isStrongPassword(formData.password)) {
+      newErrors.password = "Password must be at least 8 characters.";
+      hasError = true;
+    }
+    if (!isLogin && !formData.name) {
+      newErrors.name = "Full name is required.";
+      hasError = true;
+    }
+
+    if (hasError) {
+      setErrors(newErrors);
+      showToast({
+        type: "warning",
+        title: "Validation Error",
+        description: "Please fix the errors highlighted below.",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    if (isLogin) {
+      const success = await login(formData.email, formData.password);
+      setIsSubmitting(false);
+      if (success) {
+        showToast({
+          type: "success",
+          title: "Welcome back!",
+          description: "You have signed in successfully.",
+        });
+        onAuthenticated();
+      }
+    } else {
+      const success = await signup(formData.email, formData.password, formData.name);
+      setIsSubmitting(false);
+      if (success) {
+        showToast({
+          type: "success",
+          title: "Account Created",
+          description: "Please check your email to verify your account.",
+        });
+        onAuthenticated();
+      }
+    }
   };
 
   const handleGuestLogin = async () => {
@@ -121,65 +189,74 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
           <View style={styles.fieldStack}>
             {!isLogin && (
+              <View>
+                <View style={[styles.inputRow, {
+                  backgroundColor: theme.colors.background,
+                  borderColor: theme.colors.border,
+                  borderRadius: radius.md
+                }]}>
+                  <AppIcon name="user" size={20} color={theme.colors.mutedForeground} style={styles.inputIcon} />
+                  <TextInput
+                    style={[styles.textInput, { color: theme.colors.foreground }]}
+                    placeholder="Full Name"
+                    placeholderTextColor={theme.colors.mutedForeground}
+                    value={formData.name}
+                    onChangeText={(value) =>
+                      setFormData((prev) => ({ ...prev, name: value }))
+                    }
+                  />
+                </View>
+                {errors.name ? <Text style={styles.errorText}>{errors.name}</Text> : null}
+              </View>
+            )}
+
+            <View>
               <View style={[styles.inputRow, {
                 backgroundColor: theme.colors.background,
                 borderColor: theme.colors.border,
                 borderRadius: radius.md
               }]}>
-                <AppIcon name="user" size={20} color={theme.colors.mutedForeground} style={styles.inputIcon} />
+                <AppIcon name="mail" size={20} color={theme.colors.mutedForeground} style={styles.inputIcon} />
                 <TextInput
                   style={[styles.textInput, { color: theme.colors.foreground }]}
-                  placeholder="Full Name"
+                  placeholder="Email Address"
                   placeholderTextColor={theme.colors.mutedForeground}
-                  value={formData.name}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  value={formData.email}
                   onChangeText={(value) =>
-                    setFormData((prev) => ({ ...prev, name: value }))
+                    setFormData((prev) => ({ ...prev, email: value }))
                   }
                 />
               </View>
-            )}
-
-            <View style={[styles.inputRow, {
-              backgroundColor: theme.colors.background,
-              borderColor: theme.colors.border,
-              borderRadius: radius.md
-            }]}>
-              <AppIcon name="mail" size={20} color={theme.colors.mutedForeground} style={styles.inputIcon} />
-              <TextInput
-                style={[styles.textInput, { color: theme.colors.foreground }]}
-                placeholder="Email Address"
-                placeholderTextColor={theme.colors.mutedForeground}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                value={formData.email}
-                onChangeText={(value) =>
-                  setFormData((prev) => ({ ...prev, email: value }))
-                }
-              />
+              {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
             </View>
 
-            <View style={[styles.inputRow, {
-              backgroundColor: theme.colors.background,
-              borderColor: theme.colors.border,
-              borderRadius: radius.md
-            }]}>
-              <AppIcon name="lock" size={20} color={theme.colors.mutedForeground} style={styles.inputIcon} />
-              <TextInput
-                style={[styles.textInput, { color: theme.colors.foreground }]}
-                placeholder="Shared Password"
-                placeholderTextColor={theme.colors.mutedForeground}
-                secureTextEntry={!showPassword}
-                value={formData.password}
-                onChangeText={(value) =>
-                  setFormData((prev) => ({ ...prev, password: value }))
-                }
-              />
-              <Pressable
-                onPress={() => setShowPassword((prev) => !prev)}
-                style={styles.eyeButton}
-              >
-                <AppIcon name={showPassword ? "eye" : "eyeOff"} size={20} color={theme.colors.mutedForeground} />
-              </Pressable>
+            <View>
+              <View style={[styles.inputRow, {
+                backgroundColor: theme.colors.background,
+                borderColor: theme.colors.border,
+                borderRadius: radius.md
+              }]}>
+                <AppIcon name="lock" size={20} color={theme.colors.mutedForeground} style={styles.inputIcon} />
+                <TextInput
+                  style={[styles.textInput, { color: theme.colors.foreground }]}
+                  placeholder="Shared Password"
+                  placeholderTextColor={theme.colors.mutedForeground}
+                  secureTextEntry={!showPassword}
+                  value={formData.password}
+                  onChangeText={(value) =>
+                    setFormData((prev) => ({ ...prev, password: value }))
+                  }
+                />
+                <Pressable
+                  onPress={() => setShowPassword((prev) => !prev)}
+                  style={styles.eyeButton}
+                >
+                  <AppIcon name={showPassword ? "eye" : "eyeOff"} size={20} color={theme.colors.mutedForeground} />
+                </Pressable>
+              </View>
+              {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
             </View>
           </View>
 
@@ -266,7 +343,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           </Text>
         </Text>
       </View>
-    </ScrollView>
+      <LoadingSpinner overlay visible={isSubmitting} />
+    </ScrollView >
   );
 };
 
@@ -477,5 +555,12 @@ const styles = StyleSheet.create({
   guestButtonText: {
     fontSize: 16,
     fontWeight: "600",
+  },
+  errorText: {
+    color: theme.colors.danger,
+    fontSize: 12,
+    marginLeft: 4,
+    marginTop: -4,
+    marginBottom: 8,
   },
 });
