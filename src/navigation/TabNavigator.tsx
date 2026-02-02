@@ -30,6 +30,7 @@ import { DataExportScreen } from "../screens/DataExportScreen";
 import { HelpScreen } from "../screens/HelpScreen";
 import { TasksScreen } from "../screens/TasksScreen";
 import { SettingsScreen } from "../screens/SettingsScreen";
+import { DebugScreen } from "../screens/DebugScreen";
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -57,6 +58,7 @@ const MoreStack = () => (
     <Stack.Screen name="Privacy" component={PrivacyScreen} />
     <Stack.Screen name="Theme" component={ThemeScreen} />
     <Stack.Screen name="Settings" component={SettingsScreen} />
+    <Stack.Screen name="Debug" component={DebugScreen} />
     <Stack.Screen name="Export" component={ExportScreen} />
     <Stack.Screen name="DataExport" component={DataExportScreen} />
     <Stack.Screen name="Help" component={HelpScreen} />

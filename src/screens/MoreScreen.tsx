@@ -16,6 +16,7 @@ import { AppIcon, AppIconName } from "../components/ui/AppIcon";
 import { useFamily, FamilyMember } from "../contexts/FamilyContext";
 import { PROFILE_COLORS } from "../constants/profileColors";
 import { useAuth } from "../contexts/AuthContext";
+import Config from "react-native-config";
 
 interface MenuItem {
   label: string;
@@ -45,6 +46,11 @@ export const MoreScreen: React.FC = () => {
   const activeProfileColor = activeMember?.color
     ? (PROFILE_COLORS.find(c => c.value === activeMember.color)?.hex || colors.primary)
     : colors.primary;
+
+  // Debug: Log Config.ENABLE_DEBUG_TOOLS value
+  console.log('Config.ENABLE_DEBUG_TOOLS value:', Config.ENABLE_DEBUG_TOOLS);
+  console.log('Config.ENABLE_DEBUG_TOOLS type:', typeof Config.ENABLE_DEBUG_TOOLS);
+  console.log('Config.ENABLE_DEBUG_TOOLS === "true":', Config.ENABLE_DEBUG_TOOLS === "true");
 
   const sections: MenuSection[] = [
     {
@@ -154,6 +160,19 @@ export const MoreScreen: React.FC = () => {
         },
       ],
     },
+    ...(Config.ENABLE_DEBUG_TOOLS === "true" ? [{
+      title: "DEVELOPER",
+      items: [
+        {
+          label: "Debug Tools",
+          description: "Database visualization & logs",
+          icon: "terminal" as AppIconName,
+          color: colors.primary + '25',
+          iconColor: colors.primary,
+          route: "Debug"
+        }
+      ]
+    }] : [])
   ];
 
   // Add useAuth import at top if not present (handled by prev step or assumes knowledge, but I will do it purely here if I can, wait I need to add import line)
@@ -225,6 +244,7 @@ export const MoreScreen: React.FC = () => {
       case 'DataExport':
       case 'Help':
       case 'Tasks':
+      case 'Debug':
         navigation.navigate(route as any);
         break;
 

@@ -73,6 +73,7 @@ export const SettingsScreen: React.FC = () => {
             );
           })}
         </View>
+
       </ScrollView>
     </AppLayout>
   );
