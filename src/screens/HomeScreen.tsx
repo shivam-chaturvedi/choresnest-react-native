@@ -524,7 +524,7 @@ export const HomeScreen: React.FC = () => {
               </View>
             </View>
             <Text style={{ fontSize: 11, color: colors.mutedForeground, marginBottom: 12, marginLeft: 4, fontStyle: 'italic' }}>
-              Keep pressing any profile (1s) to edit
+              Long press profile to edit
             </Text>
             <View style={styles.membersRow}>
               {(members || []).map((member: any) => {
@@ -546,7 +546,7 @@ export const HomeScreen: React.FC = () => {
                         console.error("Error switching member:", e);
                       }
                     }}
-                    delayLongPress={1000}
+                    delayLongPress={500}
                     onLongPress={() => {
                       console.log('=== Profile Long Pressed ===');
                       ReactNativeHapticFeedback.trigger("impactHeavy", hapticOptions);

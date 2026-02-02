@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from "react";
+import React, { useMemo, useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Alert,
 } from "react-native";
 import { Swipeable, PanGestureHandler, State } from "react-native-gesture-handler";
+import { useRoute, RouteProp } from "@react-navigation/native";
 import { AppLayout } from "../components/layout/AppLayout";
 import { useFamily, GroceryItem } from "../contexts/FamilyContext";
 import { useMealPlan } from "../contexts/MealPlanContext";
@@ -22,6 +23,7 @@ import { AddShoppingItemModal } from "../components/modals/AddShoppingItemModal"
 export const ListsScreen: React.FC = () => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
+  const route = useRoute<RouteProp<{ params: { addItems?: any[] } }, 'params'>>();
   const { groceryList, addGroceryItem, toggleGroceryItem, removeGroceryItem, activeMember, members, categories } = useFamily();
   const { generateGroceryList } = useMealPlan();
 
@@ -41,6 +43,30 @@ export const ListsScreen: React.FC = () => {
   const [historyDate, setHistoryDate] = useState<Date | null>(null);
   const [historyTime, setHistoryTime] = useState<Date | null>(null);
   const [screenError, setScreenError] = useState<string | null>(null);
+
+  // Handle addItems from route params
+  useEffect(() => {
+    const addItems = route.params?.addItems;
+    if (addItems && Array.isArray(addItems) && addItems.length > 0) {
+      try {
+        addItems.forEach((item) => {
+          addGroceryItem({
+            name: item.name,
+            quantity: item.quantity,
+            unit: item.unit,
+            categoryId: categories[0]?.id || "cat6",
+            addedBy: activeMember?.id || "1",
+            completed: false,
+          });
+        });
+        // Clear the params after adding
+        // Note: You might want to use navigation.setParams({ addItems: undefined }) here
+      } catch (error) {
+        handleScreenError("handleRouteAddItems", error);
+        Alert.alert("Error", "Failed to add items from meal plan.");
+      }
+    }
+  }, [route.params?.addItems]);
 
   const handleScreenError = useCallback((context: string, error: unknown) => {
     console.error(`ListsScreen - ${context}`, error);
@@ -165,6 +191,37 @@ export const ListsScreen: React.FC = () => {
       console.error("Failed to toggle grocery item:", error);
       Alert.alert("Error", "Could not update item. Please try again.");
     }
+  };
+
+  const handleBulkDelete = () => {
+    const targetItems = activeTab === "current" ? todoItems : doneItems;
+    if (targetItems.length === 0) {
+      Alert.alert("Empty List", "No items to delete.");
+      return;
+    }
+
+    Alert.alert(
+      "Clear List",
+      `Are you sure you want to delete all ${targetItems.length} items from the ${activeTab === 'current' ? 'current' : 'purchased'} list?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete All",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              // Execute sequentially to avoid overwhelming DB/State
+              for (const item of targetItems) {
+                await removeGroceryItem(item.id);
+              }
+            } catch (e) {
+              console.error(e);
+              Alert.alert("Error", "Failed to clear list.");
+            }
+          }
+        }
+      ]
+    );
   };
 
   const renderItemCard = (item: GroceryItem, index: number, isPurchased: boolean) => {
@@ -325,9 +382,15 @@ export const ListsScreen: React.FC = () => {
                   <Text style={[styles.title, { color: colors.foreground }]}>Grocery List</Text>
                   <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Your family's shopping list</Text>
                 </View>
-                <View style={styles.headerActions}>
+                <View style={[styles.headerActions, { gap: 8, flexDirection: 'row' }]}>
                   <Pressable style={[styles.roundButton, { backgroundColor: colors.card, borderRadius: radius.md }]} onPress={() => setShowSearch(true)}>
                     <AppIcon name="search" size={18} color={colors.foreground} />
+                  </Pressable>
+                  <Pressable
+                    style={[styles.roundButton, { backgroundColor: colors.danger + '15', borderRadius: radius.md }]}
+                    onPress={handleBulkDelete}
+                  >
+                    <AppIcon name="trash" size={18} color={colors.danger} />
                   </Pressable>
                 </View>
               </View>

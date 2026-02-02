@@ -9,17 +9,19 @@ import {
     Platform,
     ToastAndroid,
     Alert,
+    Animated,
 } from "react-native";
 import { AppIcon } from "../ui/AppIcon";
 import { RecipeImage } from "../recipes/RecipeImage";
 import { useThemeColors } from "../../contexts/ThemeContext";
 import { Recipe } from "../../types/recipes";
+import { ToastItem, ActiveToast } from "../ui/Toast";
 
 interface RecipeDetailModalProps {
     recipe: Recipe | null;
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onAddToGroceryList?: (recipe: Recipe) => void;
+    onAddToGroceryList?: (recipe: Recipe) => Promise<boolean>;
     onBookmark?: (recipe: Recipe) => void;
     onEdit?: (recipe: Recipe) => void;
     onDelete?: (recipe: Recipe) => void;
@@ -87,6 +89,37 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
         }
     };
 
+    const [localToast, setLocalToast] = React.useState<ActiveToast | null>(null);
+
+    const showLocalToast = (title: string, type: 'success' | 'warning' | 'error' = 'success') => {
+        setLocalToast({
+            id: Date.now().toString(),
+            title,
+            type,
+            duration: 3000,
+            anim: new Animated.Value(0),
+        });
+        setTimeout(() => setLocalToast(null), 3000);
+    };
+
+    const handleAddToGrocery = async () => {
+        if (!onAddToGroceryList) return;
+        try {
+            const success = await onAddToGroceryList(recipe);
+            if (success) {
+                showLocalToast("Added to Grocery List", "success");
+            } else {
+                // If false is returned, assume failure logic handled or show default error
+                // But parents might catch error. If we get here with false, maybe silent or warning.
+                // showLocalToast("Could not add items", "error"); 
+                // Let's assume parent handles errors. We only toast on explicit success.
+            }
+        } catch (error) {
+            console.error(error);
+            showLocalToast("Failed to add items", "error");
+        }
+    };
+
     return (
         <Modal
             visible={open}
@@ -105,42 +138,28 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
                         style={recipe.image.startsWith('http') || recipe.image.startsWith('file:') || recipe.image.startsWith('content:') ? StyleSheet.absoluteFill : undefined}
                     />
                     <Pressable
+                        style={styles.bookmarkButton}
+                        onPress={() => {
+                            const nextSaved = onBookmark?.(recipe);
+                            if (typeof nextSaved === "boolean") {
+                                showNativeToast(nextSaved ? "Bookmark added" : "Bookmark removed");
+                            }
+                        }}
+                    >
+                        <AppIcon
+                            name="bookmark"
+                            size={20}
+                            color="#fff"
+                            style={recipe.saved ? { opacity: 1 } : { opacity: 0.7 }}
+                        />
+                    </Pressable>
+                    <Pressable
                         style={styles.closeButton}
                         onPress={() => onOpenChange(false)}
                         hitSlop={10}
                     >
                         <AppIcon name="x" size={20} color="#fff" />
                     </Pressable>
-                    <View style={styles.headerActions}>
-                        <Pressable
-                            style={[styles.smallButton, { borderColor: "#ffffff55" }]}
-                            onPress={() => onEdit?.(recipe)}
-                        >
-                            <AppIcon name="edit" size={18} color="#fff" />
-                        </Pressable>
-                        <Pressable
-                            style={[styles.smallButton, styles.deleteButton]}
-                            onPress={() => onDelete?.(recipe)}
-                        >
-                            <AppIcon name="trash" size={18} color="#fff" />
-                        </Pressable>
-                        <Pressable
-                            style={styles.bookmarkButton}
-                            onPress={() => {
-                                const nextSaved = onBookmark?.(recipe);
-                                if (typeof nextSaved === "boolean") {
-                                    showNativeToast(nextSaved ? "Bookmark added" : "Bookmark removed");
-                                }
-                            }}
-                        >
-                            <AppIcon
-                                name="bookmark"
-                                size={20}
-                                color="#fff"
-                                style={recipe.saved ? { opacity: 1 } : { opacity: 0.7 }}
-                            />
-                        </Pressable>
-                    </View>
                 </View>
 
                 {/* Content Sheet */}
@@ -225,7 +244,7 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
                                                 styles.addOutlineButton,
                                                 { backgroundColor: colors.card, borderColor: colors.border }
                                             ]}
-                                            onPress={() => onAddToGroceryList?.(recipe)}
+                                            onPress={handleAddToGrocery}
                                         >
                                             <AppIcon name="shoppingCart" size={14} color={colors.foreground} style={{ marginRight: 6 }} />
                                             <Text style={[styles.addOutlineText, { color: colors.foreground }]}>Add to List</Text>
@@ -271,7 +290,7 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
                         {/* Footer Action */}
                         <Pressable
                             style={[styles.mainActionButton, { backgroundColor: colors.primary }]}
-                            onPress={() => onAddToGroceryList?.(recipe)}
+                            onPress={handleAddToGrocery}
                         >
                             <AppIcon name="shoppingCart" size={20} color="#fff" style={{ marginRight: 8 }} />
                             <Text style={styles.mainActionText}>Add All to Grocery List</Text>
@@ -279,6 +298,13 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
 
                     </ScrollView>
                 </View>
+
+                {/* Local Toast Overlay */}
+                {localToast && (
+                    <View style={styles.toastOverlay} pointerEvents="box-none">
+                        <ToastItem toast={localToast} onDismiss={() => setLocalToast(null)} />
+                    </View>
+                )}
             </View>
         </Modal>
     );
@@ -507,5 +533,14 @@ const styles = StyleSheet.create({
         color: "#fff",
         fontWeight: "700",
         fontSize: 16,
+    },
+    toastOverlay: {
+        position: 'absolute',
+        top: 50,
+        left: 0,
+        right: 0,
+        alignItems: 'center',
+        zIndex: 9999,
+        elevation: 9999,
     },
 });

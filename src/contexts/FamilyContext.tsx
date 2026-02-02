@@ -455,10 +455,59 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         members,
         activeMember,
         setActiveMember,
-        addMember: (m: any) => FamilyService.addMember(m.name, m.symbol, m.color, m.isActive ?? false),
-        removeMember: (id: string) => FamilyService.deleteMember(id),
-        updateMember: (id: string, u: any) => FamilyService.updateMember(id, u),
-        updateMemberColor: (id: string, c: string) => FamilyService.updateMember(id, { color: c }),
+        addMember: async (m: any) => {
+          await FamilyService.addMember(m.name, m.symbol, m.color, m.isActive ?? false);
+          const updated = await FamilyService.getAllMembers();
+          const mapped = updated.map(mem => ({
+            id: mem.id,
+            name: mem.name,
+            symbol: mem.symbol,
+            color: mem.color,
+            isActive: mem.isActive,
+            role: mem.role
+          }));
+          setMembers(mapped);
+        },
+        removeMember: async (id: string) => {
+          await FamilyService.deleteMember(id);
+          const updated = await FamilyService.getAllMembers();
+          const mapped = updated.map(mem => ({
+            id: mem.id,
+            name: mem.name,
+            symbol: mem.symbol,
+            color: mem.color,
+            isActive: mem.isActive,
+            role: mem.role
+          }));
+          setMembers(mapped);
+        },
+        updateMember: async (id: string, u: any) => {
+          await FamilyService.updateMember(id, u);
+          const updated = await FamilyService.getAllMembers();
+          const mapped = updated.map(mem => ({
+            id: mem.id,
+            name: mem.name,
+            symbol: mem.symbol,
+            color: mem.color,
+            isActive: mem.isActive,
+            role: mem.role
+          }));
+          setMembers(mapped);
+        },
+        updateMemberColor: async (id: string, c: string) => {
+          await FamilyService.updateMember(id, { color: c });
+          // No refresh strictly needed if updateMember handles it, but good to be safe if this is called independently
+          const updated = await FamilyService.getAllMembers();
+          const mapped = updated.map(mem => ({
+            id: mem.id,
+            name: mem.name,
+            symbol: mem.symbol,
+            color: mem.color,
+            isActive: mem.isActive,
+            role: mem.role
+          }));
+          setMembers(mapped);
+        },
 
         globalVault,
         memberVaults,

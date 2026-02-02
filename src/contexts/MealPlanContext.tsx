@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { addDays, startOfWeek, format } from 'date-fns';
 import { useRecipes } from './RecipeContext';
 import { Recipe } from '../types/recipes';
@@ -6,6 +6,9 @@ import { MealType } from '../types/meals';
 import { NotificationScheduler } from '../services/NotificationScheduler';
 import { NotificationPreferencesService } from '../services/NotificationPreferencesService';
 import { getTargetTimeForMeal } from '../utils/mealTimes';
+import { database } from '../database';
+import MealPlan from '../database/models/MealPlan';
+import { Q } from '@nozbe/watermelondb';
 
 export type { MealType };
 
@@ -29,12 +32,12 @@ interface MealPlanContextType {
   plannedMeals: PlannedMeal[];
   currentWeekStart: Date;
   setCurrentWeekStart: (date: Date) => void;
-  addMealToPlan: (recipeId: number, date: string, mealType: MealType) => void;
-  removeMealFromPlan: (mealId: string) => void;
+  addMealToPlan: (recipeId: number, date: string, mealType: MealType) => Promise<void>;
+  removeMealFromPlan: (mealId: string) => Promise<void>;
   getMealsForDay: (date: string) => PlannedMeal[];
   getRecipeById: (id: number) => Recipe | undefined;
-  generateGroceryList: () => GroceryListItem[];
-  clearWeekPlan: () => void;
+  generateGroceryList: (weekStart?: Date, weekEnd?: Date) => GroceryListItem[];
+  clearWeekPlan: () => Promise<void>;
 }
 
 const MealPlanContext = createContext<MealPlanContextType | undefined>(undefined);
@@ -55,6 +58,30 @@ export const MealPlanProvider: React.FC<{ children: ReactNode }> = ({ children }
       return undefined;
     }
   };
+
+  // Load meal plans from database on mount
+  useEffect(() => {
+    const loadMealPlans = async () => {
+      try {
+        const mealPlansCollection = database.get<MealPlan>('meal_plans');
+        const allMealPlans = await mealPlansCollection.query().fetch();
+
+        const meals: PlannedMeal[] = allMealPlans.map(mp => ({
+          id: mp.id,
+          recipeId: parseInt(mp.recipeId, 10),
+          date: mp.date,
+          mealType: mp.type as MealType,
+          notificationId: mp.notificationId,
+        }));
+
+        setPlannedMeals(meals);
+      } catch (error) {
+        console.error('Error loading meal plans:', error);
+      }
+    };
+
+    loadMealPlans();
+  }, []);
 
   const scheduleMealReminder = async (meal: PlannedMeal) => {
     if (!meal) return;
@@ -85,6 +112,14 @@ export const MealPlanProvider: React.FC<{ children: ReactNode }> = ({ children }
       );
 
       if (notificationId) {
+        // Update database with notification ID
+        await database.write(async () => {
+          const mealPlan = await database.get<MealPlan>('meal_plans').find(meal.id);
+          await mealPlan.update(mp => {
+            mp.notificationId = notificationId;
+          });
+        });
+
         setPlannedMeals(prev => prev.map(item => item.id === meal.id ? { ...item, notificationId } : item));
       }
     } catch (error) {
@@ -99,15 +134,26 @@ export const MealPlanProvider: React.FC<{ children: ReactNode }> = ({ children }
     });
   };
 
-  const addMealToPlan = (recipeId: number, date: string, mealType: MealType) => {
+  const addMealToPlan = async (recipeId: number, date: string, mealType: MealType) => {
     try {
       if (!recipeId || !date || !mealType) return;
+
+      const newMealPlan = await database.write(async () => {
+        return await database.get<MealPlan>('meal_plans').create(mp => {
+          mp.recipeId = recipeId.toString();
+          mp.date = date;
+          mp.type = mealType;
+          mp.isCooked = false;
+        });
+      });
+
       const newMeal: PlannedMeal = {
-        id: Date.now().toString(),
+        id: newMealPlan.id,
         recipeId,
         date,
         mealType,
       };
+
       setPlannedMeals(prev => [...prev, newMeal]);
       void scheduleMealReminder(newMeal);
     } catch (error) {
@@ -115,16 +161,21 @@ export const MealPlanProvider: React.FC<{ children: ReactNode }> = ({ children }
     }
   };
 
-  const removeMealFromPlan = (mealId: string) => {
+  const removeMealFromPlan = async (mealId: string) => {
     try {
       if (!mealId) return;
-      setPlannedMeals(prev => {
-        const meal = prev.find(m => m.id === mealId);
-        if (meal?.notificationId) {
-          cancelMealReminder(meal.notificationId);
-        }
-        return prev.filter(m => m.id !== mealId);
+
+      const meal = plannedMeals.find(m => m.id === mealId);
+      if (meal?.notificationId) {
+        cancelMealReminder(meal.notificationId);
+      }
+
+      await database.write(async () => {
+        const mealPlan = await database.get<MealPlan>('meal_plans').find(mealId);
+        await mealPlan.destroyPermanently();
       });
+
+      setPlannedMeals(prev => prev.filter(m => m.id !== mealId));
     } catch (error) {
       console.error("Error in removeMealFromPlan:", error);
     }
@@ -140,11 +191,20 @@ export const MealPlanProvider: React.FC<{ children: ReactNode }> = ({ children }
     }
   };
 
-  const generateGroceryList = (): GroceryListItem[] => {
+  const generateGroceryList = (weekStart?: Date, weekEnd?: Date): GroceryListItem[] => {
     try {
       const ingredientMap = new Map<string, GroceryListItem>();
 
-      plannedMeals.forEach(meal => {
+      // Filter meals by week if dates provided
+      const mealsToProcess = weekStart && weekEnd
+        ? plannedMeals.filter(meal => {
+          if (!meal.date) return false;
+          const mealDate = new Date(meal.date);
+          return mealDate >= weekStart && mealDate <= weekEnd;
+        })
+        : plannedMeals;
+
+      mealsToProcess.forEach(meal => {
         const recipe = getRecipeById(meal.recipeId);
         if (!recipe || !recipe.ingredients) return;
 
@@ -179,34 +239,43 @@ export const MealPlanProvider: React.FC<{ children: ReactNode }> = ({ children }
     }
   };
 
-  const clearWeekPlan = () => {
+  const clearWeekPlan = async () => {
     try {
       const weekEnd = addDays(currentWeekStart, 6);
-      setPlannedMeals(prev => {
-        const toKeep: PlannedMeal[] = [];
-        const toRemove: PlannedMeal[] = [];
-        prev.forEach(meal => {
-          if (!meal.date) {
-            toRemove.push(meal);
-            return;
-          }
-          const mealDate = new Date(meal.date);
-          const isOutOfWeek = isNaN(mealDate.getTime()) || (mealDate < currentWeekStart || mealDate > weekEnd);
-          if (isOutOfWeek) {
-            toKeep.push(meal);
-          } else {
-            toRemove.push(meal);
-          }
-        });
+      const weekStart = currentWeekStart;
 
-        toRemove.forEach(meal => {
-          if (meal.notificationId) {
-            cancelMealReminder(meal.notificationId);
-          }
-        });
-
-        return toKeep;
+      const mealsToRemove = plannedMeals.filter(meal => {
+        if (!meal.date) return true;
+        const mealDate = new Date(meal.date);
+        return !isNaN(mealDate.getTime()) && mealDate >= weekStart && mealDate <= weekEnd;
       });
+
+      // Cancel notifications
+      mealsToRemove.forEach(meal => {
+        if (meal.notificationId) {
+          cancelMealReminder(meal.notificationId);
+        }
+      });
+
+      // Delete from database
+      await database.write(async () => {
+        const mealPlansCollection = database.get<MealPlan>('meal_plans');
+        const mealPlansToDelete = await mealPlansCollection
+          .query(
+            Q.where('date', Q.gte(format(weekStart, 'yyyy-MM-dd'))),
+            Q.where('date', Q.lte(format(weekEnd, 'yyyy-MM-dd')))
+          )
+          .fetch();
+
+        await Promise.all(mealPlansToDelete.map(mp => mp.destroyPermanently()));
+      });
+
+      // Update state
+      setPlannedMeals(prev => prev.filter(meal => {
+        if (!meal.date) return false;
+        const mealDate = new Date(meal.date);
+        return isNaN(mealDate.getTime()) || mealDate < weekStart || mealDate > weekEnd;
+      }));
     } catch (error) {
       console.error("Error in clearWeekPlan:", error);
     }

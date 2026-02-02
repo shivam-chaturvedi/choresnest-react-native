@@ -10,6 +10,7 @@ import {
 import { AppIcon } from '../ui/AppIcon';
 import { useThemeColors } from '../../contexts/ThemeContext';
 import { useRecipes } from '../../contexts/RecipeContext';
+import { RecipeImage } from '../recipes/RecipeImage';
 
 interface AddMealModalProps {
     open: boolean;
@@ -55,7 +56,7 @@ export const AddMealModal: React.FC<AddMealModalProps> = ({
                                     onPress={() => onSelectRecipe(recipe.id)}
                                     style={[styles.recipeCard, { backgroundColor: colors.muted }]}
                                 >
-                                    <Text style={styles.recipeEmoji}>{recipe.image}</Text>
+                                    <RecipeImage image={recipe.image} size={40} borderRadius={8} />
                                     <View style={styles.recipeInfo}>
                                         <Text style={[styles.recipeName, { color: colors.foreground }]}>{recipe.name}</Text>
                                         <Text style={[styles.recipeMeta, { color: colors.mutedForeground }]}>

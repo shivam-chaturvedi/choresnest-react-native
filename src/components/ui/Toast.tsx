@@ -15,7 +15,7 @@ import { NotificationCenter } from "../../services/NotificationCenter";
 import { theme } from "../../theme";
 import { AppIcon } from "./AppIcon";
 
-interface ActiveToast extends ToastRequest {
+export interface ActiveToast extends ToastRequest {
   id: string;
   type: ToastType;
   duration: number;
@@ -173,7 +173,7 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
-const ToastItem = ({ toast, onDismiss }: { toast: ActiveToast, onDismiss: () => void }) => {
+export const ToastItem = ({ toast, onDismiss }: { toast: ActiveToast, onDismiss: () => void }) => {
   useEffect(() => {
     Animated.spring(toast.anim, {
       toValue: 1,

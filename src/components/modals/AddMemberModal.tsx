@@ -51,7 +51,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, m
     }
   }, [open, memberToEdit]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     try {
       if (!name.trim()) {
         setError("Please enter a name");
@@ -59,13 +59,13 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, m
       }
 
       if (memberToEdit) {
-        updateMember(memberToEdit.id, {
+        await updateMember(memberToEdit.id, {
           name: name.trim(),
           symbol: selectedAvatar,
           color: selectedColor,
         });
       } else {
-        addMember({
+        await addMember({
           name: name.trim(),
           symbol: selectedAvatar,
           color: selectedColor,

@@ -31,6 +31,7 @@ import { ScreenErrorView } from "../components/ui/ScreenErrorView";
 import { Linking } from "react-native";
 import { ImageGalleryModal } from "../components/modals/ImageGalleryModal";
 import { AudioPlayerModal } from "../components/modals/AudioPlayerModal";
+import { getRecipeType } from "../utils/recipeUtils";
 
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
@@ -49,7 +50,7 @@ const tabs = ["For You", "All Recipes", "Collections"];
 export const RecipesScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<Record<string, undefined>>>();
   const { openSidebar } = useSidebar();
-  const { addGroceryItem } = useFamily();
+  const { addGroceryItem, activeMember } = useFamily();
   const colors = useThemeColors();
   const radius = useThemeRadius();
   const { recipes, collections, toggleBookmark, removeRecipe } = useRecipes();
@@ -69,6 +70,7 @@ export const RecipesScreen: React.FC = () => {
   const [activeTab, setActiveTab] = useState("For You");
   const [query, setQuery] = useState("");
   const [recipeToEdit, setRecipeToEdit] = useState<Recipe | null>(null);
+  const [recipeEditType, setRecipeEditType] = useState<'Text' | 'Image' | 'Link' | 'Audio' | undefined>(undefined);
 
   // Auto-switch to "All Recipes" when searching
   useEffect(() => {
@@ -204,31 +206,46 @@ export const RecipesScreen: React.FC = () => {
     }
   };
 
-  const handleAddToGroceryList = (recipe: Recipe) => {
+  const handleAddToGroceryList = async (recipe: Recipe): Promise<boolean> => {
     try {
-      recipe.ingredients.forEach(ing => {
-        addGroceryItem({
+      // showToast({ title: "Adding...", description: `Adding ingredients from ${recipe.name}`, type: "default" });
+
+      for (const ing of recipe.ingredients) {
+        await addGroceryItem({
           name: ing.name,
-          quantity: ing.quantity,
-          unit: ing.unit,
-          categoryId: "cat6", // Default category
-          addedBy: "1", // Current user ID (mock)
+          quantity: Number(ing.quantity) || 1,
+          unit: ing.unit || 'pcs',
+          categoryId: undefined,
+          addedBy: activeMember?.id,
           completed: false,
         });
-      });
-      showToast({ title: "Success", description: "Ingredients added to grocery list", type: "success" });
+      }
+      // showToast({ title: "Success", description: "Ingredients added to grocery list", type: "success" });
+      return true;
     } catch (error) {
       handleScreenError("handleAddToGroceryList", error);
-      showToast({ title: "Error", description: "Failed to add ingredients", type: "warning" });
+      // showToast({ title: "Error", description: "Failed to add ingredients", type: "warning" });
+      return false;
     }
   };
 
-  const handleAddCollectionToGrocery = (collectionId: number) => {
+  const handleAddCollectionToGrocery = async (collectionId: number) => {
     try {
       const collection = collections.find(c => c.id === collectionId);
       if (collection && collection.recipeIds) {
         const recipesInCollection = recipes.filter(r => collection.recipeIds?.includes(r.id));
-        recipesInCollection.forEach(r => handleAddToGroceryList(r));
+
+        if (recipesInCollection.length === 0) {
+          showToast({ title: "Info", description: "No valid recipes found in collection", type: "default" });
+          return;
+        }
+
+        showToast({ title: "Adding Collection", description: `Adding items from ${collection.name}...`, type: "default" });
+
+        for (const r of recipesInCollection) {
+          await handleAddToGroceryList(r);
+        }
+
         showToast({ title: "Success", description: `Added recipes from ${collection.name} to list`, type: "success" });
       } else {
         showToast({ title: "Info", description: "No recipes in this collection yet", type: "default" });
@@ -455,18 +472,36 @@ export const RecipesScreen: React.FC = () => {
           {/* Action Buttons - Outside the Card */}
           <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8, gap: 12, paddingHorizontal: 4 }}>
             <Pressable
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                borderWidth: 1,
+                borderColor: 'black',
+                borderRadius: radius.md,
+                paddingVertical: 8,
+                paddingHorizontal: 16,
+              }}
               onPress={() => handleEditRecipe(recipe)}
             >
-              <AppIcon name="edit" size={16} color={colors.mutedForeground} />
-              <Text style={{ fontSize: 13, color: colors.mutedForeground, fontWeight: '500' }}>Edit</Text>
+              <AppIcon name="edit" size={16} color="black" />
+              <Text style={{ fontSize: 13, color: "black", fontWeight: '600' }}>Edit</Text>
             </Pressable>
             <Pressable
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                borderWidth: 1,
+                borderColor: 'black',
+                borderRadius: radius.md,
+                paddingVertical: 8,
+                paddingHorizontal: 16,
+              }}
               onPress={() => handleDeleteRecipe(recipe)}
             >
-              <AppIcon name="trash" size={16} color={colors.danger} />
-              <Text style={{ fontSize: 13, color: colors.danger, fontWeight: '500' }}>Delete</Text>
+              <AppIcon name="trash" size={16} color="black" />
+              <Text style={{ fontSize: 13, color: "black", fontWeight: '600' }}>Delete</Text>
             </Pressable>
           </View>
         </View>
@@ -561,6 +596,14 @@ export const RecipesScreen: React.FC = () => {
   }
 
   const handleEditRecipe = (recipe: Recipe) => {
+    const recipeType = getRecipeType(recipe);
+    const tabTypeMap: Record<string, 'Text' | 'Image' | 'Link' | 'Audio'> = {
+      'text': 'Text',
+      'image': 'Image',
+      'url': 'Link',
+      'audio': 'Audio'
+    };
+    setRecipeEditType(tabTypeMap[recipeType]);
     setRecipeToEdit(recipe);
     setShowRecipeDetail(false);
     setShowAddRecipeModal(true);
@@ -706,9 +749,11 @@ export const RecipesScreen: React.FC = () => {
         <AddNewRecipeModal
           open={showAddRecipeModal}
           recipe={recipeToEdit ?? undefined}
+          initialType={recipeEditType}
           onClose={() => {
             setShowAddRecipeModal(false);
             setRecipeToEdit(null);
+            setRecipeEditType(undefined);
           }}
         />
       )}

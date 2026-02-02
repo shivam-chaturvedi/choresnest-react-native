@@ -16,6 +16,7 @@ import { Recipe } from '../types/recipes';
 import { useToast } from '../components/ui/Toast';
 import { useMealPlan, MealType } from '../contexts/MealPlanContext';
 import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
+import { useFamily } from '../contexts/FamilyContext';
 import { AddMealModal } from '../components/modals/AddMealModal';
 import { RecipeDetailModal } from '../components/modals/RecipeDetailModal';
 import { WeeklyGroceryListModal } from '../components/modals/WeeklyGroceryListModal';
@@ -51,6 +52,7 @@ export const MealPlanScreen: React.FC = () => {
     generateGroceryList,
   } = useMealPlan();
   const { toggleBookmark } = useRecipes();
+  const { addGroceryItem, activeMember } = useFamily();
 
   const [activeTab, setActiveTab] = useState<'plan' | 'prep'>('plan');
   const [addMealModal, setAddMealModal] = useState<{ open: boolean; date: string; mealType: MealType } | null>(null);
@@ -109,6 +111,44 @@ export const MealPlanScreen: React.FC = () => {
     if (recipe) {
       setSelectedRecipe(recipe);
       setShowRecipeDetail(true);
+    }
+  };
+
+  const handleRecipeAddToGrocery = async (recipe: Recipe): Promise<boolean> => {
+    try {
+      // showToast({ title: "Adding...", description: `Adding ingredients from ${recipe.name}`, type: "default" });
+
+      for (const ing of recipe.ingredients) {
+        await addGroceryItem({
+          name: ing.name,
+          quantity: Number(ing.quantity) || 1,
+          unit: ing.unit || 'pcs',
+          categoryId: undefined,
+          addedBy: activeMember?.id, // Use active member ID
+          completed: false,
+        });
+      }
+      // showToast({ title: "Success", description: "Ingredients added to grocery list", type: "success" });
+      return true;
+    } catch (error) {
+      console.error(error);
+      // showToast({ title: "Error", description: "Failed to add ingredients", type: "warning" });
+      return false;
+    }
+  };
+
+  const handleAddToGroceryList = (items: any[]) => {
+    try {
+      // Navigate to Lists screen
+      // @ts-ignore - navigation types
+      navigation.navigate('lists', { addItems: items });
+      showToast({
+        title: "Added to Grocery List",
+        description: `${items.length} item${items.length > 1 ? 's' : ''} added to your grocery list`,
+        type: "success"
+      });
+    } catch (error) {
+      showToast({ title: "Error", description: "Could not add items to grocery list", type: "warning" });
     }
   };
 
@@ -480,7 +520,8 @@ export const MealPlanScreen: React.FC = () => {
       <WeeklyGroceryListModal
         visible={showGroceryModal}
         onClose={() => setShowGroceryModal(false)}
-        items={generateGroceryList()}
+        items={generateGroceryList(currentWeekStart, addDays(currentWeekStart, 6))}
+        onAddToGroceryList={handleAddToGroceryList}
       />
 
       <RecipeDetailModal
@@ -488,6 +529,7 @@ export const MealPlanScreen: React.FC = () => {
         open={showRecipeDetail}
         onOpenChange={setShowRecipeDetail}
         onBookmark={handleBookmark}
+        onAddToGroceryList={handleRecipeAddToGrocery}
       />
     </>
   );

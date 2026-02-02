@@ -29,6 +29,7 @@ interface AddNewRecipeModalProps {
     open: boolean;
     onClose: () => void;
     recipe?: Recipe; // Added prop for editing
+    initialType?: TabType; // Type to lock to when editing
 }
 
 type TabType = "Text" | "Image" | "Link" | "Audio";
@@ -40,13 +41,14 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
     const { addRecipe, updateRecipe } = useRecipes();
     const { showToast } = useToast();
 
-    const [activeTab, setActiveTab] = useState<TabType>("Text");
+    const isEditingMode = !!props.recipe;
+    const [activeTab, setActiveTab] = useState<TabType>(props.initialType || "Text");
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
     const [prepTime, setPrepTime] = useState("");
     const [cookTime, setCookTime] = useState("");
     const [servings, setServings] = useState("");
-    const [ingredients, setIngredients] = useState<string[]>(["", ""]);
+    const [ingredients, setIngredients] = useState<{ name: string; quantity: string; unit: string }[]>([{ name: "", quantity: "", unit: "" }]);
     const [instructions, setInstructions] = useState<string[]>([""]);
     const [tags, setTags] = useState<string[]>([]);
     const [tagInput, setTagInput] = useState("");
@@ -59,7 +61,13 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
     const [carbs, setCarbs] = useState("");
     const [fats, setFats] = useState("");
 
-    const handleAddIngredient = () => setIngredients([...ingredients, ""]);
+    // Unit Picker State
+    const [showUnitPicker, setShowUnitPicker] = useState(false);
+    const [activeIngredientIndex, setActiveIngredientIndex] = useState<number | null>(null);
+
+    const COMMON_UNITS = ["unit", "g", "kg", "ml", "cup", "tbsp", "tsp", "oz", "lb", "pcs", "slice", "can", "pkg", "clove", "pinch"];
+
+    const handleAddIngredient = () => setIngredients([...ingredients, { name: "", quantity: "", unit: "" }]);
 
     // Audio UI State (Logic removed)
     const [isRecording, setIsRecording] = useState(false);
@@ -121,7 +129,12 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
             setPrepTime((totalMin > 15 ? 15 : 5).toString());
             setCookTime((totalMin > 15 ? totalMin - 15 : totalMin - 5).toString());
             setServings(props.recipe.servings.toString());
-            setIngredients(props.recipe.ingredients.map(i => i.name));
+            setServings(props.recipe.servings.toString());
+            setIngredients(props.recipe.ingredients.map(i => ({
+                name: i.name,
+                quantity: i.quantity.toString(),
+                unit: i.unit
+            })));
             setTags(props.recipe.tags);
             if (props.recipe.url) setLinkUrl(props.recipe.url);
             if (props.recipe.nutrition) {
@@ -359,9 +372,10 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
         newIngredients.splice(index, 1);
         setIngredients(newIngredients);
     };
-    const handleIngredientChange = (text: string, index: number) => {
+
+    const handleIngredientChange = (field: "name" | "quantity" | "unit", text: string, index: number) => {
         const newIngredients = [...ingredients];
-        newIngredients[index] = text;
+        newIngredients[index] = { ...newIngredients[index], [field]: text };
         setIngredients(newIngredients);
     };
 
@@ -396,7 +410,9 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
         setPrepTime("");
         setCookTime("");
         setServings("");
-        setIngredients(["", ""]);
+        setCookTime("");
+        setServings("");
+        setIngredients([{ name: "", quantity: "", unit: "" }]);
         setInstructions([""]);
         setTags([]);
         setTagInput("");
@@ -430,12 +446,10 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
             // Validation by Tab
             if (activeTab === "Text") {
                 // Text Mode: strict validation for ingredients and times
-                const formattedIngredients = ingredients
-                    .filter(i => i.trim())
-                    .map(i => ({ name: i, quantity: 1, unit: 'unit' }));
+                const validIngredients = ingredients.filter(i => i.name.trim());
 
-                if (formattedIngredients.length === 0) {
-                    showToast({ title: "Error", description: "Please add at least one ingredient", type: "warning" });
+                if (validIngredients.length === 0) {
+                    showToast({ title: "Error", description: "Please add at least one ingredient with a name", type: "warning" });
                     return;
                 }
 
@@ -467,8 +481,12 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
 
             // Prepare Data for Saving
             const formattedIngredients = ingredients
-                .filter(i => i.trim())
-                .map(i => ({ name: i, quantity: 1, unit: 'unit' }));
+                .filter(i => i.name.trim())
+                .map(i => ({
+                    name: i.name.trim(),
+                    quantity: parseFloat(i.quantity) || 1, // Default to 1 if empty/invalid
+                    unit: i.unit.trim() || 'unit' // Default to 'unit' if empty
+                }));
 
             const finalIngredients = formattedIngredients.length > 0 ? formattedIngredients :
                 (activeTab !== "Text" ? [{ name: "See details", quantity: 1, unit: "unit" }] : []);
@@ -686,20 +704,51 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
             {/* Ingredients */}
             <Text style={[styles.label, { marginTop: 20, color: colors.foreground }]}>Ingredients</Text>
             <View style={styles.dynamicList}>
-                {ingredients.map((ing, i) => (
-                    <View key={i} style={styles.dynamicRow}>
+                {ingredients.map((ingredient, index) => (
+                    <View key={index} style={[styles.dynamicRow, { alignItems: 'center' }]}>
+                        {/* Name Input */}
                         <TextInput
-                            style={[styles.input, { flex: 1, marginBottom: 0, backgroundColor: colors.muted, borderColor: colors.border, color: colors.foreground, borderRadius: radius.md }]}
-                            placeholder={`Ingredient ${i + 1}`}
+                            style={[styles.input, { flex: 1, marginBottom: 0, marginRight: 8, backgroundColor: colors.muted, borderColor: colors.border, color: colors.foreground, borderRadius: radius.md }]}
+                            placeholder={`Ingredient ${index + 1}`}
                             placeholderTextColor={colors.mutedForeground}
-                            value={ing}
-                            onChangeText={(t) => handleIngredientChange(t, i)}
+                            value={ingredient.name}
+                            onChangeText={(text) => handleIngredientChange("name", text, index)}
                         />
-                        <TouchableOpacity onPress={() => handleRemoveIngredient(i)} style={styles.trashBtn}>
+
+                        {/* Quantity Input */}
+                        <TextInput
+                            style={[styles.miniInput, { width: 60, marginBottom: 0, backgroundColor: colors.muted, borderColor: colors.border, color: colors.foreground, borderRadius: radius.md }]}
+                            placeholder="Qty"
+                            placeholderTextColor={colors.mutedForeground}
+                            keyboardType="numeric"
+                            value={ingredient.quantity}
+                            onChangeText={(text) => handleIngredientChange("quantity", text, index)}
+                        />
+
+                        {/* Unit Picker Trigger */}
+                        <Pressable
+                            style={[styles.miniInput, { width: 70, marginBottom: 0, marginLeft: 8, backgroundColor: colors.muted, borderColor: colors.border, borderRadius: radius.md, justifyContent: 'center' }]}
+                            onPress={() => {
+                                setActiveIngredientIndex(index);
+                                setShowUnitPicker(true);
+                            }}
+                        >
+                            <Text style={{ color: ingredient.unit ? colors.foreground : colors.mutedForeground }}>
+                                {ingredient.unit || "Unit"}
+                            </Text>
+                        </Pressable>
+
+                        {/* Remove Button */}
+                        <TouchableOpacity
+                            onPress={() => handleRemoveIngredient(index)}
+                            style={[styles.trashBtn, { marginLeft: 8 }]}
+                        >
                             <AppIcon name="trash" size={18} color={colors.danger} />
                         </TouchableOpacity>
                     </View>
                 ))}
+
+                {/* Add Ingredient Button */}
                 <TouchableOpacity
                     style={[styles.addButton, { backgroundColor: colors.muted, borderColor: colors.border, borderRadius: radius.md }]}
                     onPress={handleAddIngredient}
@@ -708,6 +757,39 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
                     <Text style={[styles.addButtonText, { color: colors.foreground }]}>Add Ingredient</Text>
                 </TouchableOpacity>
             </View>
+
+            {/* Unit Picker Modal */}
+            <Modal
+                visible={showUnitPicker}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowUnitPicker(false)}
+            >
+                <Pressable
+                    style={styles.modalOverlay}
+                    onPress={() => setShowUnitPicker(false)}
+                >
+                    <View style={[styles.pickerContainer, { backgroundColor: colors.card }]}>
+                        <Text style={[styles.pickerTitle, { color: colors.foreground }]}>Select Unit</Text>
+                        <ScrollView style={{ maxHeight: 300 }}>
+                            {COMMON_UNITS.map((unit) => (
+                                <TouchableOpacity
+                                    key={unit}
+                                    style={[styles.pickerItem, { borderBottomColor: colors.border }]}
+                                    onPress={() => {
+                                        if (activeIngredientIndex !== null) {
+                                            handleIngredientChange("unit", unit, activeIngredientIndex);
+                                        }
+                                        setShowUnitPicker(false);
+                                    }}
+                                >
+                                    <Text style={{ color: colors.foreground, fontSize: 16 }}>{unit}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </View>
+                </Pressable>
+            </Modal>
 
             {/* Instructions */}
             <Text style={[styles.label, { marginTop: 20, color: colors.foreground }]}>Instructions</Text>
@@ -815,7 +897,7 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
                     <AppIcon name="plus" size={20} color={colors.foreground} />
                 </TouchableOpacity>
             </View>
-        </View>
+        </View >
     );
 
     const renderImageTab = () => (
@@ -1033,14 +1115,14 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
                 <View style={[styles.modalContainer, { backgroundColor: colors.card, borderRadius: radius.xl }]}>
                     {/* Header */}
                     <View style={styles.header}>
-                        <Text style={[styles.title, { color: colors.foreground }]}>Add New Recipe</Text>
+                        <Text style={[styles.title, { color: colors.foreground }]}>{isEditingMode ? "Update Recipe" : "Add New Recipe"}</Text>
                         <TouchableOpacity onPress={onClose} style={styles.closeButton}>
                             <AppIcon name="x" size={24} color={colors.foreground} />
                         </TouchableOpacity>
                     </View>
 
                     {/* Tabs */}
-                    {renderTabs()}
+                    {!isEditingMode && renderTabs()}
 
                     {/* Content */}
                     <ScrollView contentContainerStyle={styles.contentScroll}>
@@ -1139,6 +1221,26 @@ const styles = StyleSheet.create({
     },
     formContainer: {
         gap: 0,
+    },
+    emptySubtext: {
+        fontSize: 14,
+    },
+    pickerContainer: {
+        width: '80%',
+        borderRadius: 12,
+        padding: 16,
+        alignSelf: 'center',
+    },
+    pickerTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        marginBottom: 12,
+        textAlign: 'center',
+    },
+    pickerItem: {
+        paddingVertical: 12,
+        borderBottomWidth: 1, // Use borderBottomWidth specifically
+        alignItems: 'center',
     },
     label: {
         fontSize: 14,
