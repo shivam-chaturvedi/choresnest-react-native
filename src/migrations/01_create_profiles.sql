@@ -7,7 +7,8 @@ create table profiles (
   has_completed_onboarding boolean default false,
   active_profile_id text,
   created_at timestamptz default now(),
-  updated_at timestamptz default now()
+  updated_at timestamptz default now(),
+  deleted boolean default false
 );
 
 -- Set up Row Level Security!

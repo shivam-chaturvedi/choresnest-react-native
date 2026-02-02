@@ -78,7 +78,7 @@ export const ListsScreen: React.FC = () => {
   const resetScreenError = useCallback(() => setScreenError(null), []);
 
   const filteredItems = useMemo(() => {
-    return groceryList.filter((item) =>
+    return (groceryList as GroceryItem[]).filter((item) =>
       item.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [groceryList, searchQuery]);
