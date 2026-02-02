@@ -48,7 +48,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
                     setUser({
                         id: session.user.id,
                         email: session.user.email!,
-                        name: session.user.user_metadata?.full_name
+                        name: session.user.user_metadata?.name
                     });
                 }
 
@@ -81,7 +81,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
                 setUser({
                     id: session.user.id,
                     email: session.user.email!,
-                    name: session.user.user_metadata?.full_name
+                    name: session.user.user_metadata?.name
                 });
                 setIsGuest(false);
                 AsyncStorage.removeItem("IS_GUEST");

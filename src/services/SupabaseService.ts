@@ -24,7 +24,7 @@ export class SupabaseService {
             password: pass,
             options: {
                 data: {
-                    full_name: name,
+                    name: name,
                 },
             },
         });
@@ -47,7 +47,7 @@ export class SupabaseService {
         return await supabase.auth.resetPasswordForEmail(email);
     }
 
-    static async updateProfile(userId: string, updates: { full_name?: string; color?: string; icon?: string; locale?: string }) {
+    static async updateProfile(userId: string, updates: { name?: string; color?: string; icon?: string; locale?: string }) {
         const { data, error } = await supabase
             .from('profiles')
             .update(updates)
