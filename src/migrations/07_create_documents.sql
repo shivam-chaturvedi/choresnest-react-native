@@ -1,6 +1,7 @@
 -- Documents (Vault Documents)
 create table documents (
   id text primary key,
+  profile_id uuid references profiles(id) on delete cascade not null,
   name text not null,
   type text not null,
   icon text,
@@ -17,6 +18,7 @@ create table documents (
   deleted boolean default false
 );
 
+create index idx_documents_profile_id on documents(profile_id);
 create index idx_documents_member_id on documents(member_id);
 create index idx_documents_type on documents(type);
 create index idx_documents_date on documents(date);
@@ -25,4 +27,18 @@ create index idx_documents_date on documents(date);
 alter table documents enable row level security;
 
 -- Policies
-create policy "Enable all access for authenticated users" on documents for all using (auth.role() = 'authenticated');
+create policy "Users can view own documents"
+  on documents for select
+  using ( auth.uid() = profile_id );
+
+create policy "Users can insert own documents"
+  on documents for insert
+  with check ( auth.uid() = profile_id );
+
+create policy "Users can update own documents"
+  on documents for update
+  using ( auth.uid() = profile_id );
+
+create policy "Users can delete own documents"
+  on documents for delete
+  using ( auth.uid() = profile_id );
