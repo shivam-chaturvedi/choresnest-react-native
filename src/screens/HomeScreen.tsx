@@ -677,8 +677,8 @@ export const HomeScreen: React.FC = () => {
                     ]}
                     onPress={() => {
                       if (item.type === "event") {
+                        // Only show info modal, not edit form (edit form only in calendar screen)
                         setSelectedEvent(item.source as CalendarEvent);
-                        setShowAddEvent(true);
                       } else {
                         (navigation as any).navigate("MainTabs", { screen: "more", params: { screen: "Tasks" } });
                       }

@@ -45,7 +45,6 @@ const eventColors = [
 
 const repeatOptions = [
   { value: "never", label: "Never repeats" },
-  { value: "hourly", label: "Every hour" },
   { value: "daily", label: "Every day" },
   { value: "weekly", label: "Every week" },
   { value: "biweekly", label: "Every 2 weeks" },

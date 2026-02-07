@@ -1,16 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import { View, Text, StyleSheet, Animated, ActivityIndicator } from 'react-native';
 import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import { SyncService } from '../services/SyncService';
-import { ActivityIndicator } from 'react-native';
+import { useAuth } from '../contexts/AuthContext';
 
 export const SyncIndicator: React.FC = () => {
     const [isSyncing, setIsSyncing] = useState(false);
+    const { isGuest } = useAuth();
     const colors = useThemeColors();
     const radius = useThemeRadius();
     const fadeAnim = React.useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
+        // Don't show sync indicator for guests
+        if (isGuest) {
+            return;
+        }
+
         const unsubscribe = SyncService.onSyncStatusChange((syncing) => {
             setIsSyncing(syncing);
             
@@ -23,9 +29,10 @@ export const SyncIndicator: React.FC = () => {
         });
 
         return unsubscribe;
-    }, [fadeAnim]);
+    }, [fadeAnim, isGuest]);
 
-    if (!isSyncing) {
+    // Don't show for guests
+    if (isGuest || !isSyncing) {
         return null;
     }
 

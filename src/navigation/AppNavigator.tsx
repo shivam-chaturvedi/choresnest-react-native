@@ -22,6 +22,10 @@ import { AppLockScreen } from "../screens/AppLockScreen";
 import { BiometricLockScreen } from "../screens/BiometricLockScreen";
 import { useAutoSync } from "../hooks/useAutoSync";
 import { database } from "../database";
+import { SyncService } from "../services/SyncService";
+import NetInfo from "@react-native-community/netinfo";
+import { AppState, AppStateStatus } from "react-native";
+import { SyncIndicator } from "../components/SyncIndicator";
 
 
 
@@ -36,14 +40,6 @@ export const AppNavigator = ({ shouldRequireAuthOnStartup = true }: AppNavigator
   const { isDark } = useTheme();
   const [navState, setNavState] = React.useState<any>();
   const { showToast } = useToast();
-  
-  // Trigger sync when navigator mounts (user is authenticated)
-  React.useEffect(() => {
-    const { SyncService } = require('../services/SyncService');
-    SyncService.sync().catch((err: Error) => {
-      console.error('Initial sync on navigation mount failed:', err);
-    });
-  }, []);
 
   const handleAuthError = React.useCallback((title: string, message: string) => {
     showToast({
@@ -87,14 +83,155 @@ export const AppNavigator = ({ shouldRequireAuthOnStartup = true }: AppNavigator
 
 const AppNavigatorInner = () => {
   const { isSidebarOpen, closeSidebar } = useSidebar();
-  const { isAuthenticated, isLoading, hasCompletedOnboarding, completeOnboarding } = useAuth();
+  const { isAuthenticated, isLoading, isGuest, hasCompletedOnboarding, completeOnboarding } = useAuth();
   const [showSplash, setShowSplash] = React.useState(true);
   const [hasMembersInDB, setHasMembersInDB] = React.useState<boolean | null>(null);
   
-  // Auto-sync hook - triggers sync on data changes
+  // Auto-sync hook - triggers sync on data changes (runs in background)
+  // Hook checks isGuest internally, so it's safe to call always
   useAutoSync();
 
-  // Check if there are members in the database
+  // Timeout to hide splash screen after maximum wait time (don't wait forever)
+  React.useEffect(() => {
+    const splashTimeout = setTimeout(() => {
+      if (showSplash) {
+        console.log('Splash screen timeout - hiding splash');
+        setShowSplash(false);
+        // If members check hasn't completed, assume false
+        if (hasMembersInDB === null) {
+          setHasMembersInDB(false);
+        }
+      }
+    }, 3000); // Maximum 3 seconds for splash
+
+    return () => clearTimeout(splashTimeout);
+  }, [showSplash, hasMembersInDB]);
+
+  // Comprehensive sync setup: app restart, foreground, network changes, periodic
+  React.useEffect(() => {
+    // Only sync if authenticated and not a guest
+    if (!isAuthenticated || isGuest || isLoading) {
+      return;
+    }
+
+    let netInfoUnsubscribe: (() => void) | null = null;
+    let syncInterval: ReturnType<typeof setInterval> | null = null;
+    let appStateSubscription: any = null;
+
+    // Track last sync time to prevent too frequent syncs
+    let lastSyncTime = 0;
+    let syncInProgress = false;
+    const MIN_SYNC_INTERVAL = 5000; // Minimum 5 seconds between syncs
+
+    const triggerSync = (readOnly: boolean = false) => {
+      const now = Date.now();
+      
+      // Skip if sync is already in progress (check our local flag first)
+      if (syncInProgress) {
+        console.log('Sync trigger skipped - sync already in progress');
+        return;
+      }
+
+      // Skip if synced too recently (only for read-only syncs)
+      if (readOnly && now - lastSyncTime < MIN_SYNC_INTERVAL) {
+        console.log('Read sync skipped - too soon since last sync');
+        return;
+      }
+
+      // Set local flag to prevent multiple triggers
+      syncInProgress = true;
+      lastSyncTime = now;
+
+      // Run sync in background without blocking - don't await
+      (async () => {
+        try {
+          const isOnline = await SyncService.isOnline();
+          if (isOnline) {
+            // Don't await sync - let it run in background
+            // The sync function itself handles concurrent calls
+            SyncService.sync(readOnly)
+              .then(() => {
+                syncInProgress = false;
+              })
+              .catch(err => {
+                syncInProgress = false;
+                // Don't log concurrent sync errors - they're expected and handled by SyncService
+                if (!err?.message?.includes('Concurrent synchronization')) {
+                  console.error('Background sync failed:', err);
+                }
+              });
+          } else {
+            syncInProgress = false;
+          }
+        } catch (err) {
+          syncInProgress = false;
+          console.error('Sync trigger failed:', err);
+        }
+      })();
+    };
+
+    // Initial sync on mount (app start/restart) - check 1-hour gap for write sync
+    setTimeout(async () => {
+      try {
+        const shouldDoWriteSync = await SyncService.shouldDoWriteSync();
+        if (shouldDoWriteSync) {
+          console.log('App start: Last write sync was >1 hour ago, doing full sync');
+          triggerSync(false); // Full sync (read + write)
+        } else {
+          console.log('App start: Last write sync was <1 hour ago, doing read-only sync');
+          triggerSync(true); // Read-only sync
+        }
+      } catch (err) {
+        console.error('Failed to check write sync requirement, doing read-only sync:', err);
+        triggerSync(true); // Fallback to read-only on error
+      }
+    }, 500); // Increased delay to ensure UI is ready
+
+    // Sync when app comes to foreground - always read-only
+    appStateSubscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active') {
+        // App came to foreground - read-only sync to get latest data
+        console.log('App foreground: Doing read-only sync');
+        triggerSync(true);
+      }
+    });
+
+    // Listen for network changes and sync when coming online - read-only
+    netInfoUnsubscribe = NetInfo.addEventListener(state => {
+      if (state.isConnected) {
+        console.log('Network connected: Doing read-only sync');
+        triggerSync(true); // Read-only sync on network change
+      }
+    });
+
+    // Periodic sync every 2 minutes when online - read-only only (write sync only on app start)
+    syncInterval = setInterval(() => {
+      // Don't await - run in background
+      NetInfo.fetch().then((currentState) => {
+        if (currentState.isConnected) {
+          // Periodic syncs are always read-only (write sync only happens on app start)
+          console.log('Periodic sync: Doing read-only sync');
+          triggerSync(true); // Read-only sync only
+        }
+      }).catch(err => {
+        console.error('Network check failed:', err);
+      });
+    }, 120000); // 2 minutes
+
+    return () => {
+      if (netInfoUnsubscribe) {
+        netInfoUnsubscribe();
+      }
+      if (syncInterval) {
+        clearInterval(syncInterval);
+      }
+      if (appStateSubscription) {
+        appStateSubscription.remove();
+      }
+    };
+  }, [isAuthenticated, isGuest, isLoading]);
+
+  // Check if there are members in the database - this should be fast and not wait for sync
   React.useEffect(() => {
     const checkMembers = async () => {
       try {
@@ -108,12 +245,14 @@ const AppNavigatorInner = () => {
     };
 
     if (isAuthenticated && !isLoading) {
+      // Don't await - check members immediately without blocking
       checkMembers();
     }
   }, [isAuthenticated, isLoading]);
 
   // Only show splash on initial load, not during auth operations
-  if (showSplash || (isAuthenticated && hasMembersInDB === null)) {
+  // Don't wait for sync - show UI immediately once members check completes
+  if (showSplash || (isAuthenticated && !isLoading && hasMembersInDB === null)) {
     return (
       <SplashScreen
         onContinue={() => setShowSplash(false)}
@@ -177,6 +316,7 @@ const AppNavigatorInner = () => {
           </>
         )}
       </Stack.Navigator>
+      <SyncIndicator />
       <AppLockOverlay />
       <AppSidebar open={isSidebarOpen} onClose={closeSidebar} />
     </>

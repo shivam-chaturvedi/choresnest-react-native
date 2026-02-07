@@ -85,13 +85,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
                 });
                 setIsGuest(false);
                 AsyncStorage.removeItem("IS_GUEST");
-                // Trigger Sync dynamically to avoid circular dependency
-                try {
-                    const { SyncService } = await import("../services/SyncService");
-                    await SyncService.sync();
-                } catch (err) {
-                    console.error("Failed to load/sync SyncService", err);
-                }
+                // Trigger Sync dynamically to avoid circular dependency - run in background, don't block
+                // SyncService handles concurrent calls internally, so this is safe
+                (async () => {
+                    try {
+                        const { SyncService } = await import("../services/SyncService");
+                        // Check if sync is already in progress before triggering
+                        if (!SyncService.getSyncStatus()) {
+                            // Don't await - let sync run in background
+                            SyncService.sync().catch(err => {
+                                // Don't log concurrent sync errors - they're expected
+                                if (!err?.message?.includes('Concurrent synchronization')) {
+                                    console.error("Background sync failed:", err);
+                                }
+                            });
+                        }
+                    } catch (err) {
+                        console.error("Failed to load SyncService", err);
+                    }
+                })();
             } else {
                 setUser(null);
             }

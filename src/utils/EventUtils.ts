@@ -76,6 +76,42 @@ export const getEventsForDate = (
             let isMatch = false;
 
             switch (event.recurrenceRule) {
+                case 'hourly':
+                    // Hourly events repeat every hour, so we generate 24 occurrences per day (one for each hour)
+                    // Check if target date is within the recurrence period
+                    if (eventEndZoned && isAfter(targetDate, eventEndZoned)) {
+                        return; // Skip if past recurrence end
+                    }
+                    if (isBefore(targetDate, eventStartZoned)) {
+                        return; // Skip if before start date
+                    }
+
+                    // Parse the original event time to preserve minutes
+                    let minutes = 0;
+                    const originalTime = event.time;
+                    if (originalTime && originalTime !== "All Day") {
+                        const timeMatch = originalTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
+                        if (timeMatch) {
+                            minutes = parseInt(timeMatch[2] || "0", 10);
+                        }
+                    }
+
+                    // Generate 24 hourly occurrences for this day
+                    for (let hour = 0; hour < 24; hour++) {
+                        const period = hour >= 12 ? "PM" : "AM";
+                        const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+                        const timeStr = `${displayHour}:${minutes.toString().padStart(2, '0')} ${period}`;
+                        
+                        result.push({
+                            ...event,
+                            isVirtual: true,
+                            originalDate: event.date,
+                            date: targetDateStr,
+                            time: timeStr,
+                            id: `${event.id}_${targetDateStr}_${hour}`, // Unique ID for each occurrence
+                        });
+                    }
+                    return; // Skip the default isMatch logic for hourly
                 case 'daily':
                     isMatch = true;
                     break;

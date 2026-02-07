@@ -1,5 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from "react";
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, SafeAreaView, StatusBar } from "react-native";
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, StatusBar } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { AppIcon } from "./ui/AppIcon";
 
 interface Props {

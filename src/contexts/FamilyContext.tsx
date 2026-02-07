@@ -375,7 +375,19 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const updateEvent = async (id: string, updates: any) => {
     try {
-      const event = await TaskService.updateEvent(id, updates);
+      // Handle virtual occurrences (hourly recurring events generate virtual IDs like: originalId_date_hour)
+      // Extract the original event ID if this is a virtual occurrence
+      let actualId = id;
+      const datePattern = /_\d{4}-\d{2}-\d{2}_/; // Pattern: _YYYY-MM-DD_
+      if (datePattern.test(id)) {
+        // Extract the original event ID (everything before the first date pattern)
+        const match = id.match(/^(.+?)_\d{4}-\d{2}-\d{2}_/);
+        if (match && match[1]) {
+          actualId = match[1];
+        }
+      }
+      
+      const event = await TaskService.updateEvent(actualId, updates);
       if (event) {
         upsertEvent(event);
       }
@@ -388,12 +400,32 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const deleteEvent = async (id: string) => {
     try {
-      return await TaskService.deleteEvent(id);
+      // Handle virtual occurrences (hourly recurring events generate virtual IDs like: originalId_date_hour)
+      // Extract the original event ID if this is a virtual occurrence
+      let actualId = id;
+      const datePattern = /_\d{4}-\d{2}-\d{2}_/; // Pattern: _YYYY-MM-DD_
+      if (datePattern.test(id)) {
+        // Extract the original event ID (everything before the first date pattern)
+        const match = id.match(/^(.+?)_\d{4}-\d{2}-\d{2}_/);
+        if (match && match[1]) {
+          actualId = match[1];
+        }
+      }
+      
+      return await TaskService.deleteEvent(actualId);
     } catch (error) {
       console.error('Failed to delete event:', error);
       throw new Error('Failed to delete event. Please try again.');
     } finally {
+      // Remove both the virtual and actual event from local state
       removeEvent(id);
+      const datePattern = /_\d{4}-\d{2}-\d{2}_/;
+      if (datePattern.test(id)) {
+        const match = id.match(/^(.+?)_\d{4}-\d{2}-\d{2}_/);
+        if (match && match[1]) {
+          removeEvent(match[1]);
+        }
+      }
     }
   };
 

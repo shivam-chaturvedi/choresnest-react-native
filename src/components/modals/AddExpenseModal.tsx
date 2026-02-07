@@ -46,6 +46,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     const [name, setName] = useState('');
     const [amount, setAmount] = useState('');
     const [category, setCategory] = useState('groceries');
+    const [errors, setErrors] = useState<{ name?: string; amount?: string; category?: string }>({});
     const getLocalYYYYMMDD = (d: Date) => {
         const year = d.getFullYear();
         const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -65,9 +66,53 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     const willExceedBudget = type === 'expense' && categoryBudget > 0 && (currentCategorySpending + newAmount) > categoryBudget;
     const percentOfBudget = categoryBudget > 0 ? ((currentCategorySpending + newAmount) / categoryBudget) * 100 : 0;
 
-    const handleSubmit = () => {
-        if (!name.trim() || !amount) return;
+    const handleAmountChange = (text: string) => {
+        // Only allow numbers, decimal point, and negative sign
+        const numericRegex = /^-?\d*\.?\d*$/;
+        if (numericRegex.test(text) || text === '') {
+            setAmount(text);
+            // Clear amount error when user starts typing
+            if (errors.amount) {
+                setErrors({ ...errors, amount: undefined });
+            }
+        }
+    };
 
+    const handleSubmit = () => {
+        const newErrors: { name?: string; amount?: string; category?: string } = {};
+        let isValid = true;
+
+        // Validate name
+        if (!name.trim()) {
+            newErrors.name = 'Description is required';
+            isValid = false;
+        }
+
+        // Validate amount
+        if (!amount || amount.trim() === '') {
+            newErrors.amount = 'Amount is required';
+            isValid = false;
+        } else {
+            const parsedAmount = parseFloat(amount);
+            if (isNaN(parsedAmount) || parsedAmount <= 0) {
+                newErrors.amount = 'Please enter a valid amount greater than 0';
+                isValid = false;
+            }
+        }
+
+        // Validate category (only for expenses)
+        if (type === 'expense' && !category) {
+            newErrors.category = 'Category is required';
+            isValid = false;
+        }
+
+        if (!isValid) {
+            setErrors(newErrors);
+            return;
+        }
+
+        // Clear errors and submit
+        setErrors({});
         onAdd({
             name: name.trim(),
             amount: parseFloat(amount),
@@ -83,6 +128,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
         setCategory('groceries');
         setDate(getLocalYYYYMMDD(new Date()));
         setNotes('');
+        setErrors({});
         onClose();
     };
 
@@ -158,14 +204,26 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                             <View style={styles.labelContainer}>
                                 <FileText size={16} color={colors.mutedForeground} />
                                 <Text style={[styles.label, { color: colors.foreground }]}>Description</Text>
+                                {errors.name && <Text style={[styles.errorText, { color: colors.danger }]}> *</Text>}
                             </View>
                             <TextInput
-                                style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground }]}
+                                style={[
+                                    styles.input,
+                                    { backgroundColor: colors.card, borderColor: errors.name ? colors.danger : colors.border, color: colors.foreground }
+                                ]}
                                 placeholder="e.g., Grocery shopping, Salary..."
                                 placeholderTextColor={colors.mutedForeground}
                                 value={name}
-                                onChangeText={setName}
+                                onChangeText={(text) => {
+                                    setName(text);
+                                    if (errors.name) {
+                                        setErrors({ ...errors, name: undefined });
+                                    }
+                                }}
                             />
+                            {errors.name && (
+                                <Text style={[styles.errorMessage, { color: colors.danger }]}>{errors.name}</Text>
+                            )}
                         </View>
 
                         {/* Amount Input */}
@@ -173,20 +231,28 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                             <View style={styles.labelContainer}>
                                 <DollarSign size={16} color={colors.mutedForeground} />
                                 <Text style={[styles.label, { color: colors.foreground }]}>Amount</Text>
+                                {errors.amount && <Text style={[styles.errorText, { color: colors.danger }]}> *</Text>}
                             </View>
                             <View style={styles.amountContainer}>
                                 <Text style={[styles.currencySymbol, { color: colors.mutedForeground }]}>
                                     {currentCountry.currencySymbol}
                                 </Text>
                                 <TextInput
-                                    style={[styles.input, styles.amountInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground }]}
+                                    style={[
+                                        styles.input,
+                                        styles.amountInput,
+                                        { backgroundColor: colors.card, borderColor: errors.amount ? colors.danger : colors.border, color: colors.foreground }
+                                    ]}
                                     placeholder="0.00"
                                     placeholderTextColor={colors.mutedForeground}
                                     keyboardType="numeric"
                                     value={amount}
-                                    onChangeText={setAmount}
+                                    onChangeText={handleAmountChange}
                                 />
                             </View>
+                            {errors.amount && (
+                                <Text style={[styles.errorMessage, { color: colors.danger }]}>{errors.amount}</Text>
+                            )}
                         </View>
 
                         {/* Category Selection */}
@@ -195,6 +261,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                                 <View style={styles.labelContainer}>
                                     <Tag size={16} color={colors.mutedForeground} />
                                     <Text style={[styles.label, { color: colors.foreground }]}>Category</Text>
+                                    {errors.category && <Text style={[styles.errorText, { color: colors.danger }]}> *</Text>}
                                 </View>
                                 <View style={styles.categoriesGrid}>
                                     {categories.map((cat) => (
@@ -221,6 +288,9 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                                         </TouchableOpacity>
                                     ))}
                                 </View>
+                                {errors.category && (
+                                    <Text style={[styles.errorMessage, { color: colors.danger }]}>{errors.category}</Text>
+                                )}
                             </View>
                         )}
 
@@ -297,7 +367,6 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
 
                         <Button
                             onPress={handleSubmit}
-                            disabled={!name.trim() || !amount}
                             style={[styles.submitButton, { backgroundColor: type === 'expense' ? colors.primary : colors.success }]}
                         >
                             {type === 'expense' ? '💸 Add Expense' : '💰 Add Income'}
@@ -473,5 +542,14 @@ const styles = StyleSheet.create({
     },
     submitButton: {
         marginTop: 8,
+    },
+    errorText: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    errorMessage: {
+        fontSize: 12,
+        marginTop: 4,
+        marginLeft: 24,
     },
 });

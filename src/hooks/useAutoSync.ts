@@ -16,16 +16,41 @@ export const useAutoSync = () => {
 
         // Debounce sync calls to avoid too frequent syncing
         let syncTimeout: ReturnType<typeof setTimeout> | null = null;
-        const DEBOUNCE_MS = 2000; // 2 seconds
+        let lastSyncTime = 0;
+        let syncInProgress = false;
+        const DEBOUNCE_MS = 5000; // 5 seconds (increased from 2)
+        const MIN_SYNC_INTERVAL = 10000; // Minimum 10 seconds between syncs
 
         const triggerSync = () => {
+            const now = Date.now();
+            
+            // Skip if sync is already in progress
+            if (syncInProgress) {
+                return;
+            }
+            
+            // Skip if synced too recently
+            if (now - lastSyncTime < MIN_SYNC_INTERVAL) {
+                return;
+            }
+
             if (syncTimeout) {
                 clearTimeout(syncTimeout);
             }
             syncTimeout = setTimeout(() => {
-                SyncService.sync().catch(err => {
-                    console.error('Auto-sync failed:', err);
-                });
+                syncInProgress = true;
+                lastSyncTime = Date.now();
+                SyncService.sync()
+                    .then(() => {
+                        syncInProgress = false;
+                    })
+                    .catch(err => {
+                        syncInProgress = false;
+                        // Don't log concurrent sync errors - they're expected
+                        if (!err?.message?.includes('Concurrent synchronization')) {
+                            console.error('Auto-sync failed:', err);
+                        }
+                    });
             }, DEBOUNCE_MS);
         };
 
