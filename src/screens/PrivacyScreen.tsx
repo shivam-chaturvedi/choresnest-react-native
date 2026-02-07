@@ -26,12 +26,14 @@ import {
     Eye,
     Key,
     Trash2,
-    ChevronRight
+    ChevronRight,
+    Fingerprint
 } from "lucide-react-native";
 
 // --- Data ---
 const securitySettings = [
     { id: 'app', icon: Lock, label: 'App Lock' },
+    { id: 'biometric', icon: Fingerprint, label: 'Biometric Lock' },
 ];
 
 export const PrivacyScreen: React.FC = () => {
@@ -40,14 +42,19 @@ export const PrivacyScreen: React.FC = () => {
     const { deleteAccount, isGuest, user } = useAuth();
     const {
         isAppLockEnabled,
+        isBiometricEnabled,
         hasPin,
         enableAppLock,
         disableAppLock,
+        enableBiometric,
+        disableBiometric,
         setPin: persistPin,
         unlockWithPin,
     } = useAppLock();
     const { showToast } = useToast();
     const [pendingAppLockRequest, setPendingAppLockRequest] = useState<boolean | null>(null);
+    const [pendingBiometricRequest, setPendingBiometricRequest] = useState<boolean | null>(null);
+    const [biometricBusy, setBiometricBusy] = useState(false);
     const colors = useThemeColors();
     const radius = useThemeRadius();
 
@@ -146,8 +153,7 @@ export const PrivacyScreen: React.FC = () => {
         }
     }, [pendingAppLockRequest, isAppLockEnabled]);
 
-
-
+    // Always use the actual database state, only show pending state during transitions
     const appLockSwitchValue = pendingAppLockRequest ?? isAppLockEnabled;
 
     const handleSavePassword = () => {
@@ -220,6 +226,48 @@ export const PrivacyScreen: React.FC = () => {
             setAppLockBusy(false);
         }
     };
+
+    const handleBiometricToggle = async (value: boolean) => {
+        setPendingBiometricRequest(value);
+        setBiometricBusy(true);
+        try {
+            if (value) {
+                // Check if biometric is available
+                try {
+                    const ReactNativeBiometrics = require('react-native-biometrics');
+                    const rnBiometrics = new ReactNativeBiometrics.default();
+                    const { available } = await rnBiometrics.isSensorAvailable();
+                    
+                    if (!available) {
+                        Alert.alert(
+                            "Biometric Not Available",
+                            "Biometric authentication is not available on this device. Please enable it in your device settings."
+                        );
+                        setPendingBiometricRequest(false);
+                        return;
+                    }
+                    
+                    await enableBiometric();
+                    Alert.alert("Success", "Biometric lock is now enabled.");
+                } catch (error) {
+                    console.error("Biometric enable failed", error);
+                    Alert.alert("Biometric Lock", "Unable to enable biometric lock. Please try again.");
+                    setPendingBiometricRequest(false);
+                }
+            } else {
+                await disableBiometric();
+                Alert.alert("Success", "Biometric lock has been disabled.");
+            }
+        } catch (error) {
+            console.error("Biometric toggle failed", error);
+            Alert.alert("Biometric Lock", "Unable to update biometric lock. Please try again.");
+            setPendingBiometricRequest(!value);
+        } finally {
+            setBiometricBusy(false);
+        }
+    };
+
+    const biometricSwitchValue = pendingBiometricRequest ?? isBiometricEnabled;
 
 
 
@@ -371,7 +419,16 @@ export const PrivacyScreen: React.FC = () => {
                             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Security</Text>
                             <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
                                 {securitySettings.map((item, index) => {
-                                    const description = 'Require a PIN when opening the app';
+                                    const isAppLock = item.id === 'app';
+                                    const isBiometric = item.id === 'biometric';
+                                    const description = isAppLock 
+                                        ? 'Require a PIN when opening the app'
+                                        : 'Use fingerprint or face recognition to unlock';
+                                    const switchValue = isAppLock ? appLockSwitchValue : biometricSwitchValue;
+                                    const onToggle = isAppLock ? handleAppLockToggle : handleBiometricToggle;
+                                    const isDisabled = isAppLock 
+                                        ? (appLockBusy || showConfirmModal || showPinModal)
+                                        : (biometricBusy || isAppLockEnabled);
 
                                     return (
                                         <View key={item.id}>
@@ -384,10 +441,10 @@ export const PrivacyScreen: React.FC = () => {
                                                     <Text style={[styles.settingDesc, { color: colors.mutedForeground }]}>{description}</Text>
                                                 </View>
                                                 <Switch
-                                                    value={appLockSwitchValue}
-                                                    onValueChange={handleAppLockToggle}
+                                                    value={switchValue}
+                                                    onValueChange={onToggle}
                                                     trackColor={{ false: colors.muted, true: colors.primary }}
-                                                    disabled={appLockBusy || showConfirmModal || showPinModal}
+                                                    disabled={isDisabled}
                                                 />
                                             </View>
                                             {index !== securitySettings.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}

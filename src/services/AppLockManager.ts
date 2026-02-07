@@ -40,9 +40,13 @@ class AppLockManager {
 
         if (!snapshot.enabled) {
             this.authRequired = false;
-        } else if (snapshot.enabled && !prevEnabled) {
-            // Newly enabled → require auth immediately next time.
-            this.authRequired = true;
+        } else if (snapshot.enabled) {
+            // If app lock is enabled, ensure auth is required
+            // This handles the case where settings are loaded after app start
+            if (!prevEnabled || this.authRequired === false) {
+                // Newly enabled or was disabled → require auth
+                this.authRequired = true;
+            }
         }
     }
 }

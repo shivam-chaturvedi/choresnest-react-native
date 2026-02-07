@@ -93,6 +93,37 @@ export interface VaultDocument {
   reminderRules?: VaultReminderRule[];
 }
 
+// Define the FamilyContext value type
+export interface FamilyContextValue {
+  familyName: string;
+  setFamilyName: (name: string) => void;
+  members: FamilyMember[];
+  activeMember: FamilyMember | null;
+  setActiveMember: (member: FamilyMember) => Promise<void>;
+  addMember: (member: any) => Promise<void>;
+  removeMember: (id: string) => Promise<void>;
+  updateMember: (id: string, updates: any) => Promise<void>;
+  updateMemberColor: (id: string, color: string) => Promise<void>;
+  globalVault: VaultDocument[];
+  memberVaults: Record<string, VaultDocument[]>;
+  addDocument: (doc: any) => Promise<any>;
+  updateDocument: (id: string, updates: any) => Promise<any>;
+  events: CalendarEvent[];
+  addEvent: (event: any) => Promise<any>;
+  updateEvent: (id: string, updates: any) => Promise<any>;
+  deleteEvent: (id: string) => Promise<any>;
+  groceryList: GroceryItem[];
+  addGroceryItem: (item: any) => Promise<any>;
+  toggleGroceryItem: (id: string) => Promise<any>;
+  removeGroceryItem: (id: string) => Promise<any>;
+  tasks: Task[];
+  addTask: (task: any) => Promise<any>;
+  updateTask: (id: string, updates: any) => Promise<any>;
+  deleteTask: (id: string) => Promise<any>;
+  categories: any[];
+  addCategory: () => void;
+}
+
 const formatIsoDate = (value: string | Date | undefined): string => {
   const fallback = new Date().toISOString().split('T')[0];
   return safeFormat(value, "yyyy-MM-dd", fallback);
@@ -130,7 +161,7 @@ const mapTaskModelToTask = (taskModel: any): Task => ({
   icon: taskModel.icon,
 });
 
-export const FamilyContext = createContext<any>(undefined);
+export const FamilyContext = createContext<FamilyContextValue | undefined>(undefined);
 
 export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [familyName, setFamilyNameState] = useState("Family Chores");
@@ -233,6 +264,11 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       }));
       setMembers(mapped);
       console.log('FamilyContext: Members state updated, new active:', mapped.find(m => m.isActive)?.name);
+
+      // Reschedule notifications for the new active profile
+      const { NotificationScheduler } = await import('../services/NotificationScheduler');
+      await NotificationScheduler.rescheduleNotificationsForActiveProfile();
+      console.log('FamilyContext: Notifications rescheduled for active profile');
     } catch (error) {
       console.error('FamilyContext: Error setting active member:', error);
       throw error;

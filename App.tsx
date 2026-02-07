@@ -28,6 +28,9 @@ import {
 } from "./src/services/NotificationScheduler";
 import { CountryProvider } from "./src/contexts/CountryContext";
 import { appLockManager } from "./src/services/AppLockManager";
+import { SyncIndicator } from "./src/components/SyncIndicator";
+import { SyncService } from "./src/services/SyncService";
+import NetInfo from "@react-native-community/netinfo";
 
 const App = () => {
   useEffect(() => {
@@ -132,6 +135,46 @@ const App = () => {
     appLockManager.requestFreshAuth();
   }, []);
 
+  // Auto-sync setup
+  useEffect(() => {
+    let netInfoUnsubscribe: (() => void) | null = null;
+    let syncInterval: ReturnType<typeof setInterval> | null = null;
+
+    const setupAutoSync = async () => {
+      // Initial sync on app start if online
+      const state = await NetInfo.fetch();
+      if (state.isConnected) {
+        SyncService.sync().catch(err => console.error('Initial sync failed:', err));
+      }
+
+      // Listen for network changes and sync when coming online
+      netInfoUnsubscribe = NetInfo.addEventListener(state => {
+        if (state.isConnected) {
+          SyncService.sync().catch(err => console.error('Network sync failed:', err));
+        }
+      });
+
+      // Periodic sync every 30 seconds when online
+      syncInterval = setInterval(async () => {
+        const currentState = await NetInfo.fetch();
+        if (currentState.isConnected) {
+          SyncService.sync().catch(err => console.error('Periodic sync failed:', err));
+        }
+      }, 30000); // 30 seconds
+    };
+
+    setupAutoSync();
+
+    return () => {
+      if (netInfoUnsubscribe) {
+        netInfoUnsubscribe();
+      }
+      if (syncInterval) {
+        clearInterval(syncInterval);
+      }
+    };
+  }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <CountryProvider>
@@ -151,6 +194,7 @@ const App = () => {
                         <SafeAreaView style={styles.appWrapper} edges={["top", "bottom", "left", "right"]}>
                           <ErrorBoundary>
                             <AppNavigator shouldRequireAuthOnStartup={shouldRequireStartupAuth} />
+                            <SyncIndicator />
                           </ErrorBoundary>
                         </SafeAreaView>
                       </ToastProvider>

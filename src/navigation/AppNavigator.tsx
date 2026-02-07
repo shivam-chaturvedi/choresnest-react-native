@@ -19,6 +19,8 @@ import { AuthProvider, useAuth } from "../contexts/AuthContext";
 import { useToast } from "../components/ui/Toast";
 import { AppLockProvider, useAppLock } from "../contexts/AppLockContext";
 import { AppLockScreen } from "../screens/AppLockScreen";
+import { BiometricLockScreen } from "../screens/BiometricLockScreen";
+import { useAutoSync } from "../hooks/useAutoSync";
 import { database } from "../database";
 
 
@@ -34,6 +36,14 @@ export const AppNavigator = ({ shouldRequireAuthOnStartup = true }: AppNavigator
   const { isDark } = useTheme();
   const [navState, setNavState] = React.useState<any>();
   const { showToast } = useToast();
+  
+  // Trigger sync when navigator mounts (user is authenticated)
+  React.useEffect(() => {
+    const { SyncService } = require('../services/SyncService');
+    SyncService.sync().catch((err: Error) => {
+      console.error('Initial sync on navigation mount failed:', err);
+    });
+  }, []);
 
   const handleAuthError = React.useCallback((title: string, message: string) => {
     showToast({
@@ -80,6 +90,9 @@ const AppNavigatorInner = () => {
   const { isAuthenticated, isLoading, hasCompletedOnboarding, completeOnboarding } = useAuth();
   const [showSplash, setShowSplash] = React.useState(true);
   const [hasMembersInDB, setHasMembersInDB] = React.useState<boolean | null>(null);
+  
+  // Auto-sync hook - triggers sync on data changes
+  useAutoSync();
 
   // Check if there are members in the database
   React.useEffect(() => {
@@ -173,11 +186,24 @@ const AppNavigatorInner = () => {
 const AppLockOverlay = () => {
   const {
     isLocked,
+    isAppLockEnabled,
+    isBiometricEnabled,
     unlockWithPin,
+    unlockWithBiometric,
   } = useAppLock();
 
   if (!isLocked) {
     return null;
+  }
+
+  // Show biometric lock screen if biometric is enabled, otherwise show PIN lock screen
+  if (isBiometricEnabled) {
+    return (
+      <BiometricLockScreen
+        isLocked={isLocked}
+        unlockWithBiometric={unlockWithBiometric}
+      />
+    );
   }
 
   return (

@@ -2,7 +2,7 @@ import { database } from '../database';
 import Task from '../database/models/Task';
 import Event from '../database/models/Event';
 import { List, ListItem } from '../database/models/List';
-import { NotificationScheduler } from './NotificationScheduler';
+import { NotificationScheduler, getActiveMemberId } from './NotificationScheduler';
 import { NotificationPreferencesService } from './NotificationPreferencesService';
 import { parseReminderDateTime } from '../utils/ReminderDateTimeUtils';
 import { NotificationCenter, NotificationRoute } from './NotificationCenter';
@@ -69,6 +69,12 @@ export const TaskService = {
         // 2. Background Notification
         (async () => {
             try {
+                // Only schedule notification if task is assigned to active member
+                const activeMemberId = await getActiveMemberId();
+                if (!activeMemberId || task.assigneeId !== activeMemberId) {
+                    return;
+                }
+
                 if (task.status !== 'done' && task.reminderEnabled) {
                     const triggerDate = parseReminderDateTime(task.dateString, task.dueDisplay);
                     if (triggerDate && triggerDate > new Date()) {
@@ -129,6 +135,20 @@ export const TaskService = {
         (async () => {
             try {
                 const oldNotificationId = task.notificationId;
+                
+                // Only schedule notification if task is assigned to active member
+                const activeMemberId = await getActiveMemberId();
+                if (!activeMemberId || task.assigneeId !== activeMemberId) {
+                    // Cancel notification if task is not for active member
+                    if (oldNotificationId) {
+                        await NotificationScheduler.cancelNotification(oldNotificationId);
+                        await database.write(async () => {
+                            await task.update(t => { t.notificationId = undefined; });
+                        });
+                    }
+                    return;
+                }
+
                 const shouldNotify = (task.status !== 'done') && (task.reminderEnabled);
 
                 if (shouldNotify) {
@@ -262,6 +282,12 @@ export const TaskService = {
                     const reminderMinutes = event.reminderOffsetMinutes ?? preferredReminderMinutes;
                     const triggerDate = new Date(eventDate.getTime() - reminderMinutes * 60000);
 
+                    // Only schedule notification if event is assigned to active member
+                    const activeMemberId = await getActiveMemberId();
+                    if (!activeMemberId || event.memberId !== activeMemberId) {
+                        return;
+                    }
+
                     if (triggerDate > new Date() || event.isRecurring) {
                         const repeatRule = event.isRecurring ? event.recurrenceRule : undefined;
                         const repeatType = NotificationScheduler.normalizeRepeatType(repeatRule);
@@ -350,10 +376,59 @@ export const TaskService = {
                     return;
                 }
 
+                // Only schedule notification if event is assigned to active member
+                const activeMemberId = await getActiveMemberId();
+                if (!activeMemberId || event.memberId !== activeMemberId) {
+                    // Cancel notification if event is not for active member
+                    if (oldNotificationId) {
+                        await NotificationScheduler.cancelNotification(oldNotificationId);
+                        await database.write(async () => {
+                            await event.update(e => { e.notificationId = undefined; });
+                        });
+                    }
+                    return;
+                }
+
                 if (eventDate) {
                     const preferredReminderMinutes = await NotificationPreferencesService.getReminderTime('events');
                     const reminderMinutes = event.reminderOffsetMinutes ?? preferredReminderMinutes;
                     const triggerDate = new Date(eventDate.getTime() - reminderMinutes * 60000);
+
+                    // If removing repeat mode, only cancel future notifications, don't delete history
+                    if (updates.isRecurring === false && event.isRecurring) {
+                        // Event was recurring but is now non-recurring
+                        // Cancel the recurring notification but keep event data
+                        if (oldNotificationId) {
+                            await NotificationScheduler.cancelNotification(oldNotificationId);
+                            await database.write(async () => {
+                                await event.update(e => { e.notificationId = undefined; });
+                            });
+                        }
+                        // Schedule a one-time notification if the event is in the future
+                        if (triggerDate > new Date()) {
+                            const newId = await NotificationScheduler.scheduleNotification(
+                                'events',
+                                {
+                                    title: `Event: ${event.title}`,
+                                    body: event.location ? `at ${event.location}` : `Starting soon`,
+                                    data: { eventId: event.id }
+                                },
+                                triggerDate,
+                                {
+                                    repeatType: 'none',
+                                    notifyCenter: true,
+                                    promptForPermission: true,
+                                    promptForAlarm: true,
+                                }
+                            );
+                            if (newId) {
+                                await database.write(async () => {
+                                    await event.update(e => { e.notificationId = newId; });
+                                });
+                            }
+                        }
+                        return;
+                    }
 
                     if (triggerDate > new Date() || event.isRecurring) {
                         // We use scheduleNotification directly as updateNotification implies just swapping IDs, 

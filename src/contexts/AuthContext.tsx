@@ -76,7 +76,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
         initializeAuth();
 
         // Listen for changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
             if (session?.user) {
                 setUser({
                     id: session.user.id,
@@ -86,9 +86,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
                 setIsGuest(false);
                 AsyncStorage.removeItem("IS_GUEST");
                 // Trigger Sync dynamically to avoid circular dependency
-                import("../services/SyncService").then(({ SyncService }) => {
-                    SyncService.sync();
-                }).catch(err => console.error("Failed to load SyncService", err));
+                try {
+                    const { SyncService } = await import("../services/SyncService");
+                    await SyncService.sync();
+                } catch (err) {
+                    console.error("Failed to load/sync SyncService", err);
+                }
             } else {
                 setUser(null);
             }

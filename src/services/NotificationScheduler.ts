@@ -5,6 +5,7 @@ import { Q } from '@nozbe/watermelondb';
 import Event from '../database/models/Event';
 import Task from '../database/models/Task';
 import Document from '../database/models/Document';
+import Member from '../database/models/Member';
 import { NotificationPreferencesService } from './NotificationPreferencesService';
 import { parseReminderDateTime } from '../utils/ReminderDateTimeUtils';
 import { checkPermission, requestPermission } from '../utils/permissions';
@@ -132,6 +133,7 @@ const describeRepeat = (repeatType: RepeatType) => {
 
 const DEFAULT_WEEKDAY_SCHEDULE = [1, 2, 3, 4, 5];
 const MANUAL_REPEAT_TYPES: RepeatType[] = ['biweekly', 'weekday', 'monthly', 'yearly', 'custom'];
+// Note: 'hourly' is NOT in MANUAL_REPEAT_TYPES because it's handled by RepeatFrequency.HOURLY in Notifee
 
 const getNextWeekday = (date: Date, allowed: number[]) => {
     const next = new Date(date);
@@ -162,6 +164,9 @@ const computeNextDate = (
     const next = new Date(current);
 
     switch (repeatType) {
+        case 'hourly':
+            next.setHours(next.getHours() + 1);
+            return next;
         case 'biweekly':
             next.setDate(next.getDate() + 14);
             return next;
@@ -459,6 +464,19 @@ const normalizeRepeatType = (rule?: string | RepeatType): RepeatType => {
 
 let alarmPermissionChecked = false;
 let alarmPermissionGranted = false;
+
+/**
+ * Get the currently active member ID from the database
+ */
+export const getActiveMemberId = async (): Promise<string | null> => {
+    try {
+        const members = await database.get<Member>('members').query(Q.where('is_active', true)).fetch();
+        return members.length > 0 ? members[0].id : null;
+    } catch (error) {
+        console.error('Failed to get active member:', error);
+        return null;
+    }
+};
 let alarmSettingsPrompted = false;
 
 const ensureAlarmPermission = async (promptToOpenSettings = false): Promise<boolean> => {
@@ -701,12 +719,47 @@ export const NotificationScheduler = {
             }
 
             const quietAdjustedDate = await this.adjustForQuietHours(candidateDate);
+            
+            // For non-repeating notifications, skip if in the past
+            // For repeating notifications (including hourly), allow scheduling even if first trigger is in the past
             if (quietAdjustedDate <= new Date() && repeatType === 'none') {
                 console.log(`Notification not scheduled: trigger date ${quietAdjustedDate.toISOString()} is in the past`);
                 return null;
             }
 
             let finalTrigger = quietAdjustedDate;
+            
+            // For hourly repeats, if the trigger is in the past, find the next occurrence
+            // preserving the original minutes and seconds from the event time
+            if (repeatType === 'hourly' && finalTrigger <= new Date()) {
+                const now = new Date();
+                const originalMinutes = candidateDate.getMinutes();
+                const originalSeconds = candidateDate.getSeconds();
+                const originalMilliseconds = candidateDate.getMilliseconds();
+                
+                // Start from the original candidate date (event time)
+                finalTrigger = new Date(candidateDate);
+                
+                // Keep incrementing by 1 hour until we find a future time
+                while (finalTrigger <= now) {
+                    finalTrigger.setHours(finalTrigger.getHours() + 1);
+                }
+                
+                // Preserve the original minutes, seconds, and milliseconds
+                finalTrigger.setMinutes(originalMinutes);
+                finalTrigger.setSeconds(originalSeconds);
+                finalTrigger.setMilliseconds(originalMilliseconds);
+                
+                // Re-adjust for quiet hours after finding the next occurrence
+                finalTrigger = await this.adjustForQuietHours(finalTrigger);
+                
+                // If quiet hours adjustment moved it back to the past, find the next hour again
+                if (finalTrigger <= now) {
+                    finalTrigger.setHours(finalTrigger.getHours() + 1);
+                    finalTrigger = await this.adjustForQuietHours(finalTrigger);
+                }
+            }
+            
             if (repeatType === 'weekday') {
                 const allowedDays = repeatMeta?.daysOfWeek ?? DEFAULT_WEEKDAY_SCHEDULE;
                 if (!allowedDays.includes(finalTrigger.getDay())) {
@@ -1111,8 +1164,27 @@ export const NotificationScheduler = {
                 }
             }
 
+            // Get active member ID - only schedule notifications for active profile
+            const activeMemberId = await getActiveMemberId();
+            if (!activeMemberId) {
+                console.log('No active member found, skipping notification scheduling');
+                return;
+            }
+
             // === SCHEDULE PASS: Events ===
             for (const event of events) {
+                // Filter: Only schedule notifications for events assigned to active member
+                if (event.memberId !== activeMemberId) {
+                    // Cancel notification if it exists but event is not for active member
+                    if (event.notificationId) {
+                        await notifee.cancelTriggerNotification(event.notificationId);
+                        await database.write(async () => {
+                            await event.update(e => { e.notificationId = null as any; });
+                        });
+                    }
+                    continue;
+                }
+
                 if (event.reminderOffsetMinutes !== undefined && event.reminderOffsetMinutes < 0) continue;
 
                 // Check if already scheduled (from our clean map)
@@ -1148,7 +1220,16 @@ export const NotificationScheduler = {
                 const manualRepeat = isManualRepeatType(repeatType);
 
                 let targetEventDate = eventDate;
-                if (manualRepeat) {
+                
+                // For hourly repeats, find the next occurrence if the event time is in the past
+                if (repeatType === 'hourly' && eventDate <= new Date()) {
+                    const now = new Date();
+                    targetEventDate = new Date(eventDate);
+                    // Keep incrementing by 1 hour until we find a future time
+                    while (targetEventDate <= now) {
+                        targetEventDate.setHours(targetEventDate.getHours() + 1);
+                    }
+                } else if (manualRepeat) {
                     const nextEventDate = findNextManualEventDate(eventDate, repeatType, repeatMeta, reminderMinutes);
                     if (!nextEventDate) continue;
                     targetEventDate = nextEventDate;
@@ -1167,6 +1248,7 @@ export const NotificationScheduler = {
                     },
                     triggerDate,
                     {
+                        repeatType,
                         repeatMeta,
                         notifyCenter: true, // Visible in Bell icon list
                         promptForAlarm: true // Explicitly ensure exact alarm permission
@@ -1182,6 +1264,18 @@ export const NotificationScheduler = {
 
             // === SCHEDULE PASS: Tasks ===
             for (const task of tasks) {
+                // Filter: Only schedule notifications for tasks assigned to active member
+                if (task.assigneeId !== activeMemberId) {
+                    // Cancel notification if it exists but task is not for active member
+                    if (task.notificationId) {
+                        await notifee.cancelTriggerNotification(task.notificationId);
+                        await database.write(async () => {
+                            await task.update(t => { t.notificationId = null as any; });
+                        });
+                    }
+                    continue;
+                }
+
                 if (task.status === 'done' || !task.reminderEnabled) continue;
 
                 if (taskTriggerMap.has(task.id)) {
@@ -1247,6 +1341,50 @@ export const NotificationScheduler = {
             console.error('Failed to reschedule missing notifications:', error);
         }
     },
+
+    /**
+     * Reschedule all notifications for the currently active profile
+     * Called when user switches profiles to cancel old notifications and schedule new ones
+     */
+    async rescheduleNotificationsForActiveProfile(): Promise<void> {
+        try {
+            console.log('Rescheduling notifications for active profile...');
+            
+            // Cancel all existing trigger notifications
+            const existingTriggers = await notifee.getTriggerNotifications();
+            for (const trigger of existingTriggers) {
+                const id = trigger.notification.id;
+                if (id) {
+                    await notifee.cancelTriggerNotification(id);
+                }
+            }
+
+            // Clear notification IDs from database
+            const events = await database.collections.get<Event>('events').query().fetch();
+            const tasks = await database.collections.get<Task>('tasks').query().fetch();
+
+            await database.write(async () => {
+                for (const event of events) {
+                    if (event.notificationId) {
+                        await event.update(e => { e.notificationId = null as any; });
+                    }
+                }
+                for (const task of tasks) {
+                    if (task.notificationId) {
+                        await task.update(t => { t.notificationId = null as any; });
+                    }
+                }
+            });
+
+            // Reschedule all notifications (will filter by active member)
+            await this.rescheduleAllMissing();
+            
+            console.log('✓ Notifications rescheduled for active profile');
+        } catch (error) {
+            console.error('Failed to reschedule notifications for active profile:', error);
+        }
+    },
+
     computeNextDate,
     getNextWeekday,
     getNextCustomDate,
