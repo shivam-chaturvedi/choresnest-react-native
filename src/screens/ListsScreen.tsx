@@ -7,10 +7,11 @@ import {
   Pressable,
   Modal,
   Alert,
+  FlatList,
 } from "react-native";
 import { Swipeable, PanGestureHandler, State } from "react-native-gesture-handler";
 import { useRoute, RouteProp } from "@react-navigation/native";
-import { AppLayout } from "../components/layout/AppLayout";
+import { AppLayout } from "../components/layout";
 import { useFamily, GroceryItem } from "../contexts/FamilyContext";
 import { useMealPlan } from "../contexts/MealPlanContext";
 import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
@@ -19,6 +20,121 @@ import { useSidebar } from "../contexts/SidebarContext";
 import { AppIcon, CustomDateTimePicker } from "../components/ui";
 import { ScreenErrorView } from "../components/ui/ScreenErrorView";
 import { AddShoppingItemModal } from "../components/modals/AddShoppingItemModal";
+
+type GroceryRowProps = {
+  item: GroceryItem;
+  isPurchased: boolean;
+  categoryColor?: string;
+  categoryIcon?: string;
+  colors: ReturnType<typeof useThemeColors>;
+  radius: ReturnType<typeof useThemeRadius>;
+  onToggle: (id: string) => void;
+  onRemove: (id: string) => void;
+  getMemberIcon: (memberId: string) => string;
+};
+
+const GroceryRow = React.memo<GroceryRowProps>(({
+  item,
+  isPurchased,
+  categoryColor,
+  categoryIcon,
+  colors,
+  radius,
+  onToggle,
+  onRemove,
+  getMemberIcon,
+}) => {
+  const renderRightActions = useCallback(() => (
+    <Pressable
+      style={[styles.swipedAction, { backgroundColor: colors.danger }]}
+      onPress={() => onRemove(item.id)}
+    >
+      <AppIcon name="trash" size={20} color="#fff" />
+      <Text style={styles.actionText}>Delete</Text>
+    </Pressable>
+  ), [colors.danger, item.id, onRemove]);
+
+  const renderLeftActions = useCallback(() => (
+    <Pressable
+      style={[styles.swipedAction, styles.leftAction, { backgroundColor: colors.success }]}
+      onPress={() => {
+        if (!item.completed) onToggle(item.id);
+      }}
+    >
+      <AppIcon name="check" size={20} color="#fff" />
+      <Text style={styles.actionText}>Done</Text>
+    </Pressable>
+  ), [colors.success, item, onToggle]);
+
+  return (
+    <Swipeable
+      renderRightActions={renderRightActions}
+      renderLeftActions={renderLeftActions}
+      onSwipeableRightOpen={() => onRemove(item.id)}
+      onSwipeableLeftOpen={() => !item.completed && onToggle(item.id)}
+      containerStyle={{ marginBottom: 10 }}
+    >
+      <View
+        style={[
+          styles.itemRow,
+          {
+            backgroundColor: colors.card,
+            borderRadius: radius.md,
+            padding: 12,
+            borderWidth: 1,
+            borderColor: colors.border,
+          },
+        ]}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+          <View style={[styles.categoryIconSmall, { backgroundColor: (categoryColor || colors.muted) + '20' }]}> 
+            <Text style={{ fontSize: 16 }}>{categoryIcon || "📦"}</Text>
+          </View>
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={[styles.itemName, { color: colors.foreground, textDecorationLine: isPurchased ? 'line-through' : 'none', opacity: isPurchased ? 0.7 : 1 }]}>{item.name}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+              <Text style={[styles.itemDetail, { color: colors.mutedForeground }]}>{item.quantity} {item.unit}</Text>
+              <View style={[styles.addedByBadge, { backgroundColor: colors.muted, borderRadius: radius.sm, marginLeft: 8 }]}> 
+                <Text style={{ fontSize: 10 }}>{getMemberIcon(item.addedBy || "")}</Text>
+              </View>
+              {isPurchased && item.purchasedAt && (
+                <Text style={[styles.itemDetail, { color: colors.mutedForeground, marginLeft: 8 }]}> 
+                  {new Date(item.purchasedAt).toLocaleDateString()} at {new Date(item.purchasedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+              )}
+            </View>
+          </View>
+        </View>
+
+        {!isPurchased ? (
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Pressable
+              onPress={() => onRemove(item.id)}
+              style={[styles.actionIconBtn, { backgroundColor: '#fff' }]}
+            >
+              <AppIcon name="trash" size={18} color={colors.danger} />
+            </Pressable>
+            <Pressable
+              onPress={() => onToggle(item.id)}
+              style={[styles.doneBtn, { backgroundColor: colors.success, borderRadius: radius.sm }]}
+            >
+              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Done</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <Pressable
+            onPress={() => onToggle(item.id)}
+            style={[styles.actionIconBtn, { backgroundColor: colors.muted }]}
+          >
+            <AppIcon name="rotateCw" size={18} color={colors.mutedForeground} />
+          </Pressable>
+        )}
+      </View>
+    </Swipeable>
+  );
+}, (prev, next) => {
+  return prev.item.id === next.item.id && prev.item.completed === next.item.completed && prev.onToggle === next.onToggle && prev.onRemove === next.onRemove && prev.isPurchased === next.isPurchased;
+});
 
 export const ListsScreen: React.FC = () => {
   const colors = useThemeColors();
@@ -77,14 +193,65 @@ export const ListsScreen: React.FC = () => {
 
   const resetScreenError = useCallback(() => setScreenError(null), []);
 
+  const categoriesById = useMemo(() => {
+    const map = new Map<string, { color?: string; icon?: string }>();
+    categories.forEach(cat => map.set(cat.id, { color: cat.color, icon: cat.icon }));
+    return map;
+  }, [categories]);
+
+  const getMemberIcon = useCallback((memberId: string) => {
+    const member = members.find(m => m.id === memberId);
+    return member ? member.symbol : "👤";
+  }, [members]);
+
+  const handleToggleItem = useCallback(async (id: string) => {
+    try {
+      await toggleGroceryItem(id);
+    } catch (error) {
+      console.error("Failed to toggle grocery item:", error);
+      Alert.alert("Error", "Could not update item. Please try again.");
+    }
+  }, [toggleGroceryItem]);
+
+  const handleRemoveItem = useCallback(async (id: string) => {
+    try {
+      await removeGroceryItem(id);
+    } catch (error) {
+      console.error("Failed to remove grocery item:", error);
+      Alert.alert("Error", "Unable to delete item right now.");
+    }
+  }, [removeGroceryItem]);
+
+  const renderItemCard = useCallback((item: GroceryItem, _index: number, _isHistory: boolean) => {
+    const categoryMeta = categoriesById.get(item.categoryId || "") || {
+      color: colors.muted,
+      icon: "📦",
+    };
+
+    return (
+      <GroceryRow
+        key={item.id}
+        item={item}
+        isPurchased={item.completed}
+        categoryColor={categoryMeta.color}
+        categoryIcon={categoryMeta.icon}
+        colors={colors}
+        radius={radius}
+        onToggle={handleToggleItem}
+        onRemove={handleRemoveItem}
+        getMemberIcon={getMemberIcon}
+      />
+    );
+  }, [categoriesById, colors, radius, handleRemoveItem, handleToggleItem, getMemberIcon]);
+
   const filteredItems = useMemo(() => {
     return (groceryList as GroceryItem[]).filter((item) =>
       item.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [groceryList, searchQuery]);
 
-  const todoItems = filteredItems.filter((item) => !item.completed);
-  const doneItems = filteredItems.filter((item) => item.completed);
+  const todoItems = useMemo(() => filteredItems.filter((item) => !item.completed), [filteredItems]);
+  const doneItems = useMemo(() => filteredItems.filter((item) => item.completed), [filteredItems]);
 
   const historyItems = useMemo(() => {
     let items = doneItems;
@@ -177,21 +344,7 @@ export const ListsScreen: React.FC = () => {
     }
   };
 
-  const getMemberIcon = (memberId: string) => {
-    const member = members.find((m: any) => m.id === memberId);
-    return member ? member.symbol : "👤";
-  };
-
-  const handleToggleItem = async (id: string) => {
-    try {
-      console.log(`Toggling grocery item: ${id}`);
-      await toggleGroceryItem(id);
-      console.log(`Successfully toggled item: ${id}`);
-    } catch (error) {
-      console.error("Failed to toggle grocery item:", error);
-      Alert.alert("Error", "Could not update item. Please try again.");
-    }
-  };
+  // The callbacks above already expose optimized handler hooks.
 
   const handleBulkDelete = () => {
     const targetItems = activeTab === "current" ? todoItems : doneItems;
@@ -221,108 +374,6 @@ export const ListsScreen: React.FC = () => {
           }
         }
       ]
-    );
-  };
-
-  const renderItemCard = (item: GroceryItem, index: number, isPurchased: boolean) => {
-    const category = categories.find((c: any) => c.id === item.categoryId);
-
-    const renderRightActions = (progress: any, dragX: any) => {
-      return (
-        <Pressable
-          style={[styles.swipedAction, { backgroundColor: colors.danger }]}
-          onPress={() => removeGroceryItem(item.id)}
-        >
-          <AppIcon name="trash" size={20} color="#fff" />
-          <Text style={styles.actionText}>Delete</Text>
-        </Pressable>
-      );
-    };
-
-    const renderLeftActions = (progress: any, dragX: any) => {
-      return (
-        <Pressable
-          style={[styles.swipedAction, styles.leftAction, { backgroundColor: colors.success }]}
-          onPress={() => {
-            if (!item.completed) handleToggleItem(item.id);
-          }}
-        >
-          <AppIcon name="check" size={20} color="#fff" />
-          <Text style={styles.actionText}>Done</Text>
-        </Pressable>
-      );
-    };
-
-    const cardContent = (
-      <View
-        style={[
-          styles.itemRow,
-          {
-            backgroundColor: colors.card,
-            borderRadius: radius.md,
-            padding: 12,
-            borderWidth: 1,
-            borderColor: colors.border
-          }
-        ]}
-      >
-        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-          <View style={[styles.categoryIconSmall, { backgroundColor: category?.color + '20' }]}>
-            <Text style={{ fontSize: 16 }}>{category?.icon || "📦"}</Text>
-          </View>
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={[styles.itemName, { color: colors.foreground, textDecorationLine: isPurchased ? 'line-through' : 'none', opacity: isPurchased ? 0.7 : 1 }]}>{item.name}</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-              <Text style={[styles.itemDetail, { color: colors.mutedForeground }]}>{item.quantity} {item.unit}</Text>
-              <View style={[styles.addedByBadge, { backgroundColor: colors.muted, borderRadius: radius.sm, marginLeft: 8 }]}>
-                <Text style={{ fontSize: 10 }}>{getMemberIcon(item.addedBy || "")}</Text>
-              </View>
-              {isPurchased && item.purchasedAt && (
-                <Text style={[styles.itemDetail, { color: colors.mutedForeground, marginLeft: 8 }]}>
-                  {new Date(item.purchasedAt).toLocaleDateString()} at {new Date(item.purchasedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </Text>
-              )}
-            </View>
-          </View>
-        </View>
-
-        {!isPurchased ? (
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Pressable
-              onPress={() => removeGroceryItem(item.id)}
-              style={[styles.actionIconBtn, { backgroundColor: colors.danger + "15" }]}
-            >
-              <AppIcon name="trash" size={18} color={colors.danger} />
-            </Pressable>
-            <Pressable
-              onPress={() => handleToggleItem(item.id)}
-              style={[styles.doneBtn, { backgroundColor: colors.success, borderRadius: radius.sm }]}
-            >
-              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Done</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <Pressable
-            onPress={() => handleToggleItem(item.id)}
-            style={[styles.actionIconBtn, { backgroundColor: colors.muted }]}
-          >
-            <AppIcon name="rotateCw" size={18} color={colors.mutedForeground} />
-          </Pressable>
-        )}
-      </View>
-    );
-
-    return (
-      <Swipeable
-        key={item.id}
-        renderRightActions={renderRightActions}
-        renderLeftActions={renderLeftActions}
-        onSwipeableRightOpen={() => removeGroceryItem(item.id)}
-        onSwipeableLeftOpen={() => !item.completed && handleToggleItem(item.id)}
-        containerStyle={{ marginBottom: 10 }}
-      >
-        {cardContent}
-      </Swipeable>
     );
   };
 

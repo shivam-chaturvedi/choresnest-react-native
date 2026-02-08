@@ -1,15 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Animated, ActivityIndicator } from 'react-native';
-import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
+import { Text, StyleSheet, Animated, ActivityIndicator } from 'react-native';
+import { useThemeColors } from '../contexts/ThemeContext';
 import { SyncService } from '../services/SyncService';
 import { useAuth } from '../contexts/AuthContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export const SyncIndicator: React.FC = () => {
     const [isSyncing, setIsSyncing] = useState(false);
     const { isGuest } = useAuth();
     const colors = useThemeColors();
-    const radius = useThemeRadius();
     const fadeAnim = React.useRef(new Animated.Value(0)).current;
+    const insets = useSafeAreaInsets();
 
     useEffect(() => {
         // Don't show sync indicator for guests
@@ -41,13 +42,15 @@ export const SyncIndicator: React.FC = () => {
             style={[
                 styles.container,
                 {
-                    backgroundColor: colors.primary,
+                    backgroundColor: 'transparent',
+                    borderColor: 'transparent',
                     opacity: fadeAnim,
+                    top: insets.top,
                 },
             ]}
         >
             <ActivityIndicator size="small" color={colors.primaryForeground} />
-            <Text style={[styles.text, { color: colors.primaryForeground }]}>
+            <Text style={[styles.text, { color: '#000000' }]}>
                 Syncing...
             </Text>
         </Animated.View>
@@ -67,6 +70,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         zIndex: 9999,
         gap: 8,
+        borderWidth: 1,
     },
     text: {
         fontSize: 12,

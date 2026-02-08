@@ -8,7 +8,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { AppLayout } from '../components/layout/AppLayout';
+import { AppLayout } from '../components/layout';
 import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import { useFinance, Transaction } from '../contexts/FinanceContext';
 import { DateTimePicker } from '../components/ui/SimpleDatePicker';

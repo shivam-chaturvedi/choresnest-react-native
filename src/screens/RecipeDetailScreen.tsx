@@ -1,6 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
-import { AppLayout } from "../components/layout/AppLayout";
+import { AppLayout } from "../components/layout";
 import { useMealPlan } from "../contexts/MealPlanContext";
 import { theme } from "../theme";
 import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';

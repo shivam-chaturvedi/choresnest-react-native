@@ -3,6 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "../config/supabase";
 import { SupabaseService } from "../services/SupabaseService";
 import { AppSettingsService } from "../services/AppSettingsService";
+import { ProfileBootstrapService } from "../services/ProfileBootstrapService";
 import { Session, User as SupabaseUser } from "@supabase/supabase-js";
 import { getHumanReadableMessage } from "../utils/SupabaseErrorHandler";
 
@@ -114,6 +115,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
 
     const login = async (email: string, pass: string): Promise<boolean> => {
         setIsLoading(true);
+        ProfileBootstrapService.resetCache();
         try {
             const { error } = await SupabaseService.signIn(email, pass);
             if (error) {
@@ -134,6 +136,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
 
     const signup = async (email: string, pass: string, name: string): Promise<boolean> => {
         setIsLoading(true);
+        ProfileBootstrapService.resetCache();
         try {
             const { error } = await SupabaseService.signUp(email, pass, name);
             if (error) {
@@ -155,6 +158,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
     const loginAsGuest = async () => {
         try {
             setIsLoading(true);
+            ProfileBootstrapService.resetCache();
             setIsGuest(true);
             setUser(null);
             setHasCompletedOnboarding(true); // Ensure this is true on login
@@ -162,18 +166,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
             await AsyncStorage.setItem("IS_GUEST", "true");
             await AsyncStorage.removeItem("AUTH_USER");
             await AsyncStorage.setItem("HAS_COMPLETED_ONBOARDING", "true");
-        } catch (error) {
-            console.error("Guest login failed:", error);
-            // Re-throw with user-friendly message
-            throw new Error("Failed to continue as guest. Please try again.");
-        } finally {
-            setIsLoading(false);
-        }
+    } catch (error) {
+        console.error("Guest login failed:", error);
+        // Re-throw with user-friendly message
+        throw new Error("Failed to continue as guest. Please try again.");
+    } finally {
+        setIsLoading(false);
+    }
     };
 
     const logout = async () => {
         setIsLoading(true);
         try {
+            ProfileBootstrapService.resetCache();
             await SupabaseService.signOut();
             setUser(null);
             setIsGuest(false);
@@ -200,6 +205,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
     const deleteAccount = async () => {
         setIsLoading(true);
         try {
+            ProfileBootstrapService.resetCache();
             // Import DataCleanupService dynamically to avoid circular dependencies
             const { DataCleanupService } = await import('../services/DataCleanupService');
 

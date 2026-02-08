@@ -11,7 +11,7 @@ import {
 import { useNavigation, NavigationProp } from "@react-navigation/native";
 import { theme } from "../theme";
 import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
-import { AppLayout } from "../components/layout/AppLayout";
+import { AppLayout } from "../components/layout";
 import { AppIcon } from "../components/ui/AppIcon";
 import { useSidebar } from "../contexts/SidebarContext";
 import { safeFormat, ensureDate } from "../utils/SafeDateUtils";

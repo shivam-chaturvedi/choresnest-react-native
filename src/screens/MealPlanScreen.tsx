@@ -9,7 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { AppLayout } from '../components/layout/AppLayout';
+import { AppLayout } from '../components/layout';
 import { theme } from '../theme';
 import { AppIcon } from '../components/ui/AppIcon';
 import { Recipe } from '../types/recipes';

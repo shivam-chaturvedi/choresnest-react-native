@@ -1,6 +1,81 @@
 import { synchronize } from '@nozbe/watermelondb/sync';
+import { Q } from '@nozbe/watermelondb';
 import { database } from '../database';
 import { supabase } from '../config/supabase';
+
+export interface TableChangeSet {
+    created: any[];
+    updated: any[];
+    deleted: string[];
+}
+
+export const coerceTimestamp = (value: string | number | Date | undefined | null): number => {
+    if (value === undefined || value === null) {
+        return 0;
+    }
+    if (typeof value === 'number') {
+        return value;
+    }
+    if (typeof value === 'string') {
+        const parsed = Date.parse(value);
+        if (!Number.isNaN(parsed)) {
+            return parsed;
+        }
+        return 0;
+    }
+    if (value instanceof Date) {
+        return value.getTime();
+    }
+    return 0;
+};
+
+export const dedupeById = (rows: any[]): any[] => {
+    const map = new Map<string, any>();
+    for (const row of rows) {
+        if (!row || !row.id) {
+            continue;
+        }
+        const existing = map.get(row.id);
+        if (!existing) {
+            map.set(row.id, row);
+            continue;
+        }
+        const incomingTs = coerceTimestamp(row.updated_at ?? row.updatedAt);
+        const existingTs = coerceTimestamp(existing.updated_at ?? existing.updatedAt);
+        if (incomingTs >= existingTs) {
+            map.set(row.id, row);
+        }
+    }
+    return Array.from(map.values());
+};
+
+export type TableFetchDescriptor = {
+    key: string;
+    fetcher: () => Promise<TableChangeSet>;
+};
+
+export const collectTableFetchResults = async (descriptors: TableFetchDescriptor[]): Promise<Record<string, TableChangeSet>> => {
+    const results = await Promise.allSettled(descriptors.map(desc => desc.fetcher()));
+    const output: Record<string, TableChangeSet> = {};
+    results.forEach((result, index) => {
+        const key = descriptors[index]?.key;
+        if (!key) return;
+        if (result.status === 'fulfilled') {
+            output[key] = result.value;
+        } else {
+            console.error(`Error fetching ${key}:`, result.reason);
+            output[key] = { created: [], updated: [], deleted: [] };
+        }
+    });
+    return output;
+};
+
+export const isLocalChangeNewer = (localUpdatedAt: number, serverUpdatedAt?: number): boolean => {
+    if (serverUpdatedAt === undefined) {
+        return true;
+    }
+    return localUpdatedAt > serverUpdatedAt;
+};
 
 let isSyncing = false;
 let syncPromise: Promise<void> | null = null; // Track the current sync promise
@@ -187,9 +262,8 @@ export const SyncService = {
                             query = query.eq('profile_id', user.id);
                         }
                         
-                        // Fetch records updated after lastPulled (this includes both created and updated)
-                        // We use updated_at for filtering since it changes on every modification
-                        query = query.gt('updated_at', lastPulled);
+                        // Fetch records updated at or after lastPulled (this includes both created and updated)
+                        query = query.gte('updated_at', lastPulled);
 
                         const { data, error } = await query;
                         if (error) {
@@ -201,16 +275,18 @@ export const SyncService = {
                             return { created: [], updated: [], deleted: [] };
                         }
 
+                        const dedupedData = dedupeById(data);
+
                         // Categorize records: created vs updated vs deleted
                         // A record is "created" if it was created after lastPulled
                         // A record is "updated" if it was created before lastPulled but updated after
                         // A record is "deleted" if it has deleted=true flag (soft delete)
                         const lastPulledDate = new Date(lastPulled);
-                        const created: any[] = [];
-                        const updated: any[] = [];
+                        let created: any[] = [];
+                        let updated: any[] = [];
                         const deleted: string[] = [];
 
-                        for (const r of data) {
+                        for (const r of dedupedData) {
                             // Handle deleted records
                             if (r.deleted === true) {
                                 deleted.push(r.id);
@@ -241,80 +317,95 @@ export const SyncService = {
                                 updated.push(r);
                             }
                         }
+                        const reclassifyExistingCreates = async () => {
+                            if (created.length === 0) {
+                                return;
+                            }
+
+                            try {
+                                const collection = database.collections.get(table);
+                                if (!collection) {
+                                    return;
+                                }
+
+                                const createdIds = created.map(record => record?.id).filter(Boolean);
+                                if (createdIds.length === 0) {
+                                    return;
+                                }
+
+                                const existingRows = await collection.query(Q.where('id', Q.oneOf(createdIds))).fetch();
+                                if (!existingRows.length) {
+                                    return;
+                                }
+
+                                const existingIds = new Set(existingRows.map(row => row.id));
+                                if (!existingIds.size) {
+                                    return;
+                                }
+
+                                const duplicates = created.filter(record => record?.id && existingIds.has(record.id));
+                                if (duplicates.length === 0) {
+                                    return;
+                                }
+
+                                created = created.filter(record => !record?.id || !existingIds.has(record.id));
+                                updated.push(...duplicates);
+                            } catch (error) {
+                                console.warn(`Could not reclassify existing ${table} records:`, error);
+                            }
+                        };
+
+                        await reclassifyExistingCreates();
 
                         return { created, updated, deleted };
                     };
 
-                    // Fetch all tables
-                    const [
-                        membersChanges,
-                        settingsChanges,
-                        userPreferencesChanges,
-                        eventsChanges,
-                        tasksChanges,
-                        listsChanges,
-                        listItemsChanges,
-                        listCategoriesChanges,
-                        recipesChanges,
-                        collectionsChanges,
-                        collectionRecipesChanges,
-                        mealPlansChanges,
-                        documentsChanges,
-                        transactionsChanges,
-                        budgetsChanges,
-                        foldersChanges,
-                        notesChanges,
-                        appLockChanges,
-                        notificationPreferencesChanges,
-                        quietHoursChanges,
-                        appSettingsChanges,
-                    ] = await Promise.all([
-                        fetchUpdates('members'),
-                        fetchUpdates('settings'),
-                        fetchUpdates('user_preferences'),
-                        fetchUpdates('events'),
-                        fetchUpdates('tasks'),
-                        fetchUpdates('lists'),
-                        fetchUpdates('list_items', false), // Uses RLS via parent list
-                        fetchUpdates('list_categories'),
-                        fetchUpdates('recipes'),
-                        fetchUpdates('collections'),
-                        fetchUpdates('collection_recipes', false), // Uses RLS via parent collection
-                        fetchUpdates('meal_plans'),
-                        fetchUpdates('documents'),
-                        fetchUpdates('transactions'),
-                        fetchUpdates('budgets'),
-                        fetchUpdates('folders'),
-                        fetchUpdates('notes', false), // Uses RLS via parent folder
-                        fetchUpdates('app_lock'),
-                        fetchUpdates('notification_preferences'),
-                        fetchUpdates('quiet_hours'),
-                        fetchUpdates('app_settings'),
-                    ]);
+                    const tableDescriptors: TableFetchDescriptor[] = [
+                        { key: 'members', fetcher: () => fetchUpdates('members') },
+                        { key: 'settings', fetcher: () => fetchUpdates('settings') },
+                        { key: 'user_preferences', fetcher: () => fetchUpdates('user_preferences') },
+                        { key: 'events', fetcher: () => fetchUpdates('events') },
+                        { key: 'tasks', fetcher: () => fetchUpdates('tasks') },
+                        { key: 'lists', fetcher: () => fetchUpdates('lists') },
+                        { key: 'list_items', fetcher: () => fetchUpdates('list_items', false) },
+                        { key: 'list_categories', fetcher: () => fetchUpdates('list_categories') },
+                        { key: 'recipes', fetcher: () => fetchUpdates('recipes') },
+                        { key: 'collections', fetcher: () => fetchUpdates('collections') },
+                        { key: 'collection_recipes', fetcher: () => fetchUpdates('collection_recipes', false) },
+                        { key: 'meal_plans', fetcher: () => fetchUpdates('meal_plans') },
+                        { key: 'documents', fetcher: () => fetchUpdates('documents') },
+                        { key: 'transactions', fetcher: () => fetchUpdates('transactions') },
+                        { key: 'budgets', fetcher: () => fetchUpdates('budgets') },
+                        { key: 'folders', fetcher: () => fetchUpdates('folders') },
+                        { key: 'notes', fetcher: () => fetchUpdates('notes') },
+                        { key: 'notification_preferences', fetcher: () => fetchUpdates('notification_preferences') },
+                        { key: 'quiet_hours', fetcher: () => fetchUpdates('quiet_hours') },
+                    ];
+
+                    const tableChangesMap = await collectTableFetchResults(tableDescriptors);
+                    const getChanges = (key: string): TableChangeSet => tableChangesMap[key] ?? { created: [], updated: [], deleted: [] };
 
                     return {
                         changes: {
-                            members: membersChanges,
-                            settings: settingsChanges,
-                            user_preferences: userPreferencesChanges,
-                            events: eventsChanges,
-                            tasks: tasksChanges,
-                            lists: listsChanges,
-                            list_items: listItemsChanges,
-                            list_categories: listCategoriesChanges,
-                            recipes: recipesChanges,
-                            collections: collectionsChanges,
-                            collection_recipes: collectionRecipesChanges,
-                            meal_plans: mealPlansChanges,
-                            documents: documentsChanges,
-                            transactions: transactionsChanges,
-                            budgets: budgetsChanges,
-                            folders: foldersChanges,
-                            notes: notesChanges,
-                            app_lock: appLockChanges,
-                            notification_preferences: notificationPreferencesChanges,
-                            quiet_hours: quietHoursChanges,
-                            app_settings: appSettingsChanges,
+                            members: getChanges('members'),
+                            settings: getChanges('settings'),
+                            user_preferences: getChanges('user_preferences'),
+                            events: getChanges('events'),
+                            tasks: getChanges('tasks'),
+                            lists: getChanges('lists'),
+                            list_items: getChanges('list_items'),
+                            list_categories: getChanges('list_categories'),
+                            recipes: getChanges('recipes'),
+                            collections: getChanges('collections'),
+                            collection_recipes: getChanges('collection_recipes'),
+                            meal_plans: getChanges('meal_plans'),
+                            documents: getChanges('documents'),
+                            transactions: getChanges('transactions'),
+                            budgets: getChanges('budgets'),
+                            folders: getChanges('folders'),
+                            notes: getChanges('notes'),
+                            notification_preferences: getChanges('notification_preferences'),
+                            quiet_hours: getChanges('quiet_hours'),
                         },
                         timestamp,
                     };
@@ -344,10 +435,8 @@ export const SyncService = {
                         budgets,
                         folders,
                         notes,
-                        app_lock,
                         notification_preferences,
                         quiet_hours,
-                        app_settings,
                     } = changesAny;
                     
                     // Check if there are any changes to sync
@@ -387,6 +476,12 @@ export const SyncService = {
                                 assigneeId: 'assignee_id', // WatermelonDB uses assigneeId, Supabase uses assignee_id
                                 reminderEnabled: 'reminder_enabled', // WatermelonDB uses reminderEnabled, Supabase uses reminder_enabled
                             },
+                            notes: {
+                                isStarred: 'is_starred',
+                                updatedAt: 'updated_at',
+                                folderId: 'folder_id',
+                                blocks: 'blocks_json',
+                            },
                         };
 
                         const mappings = fieldMappings[table];
@@ -397,6 +492,19 @@ export const SyncService = {
                                     delete transformed[wmField];
                                 }
                             });
+                        }
+
+                        if (table === 'notes' && transformed.blocks_json !== undefined) {
+                            if (Array.isArray(transformed.blocks_json)) {
+                                transformed.blocks_json = JSON.stringify(transformed.blocks_json);
+                            } else if (typeof transformed.blocks_json !== 'string') {
+                                try {
+                                    transformed.blocks_json = JSON.stringify(transformed.blocks_json ?? []);
+                                } catch (jsonError) {
+                                    console.warn('Failed to stringify note blocks before pushing to Supabase:', jsonError);
+                                    transformed.blocks_json = '[]';
+                                }
+                            }
                         }
 
                         return transformed;
@@ -412,85 +520,146 @@ export const SyncService = {
 
                         const { created = [], updated = [], deleted = [] } = tableChanges;
                         let errors = 0;
+                        let conflictCount = 0;
 
-                        // Validate inputs
                         if (!Array.isArray(created) || !Array.isArray(updated) || !Array.isArray(deleted)) {
                             console.error(`Invalid table changes format for ${table}`);
                             return { success: false, errors: created.length + updated.length + deleted.length };
                         }
+
+                        const candidateIds = new Set<string>();
+                        [...created, ...updated].forEach(record => {
+                            if (record?.id) {
+                                candidateIds.add(record.id);
+                            }
+                        });
+                        deleted.forEach(id => {
+                            if (id) candidateIds.add(id);
+                        });
+
+                        const fetchServerTimestamps = async (ids: string[]): Promise<Map<string, number>> => {
+                            const map = new Map<string, number>();
+                            if (ids.length === 0) {
+                                return map;
+                            }
+                            try {
+                                const { data: serverRows, error: serverError } = await supabase
+                                    .from(table)
+                                    .select('id, updated_at')
+                                    .in('id', ids);
+                                if (serverError) {
+                                    console.error(`Failed to fetch server timestamps for ${table}:`, serverError);
+                                    return map;
+                                }
+                                serverRows?.forEach(row => {
+                                    if (row?.id) {
+                                        map.set(row.id, coerceTimestamp(row.updated_at));
+                                    }
+                                });
+                            } catch (err) {
+                                console.error(`Failed to fetch server timestamps for ${table}:`, err);
+                            }
+                            return map;
+                        };
+
+                        const serverUpdatedAtMap = await fetchServerTimestamps(Array.from(candidateIds));
+
+                        const logConflict = (id: string, reason: string) => {
+                            conflictCount++;
+                            console.warn(`Sync conflict: Skipping ${reason} for ${table} ${id} because server data is newer or equal`);
+                        };
+
+                        const skipIfServerNewer = (record: any, reason: string): boolean => {
+                            const localTs = coerceTimestamp(record.updated_at ?? record.updatedAt ?? Date.now());
+                            const serverTs = serverUpdatedAtMap.get(record.id);
+                            if (!isLocalChangeNewer(localTs, serverTs)) {
+                                logConflict(record.id, reason);
+                                return false;
+                            }
+                            return true;
+                        };
+
+                        const prepareRecordForSupabase = (record: any): any => {
+                            const data = addProfileId ? { ...record, profile_id: user.id } : record;
+                            const { _changed, _status, ...cleanData } = data;
+                            const transformed = transformRecordForSupabase(cleanData, table);
+                            const now = new Date().toISOString();
+
+                            if (!transformed.created_at) {
+                                transformed.created_at = transformed.updated_at
+                                    ? (typeof transformed.updated_at === 'number'
+                                        ? new Date(transformed.updated_at).toISOString()
+                                        : transformed.updated_at)
+                                    : now;
+                            }
+
+                            if (transformed.updated_at) {
+                                if (typeof transformed.updated_at === 'number') {
+                                    transformed.updated_at = new Date(transformed.updated_at).toISOString();
+                                } else if (typeof transformed.updated_at === 'string' && !transformed.updated_at.includes('T')) {
+                                    const parsed = new Date(transformed.updated_at);
+                                    if (!isNaN(parsed.getTime())) {
+                                        transformed.updated_at = parsed.toISOString();
+                                    }
+                                }
+                            } else {
+                                transformed.updated_at = now;
+                            }
+
+                            if (transformed.created_at && typeof transformed.created_at !== 'string') {
+                                if (typeof transformed.created_at === 'number') {
+                                    transformed.created_at = new Date(transformed.created_at).toISOString();
+                                } else {
+                                    const parsed = new Date(transformed.created_at);
+                                    if (!isNaN(parsed.getTime())) {
+                                        transformed.created_at = parsed.toISOString();
+                                    }
+                                }
+                            } else if (transformed.created_at && typeof transformed.created_at === 'string' && !transformed.created_at.includes('T')) {
+                                const parsed = new Date(transformed.created_at);
+                                if (!isNaN(parsed.getTime())) {
+                                    transformed.created_at = parsed.toISOString();
+                                }
+                            }
+
+                            if (table === 'notes' && transformed.blocks_json !== undefined) {
+                                if (Array.isArray(transformed.blocks_json)) {
+                                    transformed.blocks_json = JSON.stringify(transformed.blocks_json);
+                                } else if (typeof transformed.blocks_json !== 'string') {
+                                    try {
+                                        transformed.blocks_json = JSON.stringify(transformed.blocks_json ?? []);
+                                    } catch (jsonError) {
+                                        console.warn('Failed to stringify note blocks before pushing to Supabase:', jsonError);
+                                        transformed.blocks_json = '[]';
+                                    }
+                                }
+                            }
+
+                            return transformed;
+                        };
 
                         // Batch insert created records (more efficient)
                         if (created.length > 0) {
                             try {
                                 const recordsToInsert = created
                                     .filter(record => {
-                                        // Validate record has required fields
                                         if (!record || !record.id) {
                                             console.warn(`Skipping invalid record in ${table} (missing id)`);
                                             return false;
                                         }
-                                        // Special validation for list_items: must have a valid list_id
                                         if (table === 'list_items' && (!record.list_id || record.list_id.trim() === '')) {
                                             console.warn(`Skipping invalid list_items record ${record.id} (empty or missing list_id)`);
                                             return false;
                                         }
                                         return true;
                                     })
-                                    .map(record => {
-                                        let data = addProfileId ? { ...record, profile_id: user.id } : record;
-                                        // Remove fields that shouldn't be sent (like _changed, _status from WatermelonDB)
-                                        const { _changed, _status, ...cleanData } = data;
-                                        
-                                        // Transform field names to match Supabase columns
-                                        const transformed = transformRecordForSupabase(cleanData, table);
-                                        
-                                        // Ensure created_at and updated_at are set (WatermelonDB auto-generates these)
-                                        const now = new Date().toISOString();
-                                        if (!transformed.created_at) {
-                                            // If created_at is missing, use updated_at or current time
-                                            transformed.created_at = transformed.updated_at 
-                                                ? (typeof transformed.updated_at === 'number' 
-                                                    ? new Date(transformed.updated_at).toISOString() 
-                                                    : transformed.updated_at)
-                                                : now;
-                                        }
-                                        
-                                        // Convert timestamps from number (WatermelonDB) to ISO string (Supabase) if needed
-                                        // Handle both number timestamps and already-formatted ISO strings
-                                        if (transformed.updated_at) {
-                                            if (typeof transformed.updated_at === 'number') {
-                                                transformed.updated_at = new Date(transformed.updated_at).toISOString();
-                                            } else if (typeof transformed.updated_at === 'string' && !transformed.updated_at.includes('T')) {
-                                                // If it's a string but not ISO format, try to parse it
-                                                const parsed = new Date(transformed.updated_at);
-                                                if (!isNaN(parsed.getTime())) {
-                                                    transformed.updated_at = parsed.toISOString();
-                                                }
-                                            }
-                                        } else {
-                                            transformed.updated_at = now;
-                                        }
-                                        
-                                        if (transformed.created_at) {
-                                            if (typeof transformed.created_at === 'number') {
-                                                transformed.created_at = new Date(transformed.created_at).toISOString();
-                                            } else if (typeof transformed.created_at === 'string' && !transformed.created_at.includes('T')) {
-                                                const parsed = new Date(transformed.created_at);
-                                                if (!isNaN(parsed.getTime())) {
-                                                    transformed.created_at = parsed.toISOString();
-                                                }
-                                            }
-                                        }
-                                        
-                                        return transformed;
-                                    });
-                                
+                                    .map(prepareRecordForSupabase)
+                                    .filter(record => skipIfServerNewer(record, 'create'));
+
                                 if (recordsToInsert.length === 0) {
                                     console.warn(`No valid records to insert for ${table}`);
                                 } else {
                                     console.log(`Syncing ${recordsToInsert.length} new records to ${table}...`);
-                                    // Use upsert instead of insert to handle duplicates gracefully
-                                    // This will insert new records and update existing ones
                                     const { data, error } = await supabase
                                         .from(table)
                                         .upsert(recordsToInsert, { onConflict: 'id' })
@@ -498,19 +667,16 @@ export const SyncService = {
                                     if (error) {
                                         console.error(`Failed to batch upsert ${table} (${recordsToInsert.length} records):`, error);
                                         console.error(`Error details:`, JSON.stringify(error, null, 2));
-                                        // Log first record for debugging
                                         if (recordsToInsert.length > 0) {
                                             console.error(`First record sample:`, JSON.stringify(recordsToInsert[0], null, 2));
                                         }
                                         errors += recordsToInsert.length;
-                                        // Fallback to individual upserts for better error isolation
                                         for (const record of recordsToInsert) {
                                             try {
                                                 const { error: individualError } = await supabase
                                                     .from(table)
                                                     .upsert(record, { onConflict: 'id' });
                                                 if (individualError) {
-                                                    // If upsert fails, try update as last resort
                                                     if (individualError.code === '23505' || individualError.code === '23503') {
                                                         console.log(`Record ${record.id} conflict in ${table}, trying update...`);
                                                         const { error: updateError } = await supabase
@@ -532,7 +698,6 @@ export const SyncService = {
                                                     console.log(`✓ Successfully upserted ${table} record ${record.id}`);
                                                 }
                                             } catch (individualErr: any) {
-                                                // Handle errors in catch block
                                                 if (individualErr?.code === '23505' || individualErr?.code === '23503') {
                                                     console.log(`Record ${record.id} conflict in ${table}, trying update...`);
                                                     try {
@@ -573,7 +738,6 @@ export const SyncService = {
                                     console.warn(`Skipping invalid update record in ${table} (missing id)`);
                                     return false;
                                 }
-                                // Special validation for list_items: must have a valid list_id
                                 if (table === 'list_items' && (!record.list_id || record.list_id.trim() === '')) {
                                     console.warn(`Skipping invalid list_items update record ${record.id} (empty or missing list_id)`);
                                     return false;
@@ -581,45 +745,17 @@ export const SyncService = {
                                 return true;
                             });
 
-                            const updatePromises = validUpdates.map(async (record) => {
+                            const transformedUpdates = validUpdates
+                                .map(prepareRecordForSupabase)
+                                .filter(record => skipIfServerNewer(record, 'update'));
+
+                            const updatePromises = transformedUpdates.map(async (record) => {
                                 try {
-                                    let data = addProfileId ? { ...record, profile_id: user.id } : record;
-                                    // Remove WatermelonDB internal fields
-                                    const { _changed, _status, ...cleanData } = data;
-                                    
-                                    // Transform field names to match Supabase columns
-                                    const transformed = transformRecordForSupabase(cleanData, table);
-                                    
-                                    // Convert timestamps (handle both number and string formats)
-                                    if (transformed.updated_at) {
-                                        if (typeof transformed.updated_at === 'number') {
-                                            transformed.updated_at = new Date(transformed.updated_at).toISOString();
-                                        } else if (typeof transformed.updated_at === 'string' && !transformed.updated_at.includes('T')) {
-                                            const parsed = new Date(transformed.updated_at);
-                                            if (!isNaN(parsed.getTime())) {
-                                                transformed.updated_at = parsed.toISOString();
-                                            }
-                                        }
-                                    } else {
-                                        transformed.updated_at = new Date().toISOString();
-                                    }
-                                    
-                                    if (transformed.created_at) {
-                                        if (typeof transformed.created_at === 'number') {
-                                            transformed.created_at = new Date(transformed.created_at).toISOString();
-                                        } else if (typeof transformed.created_at === 'string' && !transformed.created_at.includes('T')) {
-                                            const parsed = new Date(transformed.created_at);
-                                            if (!isNaN(parsed.getTime())) {
-                                                transformed.created_at = parsed.toISOString();
-                                            }
-                                        }
-                                    }
-                                    
                                     const { error } = await supabase
                                         .from(table)
-                                        .update(transformed)
+                                        .update(record)
                                         .eq('id', record.id);
-                                    
+
                                     if (error) {
                                         console.error(`Failed to update ${table} record ${record.id}:`, error);
                                         return false;
@@ -633,7 +769,6 @@ export const SyncService = {
 
                             const results = await Promise.all(updatePromises);
                             errors += results.filter(r => !r).length;
-                            // Count skipped invalid records as errors
                             errors += updated.length - validUpdates.length;
                         }
 
@@ -647,19 +782,45 @@ export const SyncService = {
                                 return true;
                             });
 
-                            const deletePromises = validIds.map(async (id) => {
+                            const localDeletedTimestamps = new Map<string, number>();
+                            if (validIds.length > 0) {
                                 try {
-                                    // Try soft delete first (update deleted flag)
+                                    const collection = database.collections.get(table);
+                                    if (collection) {
+                                        const rows = await collection.query(Q.where('id', Q.oneOf(validIds))).fetch();
+                                        rows.forEach((row: any) => {
+                                            const ts = coerceTimestamp(row.updatedAt ?? row.updated_at ?? Date.now());
+                                            if (row.id) {
+                                                localDeletedTimestamps.set(row.id, ts);
+                                            }
+                                        });
+                                    }
+                                } catch (err) {
+                                    console.warn(`Failed to read deleted timestamps for ${table}:`, err);
+                                }
+                            }
+
+                            const deleteIdsToApply = validIds.filter(id => {
+                                const localTs = localDeletedTimestamps.get(id) ?? Date.now();
+                                const serverTs = serverUpdatedAtMap.get(id);
+                                if (!isLocalChangeNewer(localTs, serverTs)) {
+                                    logConflict(id, 'delete');
+                                    return false;
+                                }
+                                return true;
+                            });
+
+                            const deletePromises = deleteIdsToApply.map(async (id) => {
+                                try {
                                     const { error: updateError } = await supabase
                                         .from(table)
                                         .update({ deleted: true, updated_at: new Date().toISOString() })
                                         .eq('id', id);
-                                    
+
                                     if (!updateError) {
                                         return true;
                                     }
 
-                                    // If soft delete fails, try hard delete
                                     const { error: deleteError } = await supabase.from(table).delete().eq('id', id);
                                     if (deleteError) {
                                         console.error(`Failed to delete ${table} record ${id}:`, deleteError);
@@ -674,13 +835,16 @@ export const SyncService = {
 
                             const results = await Promise.all(deletePromises);
                             errors += results.filter(r => !r).length;
-                            // Count skipped invalid IDs as errors
                             errors += deleted.length - validIds.length;
+                        }
+
+                        if (conflictCount > 0) {
+                            console.warn(`Skipped ${conflictCount} conflicted records for ${table} to preserve newer server data`);
+                            errors += conflictCount;
                         }
 
                         return { success: errors === 0, errors };
                     };
-
                     // Push tables in dependency order to avoid foreign key constraint violations
                     // Run phases sequentially to ensure dependencies exist before dependent records are inserted
                     
@@ -691,10 +855,8 @@ export const SyncService = {
                         pushTableChanges('members', members), // Must be first - events/tasks reference members
                         pushTableChanges('settings', settings),
                         pushTableChanges('user_preferences', user_preferences, true), // Ensure profile_id is added
-                        pushTableChanges('app_lock', app_lock),
                         pushTableChanges('notification_preferences', notification_preferences),
                         pushTableChanges('quiet_hours', quiet_hours),
-                        pushTableChanges('app_settings', app_settings),
                         pushTableChanges('list_categories', list_categories),
                         pushTableChanges('folders', folders), // Notes depend on folders
                     ]);
@@ -718,7 +880,7 @@ export const SyncService = {
                     const phase3Results = await Promise.allSettled([
                         pushTableChanges('list_items', list_items, false), // Depends on lists (profile_id comes from parent list)
                         pushTableChanges('collection_recipes', collection_recipes, false), // Depends on collections (profile_id comes from parent collection)
-                        pushTableChanges('notes', notes, false), // Depends on folders (profile_id comes from parent folder)
+                        pushTableChanges('notes', notes, true), // Depends on folders; ensure profile_id is set
                     ]);
                     allPushResults.push(...phase3Results);
                     
@@ -828,6 +990,13 @@ export const SyncService = {
     },
 
     /**
+     * Helper for consumers needing a boolean check directly
+     */
+    isSyncing(): boolean {
+        return isSyncing;
+    },
+
+    /**
      * Get last sync error
      */
     getLastSyncError(): Error | null {
@@ -840,5 +1009,15 @@ export const SyncService = {
     resetSyncState(): void {
         consecutiveFailures = 0;
         lastSyncError = null;
+    },
+    
+    /**
+     * Fire a single manual refresh, honoring existing sync guards.
+     */
+    async refreshNow(): Promise<void> {
+        if (syncPromise) {
+            return syncPromise;
+        }
+        return this.sync(false);
     },
 };

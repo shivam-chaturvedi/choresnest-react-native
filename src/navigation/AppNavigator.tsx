@@ -26,6 +26,8 @@ import { SyncService } from "../services/SyncService";
 import NetInfo from "@react-native-community/netinfo";
 import { AppState, AppStateStatus } from "react-native";
 import { SyncIndicator } from "../components/SyncIndicator";
+import { ProfileBootstrapService } from "../services/ProfileBootstrapService";
+import { AppSettingsService } from "../services/AppSettingsService";
 
 
 
@@ -83,9 +85,11 @@ export const AppNavigator = ({ shouldRequireAuthOnStartup = true }: AppNavigator
 
 const AppNavigatorInner = () => {
   const { isSidebarOpen, closeSidebar } = useSidebar();
-  const { isAuthenticated, isLoading, isGuest, hasCompletedOnboarding, completeOnboarding } = useAuth();
+  const { user, isAuthenticated, isLoading, isGuest, hasCompletedOnboarding, completeOnboarding } = useAuth();
   const [showSplash, setShowSplash] = React.useState(true);
   const [hasMembersInDB, setHasMembersInDB] = React.useState<boolean | null>(null);
+  const [hasLocalOnboarding, setHasLocalOnboarding] = React.useState<boolean | null>(null);
+  const [localOnboardingLoaded, setLocalOnboardingLoaded] = React.useState(false);
   
   // Auto-sync hook - triggers sync on data changes (runs in background)
   // Hook checks isGuest internally, so it's safe to call always
@@ -231,28 +235,88 @@ const AppNavigatorInner = () => {
     };
   }, [isAuthenticated, isGuest, isLoading]);
 
-  // Check if there are members in the database - this should be fast and not wait for sync
   React.useEffect(() => {
-    const checkMembers = async () => {
+    let cancelled = false;
+
+    const loadLocalOnboarding = async () => {
       try {
-        const membersCollection = database.get('members');
-        const members = await membersCollection.query().fetch();
-        setHasMembersInDB(members.length > 0);
+        const localComplete = await AppSettingsService.hasCompletedOnboarding();
+        if (cancelled) return;
+        setHasLocalOnboarding(localComplete);
+        if (localComplete) {
+          setHasMembersInDB(true);
+        }
       } catch (error) {
-        console.error('Error checking members:', error);
-        setHasMembersInDB(false);
+        console.error('Failed to read local onboarding flag:', error);
+        if (!cancelled) {
+          setHasLocalOnboarding(false);
+        }
+      } finally {
+        if (!cancelled) {
+          setLocalOnboardingLoaded(true);
+        }
       }
     };
 
-    if (isAuthenticated && !isLoading) {
-      // Don't await - check members immediately without blocking
-      checkMembers();
+    loadLocalOnboarding();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (hasLocalOnboarding) {
+      return;
     }
-  }, [isAuthenticated, isLoading]);
+
+    let cancelled = false;
+
+    const bootstrapAndCheckMembers = async () => {
+      if (!isAuthenticated || isGuest || isLoading || !user?.id) {
+        if (!isAuthenticated) {
+          setHasMembersInDB(false);
+        }
+        return;
+      }
+
+      try {
+        const result = await ProfileBootstrapService.bootstrap(user.id);
+        if (cancelled) return;
+        if (result.hasMembers) {
+          try {
+            await AppSettingsService.completeOnboarding();
+            if (cancelled) return;
+            setHasLocalOnboarding(true);
+          } catch (completeError) {
+            console.warn('Failed to mark onboarding complete after bootstrap:', completeError);
+          }
+          setHasMembersInDB(true);
+          return;
+        }
+        setHasMembersInDB(false);
+      } catch (error) {
+        console.error('Profile bootstrap failed:', error);
+        if (!cancelled) {
+          setHasMembersInDB(false);
+        }
+      }
+    };
+
+    bootstrapAndCheckMembers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, isGuest, isLoading, user?.id, hasLocalOnboarding]);
 
   // Only show splash on initial load, not during auth operations
   // Don't wait for sync - show UI immediately once members check completes
-  if (showSplash || (isAuthenticated && !isLoading && hasMembersInDB === null)) {
+  if (
+    showSplash ||
+    !localOnboardingLoaded ||
+    (isAuthenticated && !isLoading && hasMembersInDB === null)
+  ) {
     return (
       <SplashScreen
         onContinue={() => setShowSplash(false)}
@@ -265,7 +329,7 @@ const AppNavigatorInner = () => {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {isAuthenticated ? (
           <>
-            {!hasMembersInDB ? (
+            {(!hasMembersInDB && hasLocalOnboarding !== true) ? (
               <Stack.Screen name="InitialSetup">
                 {() => (
                   <InitialSetupScreen
@@ -274,6 +338,7 @@ const AppNavigatorInner = () => {
                       const membersCollection = database.get('members');
                       const members = await membersCollection.query().fetch();
                       setHasMembersInDB(members.length > 0);
+                      setHasLocalOnboarding(true);
                     }}
                   />
                 )}

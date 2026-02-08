@@ -11,7 +11,7 @@ import {
     TextInput
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { AppLayout } from "../components/layout/AppLayout";
+import { AppLayout } from "../components/layout";
 import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import { useSidebar } from "../contexts/SidebarContext";
 import { useAuth } from "../contexts/AuthContext";
@@ -146,6 +146,19 @@ export const PrivacyScreen: React.FC = () => {
     const [confirmValue, setConfirmValue] = useState("");
     const [confirmError, setConfirmError] = useState("");
     const [confirmBusy, setConfirmBusy] = useState(false);
+
+    const getRootNavigator = () => {
+        let parent = navigation.getParent();
+        while (parent?.getParent()) {
+            parent = parent.getParent();
+        }
+        return parent;
+    };
+
+    const handleNavigateToAuth = () => {
+        const rootNav = getRootNavigator() ?? navigation;
+        rootNav.navigate("Auth" as never);
+    };
 
     useEffect(() => {
         if (pendingAppLockRequest !== null && pendingAppLockRequest === isAppLockEnabled) {
@@ -632,7 +645,7 @@ export const PrivacyScreen: React.FC = () => {
                                             onPress={() => {
                                                 setShowGuestModal(false);
                                                 // Navigate to login/signup screen
-                                                navigation.navigate('Auth' as never);
+                                                handleNavigateToAuth();
                                             }}
                                         >
                                             <Text style={[styles.guestModalButtonText, { color: colors.primary }]}>LOGIN / SIGN UP</Text>

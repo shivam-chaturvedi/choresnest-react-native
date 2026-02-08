@@ -6,7 +6,7 @@ import {
   Pressable,
   ScrollView,
 } from "react-native";
-import { AppLayout } from "../components/layout/AppLayout";
+import { AppLayout } from "../components/layout";
 import { theme } from "../theme";
 import { useSidebar } from "../contexts/SidebarContext";
 import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";

@@ -1,6 +1,6 @@
 import React from "react";
 import { ScrollView, StyleSheet, View, Text } from "react-native";
-import { AppLayout } from "../components/layout/AppLayout";
+import { AppLayout } from "../components/layout";
 import { DatabaseVisualization } from "../components/debug/DatabaseVisualization";
 import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 

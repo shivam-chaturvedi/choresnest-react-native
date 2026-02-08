@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   BackHandler,
 } from "react-native";
-import { AppLayout } from "../components/layout/AppLayout";
+import { AppLayout } from "../components/layout";
 import { useFamily } from "../contexts/FamilyContext";
 import { useFinance } from "../contexts/FinanceContext";
 import type { VaultDocument } from "../contexts/FamilyContext";

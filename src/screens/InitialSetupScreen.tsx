@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
     View,
     Text,
@@ -13,6 +13,7 @@ import { useThemeColors } from "../contexts/ThemeContext";
 import { useFamily } from "../contexts/FamilyContext";
 import { PROFILE_COLORS } from "../constants/profileColors";
 import { AppIcon } from "../components/ui/AppIcon";
+import { AppSettingsService } from "../services/AppSettingsService";
 
 interface InitialSetupScreenProps {
     onComplete: () => void;
@@ -21,12 +22,41 @@ interface InitialSetupScreenProps {
 export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComplete }) => {
     const colors = useThemeColors();
     const radius = theme.radius;
-    const { setFamilyName, addMember, setActiveMember, members } = useFamily();
+    const { setFamilyName, addMember, setActiveMember, members, familyName } = useFamily();
 
-    const [familyNameInput, setFamilyNameInput] = useState("");
-    const [memberName, setMemberName] = useState("");
+    const [familyNameInput, setFamilyNameInput] = useState("Family");
+    const [memberName, setMemberName] = useState("Admin");
     const [selectedColor, setSelectedColor] = useState(PROFILE_COLORS[0]);
     const [selectedEmoji, setSelectedEmoji] = useState("👤");
+    const [familyNameTouched, setFamilyNameTouched] = useState(false);
+
+    useEffect(() => {
+        if (familyNameTouched) return;
+        if (familyName && familyName !== "Family Chores") {
+            setFamilyNameInput(familyName);
+            return;
+        }
+        setFamilyNameInput("Family");
+    }, [familyName, familyNameTouched]);
+
+    const availableColors = React.useMemo(() => {
+        const used = new Set(members.map((member: any) => member.color));
+        const filtered = PROFILE_COLORS.filter((color) => !used.has(color.value));
+        return filtered.length > 0 ? filtered : PROFILE_COLORS;
+    }, [members]);
+
+    useEffect(() => {
+        if (!availableColors.some(c => c.value === selectedColor.value)) {
+            setSelectedColor(availableColors[0]);
+        }
+    }, [availableColors, selectedColor.value]);
+
+    const handleFamilyNameChange = (value: string) => {
+        setFamilyNameInput(value);
+        if (!familyNameTouched) {
+            setFamilyNameTouched(true);
+        }
+    };
 
     const emojis = ["👤", "👨", "👩", "👦", "👧", "🧑", "👶", "👴", "👵", "🧔", "👨‍🦱", "👩‍🦱"];
 
@@ -63,6 +93,8 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
                     await setActiveMember(firstMember);
                 }
 
+                await AppSettingsService.completeOnboarding();
+
                 // Complete setup
                 onComplete();
             }, 500);
@@ -97,12 +129,12 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
                     <Text style={[styles.sectionLabel, { color: colors.foreground }]}>
                         Family Name
                     </Text>
-                    <TextInput
+                <TextInput
                         style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderColor: colors.border, borderRadius: radius.md }]}
                         placeholder="e.g., The Smiths, Our Family"
                         placeholderTextColor={colors.mutedForeground}
                         value={familyNameInput}
-                        onChangeText={setFamilyNameInput}
+                        onChangeText={handleFamilyNameChange}
                         autoCapitalize="words"
                     />
                 </View>
@@ -150,7 +182,7 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
                         Choose Color
                     </Text>
                     <View style={styles.colorGrid}>
-                        {PROFILE_COLORS.map((color) => (
+                        {availableColors.map((color) => (
                             <Pressable
                                 key={color.id}
                                 style={[

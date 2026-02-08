@@ -14,10 +14,10 @@ export interface NoteBlock {
 export interface Note {
     id: string;
     title: string;
-    preview: string; // For list view
+    preview: string;
     tag: string;
     color: string;
-    updatedAt: string;
+    updatedAt: number;
     blocks: NoteBlock[];
     isStarred?: boolean;
     folderId: string;
@@ -99,19 +99,23 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             next: (records) => {
                 console.log(`📥 NotesContext: Received ${records.length} notes update`);
                 const mapped = records
-                    .map(record => ({
-                        id: record.id,
-                        title: record.title,
-                        preview: record.preview || 'No content',
-                        tag: record.tag || 'General',
-                        color: record.color,
-                        updatedAt: new Date(record.updatedAt).toISOString(),
-                        blocks: Array.isArray(record.blocks) ? record.blocks : [],
-                        isStarred: record.isStarred,
-                        folderId: record.folderId,
-                    }))
+                    .map(record => {
+                        const safeUpdatedAt = typeof record.updatedAt === 'number' ? record.updatedAt : Date.now();
+                        const safeBlocks = Array.isArray(record.blocks) ? record.blocks : [];
+                        return {
+                            id: record.id,
+                            title: record.title,
+                            preview: record.preview || 'No content',
+                            tag: record.tag || 'General',
+                            color: record.color,
+                            updatedAt: safeUpdatedAt,
+                            blocks: safeBlocks,
+                            isStarred: record.isStarred,
+                            folderId: record.folderId,
+                        };
+                    })
                     // Sort again in JS to be absolutely sure the UI reflects the latest order
-                    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+                    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
                 setNotes(mapped);
             },
             error: (error) => console.error("Notes subscription failed", error),

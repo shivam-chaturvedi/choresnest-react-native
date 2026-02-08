@@ -45,6 +45,279 @@ const pushHomeNotification = (
     });
 };
 
+type TaskNotificationJobOptions = { showFeedback: boolean };
+const enqueueTaskNotificationJob = (taskId: string, options: TaskNotificationJobOptions) => {
+    NotificationScheduler.enqueueJob(async () => {
+        await handleTaskNotificationJob(taskId, options);
+    });
+};
+
+const handleTaskNotificationJob = async (taskId: string, options: TaskNotificationJobOptions) => {
+    try {
+        const task = await database.get<Task>('tasks').find(taskId);
+        const activeMemberId = await getActiveMemberId();
+        const oldNotificationId = task.notificationId;
+
+        if (!activeMemberId || task.assigneeId !== activeMemberId) {
+            if (oldNotificationId) {
+                await NotificationScheduler.cancelNotification(oldNotificationId);
+                await database.write(async () => {
+                    await task.update(t => {
+                        t.notificationId = undefined;
+                    });
+                });
+            }
+            return;
+        }
+
+        const shouldNotify = task.status !== 'done' && task.reminderEnabled;
+        if (shouldNotify) {
+            const triggerDate = parseReminderDateTime(task.dateString, task.dueDisplay);
+            if (triggerDate && triggerDate > new Date()) {
+                const reminderMinutes = await NotificationPreferencesService.getReminderTime('tasks');
+                const notificationTrigger = new Date(triggerDate.getTime() - reminderMinutes * 60000);
+                const newId = await NotificationScheduler.updateNotification(
+                    oldNotificationId || null,
+                    'tasks',
+                    {
+                        title: `Task: ${task.name}`,
+                        body: `Due ${task.dueDisplay || 'today'}! Priority: ${task.priority}`,
+                        data: { taskId: task.id }
+                    },
+                    notificationTrigger,
+                    {
+                        notifyCenter: true,
+                        promptForPermission: true,
+                        promptForAlarm: true,
+                    }
+                );
+
+                if (newId) {
+                    await database.write(async () => {
+                        await task.update(t => {
+                            t.notificationId = newId;
+                        });
+                    });
+
+                    if (options.showFeedback) {
+                        const formattedReminder = formatReminderDateTimeDisplay(notificationTrigger);
+                        pushHomeNotification(
+                            "Task reminder updated",
+                            `${task.name} reminder set for ${formattedReminder}.`,
+                            "success",
+                            TASKS_ROUTE
+                        );
+                        await NotificationScheduler.notifyImmediateUpdate(
+                            'tasks',
+                            `Task reminder updated: ${task.name}`,
+                            `Reminder scheduled for ${formattedReminder}`,
+                            { taskId: task.id }
+                        );
+                    }
+                }
+            }
+        } else if (oldNotificationId) {
+            await NotificationScheduler.cancelNotification(oldNotificationId);
+            await database.write(async () => {
+                await task.update(t => { t.notificationId = undefined; });
+            });
+
+            if (options.showFeedback) {
+                pushHomeNotification(
+                    "Task reminder cancelled",
+                    `${task.name} will no longer trigger reminders.`,
+                    "warning",
+                    TASKS_ROUTE
+                );
+                await NotificationScheduler.notifyImmediateUpdate(
+                    'tasks',
+                    `Task reminder cancelled: ${task.name}`,
+                    task.status === 'done'
+                        ? "Task completed, reminder cleared."
+                        : "Reminder toggled off.",
+                    { taskId: task.id }
+                );
+            }
+        }
+    } catch (err) {
+        console.error('Failed to process task notification job:', err);
+    }
+};
+
+type EventNotificationJobOptions = { showFeedback: boolean; updates?: Partial<Event> };
+const enqueueEventNotificationJob = (eventId: string, options: EventNotificationJobOptions) => {
+    NotificationScheduler.enqueueJob(async () => {
+        await handleEventNotificationJob(eventId, options);
+    });
+};
+
+const handleEventNotificationJob = async (eventId: string, options: EventNotificationJobOptions) => {
+    try {
+        const event = await database.get<Event>('events').find(eventId);
+        const oldNotificationId = event.notificationId;
+        const eventDate = parseReminderDateTime(event.dateString, event.time);
+
+        if (event.reminderOffsetMinutes !== undefined && event.reminderOffsetMinutes < 0) {
+            if (oldNotificationId) {
+                await NotificationScheduler.cancelNotification(oldNotificationId);
+                await database.write(async () => {
+                    await event.update(e => { e.notificationId = undefined; });
+                });
+                if (options.showFeedback) {
+                    pushHomeNotification(
+                        "Event reminder cancelled",
+                        `${event.title} reminders have been disabled.`,
+                        "warning",
+                        EVENTS_ROUTE
+                    );
+                    await NotificationScheduler.notifyImmediateUpdate(
+                        'events',
+                        `Event reminder cancelled: ${event.title}`,
+                        "Reminder removed via settings.",
+                        { eventId: event.id }
+                    );
+                }
+            }
+            return;
+        }
+
+        const activeMemberId = await getActiveMemberId();
+        if (!activeMemberId || event.memberId !== activeMemberId) {
+            if (oldNotificationId) {
+                await NotificationScheduler.cancelNotification(oldNotificationId);
+                await database.write(async () => {
+                    await event.update(e => { e.notificationId = undefined; });
+                });
+            }
+            return;
+        }
+
+        if (!eventDate) {
+            return;
+        }
+
+        const preferredReminderMinutes = await NotificationPreferencesService.getReminderTime('events');
+        const reminderMinutes = event.reminderOffsetMinutes ?? preferredReminderMinutes;
+        const triggerDate = new Date(eventDate.getTime() - reminderMinutes * 60000);
+
+        if (options.updates?.isRecurring === false && event.isRecurring) {
+            if (oldNotificationId) {
+                await NotificationScheduler.cancelNotification(oldNotificationId);
+                await database.write(async () => {
+                    await event.update(e => { e.notificationId = undefined; });
+                });
+            }
+
+            if (triggerDate > new Date()) {
+                const newId = await NotificationScheduler.scheduleNotification(
+                    'events',
+                    {
+                        title: `Event: ${event.title}`,
+                        body: event.location ? `at ${event.location}` : `Starting soon`,
+                        data: { eventId: event.id }
+                    },
+                    triggerDate,
+                    {
+                        repeatType: 'none',
+                        notifyCenter: true,
+                        promptForPermission: true,
+                        promptForAlarm: true,
+                    }
+                );
+                if (newId) {
+                    await database.write(async () => {
+                        await event.update(e => { e.notificationId = newId; });
+                    });
+                    if (options.showFeedback) {
+                        const formattedReminder = formatReminderDateTimeDisplay(triggerDate);
+                        pushHomeNotification(
+                            "Event reminder updated",
+                            `${event.title} reminder set for ${formattedReminder}.`,
+                            "success",
+                            EVENTS_ROUTE
+                        );
+                        await NotificationScheduler.notifyImmediateUpdate(
+                            'events',
+                            `Event reminder updated: ${event.title}`,
+                            `Reminder scheduled for ${formattedReminder}`,
+                            { eventId: event.id }
+                        );
+                    }
+                }
+            }
+            return;
+        }
+
+        if (triggerDate > new Date() || event.isRecurring) {
+            if (oldNotificationId) {
+                await NotificationScheduler.cancelNotification(oldNotificationId);
+            }
+
+            const repeatRule = event.isRecurring ? event.recurrenceRule : undefined;
+            const repeatType = NotificationScheduler.normalizeRepeatType(repeatRule);
+            const repeatMeta = NotificationScheduler.buildRepeatMetaFromRule(repeatRule);
+            const newId = await NotificationScheduler.scheduleNotification(
+                'events',
+                {
+                    title: `Event: ${event.title}`,
+                    body: event.location ? `at ${event.location}` : `Starting soon`,
+                    data: { eventId: event.id }
+                },
+                triggerDate,
+                {
+                    repeatType,
+                    repeatMeta,
+                    notifyCenter: true,
+                    promptForPermission: true,
+                    promptForAlarm: true,
+                }
+            );
+
+            if (newId) {
+                await database.write(async () => {
+                    await event.update(e => { e.notificationId = newId; });
+                });
+                if (options.showFeedback) {
+                    const formattedReminder = formatReminderDateTimeDisplay(triggerDate);
+                    pushHomeNotification(
+                        "Event reminder updated",
+                        `${event.title} reminder set for ${formattedReminder}.`,
+                        "success",
+                        EVENTS_ROUTE
+                    );
+                    await NotificationScheduler.notifyImmediateUpdate(
+                        'events',
+                        `Event reminder updated: ${event.title}`,
+                        `Reminder scheduled for ${formattedReminder}`,
+                        { eventId: event.id }
+                    );
+                }
+            }
+        } else if (oldNotificationId) {
+            await NotificationScheduler.cancelNotification(oldNotificationId);
+            await database.write(async () => {
+                await event.update(e => { e.notificationId = undefined; });
+            });
+            if (options.showFeedback) {
+                pushHomeNotification(
+                    "Event reminder cancelled",
+                    `${event.title} reminder cleared because the event is in the past.`,
+                    "warning",
+                    EVENTS_ROUTE
+                );
+                await NotificationScheduler.notifyImmediateUpdate(
+                    'events',
+                    `Event reminder cancelled: ${event.title}`,
+                    "Reminder cleared because the event no longer has an upcoming occurrence.",
+                    { eventId: event.id }
+                );
+            }
+        }
+    } catch (err) {
+        console.error('Failed to process event notification job:', err);
+    }
+};
+
 export const TaskService = {
     // --- Tasks ---
     observeTasks: () => database.get<Task>('tasks').query().observe(),
@@ -66,48 +339,7 @@ export const TaskService = {
             });
         });
 
-        // 2. Background Notification
-        (async () => {
-            try {
-                // Only schedule notification if task is assigned to active member
-                const activeMemberId = await getActiveMemberId();
-                if (!activeMemberId || task.assigneeId !== activeMemberId) {
-                    return;
-                }
-
-                if (task.status !== 'done' && task.reminderEnabled) {
-                    const triggerDate = parseReminderDateTime(task.dateString, task.dueDisplay);
-                    if (triggerDate && triggerDate > new Date()) {
-                        const reminderMinutes = await NotificationPreferencesService.getReminderTime('tasks');
-                        const notificationTrigger = new Date(triggerDate.getTime() - reminderMinutes * 60000);
-
-                        const notificationId = await NotificationScheduler.scheduleNotification(
-                            'tasks',
-                            {
-                                title: `Task: ${task.name}`,
-                                body: `Due ${task.dueDisplay || 'today'}! Priority: ${task.priority}`,
-                                data: { taskId: task.id }
-                            },
-                            notificationTrigger,
-                            {
-                                notifyCenter: true,
-                                promptForPermission: true,
-                                promptForAlarm: true,
-                            }
-                        );
-                        if (notificationId) {
-                            await database.write(async () => {
-                                await task.update(t => {
-                                    t.notificationId = notificationId;
-                                });
-                            });
-                        }
-                    }
-                }
-            } catch (err) {
-                console.error('Failed to schedule background notification for task:', err);
-            }
-        })();
+        enqueueTaskNotificationJob(task.id, { showFeedback: false });
 
         return task;
     },
@@ -131,93 +363,7 @@ export const TaskService = {
             return t;
         });
 
-        // 2. Background Notification Logic
-        (async () => {
-            try {
-                const oldNotificationId = task.notificationId;
-                
-                // Only schedule notification if task is assigned to active member
-                const activeMemberId = await getActiveMemberId();
-                if (!activeMemberId || task.assigneeId !== activeMemberId) {
-                    // Cancel notification if task is not for active member
-                    if (oldNotificationId) {
-                        await NotificationScheduler.cancelNotification(oldNotificationId);
-                        await database.write(async () => {
-                            await task.update(t => { t.notificationId = undefined; });
-                        });
-                    }
-                    return;
-                }
-
-                const shouldNotify = (task.status !== 'done') && (task.reminderEnabled);
-
-                if (shouldNotify) {
-                    const triggerDate = parseReminderDateTime(task.dateString, task.dueDisplay);
-                    if (triggerDate && triggerDate > new Date()) {
-                        const reminderMinutes = await NotificationPreferencesService.getReminderTime('tasks');
-                        const notificationTrigger = new Date(triggerDate.getTime() - reminderMinutes * 60000);
-
-                        const newId = await NotificationScheduler.updateNotification(
-                            oldNotificationId || null,
-                            'tasks',
-                            {
-                                title: `Task: ${task.name}`,
-                                body: `Due ${task.dueDisplay || 'today'}! Priority: ${task.priority}`,
-                                data: { taskId: task.id }
-                            },
-                            notificationTrigger,
-                            {
-                                notifyCenter: true,
-                                promptForPermission: true,
-                                promptForAlarm: true,
-                            }
-                        );
-                        if (newId) {
-                            await database.write(async () => {
-                                await task.update(t => { t.notificationId = newId; });
-                            });
-
-                            const formattedReminder = formatReminderDateTimeDisplay(notificationTrigger);
-                            pushHomeNotification(
-                                "Task reminder updated",
-                                `${task.name} reminder set for ${formattedReminder}.`,
-                                "success",
-                                TASKS_ROUTE
-                            );
-                            await NotificationScheduler.notifyImmediateUpdate(
-                                'tasks',
-                                `Task reminder updated: ${task.name}`,
-                                `Reminder scheduled for ${formattedReminder}`,
-                                { taskId: task.id }
-                            );
-                        }
-                    }
-                } else if (oldNotificationId && (task.status === 'done' || !task.reminderEnabled)) {
-                    // Cancel
-                    await NotificationScheduler.cancelNotification(oldNotificationId);
-                    await database.write(async () => {
-                        await task.update(t => { t.notificationId = undefined; });
-                    });
-
-                    pushHomeNotification(
-                        "Task reminder cancelled",
-                        `${task.name} will no longer trigger reminders.`,
-                        "warning",
-                        TASKS_ROUTE
-                    );
-                    await NotificationScheduler.notifyImmediateUpdate(
-                        'tasks',
-                        `Task reminder cancelled: ${task.name}`,
-                        task.status === 'done'
-                            ? "Task completed, reminder cleared."
-                            : "Reminder toggled off.",
-                        { taskId: task.id }
-                    );
-                }
-            } catch (err) {
-                console.error('Failed to update background notification for task:', err);
-            }
-        })();
+        enqueueTaskNotificationJob(task.id, { showFeedback: true });
 
         return task;
     },
@@ -267,59 +413,7 @@ export const TaskService = {
             });
         });
 
-        // 2. Background Notification Scheduling (Fire & Forget logic)
-        // We don't await this to return the event faster, but in JS strictly speaking it runs after the stack clears.
-        // However, the DB write is already done.
-        (async () => {
-            try {
-                const eventDate = parseReminderDateTime(event.dateString, event.time);
-                if (eventDate) {
-                    if (event.reminderOffsetMinutes !== undefined && event.reminderOffsetMinutes < 0) {
-                        return;
-                    }
-
-                    const preferredReminderMinutes = await NotificationPreferencesService.getReminderTime('events');
-                    const reminderMinutes = event.reminderOffsetMinutes ?? preferredReminderMinutes;
-                    const triggerDate = new Date(eventDate.getTime() - reminderMinutes * 60000);
-
-                    // Only schedule notification if event is assigned to active member
-                    const activeMemberId = await getActiveMemberId();
-                    if (!activeMemberId || event.memberId !== activeMemberId) {
-                        return;
-                    }
-
-                    if (triggerDate > new Date() || event.isRecurring) {
-                        const repeatRule = event.isRecurring ? event.recurrenceRule : undefined;
-                        const repeatType = NotificationScheduler.normalizeRepeatType(repeatRule);
-                        const repeatMeta = NotificationScheduler.buildRepeatMetaFromRule(repeatRule);
-                        const notificationId = await NotificationScheduler.scheduleNotification(
-                            'events',
-                            {
-                                title: `Event: ${event.title}`,
-                                body: event.location ? `at ${event.location}` : `Starting soon`,
-                                data: { eventId: event.id }
-                            },
-                            triggerDate,
-                            {
-                                repeatType,
-                                repeatMeta,
-                                notifyCenter: true,
-                                promptForPermission: true,
-                                promptForAlarm: true,
-                            }
-                        );
-
-                        if (notificationId) {
-                            await database.write(async () => {
-                                await event.update(e => { e.notificationId = notificationId; });
-                            });
-                        }
-                    }
-                }
-            } catch (err) {
-                console.error('Failed to schedule background notification for event:', err);
-            }
-        })();
+        enqueueEventNotificationJob(event.id, { showFeedback: false });
 
         return event;
     },
@@ -348,157 +442,7 @@ export const TaskService = {
             return e;
         });
 
-        // 2. Background Notification Rescheduling
-        (async () => {
-            try {
-                const oldNotificationId = event.notificationId;
-                const eventDate = parseReminderDateTime(event.dateString, event.time);
-
-                if (event.reminderOffsetMinutes !== undefined && event.reminderOffsetMinutes < 0) {
-                    if (oldNotificationId) {
-                        await NotificationScheduler.cancelNotification(oldNotificationId);
-                        await database.write(async () => {
-                            await event.update(e => { e.notificationId = undefined; });
-                        });
-                        pushHomeNotification(
-                            "Event reminder cancelled",
-                            `${event.title} reminders have been disabled.`,
-                            "warning",
-                            EVENTS_ROUTE
-                        );
-                        await NotificationScheduler.notifyImmediateUpdate(
-                            'events',
-                            `Event reminder cancelled: ${event.title}`,
-                            "Reminder removed via settings.",
-                            { eventId: event.id }
-                        );
-                    }
-                    return;
-                }
-
-                // Only schedule notification if event is assigned to active member
-                const activeMemberId = await getActiveMemberId();
-                if (!activeMemberId || event.memberId !== activeMemberId) {
-                    // Cancel notification if event is not for active member
-                    if (oldNotificationId) {
-                        await NotificationScheduler.cancelNotification(oldNotificationId);
-                        await database.write(async () => {
-                            await event.update(e => { e.notificationId = undefined; });
-                        });
-                    }
-                    return;
-                }
-
-                if (eventDate) {
-                    const preferredReminderMinutes = await NotificationPreferencesService.getReminderTime('events');
-                    const reminderMinutes = event.reminderOffsetMinutes ?? preferredReminderMinutes;
-                    const triggerDate = new Date(eventDate.getTime() - reminderMinutes * 60000);
-
-                    // If removing repeat mode, only cancel future notifications, don't delete history
-                    if (updates.isRecurring === false && event.isRecurring) {
-                        // Event was recurring but is now non-recurring
-                        // Cancel the recurring notification but keep event data
-                        if (oldNotificationId) {
-                            await NotificationScheduler.cancelNotification(oldNotificationId);
-                            await database.write(async () => {
-                                await event.update(e => { e.notificationId = undefined; });
-                            });
-                        }
-                        // Schedule a one-time notification if the event is in the future
-                        if (triggerDate > new Date()) {
-                            const newId = await NotificationScheduler.scheduleNotification(
-                                'events',
-                                {
-                                    title: `Event: ${event.title}`,
-                                    body: event.location ? `at ${event.location}` : `Starting soon`,
-                                    data: { eventId: event.id }
-                                },
-                                triggerDate,
-                                {
-                                    repeatType: 'none',
-                                    notifyCenter: true,
-                                    promptForPermission: true,
-                                    promptForAlarm: true,
-                                }
-                            );
-                            if (newId) {
-                                await database.write(async () => {
-                                    await event.update(e => { e.notificationId = newId; });
-                                });
-                            }
-                        }
-                        return;
-                    }
-
-                    if (triggerDate > new Date() || event.isRecurring) {
-                        // We use scheduleNotification directly as updateNotification implies just swapping IDs, 
-                        // but we need to handle cancel + new with potential recursion rule changes.
-                        if (oldNotificationId) {
-                            await NotificationScheduler.cancelNotification(oldNotificationId);
-                        }
-
-                        const repeatRule = event.isRecurring ? event.recurrenceRule : undefined;
-                        const repeatType = NotificationScheduler.normalizeRepeatType(repeatRule);
-                        const repeatMeta = NotificationScheduler.buildRepeatMetaFromRule(repeatRule);
-                        const newId = await NotificationScheduler.scheduleNotification(
-                            'events',
-                            {
-                                title: `Event: ${event.title}`,
-                                body: event.location ? `at ${event.location}` : `Starting soon`,
-                                data: { eventId: event.id }
-                            },
-                            triggerDate,
-                            {
-                                repeatType,
-                                repeatMeta,
-                                notifyCenter: true,
-                                promptForPermission: true,
-                                promptForAlarm: true,
-                            }
-                        );
-
-                        if (newId) {
-                            await database.write(async () => {
-                                await event.update(e => { e.notificationId = newId; });
-                            });
-                            const formattedReminder = formatReminderDateTimeDisplay(triggerDate);
-                            pushHomeNotification(
-                                "Event reminder updated",
-                                `${event.title} reminder set for ${formattedReminder}.`,
-                                "success",
-                                EVENTS_ROUTE
-                            );
-                            await NotificationScheduler.notifyImmediateUpdate(
-                                'events',
-                                `Event reminder updated: ${event.title}`,
-                                `Reminder scheduled for ${formattedReminder}`,
-                                { eventId: event.id }
-                            );
-                        }
-                    } else if (oldNotificationId) {
-                        // Past event, cancel old
-                        await NotificationScheduler.cancelNotification(oldNotificationId);
-                        await database.write(async () => {
-                            await event.update(e => { e.notificationId = undefined; });
-                        });
-                        pushHomeNotification(
-                            "Event reminder cancelled",
-                            `${event.title} reminder cleared because the event is in the past.`,
-                            "warning",
-                            EVENTS_ROUTE
-                        );
-                        await NotificationScheduler.notifyImmediateUpdate(
-                            'events',
-                            `Event reminder cancelled: ${event.title}`,
-                            "Reminder cleared because the event no longer has an upcoming occurrence.",
-                            { eventId: event.id }
-                        );
-                    }
-                }
-            } catch (err) {
-                console.error('Failed to reschedule background notification for event:', err);
-            }
-        })();
+        enqueueEventNotificationJob(event.id, { showFeedback: true, updates });
 
         return event;
     },

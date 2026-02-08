@@ -1,5 +1,11 @@
-import React, { useCallback } from "react";
-import { View, StyleSheet, Pressable } from "react-native";
+import React, { useCallback, useState } from "react";
+import {
+  RefreshControl,
+  ScrollView,
+  View,
+  StyleSheet,
+  Pressable,
+} from "react-native";
 import { NavigationProp, useNavigation } from "@react-navigation/native";
 import { theme } from "../../theme";
 import { BottomNavigation, BottomNavRoute } from "./BottomNavigation";
@@ -8,8 +14,11 @@ import { QuickAddModal } from "../modals/QuickAddModal";
 import { AddEventModal } from "../modals/AddEventModal";
 import { AddTaskModal } from "../modals/AddTaskModal";
 import { useTheme, useThemeRadius } from "../../contexts/ThemeContext";
+import { useSyncStatus } from "../../hooks/useSyncStatus";
+import { PanGestureHandler, State, PanGestureHandlerStateChangeEvent } from "react-native-gesture-handler";
+import { useSidebar } from "../../contexts/SidebarContext";
 
-interface AppLayoutProps {
+type AppLayoutProps = {
   children: React.ReactNode;
   showNav?: boolean;
   showAddButton?: boolean;
@@ -17,11 +26,8 @@ interface AppLayoutProps {
   style?: object;
   navActiveRoute?: BottomNavRoute;
   navOnNavigate?: (route: BottomNavRoute) => void;
-}
-
-import { PanGestureHandler, State, PanGestureHandlerStateChangeEvent } from "react-native-gesture-handler";
-import { useSidebar } from "../../contexts/SidebarContext";
-import { Dimensions } from "react-native";
+  enablePullToRefresh?: boolean;
+};
 
 export const AppLayout: React.FC<AppLayoutProps> = ({
   children,
@@ -31,15 +37,13 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   style = {},
   navActiveRoute,
   navOnNavigate,
+  enablePullToRefresh = true,
 }) => {
-  type MainTabsParamList = {
-    MainTabs: { screen?: BottomNavRoute };
-  };
-
-  const navigation = useNavigation<NavigationProp<MainTabsParamList>>();
-  const { themeVersion } = useTheme(); // Force re-render on theme change
+  const navigation = useNavigation<NavigationProp<{ MainTabs: { screen?: BottomNavRoute } }>>();
+  const { themeVersion } = useTheme();
   const radius = useThemeRadius();
   const { openSidebar } = useSidebar();
+  const { refreshing, refreshNow } = useSyncStatus();
 
   const handleNavigate = useCallback(
     (route: BottomNavRoute) => {
@@ -48,34 +52,52 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     [navigation]
   );
 
-  const [showQuickAdd, setShowQuickAdd] = React.useState(false);
-  const [showAddEvent, setShowAddEvent] = React.useState(false);
-  const [showAddTask, setShowAddTask] = React.useState(false);
-
-  const onGestureEvent = (event: PanGestureHandlerStateChangeEvent) => {
-    if (event.nativeEvent.state === State.ACTIVE) {
-      const { x, translationX } = event.nativeEvent;
-      // Detect swipe from left edge (moving Right to open)
-      // Increased edge zone to 60px for easier activation
-      if (x < 60 && translationX > 20) {
-        openSidebar();
-      }
+  const onGestureEvent = useCallback((event: PanGestureHandlerStateChangeEvent) => {
+    if (event.nativeEvent.state !== State.ACTIVE) return;
+    const { x, translationX } = event.nativeEvent;
+    if (x < 60 && translationX > 20) {
+      openSidebar();
     }
-  };
+  }, [openSidebar]);
+
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [showAddEvent, setShowAddEvent] = useState(false);
+  const [showAddTask, setShowAddTask] = useState(false);
+
+  const refreshControl = enablePullToRefresh ? (
+    <RefreshControl
+      refreshing={refreshing}
+      onRefresh={refreshNow}
+      tintColor={theme.colors.primary}
+      colors={[theme.colors.primary]}
+    />
+  ) : undefined;
 
   return (
     <PanGestureHandler
       onHandlerStateChange={onGestureEvent}
-      // activeOffsetX: [-left_fail, +right_activate]
-      // We want to activate only on Right swipe (positive). 
-      // We set left threshold extremely low (-500) effectively ignoring left swipes
-      // We set right threshold to 10px for quick activation
       activeOffsetX={[-500, 20]}
       activeOffsetY={[-10, 10]}
       failOffsetY={[-10, 10]}
     >
       <View style={[styles.container, { backgroundColor: theme.colors.background }, style]}>
-        <View style={styles.content}>{children}</View>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.content}
+          refreshControl={refreshControl}
+          keyboardShouldPersistTaps="handled"
+          bounces={false}
+        >
+          {children}
+        </ScrollView>
+        <QuickAddModal
+          open={showQuickAdd}
+          onClose={() => setShowQuickAdd(false)}
+          onAddEvent={() => setShowAddEvent(true)}
+          onAddTask={() => setShowAddTask(true)}
+        />
+        <AddEventModal open={showAddEvent} onOpenChange={setShowAddEvent} />
+        <AddTaskModal open={showAddTask} onClose={() => setShowAddTask(false)} />
         {showNav && (
           <BottomNavigation
             activeRoute={navActiveRoute}
@@ -97,17 +119,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
             <AppIcon name="plus" size={34} color={theme.colors.primaryForeground} />
           </Pressable>
         )}
-
-        <QuickAddModal
-          open={showQuickAdd}
-          onClose={() => setShowQuickAdd(false)}
-          onAddEvent={() => setShowAddEvent(true)}
-          onAddTask={() => setShowAddTask(true)}
-        />
-
-        <AddEventModal open={showAddEvent} onOpenChange={setShowAddEvent} />
-        <AddTaskModal open={showAddTask} onClose={() => setShowAddTask(false)} />
-      </View >
+      </View>
     </PanGestureHandler>
   );
 };
@@ -116,17 +128,19 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
-    position: "relative",
+  },
+  scrollView: {
+    flex: 1,
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
   },
   addButton: {
     position: "absolute",
     right: 24,
     bottom: 20,
-    zIndex: 9999, // Super high z-index
-    elevation: 20, // High elevation for Android
+    zIndex: 9999,
+    elevation: 20,
     width: 56,
     height: 56,
     borderRadius: 16,

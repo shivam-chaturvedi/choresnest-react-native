@@ -9,7 +9,7 @@ import {
   Modal,
 } from "react-native";
 import { useNavigation, NavigationProp } from "@react-navigation/native";
-import { AppLayout } from "../components/layout/AppLayout";
+import { AppLayout } from "../components/layout";
 import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { useSidebar } from "../contexts/SidebarContext";
 import { AppIcon, AppIconName } from "../components/ui/AppIcon";

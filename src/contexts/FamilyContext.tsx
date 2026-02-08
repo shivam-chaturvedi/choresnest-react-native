@@ -1,10 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { PROFILE_COLORS } from "../constants/profileColors";
+import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from "react";
 import { FamilyService } from "../services/FamilyService";
 import { TaskService } from "../services/TaskService";
 import { VaultService } from "../services/VaultService";
-import { Q } from '@nozbe/watermelondb';
-import { safeParseDate, safeFormat, ensureDate } from "../utils/SafeDateUtils";
 
 // Re-export interfaces (keeping compatibility or updating as needed)
 export interface FamilyMember {
@@ -124,19 +121,14 @@ export interface FamilyContextValue {
   addCategory: () => void;
 }
 
-const formatIsoDate = (value: string | Date | undefined): string => {
-  const fallback = new Date().toISOString().split('T')[0];
-  return safeFormat(value, "yyyy-MM-dd", fallback);
-};
-
-const mapEventModelToCalendarEvent = (eventModel: any): CalendarEvent => ({
+const mapEventModelToCalendarEvent = (eventModel: any, membersById: Map<string, FamilyMember>): CalendarEvent => ({
   id: eventModel.id,
   title: eventModel.title,
   icon: eventModel.icon,
-  date: formatIsoDate(eventModel.dateString),
+  date: eventModel.dateString || "",
   time: eventModel.time,
   endTime: eventModel.endTime,
-  memberId: eventModel.memberId,
+  memberId: eventModel.memberId && membersById.has(eventModel.memberId) ? eventModel.memberId : undefined,
   description: eventModel.description,
   notes: eventModel.notes,
   recurrenceRule: eventModel.recurrenceRule,
@@ -149,53 +141,110 @@ const mapEventModelToCalendarEvent = (eventModel: any): CalendarEvent => ({
   timeZone: eventModel.timeZone,
 });
 
-const mapTaskModelToTask = (taskModel: any): Task => ({
+const mapTaskModelToTask = (taskModel: any, membersById: Map<string, FamilyMember>): Task => ({
   id: taskModel.id,
   name: taskModel.name,
   status: taskModel.status,
   priority: taskModel.priority,
   due: taskModel.dueDisplay,
-  date: formatIsoDate(taskModel.dateString),
-  assignee: taskModel.assigneeId,
+  date: taskModel.dateString || "",
+  assignee: taskModel.assigneeId && membersById.has(taskModel.assigneeId) ? taskModel.assigneeId : undefined,
   tab: taskModel.tab,
   icon: taskModel.icon,
 });
+
+const VALID_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+const isValidDateString = (value: any): value is string => typeof value === "string" && VALID_DATE_REGEX.test(value);
+
+const normalizeVirtualId = (id: string): string => {
+  if (!id) return id;
+  const match = id.match(/^(.+?)_\d{4}-\d{2}-\d{2}_/);
+  return match && match[1] ? match[1] : id;
+};
 
 export const FamilyContext = createContext<FamilyContextValue | undefined>(undefined);
 
 export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [familyName, setFamilyNameState] = useState("Family Chores");
   const [members, setMembers] = useState<FamilyMember[]>([]);
-  const [events, setEvents] = useState<any[]>([]);
-  const [tasks, setTasks] = useState<any[]>([]);
+  const [rawEvents, setRawEvents] = useState<any[]>([]);
+  const [rawTasks, setRawTasks] = useState<any[]>([]);
   const [globalVault, setGlobalVault] = useState<any[]>([]);
   const [memberVaults, setMemberVaults] = useState<Record<string, any[]>>({});
   const [groceryList, setGroceryList] = useState<GroceryItem[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
 
-  const upsertEvent = (eventModel: any) => {
-    const normalized = mapEventModelToCalendarEvent(eventModel);
-    setEvents(prev => {
-      const filtered = prev.filter(ev => ev.id !== normalized.id);
-      return [...filtered, normalized];
+  const membersById = useMemo(() => {
+    const map = new Map<string, FamilyMember>();
+    members.forEach(member => {
+      map.set(member.id, member);
+    });
+    return map;
+  }, [members]);
+
+  const events = useMemo(() => {
+    const invalidDates: any[] = [];
+    const missingMembers: any[] = [];
+
+    const filtered = rawEvents.filter(eventModel => {
+      if (!isValidDateString(eventModel.dateString)) {
+        invalidDates.push(eventModel);
+        return false;
+      }
+      if (eventModel.memberId && !membersById.has(eventModel.memberId)) {
+        missingMembers.push(eventModel);
+        return false;
+      }
+      return true;
+    });
+
+    if (invalidDates.length > 0) {
+      console.warn(`FamilyContext: Skipping ${invalidDates.length} events with invalid dateString`.trim());
+    }
+    if (missingMembers.length > 0) {
+      console.warn(`FamilyContext: Skipping ${missingMembers.length} events with missing members`.trim());
+    }
+
+    return filtered.map(eventModel => mapEventModelToCalendarEvent(eventModel, membersById));
+  }, [rawEvents, membersById]);
+
+  const upsertRawEvent = (eventModel: any) => {
+    setRawEvents(prev => {
+      const filtered = prev.filter(ev => ev.id !== eventModel.id);
+      return [...filtered, eventModel];
     });
   };
 
-  const removeEvent = (id: string) => {
-    setEvents(prev => prev.filter(ev => ev.id !== id));
+  const removeRawEvent = (id: string) => {
+    setRawEvents(prev => prev.filter(ev => ev.id !== id));
   };
 
-  const upsertTask = (taskModel: any) => {
-    const normalized = mapTaskModelToTask(taskModel);
-    setTasks(prev => {
-      const filtered = prev.filter(tsk => tsk.id !== normalized.id);
-      return [...filtered, normalized];
+  const tasks = useMemo(() => {
+    const invalidDates: any[] = [];
+    const missingAssignees: any[] = [];
+
+    const filtered = rawTasks.filter(taskModel => {
+      if (!isValidDateString(taskModel.dateString)) {
+        invalidDates.push(taskModel);
+        return false;
+      }
+      if (taskModel.assigneeId && !membersById.has(taskModel.assigneeId)) {
+        missingAssignees.push(taskModel);
+        return false;
+      }
+      return true;
     });
-  };
 
-  const removeTask = (id: string) => {
-    setTasks(prev => prev.filter(tsk => tsk.id !== id));
-  };
+    if (invalidDates.length > 0) {
+      console.warn(`FamilyContext: Skipping ${invalidDates.length} tasks with invalid dateString`.trim());
+    }
+    if (missingAssignees.length > 0) {
+      console.warn(`FamilyContext: Skipping ${missingAssignees.length} tasks with missing assignees`.trim());
+    }
+
+    return filtered.map(taskModel => mapTaskModelToTask(taskModel, membersById));
+  }, [rawTasks, membersById]);
 
   // --- Load Family Name ---
   useEffect(() => {
@@ -281,19 +330,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       const sub = TaskService.observeEvents().subscribe({
         next: (rawEvents) => {
           console.log(`FamilyContext: Received ${rawEvents.length} events from DB`);
-          try {
-            const mapped = rawEvents
-              .filter(e => {
-                const isValid = safeParseDate(e.dateString);
-                if (!isValid) console.warn(`FamilyContext: Invalid date for event ${e.id}: ${e.dateString}`);
-                return isValid;
-              })
-              .map(mapEventModelToCalendarEvent);
-            console.log(`FamilyContext: Updating events state with ${mapped.length} items`);
-            setEvents(mapped);
-          } catch (error) {
-            console.error('Error mapping events:', error);
-          }
+          setRawEvents(rawEvents);
         },
         error: (error) => {
           console.error('Error observing events:', error);
@@ -305,17 +342,12 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   }, []);
 
-  // ... (inside observeTasks)
   useEffect(() => {
     try {
       const sub = TaskService.observeTasks().subscribe({
         next: (rawTasks) => {
-          try {
-            const mapped = rawTasks.map(mapTaskModelToTask);
-            setTasks(mapped);
-          } catch (error) {
-            console.error('Error mapping tasks:', error);
-          }
+          console.log(`FamilyContext: Received ${rawTasks.length} tasks from DB`);
+          setRawTasks(rawTasks);
         },
         error: (error) => {
           console.error('Error observing tasks:', error);
@@ -329,9 +361,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const addTask = async (t: any) => {
     try {
-      const task = await TaskService.addTask(t);
-      upsertTask(task);
-      return task;
+      return await TaskService.addTask(t);
     } catch (error) {
       console.error('Failed to add task:', error);
       throw new Error('Failed to add task. Please try again.');
@@ -340,11 +370,8 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const updateTask = async (id: string, updates: any) => {
     try {
-      const task = await TaskService.updateTask(id, updates);
-      if (task) {
-        upsertTask(task);
-      }
-      return task;
+      const normalizedId = normalizeVirtualId(id);
+      return await TaskService.updateTask(normalizedId, updates);
     } catch (error) {
       console.error('Failed to update task:', error);
       throw new Error('Failed to update task. Please try again.');
@@ -353,19 +380,18 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const deleteTask = async (id: string) => {
     try {
-      return await TaskService.deleteTask(id);
+      const normalizedId = normalizeVirtualId(id);
+      return await TaskService.deleteTask(normalizedId);
     } catch (error) {
       console.error('Failed to delete task:', error);
       throw new Error('Failed to delete task. Please try again.');
-    } finally {
-      removeTask(id);
     }
   };
 
   const addEvent = async (e: any) => {
     try {
       const event = await TaskService.addEvent(e);
-      upsertEvent(event);
+      upsertRawEvent(event);
       return event;
     } catch (error) {
       console.error('Failed to add event:', error);
@@ -375,22 +401,9 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const updateEvent = async (id: string, updates: any) => {
     try {
-      // Handle virtual occurrences (hourly recurring events generate virtual IDs like: originalId_date_hour)
-      // Extract the original event ID if this is a virtual occurrence
-      let actualId = id;
-      const datePattern = /_\d{4}-\d{2}-\d{2}_/; // Pattern: _YYYY-MM-DD_
-      if (datePattern.test(id)) {
-        // Extract the original event ID (everything before the first date pattern)
-        const match = id.match(/^(.+?)_\d{4}-\d{2}-\d{2}_/);
-        if (match && match[1]) {
-          actualId = match[1];
-        }
-      }
-      
-      const event = await TaskService.updateEvent(actualId, updates);
-      if (event) {
-        upsertEvent(event);
-      }
+      const normalizedId = normalizeVirtualId(id);
+      const event = await TaskService.updateEvent(normalizedId, updates);
+      upsertRawEvent(event);
       return event;
     } catch (error) {
       console.error('Failed to update event:', error);
@@ -400,32 +413,13 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const deleteEvent = async (id: string) => {
     try {
-      // Handle virtual occurrences (hourly recurring events generate virtual IDs like: originalId_date_hour)
-      // Extract the original event ID if this is a virtual occurrence
-      let actualId = id;
-      const datePattern = /_\d{4}-\d{2}-\d{2}_/; // Pattern: _YYYY-MM-DD_
-      if (datePattern.test(id)) {
-        // Extract the original event ID (everything before the first date pattern)
-        const match = id.match(/^(.+?)_\d{4}-\d{2}-\d{2}_/);
-        if (match && match[1]) {
-          actualId = match[1];
-        }
-      }
-      
-      return await TaskService.deleteEvent(actualId);
+      const normalizedId = normalizeVirtualId(id);
+      const result = await TaskService.deleteEvent(normalizedId);
+      removeRawEvent(normalizedId);
+      return result;
     } catch (error) {
       console.error('Failed to delete event:', error);
       throw new Error('Failed to delete event. Please try again.');
-    } finally {
-      // Remove both the virtual and actual event from local state
-      removeEvent(id);
-      const datePattern = /_\d{4}-\d{2}-\d{2}_/;
-      if (datePattern.test(id)) {
-        const match = id.match(/^(.+?)_\d{4}-\d{2}-\d{2}_/);
-        if (match && match[1]) {
-          removeEvent(match[1]);
-        }
-      }
     }
   };
 
@@ -598,7 +592,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         updateTask,
         deleteTask,
 
-        categories: [], // TODO: ListCategoryService
+        categories,
         addCategory: () => { },
       }}
     >

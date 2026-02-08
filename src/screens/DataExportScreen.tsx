@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { AppLayout } from "../components/layout/AppLayout";
+import { AppLayout } from "../components/layout";
 import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import {
   ChevronLeft,

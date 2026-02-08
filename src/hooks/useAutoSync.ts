@@ -1,13 +1,26 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { SyncService } from '../services/SyncService';
 import { database } from '../database';
 import { useAuth } from '../contexts/AuthContext';
+
+export const shouldTriggerAutoSync = (
+    isSyncingFlag: boolean,
+    lastSync: number,
+    now: number,
+    minInterval: number
+): boolean => {
+    if (isSyncingFlag) {
+        return false;
+    }
+    return now - lastSync >= minInterval;
+};
 
 /**
  * Hook to automatically trigger sync after database changes
  */
 export const useAutoSync = () => {
     const { isAuthenticated, isGuest } = useAuth();
+    const syncStateRef = useRef(SyncService.isSyncing());
 
     useEffect(() => {
         if (!isAuthenticated || isGuest) {
@@ -21,16 +34,17 @@ export const useAutoSync = () => {
         const DEBOUNCE_MS = 5000; // 5 seconds (increased from 2)
         const MIN_SYNC_INTERVAL = 10000; // Minimum 10 seconds between syncs
 
+        const statusUnsubscribe = SyncService.onSyncStatusChange(syncing => {
+            syncStateRef.current = syncing;
+        });
+
+        syncStateRef.current = SyncService.isSyncing();
+
         const triggerSync = () => {
             const now = Date.now();
-            
-            // Skip if sync is already in progress
-            if (syncInProgress) {
-                return;
-            }
-            
-            // Skip if synced too recently
-            if (now - lastSyncTime < MIN_SYNC_INTERVAL) {
+            const isSyncingFlag = syncStateRef.current;
+
+            if (!shouldTriggerAutoSync(isSyncingFlag, lastSyncTime, now, MIN_SYNC_INTERVAL)) {
                 return;
             }
 
@@ -76,10 +90,8 @@ export const useAutoSync = () => {
             'budgets',
             'folders',
             'notes',
-            'app_lock',
             'notification_preferences',
             'quiet_hours',
-            'app_settings',
         ];
 
         collections.forEach(collectionName => {
@@ -99,6 +111,7 @@ export const useAutoSync = () => {
                 clearTimeout(syncTimeout);
             }
             subscriptions.forEach(sub => sub.unsubscribe());
+            statusUnsubscribe();
         };
     }, [isAuthenticated, isGuest]);
 };

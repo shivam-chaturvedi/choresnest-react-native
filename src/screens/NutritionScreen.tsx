@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
-import { AppLayout } from '../components/layout/AppLayout';
+import { AppLayout } from '../components/layout';
 import { theme } from '../theme';
 import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import { Camera, AlertTriangle, TrendingUp, Check, ChevronRight, Heart, Droplet, Flame, Apple } from 'lucide-react-native';

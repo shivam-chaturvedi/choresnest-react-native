@@ -15,7 +15,7 @@ import {
   Modal,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { AppLayout } from "../components/layout/AppLayout";
+import { AppLayout } from "../components/layout";
 import { useNavigation } from "@react-navigation/native";
 import { useFamily, CalendarEvent, Task } from "../contexts/FamilyContext";
 import { MealType, useMealPlan } from "../contexts/MealPlanContext";

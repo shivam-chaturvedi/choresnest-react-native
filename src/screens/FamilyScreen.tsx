@@ -6,7 +6,7 @@ import {
   ScrollView,
   Pressable,
 } from "react-native";
-import { AppLayout } from "../components/layout/AppLayout";
+import { AppLayout } from "../components/layout";
 import { useFamily } from "../contexts/FamilyContext";
 import { theme } from "../theme";
 import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';

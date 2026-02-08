@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { format } from "date-fns"; // Keeping specific functions if needed, but we'll try to use safeFormat
-import { toZonedTime } from "date-fns-tz";
+import { formatInTimeZone, toZonedTime, getTimezoneOffset } from "date-fns-tz";
 import { safeFormat, ensureDate, safeParseDate } from "../../utils/SafeDateUtils";
 import {
   Modal,
@@ -263,7 +262,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         ? (members.find((m: any) => m.isActive) || members[0])
         : null;
 
-      setMemberId(activeMemberObj?.id || "1");
+      setMemberId(activeMemberObj?.id || members[0]?.id || "");
 
       // Auto-set color based on active/initial member
       const initialColor = activeMemberObj ? activeMemberObj.color : "member-blue";
@@ -324,21 +323,47 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
     const selectedMember = members.find((m: any) => m.id === memberId);
     if (selectedMember) {
       setColor(selectedMember.color);
+    } else if (members.length > 0 && !memberId) {
+      const active = members.find((m: any) => m.isActive) || members[0];
+      setMemberId(active.id);
+      setColor(active.color);
     }
   }, [memberId, members]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     try {
       if (!name.trim()) {
         Alert.alert("Missing Information", `Please enter a ${activeTab === 'event' ? 'event' : 'task'} name.`);
         return;
       }
 
-      // Format date as YYYY-MM-DD using local time
-      const formattedDate = safeFormat(startDate, "yyyy-MM-dd");
+      const eventTimeZone = eventToEdit?.timeZone || currentCountry.timeZone;
+      const fallbackDate = new Date().toISOString().split("T")[0];
 
-      // Format time as HH:MM AM/PM
-      // For all-day events, set start time to 12:00 AM and end time to 11:59 PM
+      const toEventUtc = (date: Date | null, time: Date | null, includeTime: boolean) => {
+        if (!date) return undefined;
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        const day = date.getDate();
+        const hours = includeTime && time ? time.getHours() : 0;
+        const minutes = includeTime && time ? time.getMinutes() : 0;
+        const utcCandidate = Date.UTC(year, month, day, hours, minutes, 0, 0);
+        const offset = getTimezoneOffset(eventTimeZone, new Date(utcCandidate));
+        return new Date(utcCandidate - offset);
+      };
+
+      const formatInEventZone = (date: Date | null, time: Date | null, pattern: string, includeTime: boolean, fallback?: string) => {
+        const utcDate = toEventUtc(date, time, includeTime);
+        if (!utcDate) return fallback;
+        return formatInTimeZone(utcDate, eventTimeZone, pattern);
+      };
+
+      const formatDateOnly = (date: Date | null) => {
+        return formatInEventZone(date, null, "yyyy-MM-dd", false);
+      };
+
+      const formattedDate = formatInEventZone(startDate, startTime, "yyyy-MM-dd", true, fallbackDate) || fallbackDate;
+
       let formattedTime: string;
       let formattedEndTime: string | undefined;
 
@@ -346,22 +371,28 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         formattedTime = "12:00 AM";
         formattedEndTime = "11:59 PM";
       } else {
-        formattedTime = startTime.toLocaleTimeString("en-US", {
+        const fallbackTime = startTime.toLocaleTimeString("en-US", {
           hour: "2-digit",
           minute: "2-digit",
         });
-        formattedEndTime = endTime ? endTime.toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }) : undefined;
+        formattedTime = formatInEventZone(startDate, startTime, "hh:mm aa", true, fallbackTime) || fallbackTime;
+
+        if (endTime) {
+          const fallbackEndTime = endTime.toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+          formattedEndTime = formatInEventZone(endDate || startDate, endTime, "hh:mm aa", true, fallbackEndTime) || fallbackEndTime;
+        } else {
+          formattedEndTime = undefined;
+        }
       }
 
       const reminderOffsetMinutes = reminder ? parseInt(reminderTime, 10) : -1;
-      const eventTimeZone = eventToEdit?.timeZone || currentCountry.timeZone;
 
       if (activeTab === 'task') {
         if (isEditing && eventToEdit) {
-          updateTask(eventToEdit.id, {
+          await updateTask(eventToEdit.id, {
             name: name.trim(),
             icon: taskIcon,
             priority: taskPriority as any,
@@ -370,7 +401,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             assigneeId: memberId,
           });
         } else {
-          addTask({
+          await addTask({
             name: name.trim(),
             icon: taskIcon,
             priority: taskPriority as any,
@@ -383,7 +414,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         }
       } else {
         if (isEditing && eventToEdit) {
-          updateEvent(eventToEdit.id, {
+          await updateEvent(eventToEdit.id, {
             title: name.trim(),
             description: description.trim(),
             notes: notes.trim(),
@@ -393,10 +424,10 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             icon: selectedIcon,
             memberId,
             location,
-            endDate: endDate ? safeFormat(endDate, "yyyy-MM-dd") : undefined,
+            endDate: formatInEventZone(endDate, endTime, "yyyy-MM-dd", true),
             isRecurring: repeatType !== 'never',
             recurrenceRule: repeatType !== 'never' ? repeatType : undefined,
-            recurrenceEndDate: repeatEndDate ? safeFormat(repeatEndDate, "yyyy-MM-dd") : undefined,
+            recurrenceEndDate: formatDateOnly(repeatEndDate),
             reminderOffsetMinutes,
             timeZone: eventTimeZone,
           });
@@ -413,7 +444,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             }
           }
 
-          addEvent({
+          await addEvent({
             title: name.trim(),
             description: description.trim(),
             notes: notes.trim(),
@@ -423,10 +454,10 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             icon: selectedIcon,
             memberId,
             location,
-            endDate: endDate ? safeFormat(endDate, "yyyy-MM-dd") : undefined,
+            endDate: formatInEventZone(endDate, endTime, "yyyy-MM-dd", true),
             isRecurring: repeatType !== 'never',
             recurrenceRule: repeatType !== 'never' ? repeatType : undefined,
-            recurrenceEndDate: repeatEndDate ? safeFormat(repeatEndDate, "yyyy-MM-dd") : undefined,
+            recurrenceEndDate: formatDateOnly(repeatEndDate),
             reminderOffsetMinutes,
             timeZone: currentCountry.timeZone,
           });
