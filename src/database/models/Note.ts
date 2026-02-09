@@ -18,6 +18,7 @@ export class Note extends Model {
     @field('is_starred') isStarred!: boolean;
     @field('updated_at') updatedAt!: number;
     @text('folder_id') folderId!: string;
+    @field('created_at') createdAt!: number;
 
     @json('blocks_json', (json: any) => json) blocks!: any[];
 }

@@ -8,6 +8,10 @@ import { parseReminderDateTime } from '../utils/ReminderDateTimeUtils';
 import { NotificationCenter, NotificationRoute } from './NotificationCenter';
 import { CountryPreferenceService } from './CountryPreferenceService';
 import { formatDateTime } from '../utils/countryFormatting';
+import { pushEventToSupabase } from './pushEventToSupabase';
+import { pushTaskToSupabase } from './pushTaskToSupabase';
+import { SyncService } from './SyncService';
+import { supabase } from '../config/supabase';
 
 const formatReminderDateTimeDisplay = (date: Date) =>
     formatDateTime(date, CountryPreferenceService.getCurrentCountry(), {
@@ -25,6 +29,22 @@ const severityMeta: Record<"success" | "warning" | "default", { tone: string; te
 
 const TASKS_ROUTE: NotificationRoute = { tab: "more", screen: "Tasks" };
 const EVENTS_ROUTE: NotificationRoute = { tab: "calendar" };
+
+const attemptInstantDelete = async (table: 'tasks' | 'events', id: string) => {
+    try {
+        if (!(await SyncService.isOnline())) {
+            return;
+        }
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError || !user) {
+            console.warn('Instant delete skipped: user not authenticated', authError);
+            return;
+        }
+        await supabase.from(table).delete().eq('id', id).eq('profile_id', user.id);
+    } catch (err) {
+        console.warn(`Instant ${table} delete failed`, err);
+    }
+};
 
 type GroceryItemPayload = Partial<ListItem> & { addedBy?: string };
 
@@ -335,11 +355,20 @@ export const TaskService = {
                 t.tab = data.tab || 'My Tasks';
                 t.icon = data.icon || '📝';
                 t.reminderEnabled = data.reminderEnabled ?? true;
+                t.createdAt = Date.now();
                 t.updatedAt = Date.now();
             });
         });
 
         enqueueTaskNotificationJob(task.id, { showFeedback: false });
+
+        try {
+            if (await SyncService.isOnline()) {
+                void pushTaskToSupabase(task.id);
+            }
+        } catch (onlineError) {
+            console.warn('Instant task push skipped (connectivity check failed)', onlineError);
+        }
 
         return task;
     },
@@ -365,6 +394,14 @@ export const TaskService = {
 
         enqueueTaskNotificationJob(task.id, { showFeedback: true });
 
+        try {
+            if (await SyncService.isOnline()) {
+                void pushTaskToSupabase(task.id);
+            }
+        } catch (onlineError) {
+            console.warn('Instant task push skipped (connectivity check failed)', onlineError);
+        }
+
         return task;
     },
 
@@ -379,6 +416,8 @@ export const TaskService = {
             const task = await database.get<Task>('tasks').find(id);
             await task.markAsDeleted();
         });
+
+        void attemptInstantDelete('tasks', id);
 
         if (notificationId) {
             NotificationScheduler.cancelNotification(notificationId).catch(err => console.error('Bg cancel failed', err));
@@ -409,11 +448,20 @@ export const TaskService = {
                 e.recurrenceRule = data.recurrenceRule;
                 e.recurrenceEndDate = data.recurrenceEndDate;
                 e.reminderOffsetMinutes = data.reminderOffsetMinutes ?? 15;
+                e.createdAt = Date.now();
                 e.updatedAt = Date.now();
             });
         });
 
         enqueueEventNotificationJob(event.id, { showFeedback: false });
+
+        try {
+            if (await SyncService.isOnline()) {
+                void pushEventToSupabase(event.id);
+            }
+        } catch (onlineError) {
+            console.warn('Instant event push skipped (connectivity check failed)', onlineError);
+        }
 
         return event;
     },
@@ -444,6 +492,14 @@ export const TaskService = {
 
         enqueueEventNotificationJob(event.id, { showFeedback: true, updates });
 
+        try {
+            if (await SyncService.isOnline()) {
+                void pushEventToSupabase(event.id);
+            }
+        } catch (onlineError) {
+            console.warn('Instant event push skipped (connectivity check failed)', onlineError);
+        }
+
         return event;
     },
 
@@ -463,6 +519,8 @@ export const TaskService = {
                 console.error('Error deleting event:', e);
             }
         });
+
+        void attemptInstantDelete('events', id);
 
         // Background Cancel
         if (notificationId) {

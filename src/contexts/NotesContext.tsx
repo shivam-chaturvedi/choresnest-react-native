@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useMemo, useCall
 import { database } from '../database';
 import { Folder as DbFolder, Note as DbNote } from '../database/models/Note';
 import { Q } from '@nozbe/watermelondb';
+import { SyncService } from '../services/SyncService';
+import { pushNoteToSupabase } from '../services/pushNoteToSupabase';
 
 // Types
 export interface NoteBlock {
@@ -200,6 +202,15 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 });
                 createdId = note.id;
             });
+            if (createdId) {
+                try {
+                    if (await SyncService.isOnline()) {
+                        void pushNoteToSupabase(createdId);
+                    }
+                } catch (onlineError) {
+                    console.warn('Instant note push skipped (connectivity check failed)', onlineError);
+                }
+            }
             return createdId;
         } catch (error) {
             console.error("Error adding note:", error);
@@ -225,6 +236,13 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     record.updatedAt = Date.now();
                 });
             });
+            try {
+                if (await SyncService.isOnline()) {
+                    void pushNoteToSupabase(noteId);
+                }
+            } catch (onlineError) {
+                console.warn('Instant note push skipped (connectivity check failed)', onlineError);
+            }
             console.log('✅ Note updated in DB successfully');
         } catch (error: any) {
             if (error?.message?.includes('not found')) {

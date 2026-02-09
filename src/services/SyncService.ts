@@ -253,6 +253,7 @@ export const SyncService = {
                     const timestamp = Date.now();
                     const lastPulled = lastPulledAt ? new Date(lastPulledAt).toISOString() : new Date(0).toISOString();
                     console.log(`📥 Pulling changes since: ${lastPulled}`);
+                    const lastPulledDate = new Date(lastPulled);
 
                     // Helper to fetch updates for a table with profile_id filter
                     const fetchUpdates = async (table: string, hasProfileId: boolean = true) => {
@@ -360,6 +361,78 @@ export const SyncService = {
                         return { created, updated, deleted };
                     };
 
+                    const dedupeRowsById = (rows: any[]): any[] => {
+                        const recordMap = new Map<string, any>();
+                        rows.forEach(row => {
+                            if (!row?.id) return;
+                            const current = recordMap.get(row.id);
+                            const currentTs = coerceTimestamp(current?.updated_at ?? current?.updatedAt ?? 0);
+                            const incomingTs = coerceTimestamp(row.updated_at ?? row.updatedAt ?? 0);
+                            if (!current || incomingTs >= currentTs) {
+                                recordMap.set(row.id, row);
+                            }
+                        });
+                        return Array.from(recordMap.values());
+                    };
+
+                    const classifyRows = (rows: any[]): TableChangeSet => {
+                        const created: any[] = [];
+                        const updated: any[] = [];
+                        const deleted: string[] = [];
+                        const uniqueRows = dedupeRowsById(rows);
+                        uniqueRows.forEach(row => {
+                            if (!row?.id) return;
+                            if (row.deleted === true) {
+                                deleted.push(row.id);
+                                return;
+                            }
+                            const createdAtValue = row.created_at ?? row.createdAt;
+                            const createdAt = typeof createdAtValue === 'string'
+                                ? new Date(createdAtValue)
+                                : typeof createdAtValue === 'number'
+                                    ? new Date(createdAtValue)
+                                    : new Date(0);
+                            if (createdAt > lastPulledDate) {
+                                created.push(row);
+                            } else {
+                                updated.push(row);
+                            }
+                        });
+                        return { created, updated, deleted };
+                    };
+
+                    const fetchRawTransactions = async () => {
+                        const { data, error } = await supabase
+                            .from('transactions')
+                            .select('*')
+                            .eq('profile_id', user.id)
+                            .gte('updated_at', lastPulled);
+
+                        if (error) {
+                            console.error('Error fetching raw transactions:', error);
+                            throw error;
+                        }
+
+                        const rows = data ?? [];
+                        return classifyRows(rows);
+                    };
+
+                    const fetchRawBudgets = async () => {
+                        const { data, error } = await supabase
+                            .from('budgets')
+                            .select('*')
+                            .eq('profile_id', user.id)
+                            .gte('updated_at', lastPulled);
+
+                        if (error) {
+                            console.error('Error fetching raw budgets:', error);
+                            throw error;
+                        }
+
+                        const rows = data ?? [];
+                        return classifyRows(rows);
+                    };
+
                     const tableDescriptors: TableFetchDescriptor[] = [
                         { key: 'members', fetcher: () => fetchUpdates('members') },
                         { key: 'settings', fetcher: () => fetchUpdates('settings') },
@@ -383,7 +456,14 @@ export const SyncService = {
                     ];
 
                     const tableChangesMap = await collectTableFetchResults(tableDescriptors);
+                    const rawTransactions = await fetchRawTransactions();
+                    console.log(`🧾 Raw transactions fetched: ${rawTransactions.created.length + rawTransactions.updated.length + rawTransactions.deleted.length}`);
+                    const rawBudgets = await fetchRawBudgets();
+                    console.log(`📊 Raw budgets fetched: ${rawBudgets.created.length + rawBudgets.updated.length + rawBudgets.deleted.length}`);
                     const getChanges = (key: string): TableChangeSet => tableChangesMap[key] ?? { created: [], updated: [], deleted: [] };
+
+                    tableChangesMap['transactions'] = rawTransactions;
+                    tableChangesMap['budgets'] = rawBudgets;
 
                     return {
                         changes: {
@@ -475,6 +555,12 @@ export const SyncService = {
                                 dueDisplay: 'due_display', // WatermelonDB uses dueDisplay, Supabase uses due_display
                                 assigneeId: 'assignee_id', // WatermelonDB uses assigneeId, Supabase uses assignee_id
                                 reminderEnabled: 'reminder_enabled', // WatermelonDB uses reminderEnabled, Supabase uses reminder_enabled
+                            },
+                            list_items: {
+                                isCompleted: 'is_completed',
+                                addedById: 'added_by_id',
+                                purchasedAt: 'purchased_at',
+                                updatedAt: 'updated_at',
                             },
                             notes: {
                                 isStarred: 'is_starred',
@@ -622,6 +708,24 @@ export const SyncService = {
                                 }
                             }
 
+                            // Normalize purchased_at for list_items (must be numeric timestamp, never ISO string)
+                            if (table === 'list_items') {
+                                const purchased = transformed.purchased_at;
+                                if (purchased === undefined || purchased === null) {
+                                    transformed.purchased_at = null;
+                                } else if (typeof purchased === 'string') {
+                                    const parsed = Date.parse(purchased);
+                                    transformed.purchased_at = Number.isNaN(parsed) ? null : parsed;
+                                } else if (purchased instanceof Date) {
+                                    transformed.purchased_at = purchased.getTime();
+                                } else if (typeof purchased === 'number') {
+                                    transformed.purchased_at = purchased;
+                                } else {
+                                    const coerced = Number(purchased);
+                                    transformed.purchased_at = Number.isNaN(coerced) ? null : coerced;
+                                }
+                            }
+
                             if (table === 'notes' && transformed.blocks_json !== undefined) {
                                 if (Array.isArray(transformed.blocks_json)) {
                                     transformed.blocks_json = JSON.stringify(transformed.blocks_json);
@@ -660,10 +764,9 @@ export const SyncService = {
                                     console.warn(`No valid records to insert for ${table}`);
                                 } else {
                                     console.log(`Syncing ${recordsToInsert.length} new records to ${table}...`);
-                                    const { data, error } = await supabase
+                                    const { error } = await supabase
                                         .from(table)
-                                        .upsert(recordsToInsert, { onConflict: 'id' })
-                                        .select();
+                                        .upsert(recordsToInsert, { onConflict: 'id' });
                                     if (error) {
                                         console.error(`Failed to batch upsert ${table} (${recordsToInsert.length} records):`, error);
                                         console.error(`Error details:`, JSON.stringify(error, null, 2));

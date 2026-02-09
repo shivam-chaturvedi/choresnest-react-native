@@ -55,5 +55,28 @@ export default schemaMigrations({
                 }),
             ],
         },
+        {
+            toVersion: 6,
+            steps: [
+                addColumns({
+                    table: 'transactions',
+                    columns: [
+                        { name: 'profile_id', type: 'string' },
+                        { name: 'created_at', type: 'number' },
+                        { name: 'updated_at', type: 'number' },
+                        { name: 'deleted', type: 'boolean' },
+                    ],
+                }),
+                addColumns({
+                    table: 'budgets',
+                    columns: [
+                        { name: 'profile_id', type: 'string' },
+                        { name: 'created_at', type: 'number' },
+                        { name: 'updated_at', type: 'number' },
+                        { name: 'deleted', type: 'boolean' },
+                    ],
+                }),
+            ],
+        },
     ],
 });

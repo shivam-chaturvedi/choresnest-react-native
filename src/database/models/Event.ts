@@ -22,4 +22,5 @@ export default class Event extends Model {
     @text('notification_id') notificationId?: string;
     @field('reminder_offset_minutes') reminderOffsetMinutes?: number;
     @field('updated_at') updatedAt!: number;
+    @field('created_at') createdAt!: number;
 }

@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export default appSchema({
-    version: 5,
+    version: 6,
     tables: [
         tableSchema({
             name: 'users',
@@ -160,22 +160,28 @@ export default appSchema({
         tableSchema({
             name: 'transactions', // Finance
             columns: [
+                { name: 'profile_id', type: 'string', isIndexed: true },
                 { name: 'name', type: 'string' },
                 { name: 'amount', type: 'number' },
                 { name: 'date', type: 'string', isIndexed: true },
                 { name: 'icon', type: 'string' },
                 { name: 'type', type: 'string' }, // income, expense
                 { name: 'category', type: 'string' },
+                { name: 'created_at', type: 'number' },
+                { name: 'updated_at', type: 'number' },
+                { name: 'deleted', type: 'boolean' },
             ],
         }),
         tableSchema({
             name: 'budgets', // Finance Budgets
             columns: [
+                { name: 'profile_id', type: 'string', isIndexed: true },
                 { name: 'category', type: 'string' },
                 { name: 'amount', type: 'number' },
-                { name: 'month', type: 'string' }, // YYYY-MM
-                { name: 'notification_id', type: 'string', isOptional: true },
-                { name: 'alert_threshold_percent', type: 'number', isOptional: true }, // 80, 90, 100
+                { name: 'month', type: 'string', isIndexed: true }, // YYYY-MM
+                { name: 'created_at', type: 'number' },
+                { name: 'updated_at', type: 'number' },
+                { name: 'deleted', type: 'boolean' },
             ],
         }),
         tableSchema({

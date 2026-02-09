@@ -129,12 +129,6 @@ const App = () => {
     return () => unsubscribe();
   }, []);
 
-  const [shouldRequireStartupAuth] = useState(false);
-
-  useEffect(() => {
-    appLockManager.requestFreshAuth();
-  }, []);
-
   // Note: Sync setup is handled in AppNavigatorInner where we have access to auth context
   // This ensures sync only runs when user is authenticated
 
@@ -156,7 +150,7 @@ const App = () => {
                         />
                         <SafeAreaView style={styles.appWrapper} edges={["top", "bottom", "left", "right"]}>
                           <ErrorBoundary>
-                            <AppNavigator shouldRequireAuthOnStartup={shouldRequireStartupAuth} />
+                            <AppNavigator />
                           </ErrorBoundary>
                         </SafeAreaView>
                       </ToastProvider>

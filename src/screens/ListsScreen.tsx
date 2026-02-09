@@ -260,20 +260,26 @@ export const ListsScreen: React.FC = () => {
     }
     if (historyDate) {
       const dateStr = historyDate.toISOString().split('T')[0];
-      items = items.filter(i => i.purchasedAt?.startsWith(dateStr));
+      const dayStart = new Date(`${dateStr}T00:00:00`).getTime();
+      const dayEnd = dayStart + 86400000;
+      items = items.filter(i =>
+        typeof i.purchasedAt === 'number' &&
+        i.purchasedAt >= dayStart &&
+        i.purchasedAt < dayEnd
+      );
     }
     if (historyTime) {
       const hours = historyTime.getHours();
       const mins = historyTime.getMinutes();
       items = items.filter(i => {
-        if (!i.purchasedAt) return false;
+        if (typeof i.purchasedAt !== 'number') return false;
         const pDate = new Date(i.purchasedAt);
         // Show items at or after this time on the selected date (or any date if date filter isn't set)
         return pDate.getHours() > hours || (pDate.getHours() === hours && pDate.getMinutes() >= mins);
       });
     }
     // Sort by date descending
-    return [...items].sort((a, b) => (b.purchasedAt || "").localeCompare(a.purchasedAt || ""));
+    return [...items].sort((a, b) => (b.purchasedAt || 0) - (a.purchasedAt || 0));
   }, [doneItems, historyCategoryFilter, historyDate, historyTime]);
 
   const progress = filteredItems.length > 0

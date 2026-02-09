@@ -15,4 +15,5 @@ export default class Task extends Model {
     @text('notification_id') notificationId?: string;
     @field('reminder_enabled') reminderEnabled!: boolean;
     @field('updated_at') updatedAt!: number;
+    @field('created_at') createdAt!: number;
 }

@@ -27,6 +27,7 @@ type AppLayoutProps = {
   navActiveRoute?: BottomNavRoute;
   navOnNavigate?: (route: BottomNavRoute) => void;
   enablePullToRefresh?: boolean;
+  disableScroll?: boolean;
 };
 
 export const AppLayout: React.FC<AppLayoutProps> = ({
@@ -38,6 +39,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   navActiveRoute,
   navOnNavigate,
   enablePullToRefresh = true,
+  disableScroll = false,
 }) => {
   const navigation = useNavigation<NavigationProp<{ MainTabs: { screen?: BottomNavRoute } }>>();
   const { themeVersion } = useTheme();
@@ -81,15 +83,19 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       failOffsetY={[-10, 10]}
     >
       <View style={[styles.container, { backgroundColor: theme.colors.background }, style]}>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.content}
-          refreshControl={refreshControl}
-          keyboardShouldPersistTaps="handled"
-          bounces={false}
-        >
-          {children}
-        </ScrollView>
+        {disableScroll ? (
+          <View style={[styles.scrollView, styles.content]}>{children}</View>
+        ) : (
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.content}
+            refreshControl={refreshControl}
+            keyboardShouldPersistTaps="handled"
+            bounces={false}
+          >
+            {children}
+          </ScrollView>
+        )}
         <QuickAddModal
           open={showQuickAdd}
           onClose={() => setShowQuickAdd(false)}

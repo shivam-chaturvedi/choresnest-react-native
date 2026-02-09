@@ -53,7 +53,7 @@ export interface GroceryItem {
   completed: boolean;
   addedBy?: string;
   categoryId?: string;
-  purchasedAt?: string;
+  purchasedAt?: number;
 }
 
 export interface GroceryCategory {
@@ -476,19 +476,16 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         next: (items) => {
           try {
             // Map to grocery list format
-            const mapped = items.map(i => {
-              const purchasedAtIso = typeof i.purchasedAt === 'number' ? new Date(i.purchasedAt).toISOString() : undefined;
-              return {
-                id: i.id,
-                name: i.name,
-                quantity: i.quantity,
-                unit: i.unit,
-                completed: i.isCompleted,
-                categoryId: i.categoryId,
-                addedBy: i.addedById,
-                purchasedAt: purchasedAtIso,
-              };
-            });
+            const mapped = items.map(i => ({
+              id: i.id,
+              name: i.name,
+              quantity: i.quantity,
+              unit: i.unit,
+              completed: i.isCompleted,
+              categoryId: i.categoryId,
+              addedBy: i.addedById,
+              purchasedAt: i.purchasedAt,
+            }));
             console.log(`FamilyContext: Grocery list updated with ${mapped.length} items`);
             console.log(`FamilyContext: Completed items: ${mapped.filter(i => i.completed).length}`);
             setGroceryList(mapped);

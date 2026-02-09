@@ -74,12 +74,10 @@ export const parseDateTimeInZone = (
 /**
  * Safely formats a date. Returns fallback if invalid.
  */
-export const safeFormat = (date: Date | string | number | null | undefined, formatStr: string, fallback: string = ''): string => {
-    if (!date) return fallback;
+export const safeFormat = (date: Date | null | undefined, formatStr: string, fallback: string = ''): string => {
+    if (!date || !isValid(date)) return fallback;
     try {
-        const d = new Date(date);
-        if (!isValid(d)) return fallback;
-        return dateFnsFormat(d, formatStr);
+        return dateFnsFormat(date, formatStr);
     } catch {
         return fallback;
     }

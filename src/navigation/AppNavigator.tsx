@@ -34,11 +34,7 @@ import Member from "../database/models/Member";
 
 const Stack = createNativeStackNavigator();
 
-interface AppNavigatorProps {
-  shouldRequireAuthOnStartup?: boolean;
-}
-
-export const AppNavigator = ({ shouldRequireAuthOnStartup = true }: AppNavigatorProps) => {
+export const AppNavigator = () => {
   const { isDark } = useTheme();
   const [navState, setNavState] = React.useState<any>();
   const { showToast } = useToast();
@@ -68,7 +64,7 @@ export const AppNavigator = ({ shouldRequireAuthOnStartup = true }: AppNavigator
 
   return (
     <AuthProvider onError={handleAuthError}>
-      <AppLockProvider shouldRequireAuthOnStartup={shouldRequireAuthOnStartup}>
+      <AppLockProvider>
         <NotesProvider>
           <NavigationContainer
             theme={navigationTheme}
@@ -383,8 +379,32 @@ const AppLockOverlay = () => {
     unlockWithPin,
     unlockWithBiometric,
   } = useAppLock();
+  const [shouldRenderLock, setShouldRenderLock] = React.useState(false);
+  const rafRef = React.useRef<number | null>(null);
 
-  if (!isLocked) {
+  React.useEffect(() => {
+    if (isLocked) {
+      rafRef.current = requestAnimationFrame(() => {
+        setShouldRenderLock(true);
+        rafRef.current = null;
+      });
+    } else {
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      setShouldRenderLock(false);
+    }
+
+    return () => {
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, [isLocked]);
+
+  if (!isLocked || !shouldRenderLock) {
     return null;
   }
 

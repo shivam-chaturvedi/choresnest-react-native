@@ -3,7 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   Pressable,
   Alert,
   Modal,
@@ -256,7 +256,7 @@ export const MoreScreen: React.FC = () => {
   return (
     <>
       <AppLayout showNav={false}>
-        <ScrollView contentContainerStyle={styles.container}>
+        <View style={styles.container}>
           <View style={styles.header}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Pressable onPress={openSidebar} style={[styles.menuButton, { backgroundColor: colors.card, shadowColor: colors.foreground, borderRadius: radius.md }]}>
@@ -344,7 +344,7 @@ export const MoreScreen: React.FC = () => {
           </Pressable>
 
           <Text style={[styles.version, { color: colors.mutedForeground }]}>Family Chores v1.0.0 · Made with ❤️ for families</Text>
-        </ScrollView>
+        </View>
       </AppLayout>
 
       {/* Profile Switcher Modal */}
@@ -358,17 +358,25 @@ export const MoreScreen: React.FC = () => {
                 <AppIcon name="x" size={24} color={colors.mutedForeground} />
               </Pressable>
             </View>
-            <ScrollView contentContainerStyle={{ gap: 12 }}>
-              {members?.map((member: FamilyMember) => {
+            <FlatList
+              data={members ?? []}
+              keyExtractor={(member) => member.id}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ gap: 12 }}
+              renderItem={({ item: member }) => {
                 const isActive = member.id === activeMember?.id;
                 const memColor = PROFILE_COLORS.find(c => c.value === member.color)?.hex || colors.primary;
 
                 return (
                   <Pressable
-                    key={member.id}
                     style={[
                       styles.memberOption,
-                      { backgroundColor: isActive ? memColor + '10' : colors.muted, borderRadius: radius.lg, borderColor: isActive ? memColor : 'transparent', borderWidth: 1 }
+                      {
+                        backgroundColor: isActive ? memColor + '10' : colors.muted,
+                        borderRadius: radius.lg,
+                        borderColor: isActive ? memColor : 'transparent',
+                        borderWidth: 1,
+                      },
                     ]}
                     onPress={() => handleSwitchProfile(member)}
                   >
@@ -376,14 +384,18 @@ export const MoreScreen: React.FC = () => {
                       <Text style={{ fontSize: 24 }}>{member.symbol}</Text>
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.optionName, { color: colors.foreground, fontWeight: isActive ? '700' : '500' }]}>{member.name}</Text>
-                      <Text style={{ fontSize: 12, color: colors.mutedForeground }}>{PROFILE_COLORS.find(c => c.value === member.color)?.name}</Text>
+                      <Text style={[styles.optionName, { color: colors.foreground, fontWeight: isActive ? '700' : '500' }]}>
+                        {member.name}
+                      </Text>
+                      <Text style={{ fontSize: 12, color: colors.mutedForeground }}>
+                        {PROFILE_COLORS.find(c => c.value === member.color)?.name}
+                      </Text>
                     </View>
                     {isActive && <AppIcon name="check" size={20} color={memColor} />}
                   </Pressable>
-                )
-              })}
-            </ScrollView>
+                );
+              }}
+            />
           </View>
         </View>
       </Modal>

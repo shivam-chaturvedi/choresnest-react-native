@@ -48,7 +48,8 @@
     "react-native-screens": "^4.19.0",
     "react-native-share": "^12.2.4",
     "react-native-svg": "^15.12.1",
-    "react-native-url-polyfill": "^3.0.0"
+    "react-native-url-polyfill": "^3.0.0",
+    "react-native-uuid": "^2.0.3"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
