@@ -1,6 +1,6 @@
 import { differenceInDays, isAfter, isBefore, isSameDay, startOfDay } from "date-fns";
 import { formatInTimeZone, toZonedTime } from "date-fns-tz";
-import { safeParseDate, safeFormat } from "./SafeDateUtils";
+import { safeFormat, parseDateTimeInZone } from "./SafeDateUtils";
 import { CalendarEvent, Task } from "../contexts/FamilyContext";
 
 export type CalendarItem = (CalendarEvent | Task) & {
@@ -21,6 +21,7 @@ export const getEventsForDate = (
     const targetZoned = toZonedTime(date, timeZone);
     const baseTargetDate = startOfDay(targetZoned);
     const baseTargetDateStr = formatInTimeZone(targetZoned, timeZone, "yyyy-MM-dd");
+    const targetDateStr = baseTargetDateStr;
 
     const result: CalendarItem[] = [];
 
@@ -41,18 +42,19 @@ export const getEventsForDate = (
 
     // Process Events
     events.forEach(event => {
-        const eventStartDate = safeParseDate(event.date);
-
+        const eventTimeZone = event.timeZone || timeZone;
+        const eventStartDate = parseDateTimeInZone(event.date, eventTimeZone, event.time);
         if (!eventStartDate) return;
 
-        const eventTimeZone = event.timeZone || timeZone;
-        const eventEndDate = event.endDate ? safeParseDate(event.endDate) || eventStartDate : eventStartDate;
-        const recurrenceEnd = event.recurrenceEndDate ? safeParseDate(event.recurrenceEndDate) : null;
+        const eventEndDate = event.endDate
+            ? parseDateTimeInZone(event.endDate, eventTimeZone, event.endTime || event.time) || eventStartDate
+            : eventStartDate;
+        const recurrenceEnd = event.recurrenceEndDate ? parseDateTimeInZone(event.recurrenceEndDate, eventTimeZone) : null;
         const targetDateStr = formatInTimeZone(date, eventTimeZone, "yyyy-MM-dd");
         const targetDate = startOfDay(toZonedTime(date, eventTimeZone));
-        const eventStartZoned = toZonedTime(eventStartDate, eventTimeZone);
-        const eventEndZoned = toZonedTime(eventEndDate, eventTimeZone);
-        const recurrenceEndZoned = recurrenceEnd ? toZonedTime(recurrenceEnd, eventTimeZone) : null;
+        const eventStartZoned = eventStartDate;
+        const eventEndZoned = eventEndDate;
+        const recurrenceEndZoned = recurrenceEnd;
 
         // 1. Single Instance / Multi-day check (Non-recurring)
         if (!event.isRecurring) {

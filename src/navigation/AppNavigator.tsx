@@ -26,8 +26,8 @@ import { SyncService } from "../services/SyncService";
 import NetInfo from "@react-native-community/netinfo";
 import { AppState, AppStateStatus } from "react-native";
 import { SyncIndicator } from "../components/SyncIndicator";
-import { ProfileBootstrapService } from "../services/ProfileBootstrapService";
 import { AppSettingsService } from "../services/AppSettingsService";
+import Member from "../database/models/Member";
 
 
 
@@ -266,49 +266,36 @@ const AppNavigatorInner = () => {
   }, []);
 
   React.useEffect(() => {
-    if (hasLocalOnboarding) {
-      return;
-    }
-
     let cancelled = false;
 
-    const bootstrapAndCheckMembers = async () => {
-      if (!isAuthenticated || isGuest || isLoading || !user?.id) {
-        if (!isAuthenticated) {
+    const loadLocalMembers = async () => {
+      if (!isAuthenticated || isGuest || isLoading) {
+        if (!cancelled) {
           setHasMembersInDB(false);
         }
         return;
       }
 
       try {
-        const result = await ProfileBootstrapService.bootstrap(user.id);
-        if (cancelled) return;
-        if (result.hasMembers) {
-          try {
-            await AppSettingsService.completeOnboarding();
-            if (cancelled) return;
-            setHasLocalOnboarding(true);
-          } catch (completeError) {
-            console.warn('Failed to mark onboarding complete after bootstrap:', completeError);
-          }
-          setHasMembersInDB(true);
-          return;
+        const membersCollection = database.collections.get<Member>('members');
+        const localMembers = await membersCollection.query().fetch();
+        if (!cancelled) {
+          setHasMembersInDB(localMembers.length > 0);
         }
-        setHasMembersInDB(false);
       } catch (error) {
-        console.error('Profile bootstrap failed:', error);
+        console.error('Failed to read local members:', error);
         if (!cancelled) {
           setHasMembersInDB(false);
         }
       }
     };
 
-    bootstrapAndCheckMembers();
+    loadLocalMembers();
 
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, isGuest, isLoading, user?.id, hasLocalOnboarding]);
+  }, [isAuthenticated, isGuest, isLoading]);
 
   // Only show splash on initial load, not during auth operations
   // Don't wait for sync - show UI immediately once members check completes

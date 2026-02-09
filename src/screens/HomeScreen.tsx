@@ -36,7 +36,7 @@ import { GlobalSearch } from "../components/search/GlobalSearch";
 import { useSidebar } from "../contexts/SidebarContext";
 import { AppIcon, AppIconName } from "../components/ui/AppIcon";
 import { PROFILE_COLORS } from "../constants/profileColors";
-import { safeParseDate } from "../utils/SafeDateUtils";
+import { parseDateTimeInZone } from "../utils/SafeDateUtils";
 import ReactNativeHapticFeedback from "react-native-haptic-feedback";
 
 const hapticOptions = {
@@ -63,7 +63,7 @@ export const HomeScreen: React.FC = () => {
   const { getMealsForDay, getRecipeById } = useMealPlan();
   const navigation = useNavigation<any>();
   const { openSidebar } = useSidebar();
-  const { formatDateTime } = useCountry();
+  const { currentCountry, formatDateTime } = useCountry();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
@@ -168,31 +168,9 @@ export const HomeScreen: React.FC = () => {
   const todaysDateLabel = useMemo(() => new Date().toISOString().split("T")[0], []);
   const todaysEvents = useMemo(() => events.filter((event: any) => event.date === todaysDateLabel), [events, todaysDateLabel]);
   const parseEventDateTime = (event: any): { dateTime: Date | null; isAllDay: boolean } => {
-    const baseDate = safeParseDate(event?.date);
-    if (!baseDate) return { dateTime: null, isAllDay: false };
-
-    const normalized = new Date(baseDate.getTime());
-    normalized.setHours(0, 0, 0, 0);
-
-    const timeString = event?.time;
-    if (!timeString || timeString === "All Day") {
-      return { dateTime: normalized, isAllDay: true };
-    }
-
-    const match = timeString.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);
-    if (!match) {
-      return { dateTime: normalized, isAllDay: true };
-    }
-
-    let hours = parseInt(match[1], 10);
-    const minutes = parseInt(match[2] ?? "0", 10);
-    const period = match[3].toUpperCase();
-
-    if (period === "PM" && hours !== 12) hours += 12;
-    if (period === "AM" && hours === 12) hours = 0;
-
-    normalized.setHours(hours, minutes, 0, 0);
-    return { dateTime: normalized, isAllDay: false };
+    const isAllDay = !event?.time || event.time === "All Day";
+    const dateTime = parseDateTimeInZone(event?.date, currentCountry.timeZone, event?.time);
+    return { dateTime, isAllDay };
   };
 
   const parseTimeToMinutes = (time?: string | null): number | null => {

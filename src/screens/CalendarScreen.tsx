@@ -29,7 +29,7 @@ const hapticOptions = {
 import { addMonths, subMonths, addDays, subDays, startOfWeek, endOfWeek, isSameMonth, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval, addYears, startOfDay, isAfter } from "date-fns";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { getEventsForDate } from "../utils/EventUtils";
-import { safeParseDate } from "../utils/SafeDateUtils";
+import { parseDateTimeInZone } from "../utils/SafeDateUtils";
 import { formatInTimeZone, toZonedTime } from "date-fns-tz";
 
 const filteredEvents = (events: any[], filterMember: string | null) => {
@@ -37,7 +37,7 @@ const filteredEvents = (events: any[], filterMember: string | null) => {
   return events.filter((e) => e.memberId === filterMember);
 };
 
-type CalendarListEntry = (CalendarEvent & { type: 'event'; isVirtual?: boolean; originalDate?: string }) | (Pick<Task, 'id' | 'icon' | 'date' | 'priority'> & { type: 'task'; title: string; time: string; memberId?: string });
+type CalendarListEntry = (CalendarEvent & { type: 'event'; isVirtual?: boolean; originalDate?: string; timeZone?: string }) | (Pick<Task, 'id' | 'icon' | 'date' | 'priority'> & { type: 'task'; title: string; time: string; memberId?: string; timeZone?: string });
 type UpcomingEntry = CalendarListEntry & { nextDate: Date };
 
 const parseTimeToDate = (date: Date, time?: string): Date => {
@@ -83,17 +83,18 @@ const advanceRecurrenceDate = (date: Date, rule: string): Date | null => {
   }
 };
 
-const getNextRecurringOccurrence = (event: CalendarEvent, reference: Date): Date | null => {
+const getNextRecurringOccurrence = (event: CalendarEvent, reference: Date, fallbackTimeZone: string): Date | null => {
   if (!event.isRecurring || !event.recurrenceRule) return null;
-  const start = safeParseDate(event.date);
+  const eventTimeZone = event.timeZone || fallbackTimeZone;
+  const start = parseDateTimeInZone(event.date, eventTimeZone, event.time);
   if (!start) return null;
-  const endDate = event.recurrenceEndDate ? safeParseDate(event.recurrenceEndDate) : null;
+  const recurrenceEnd = event.recurrenceEndDate ? parseDateTimeInZone(event.recurrenceEndDate, eventTimeZone) : null;
 
   let candidateDate = startOfDay(start);
   const limit = 500;
 
   for (let i = 0; i < limit; i += 1) {
-    if (endDate && isAfter(candidateDate, startOfDay(endDate))) return null;
+    if (recurrenceEnd && isAfter(candidateDate, startOfDay(recurrenceEnd))) return null;
     const candidateDateTime = parseTimeToDate(candidateDate, event.time);
     if (candidateDateTime > reference) {
       return candidateDateTime;
@@ -105,19 +106,17 @@ const getNextRecurringOccurrence = (event: CalendarEvent, reference: Date): Date
   return null;
 };
 
-const getNextCandidateForEntry = (entry: CalendarListEntry, reference: Date): Date | null => {
-  const baseDate = safeParseDate(entry.date);
+const getNextCandidateForEntry = (entry: CalendarListEntry, reference: Date, fallbackTimeZone: string): Date | null => {
+  const entryTimeZone = entry.timeZone || fallbackTimeZone;
+  const baseDate = parseDateTimeInZone(entry.date, entry.time, entryTimeZone);
   if (!baseDate) return null;
 
-  if (entry.type === "event") {
-    if (entry.isRecurring) {
-      const recurring = getNextRecurringOccurrence(entry, reference);
-      if (recurring) return recurring;
-    }
+  if (entry.type === "event" && entry.isRecurring) {
+    const recurring = getNextRecurringOccurrence(entry, reference, entryTimeZone);
+    if (recurring) return recurring;
   }
 
-  const candidate = parseTimeToDate(baseDate, entry.time);
-  if (candidate > reference) return candidate;
+  if (baseDate > reference) return baseDate;
   return null;
 };
 
@@ -206,9 +205,10 @@ const DraggableEvent: React.FC<{
           // Allow easier dragging between days (threshold: 1/3 screen width)
           const colShift = Math.round(deltaX / (Dimensions.get('window').width / 3));
           if (colShift !== 0) {
-            const currentDate = new Date(event.date);
-            currentDate.setDate(currentDate.getDate() + colShift);
-            newDate = formatInTimeZone(currentDate, timeZone, "yyyy-MM-dd");
+            const eventTimeZone = event.timeZone || timeZone;
+            const currentZoned = parseDateTimeInZone(event.date, eventTimeZone) || new Date();
+            currentZoned.setDate(currentZoned.getDate() + colShift);
+            newDate = formatInTimeZone(currentZoned, eventTimeZone, "yyyy-MM-dd");
           }
         }
 
@@ -497,7 +497,11 @@ export const CalendarScreen: React.FC = () => {
   const zonedNow = toZonedTime(now, timeZone);
 
   const calendarItems = useMemo<CalendarListEntry[]>(() => {
-    const eventItems = filteredEvents.map((e: CalendarEvent) => ({ ...e, type: 'event' as const }));
+    const eventItems = filteredEvents.map((e: CalendarEvent) => ({
+      ...e,
+      type: 'event' as const,
+      timeZone: e.timeZone || timeZone,
+    }));
     const taskItems = filteredTasks
       .filter((t: Task) => t.status !== 'done')
       .map((t: Task) => ({
@@ -509,6 +513,7 @@ export const CalendarScreen: React.FC = () => {
         memberId: t.assignee,
         type: 'task' as const,
         priority: t.priority,
+        timeZone,
       }));
 
     return [...eventItems, ...taskItems];
@@ -517,7 +522,7 @@ export const CalendarScreen: React.FC = () => {
   const upcomingItems = useMemo<UpcomingEntry[]>(() => {
     const entries: UpcomingEntry[] = [];
     calendarItems.forEach(item => {
-      const nextDate = getNextCandidateForEntry(item, zonedNow);
+      const nextDate = getNextCandidateForEntry(item, zonedNow, timeZone);
       if (nextDate) {
         entries.push({ ...item, nextDate });
       }

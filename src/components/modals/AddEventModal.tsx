@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { formatInTimeZone, toZonedTime, getTimezoneOffset } from "date-fns-tz";
-import { safeFormat, ensureDate, safeParseDate } from "../../utils/SafeDateUtils";
+import { formatInTimeZone, getTimezoneOffset } from "date-fns-tz";
+import { safeFormat } from "../../utils/SafeDateUtils";
 import {
   Modal,
   Pressable,
@@ -86,10 +86,8 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const buildLocalizedNow = () => toZonedTime(new Date(), currentCountry.timeZone);
-
-  const [startDate, setStartDate] = useState(() => buildLocalizedNow());
-  const [startTime, setStartTime] = useState(() => buildLocalizedNow());
+  const [startDate, setStartDate] = useState(() => new Date());
+  const [startTime, setStartTime] = useState(() => new Date());
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [endTime, setEndTime] = useState<Date | null>(null);
   const [selectedIcon, setSelectedIcon] = useState("📅");
@@ -133,12 +131,12 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
   useEffect(() => {
     if (!open || eventToEdit) return;
-    const localizedNow = buildLocalizedNow();
-    setStartDate(localizedNow);
-    setStartTime(localizedNow);
+    const now = new Date();
+    setStartDate(now);
+    setStartTime(now);
     setEndDate(null);
     setEndTime(null);
-  }, [open, eventToEdit, currentCountry.timeZone]);
+  }, [open, eventToEdit]);
 
   useEffect(() => {
     if (eventToEdit) {
@@ -330,6 +328,48 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
     }
   }, [memberId, members]);
 
+  const combineLocalDateTime = (date: Date | null, time: Date | null): Date | null => {
+    if (!date) return null;
+    const result = new Date(date);
+    result.setSeconds(0, 0);
+    if (time) {
+      result.setHours(time.getHours(), time.getMinutes(), 0, 0);
+    } else {
+      result.setHours(0, 0, 0, 0);
+    }
+    return result;
+  };
+
+  const toUtcFromLocal = (date: Date | null, time: Date | null, timeZone: string): Date | null => {
+    const combined = combineLocalDateTime(date, time);
+    if (!combined) return null;
+    const offset = getTimezoneOffset(timeZone, combined);
+    return new Date(combined.getTime() - offset);
+  };
+
+  const formatUtc = (utcDate: Date | null, pattern: string, fallback: string): string => {
+    if (!utcDate) return fallback;
+    try {
+      return formatInTimeZone(utcDate, "UTC", pattern);
+    } catch {
+      return fallback;
+    }
+  };
+
+  const formatUtcOptional = (utcDate: Date | null, pattern: string): string | undefined => {
+    if (!utcDate) return undefined;
+    try {
+      return formatInTimeZone(utcDate, "UTC", pattern);
+    } catch {
+      return undefined;
+    }
+  };
+
+  const formatDateOnlyUtc = (date: Date | null, timeZone: string): string | undefined => {
+    const utcDate = toUtcFromLocal(date, null, timeZone);
+    return formatUtcOptional(utcDate, "yyyy-MM-dd");
+  };
+
   const handleSave = async () => {
     try {
       if (!name.trim()) {
@@ -340,52 +380,36 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       const eventTimeZone = eventToEdit?.timeZone || currentCountry.timeZone;
       const fallbackDate = new Date().toISOString().split("T")[0];
 
-      const toEventUtc = (date: Date | null, time: Date | null, includeTime: boolean) => {
-        if (!date) return undefined;
-        const year = date.getFullYear();
-        const month = date.getMonth();
-        const day = date.getDate();
-        const hours = includeTime && time ? time.getHours() : 0;
-        const minutes = includeTime && time ? time.getMinutes() : 0;
-        const utcCandidate = Date.UTC(year, month, day, hours, minutes, 0, 0);
-        const offset = getTimezoneOffset(eventTimeZone, new Date(utcCandidate));
-        return new Date(utcCandidate - offset);
-      };
+      const fallbackTime = startTime
+        ? startTime.toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "12:00 AM";
 
-      const formatInEventZone = (date: Date | null, time: Date | null, pattern: string, includeTime: boolean, fallback?: string) => {
-        const utcDate = toEventUtc(date, time, includeTime);
-        if (!utcDate) return fallback;
-        return formatInTimeZone(utcDate, eventTimeZone, pattern);
-      };
-
-      const formatDateOnly = (date: Date | null) => {
-        return formatInEventZone(date, null, "yyyy-MM-dd", false);
-      };
-
-      const formattedDate = formatInEventZone(startDate, startTime, "yyyy-MM-dd", true, fallbackDate) || fallbackDate;
+      const startUtc = toUtcFromLocal(startDate, allDay ? null : startTime, eventTimeZone);
+      const formattedDate = formatUtc(startUtc, "yyyy-MM-dd", fallbackDate);
 
       let formattedTime: string;
       let formattedEndTime: string | undefined;
+      let formattedEndDate: string | undefined;
 
       if (allDay) {
         formattedTime = "12:00 AM";
         formattedEndTime = "11:59 PM";
       } else {
-        const fallbackTime = startTime.toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-        formattedTime = formatInEventZone(startDate, startTime, "hh:mm aa", true, fallbackTime) || fallbackTime;
+        formattedTime = formatUtc(startUtc, "hh:mm aa", fallbackTime);
 
         if (endTime) {
-          const fallbackEndTime = endTime.toLocaleTimeString("en-US", {
-            hour: "2-digit",
-            minute: "2-digit",
-          });
-          formattedEndTime = formatInEventZone(endDate || startDate, endTime, "hh:mm aa", true, fallbackEndTime) || fallbackEndTime;
-        } else {
-          formattedEndTime = undefined;
+          const endUtcForTime = toUtcFromLocal(endDate || startDate, endTime, eventTimeZone);
+          formattedEndTime = endUtcForTime ? formatUtcOptional(endUtcForTime, "hh:mm aa") : undefined;
         }
+      }
+
+      if (endDate) {
+        const endTimeForDate = allDay ? null : (endTime || startTime);
+        const endUtcForDate = toUtcFromLocal(endDate, endTimeForDate, eventTimeZone);
+        formattedEndDate = endUtcForDate ? formatUtcOptional(endUtcForDate, "yyyy-MM-dd") : undefined;
       }
 
       const reminderOffsetMinutes = reminder ? parseInt(reminderTime, 10) : -1;
@@ -424,10 +448,10 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             icon: selectedIcon,
             memberId,
             location,
-            endDate: formatInEventZone(endDate, endTime, "yyyy-MM-dd", true),
+            endDate: formattedEndDate,
             isRecurring: repeatType !== 'never',
             recurrenceRule: repeatType !== 'never' ? repeatType : undefined,
-            recurrenceEndDate: formatDateOnly(repeatEndDate),
+            recurrenceEndDate: formatDateOnlyUtc(repeatEndDate, eventTimeZone),
             reminderOffsetMinutes,
             timeZone: eventTimeZone,
           });
@@ -454,10 +478,10 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             icon: selectedIcon,
             memberId,
             location,
-            endDate: formatInEventZone(endDate, endTime, "yyyy-MM-dd", true),
+            endDate: formattedEndDate,
             isRecurring: repeatType !== 'never',
             recurrenceRule: repeatType !== 'never' ? repeatType : undefined,
-            recurrenceEndDate: formatDateOnly(repeatEndDate),
+            recurrenceEndDate: formatDateOnlyUtc(repeatEndDate, eventTimeZone),
             reminderOffsetMinutes,
             timeZone: currentCountry.timeZone,
           });
