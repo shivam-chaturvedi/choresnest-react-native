@@ -78,5 +78,16 @@ export default schemaMigrations({
                 }),
             ],
         },
+        {
+            toVersion: 7,
+            steps: [
+                addColumns({
+                    table: 'events',
+                    columns: [
+                        { name: 'created_at', type: 'number' },
+                    ],
+                }),
+            ],
+        },
     ],
 });

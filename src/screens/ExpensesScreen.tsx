@@ -528,7 +528,7 @@ export const ExpensesScreen: React.FC = () => {
   }
 
   return (
-    <AppLayout showNav={false} showAddButton={false}>
+    <AppLayout showNav={false} showAddButton={true} onAddPress={() => setExpenseModalOpen(true)}>
       <GestureDetector gesture={panGesture}>
         <ScrollView
           contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
@@ -823,14 +823,6 @@ export const ExpensesScreen: React.FC = () => {
         </ScrollView>
       </GestureDetector>
 
-      {/* Floating Action Button - Only one now */}
-      <TouchableOpacity
-        style={[styles.fab, { backgroundColor: colors.primary, borderRadius: radius.full }]}
-        onPress={() => setExpenseModalOpen(true)}
-      >
-        <Plus size={32} color="#fff" />
-      </TouchableOpacity>
-
       <AddExpenseModal
         visible={expenseModalOpen}
         onClose={() => setExpenseModalOpen(false)}
@@ -1069,17 +1061,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12
   },
-  fab: {
-    position: 'absolute',
-    bottom: 24,
-    right: 24,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
+
   barChartRow: {
     flexDirection: 'row',
     alignItems: 'center',

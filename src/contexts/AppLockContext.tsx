@@ -8,12 +8,15 @@ import React, {
     useRef,
     ReactNode,
 } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
 import { useAuth } from './AuthContext';
 import { appLockService, hashPin } from '../services/AppLockService';
 import AppLock from '../database/models/AppLock';
 import { database } from '../database';
 import { appLockManager } from '../services/AppLockManager';
+
+type EnableAppLockOptions = {
+    keepSessionAuthenticated?: boolean;
+};
 
 export interface AppLockContextType {
     isReady: boolean;
@@ -21,7 +24,7 @@ export interface AppLockContextType {
     isAppLockEnabled: boolean;
     isBiometricEnabled: boolean;
     hasPin: boolean;
-    enableAppLock: () => Promise<void>;
+    enableAppLock: (options?: EnableAppLockOptions) => Promise<void>;
     disableAppLock: () => Promise<void>;
     enableBiometric: () => Promise<void>;
     disableBiometric: () => Promise<void>;
@@ -55,10 +58,9 @@ export const AppLockProvider: React.FC<AppLockProviderProps> = ({
     const [isReady, setIsReady] = useState(false);
     const [isLocked, setIsLocked] = useState(false);
     const [sessionUnlocked, setSessionUnlocked] = useState(false);
-    const appStateRef = useRef<AppStateStatus>(AppState.currentState);
     const recordRef = useRef<AppLockSnapshot>(null);
-    const sessionUnlockedRef = useRef(sessionUnlocked);
     const unlockingRef = useRef(false);
+    const justEnabledRef = useRef(false);
 
     const mapToSnapshot = useCallback((lock: AppLock | null): AppLockSnapshot => {
         if (!lock) {
@@ -113,56 +115,22 @@ export const AppLockProvider: React.FC<AppLockProviderProps> = ({
         recordRef.current = record;
     }, [record]);
 
-    useEffect(() => {
-        sessionUnlockedRef.current = sessionUnlocked;
-    }, [sessionUnlocked]);
-
     const prevEnabledRef = useRef<boolean | null>(null);
     useEffect(() => {
         const isLockEnabled = record?.enabled || record?.biometricEnabled;
         if (isLockEnabled) {
             if (prevEnabledRef.current !== true) {
-                setSessionUnlocked(false);
+                if (justEnabledRef.current) {
+                    justEnabledRef.current = false;
+                } else {
+                    setSessionUnlocked(false);
+                }
             }
         } else {
             setSessionUnlocked(true);
         }
         prevEnabledRef.current = isLockEnabled ?? null;
     }, [record?.enabled, record?.biometricEnabled]);
-
-    // Handle app state changes - treat only background as a security boundary
-    useEffect(() => {
-        if (!isReady || !isAuthenticated) return;
-
-        const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
-            const previousState = appStateRef.current;
-            appStateRef.current = nextAppState;
-            const currentRecord = recordRef.current;
-            const isLockEnabled = currentRecord?.enabled || currentRecord?.biometricEnabled;
-
-            if (!isLockEnabled) {
-                return;
-            }
-
-            if (nextAppState === 'background') {
-                setSessionUnlocked(false);
-                sessionUnlockedRef.current = false;
-                appLockManager.requestFreshAuth();
-            } else if (nextAppState === 'active' && previousState === 'background') {
-                if (
-                    !sessionUnlockedRef.current &&
-                    !unlockingRef.current &&
-                    appLockManager.shouldRequireAuth()
-                ) {
-                    setIsLocked(true);
-                }
-            }
-        });
-
-        return () => {
-            subscription.remove();
-        };
-    }, [isReady, isAuthenticated]);
 
     const handleUnlockSuccess = useCallback(() => {
         setSessionUnlocked(true);
@@ -195,7 +163,7 @@ export const AppLockProvider: React.FC<AppLockProviderProps> = ({
 
     const hasPin = Boolean(record?.pinHash);
 
-    const enableAppLock = useCallback(async () => {
+    const enableAppLock = useCallback(async (options: EnableAppLockOptions = { keepSessionAuthenticated: true }) => {
         if (!hasPin) {
             throw new Error('PIN required before enabling app lock');
         }
@@ -205,9 +173,15 @@ export const AppLockProvider: React.FC<AppLockProviderProps> = ({
         }
         await appLockService.enableAppLock();
         await refreshRecord();
-        // When enabling, mark that auth will be required next time
-        appLockManager.requestFreshAuth();
-        setSessionUnlocked(false);
+        if (options.keepSessionAuthenticated !== false) {
+            justEnabledRef.current = true;
+            // Keep the current session live unless we explicitly need a re-auth.
+            appLockManager.markAuthenticated();
+            setSessionUnlocked(true);
+        } else {
+            appLockManager.requestFreshAuth();
+            setSessionUnlocked(false);
+        }
     }, [hasPin, refreshRecord, record?.biometricEnabled]);
 
     const disableAppLock = useCallback(async () => {

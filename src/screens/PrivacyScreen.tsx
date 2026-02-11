@@ -13,9 +13,9 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import { AppLayout } from "../components/layout";
 import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
-import { useSidebar } from "../contexts/SidebarContext";
 import { useAuth } from "../contexts/AuthContext";
 import { useAppLock } from "../contexts/AppLockContext";
+import { useFamily } from "../contexts/FamilyContext";
 import { useToast } from "../hooks/useToast";
 import { supabase } from "../config/supabase";
 import notifee from "@notifee/react-native";
@@ -23,12 +23,12 @@ import {
     ChevronLeft,
     Shield,
     Lock,
-    Eye,
     Key,
     Trash2,
     ChevronRight,
     Fingerprint
 } from "lucide-react-native";
+import { PROFILE_COLORS } from "../constants/profileColors";
 
 // --- Data ---
 const securitySettings = [
@@ -38,8 +38,8 @@ const securitySettings = [
 
 export const PrivacyScreen: React.FC = () => {
     const navigation = useNavigation();
-    const { openSidebar } = useSidebar();
     const { deleteAccount, isGuest, user } = useAuth();
+    const { activeMember } = useFamily();
     const {
         isAppLockEnabled,
         isBiometricEnabled,
@@ -57,6 +57,8 @@ export const PrivacyScreen: React.FC = () => {
     const [biometricBusy, setBiometricBusy] = useState(false);
     const colors = useThemeColors();
     const radius = useThemeRadius();
+    const activeMemberColor =
+        PROFILE_COLORS.find(color => color.value === activeMember?.color)?.hex || colors.primary;
 
     const [clearNotifications, setClearNotifications] = useState(false);
 
@@ -82,7 +84,6 @@ export const PrivacyScreen: React.FC = () => {
     const [showPasswordModal, setShowPasswordModal] = useState(false);
     const [showPinModal, setShowPinModal] = useState(false);
     const [showGuestModal, setShowGuestModal] = useState(false);
-    const [activeTab, setActiveTab] = useState<'account' | 'security'>('account');
     const [profileData, setProfileData] = useState<{
         id: string;
         email: string;
@@ -298,7 +299,7 @@ export const PrivacyScreen: React.FC = () => {
                 setConfirmError("PIN did not match");
                 return;
             }
-            await enableAppLock();
+            await enableAppLock({ keepSessionAuthenticated: true });
             setConfirmError("");
             setShowConfirmModal(false);
             setConfirmValue("");
@@ -328,178 +329,147 @@ export const PrivacyScreen: React.FC = () => {
                     <Text style={[styles.headerTitle, { color: colors.foreground }]}>Privacy & Security</Text>
                 </View>
 
-                {/* Tab Navigation */}
-                <View style={[styles.tabContainer, { borderBottomColor: colors.border }]}>
-                    <Pressable
-                        style={[styles.tab, activeTab === 'account' && styles.activeTab]}
-                        onPress={() => setActiveTab('account')}
-                    >
-                        <Text style={[
-                            styles.tabText,
-                            { color: activeTab === 'account' ? colors.primary : colors.mutedForeground }
-                        ]}>
-                            Account
-                        </Text>
-                        {activeTab === 'account' && (
-                            <View style={[styles.tabIndicator, { backgroundColor: colors.primary }]} />
-                        )}
-                    </Pressable>
-                    <Pressable
-                        style={[styles.tab, activeTab === 'security' && styles.activeTab]}
-                        onPress={() => setActiveTab('security')}
-                    >
-                        <Text style={[
-                            styles.tabText,
-                            { color: activeTab === 'security' ? colors.primary : colors.mutedForeground }
-                        ]}>
-                            Security
-                        </Text>
-                        {activeTab === 'security' && (
-                            <View style={[styles.tabIndicator, { backgroundColor: colors.primary }]} />
-                        )}
-                    </Pressable>
+                {/* Security Status */}
+                <View style={[styles.statusCard, { backgroundColor: colors.primary, borderRadius: radius.card }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+                        <View style={[styles.statusIconBg, { borderRadius: radius.card }]}>
+                            <Shield size={28} color={colors.primaryForeground} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={[styles.statusTitle, { color: colors.primaryForeground }]}>Security Status</Text>
+                            <Text style={[styles.statusSubtitle, { color: colors.primaryForeground }]}>Your data is protected</Text>
+                        </View>
+                        <Text style={{ fontSize: 24 }}>🔒</Text>
+                    </View>
                 </View>
 
-                {/* Account Tab Content */}
-                {activeTab === 'account' && (
-                    <View>
-                        {isGuest ? (
-                            <View style={[styles.guestCard, { backgroundColor: colors.muted, borderRadius: radius.card }]}>
-                                <Text style={[styles.guestCardTitle, { color: colors.foreground }]}>Guest</Text>
-                                <Text style={[styles.guestCardText, { color: colors.mutedForeground }]}>
-                                    You are using the app in guest mode. Create an account to sync your data.
-                                </Text>
-                            </View>
-                        ) : (
-                            <View>
-                                <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Profile Information</Text>
-                                <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
-                                    {loadingProfile ? (
-                                        <View style={{ padding: 20, alignItems: 'center' }}>
-                                            <Text style={{ color: colors.mutedForeground }}>Loading...</Text>
-                                        </View>
-                                    ) : profileData ? (
-                                        <>
-                                            <View style={styles.profileRow}>
-                                                <Text style={[styles.profileLabel, { color: colors.mutedForeground }]}>Name</Text>
-                                                <Text style={[styles.profileValue, { color: colors.foreground }]}>{profileData.name}</Text>
-                                            </View>
-                                            <View style={[styles.divider, { backgroundColor: colors.border }]} />
-                                            <View style={styles.profileRow}>
-                                                <Text style={[styles.profileLabel, { color: colors.mutedForeground }]}>Email</Text>
-                                                <Text style={[styles.profileValue, { color: colors.foreground }]}>{profileData.email}</Text>
-                                            </View>
-                                            <View style={[styles.divider, { backgroundColor: colors.border }]} />
-                                            <View style={styles.profileRow}>
-                                                <Text style={[styles.profileLabel, { color: colors.mutedForeground }]}>User ID</Text>
-                                                <Text style={[styles.profileValue, { color: colors.foreground }]} numberOfLines={1}>
-                                                    {profileData.id.substring(0, 8)}...{profileData.id.substring(profileData.id.length - 8)}
-                                                </Text>
-                                            </View>
-                                        </>
-                                    ) : (
-                                        <View style={{ padding: 20, alignItems: 'center' }}>
-                                            <Text style={{ color: colors.mutedForeground }}>No profile data available</Text>
-                                        </View>
-                                    )}
+                <View style={{ marginTop: 24 }}>
+                    <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Account Details</Text>
+                    {isGuest ? (
+                        <View style={[styles.guestCard, { backgroundColor: colors.muted, borderRadius: radius.card }]}>
+                            <Text style={[styles.guestCardTitle, { color: colors.foreground }]}>Guest</Text>
+                            <Text style={[styles.guestCardText, { color: colors.mutedForeground }]}>
+                                You are using the app in guest mode. Create an account to sync your data.
+                            </Text>
+                        </View>
+                    ) : (
+                        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+                            {loadingProfile ? (
+                                <View style={{ padding: 20, alignItems: 'center' }}>
+                                    <Text style={{ color: colors.mutedForeground }}>Loading...</Text>
                                 </View>
-                            </View>
-                        )}
+                            ) : (
+                                <>
+                                    <View style={styles.profileRow}>
+                                        <Text style={[styles.profileLabel, { color: colors.mutedForeground }]}>Name</Text>
+                                        <Text style={[styles.profileValue, { color: colors.foreground }]} numberOfLines={1}>
+                                            {profileData?.name || user?.name || '—'}
+                                        </Text>
+                                    </View>
+                                    <View style={[styles.divider, { backgroundColor: colors.border }]} />
+                                    <View style={styles.profileRow}>
+                                        <Text style={[styles.profileLabel, { color: colors.mutedForeground }]}>Email</Text>
+                                        <Text style={[styles.profileValue, { color: colors.foreground }]} numberOfLines={1}>
+                                            {profileData?.email || user?.email || '—'}
+                                        </Text>
+                                    </View>
+                                    <View style={[styles.divider, { backgroundColor: colors.border }]} />
+                                    <View style={styles.profileRow}>
+                                        <Text style={[styles.profileLabel, { color: colors.mutedForeground }]}>User ID</Text>
+                                        <Text style={[styles.profileValue, { color: colors.foreground }]} numberOfLines={1}>
+                                            {(() => {
+                                                const id = profileData?.id || user?.id;
+                                                if (!id) return '—';
+                                                return `${id.substring(0, 8)}...${id.substring(id.length - 8)}`;
+                                            })()}
+                                        </Text>
+                                    </View>
+                                    <View style={[styles.divider, { backgroundColor: colors.border }]} />
+                                    <View style={styles.profileRow}>
+                                        <Text style={[styles.profileLabel, { color: colors.mutedForeground }]}>Current Active Member</Text>
+                                        <View style={styles.memberInfo}>
+                                            <View style={[styles.memberDot, { backgroundColor: activeMemberColor }]} />
+                                            <Text style={[styles.profileValueCompact, { color: colors.foreground }]}>
+                                                {activeMember?.name || 'Not assigned'}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                </>
+                            )}
+                        </View>
+                    )}
+                </View>
+
+                <View style={{ marginTop: 24 }}>
+                    <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Security</Text>
+                    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+                        {securitySettings.map((item, index) => {
+                            const isAppLock = item.id === 'app';
+                            const description = isAppLock
+                                ? 'Require a PIN when opening the app'
+                                : 'Use fingerprint or face recognition to unlock';
+                            const switchValue = isAppLock ? appLockSwitchValue : biometricSwitchValue;
+                            const onToggle = isAppLock ? handleAppLockToggle : handleBiometricToggle;
+                            const isDisabled = isAppLock
+                                ? (appLockBusy || showConfirmModal || showPinModal)
+                                : (biometricBusy || isAppLockEnabled);
+
+                            return (
+                                <View key={item.id}>
+                                    <View style={styles.settingRow}>
+                                        <View style={[styles.iconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
+                                            <item.icon size={20} color={colors.mutedForeground} />
+                                        </View>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={[styles.settingLabel, { color: colors.foreground }]}>{item.label}</Text>
+                                            <Text style={[styles.settingDesc, { color: colors.mutedForeground }]}>{description}</Text>
+                                        </View>
+                                        <Switch
+                                            value={switchValue}
+                                            onValueChange={onToggle}
+                                            trackColor={{ false: colors.muted, true: colors.primary }}
+                                            disabled={isDisabled}
+                                        />
+                                    </View>
+                                    {index !== securitySettings.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
+                                </View>
+                            );
+                        })}
                     </View>
-                )}
+                </View>
 
-                {/* Security Tab Content */}
-                {activeTab === 'security' && (
-                    <View>
-
-                        {/* Security Status Card */}
-                        {/* Simulated gradient or primary color */}
-                        <View style={[styles.statusCard, { backgroundColor: colors.primary, borderRadius: radius.card }]}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-                                <View style={[styles.statusIconBg, { borderRadius: radius.card }]}>
-                                    <Shield size={28} color={colors.primaryForeground} />
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={[styles.statusTitle, { color: colors.primaryForeground }]}>Security Status</Text>
-                                    <Text style={[styles.statusSubtitle, { color: colors.primaryForeground }]}>Your data is protected</Text>
-                                </View>
-                                <Text style={{ fontSize: 24 }}>🔒</Text>
+                <View style={{ marginTop: 24 }}>
+                    <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Access</Text>
+                    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+                        <Pressable style={styles.accessRow} onPress={() => {
+                            if (isGuest) {
+                                setShowGuestModal(true);
+                            } else {
+                                setShowPasswordModal(true);
+                            }
+                        }}>
+                            <View style={[styles.iconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
+                                <Key size={20} color={colors.mutedForeground} />
                             </View>
-                        </View>
-
-                        {/* Security Settings */}
-                        <View>
-                            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Security</Text>
-                            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
-                                {securitySettings.map((item, index) => {
-                                    const isAppLock = item.id === 'app';
-                                    const isBiometric = item.id === 'biometric';
-                                    const description = isAppLock 
-                                        ? 'Require a PIN when opening the app'
-                                        : 'Use fingerprint or face recognition to unlock';
-                                    const switchValue = isAppLock ? appLockSwitchValue : biometricSwitchValue;
-                                    const onToggle = isAppLock ? handleAppLockToggle : handleBiometricToggle;
-                                    const isDisabled = isAppLock 
-                                        ? (appLockBusy || showConfirmModal || showPinModal)
-                                        : (biometricBusy || isAppLockEnabled);
-
-                                    return (
-                                        <View key={item.id}>
-                                            <View style={styles.settingRow}>
-                                                <View style={[styles.iconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
-                                                    <item.icon size={20} color={colors.mutedForeground} />
-                                                </View>
-                                                <View style={{ flex: 1 }}>
-                                                    <Text style={[styles.settingLabel, { color: colors.foreground }]}>{item.label}</Text>
-                                                    <Text style={[styles.settingDesc, { color: colors.mutedForeground }]}>{description}</Text>
-                                                </View>
-                                                <Switch
-                                                    value={switchValue}
-                                                    onValueChange={onToggle}
-                                                    trackColor={{ false: colors.muted, true: colors.primary }}
-                                                    disabled={isDisabled}
-                                                />
-                                            </View>
-                                            {index !== securitySettings.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
-                                        </View>
-                                    );
-                                })}
+                            <View style={{ flex: 1 }}>
+                                <Text style={[styles.settingLabel, { color: colors.foreground }]}>Change Password</Text>
+                                <Text style={[styles.settingDesc, { color: colors.mutedForeground }]}>Last changed 30 days ago</Text>
                             </View>
-                        </View>
-
-                        {/* Access */}
-                        <View>
-                            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Access</Text>
-                            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
-                                <Pressable style={styles.accessRow} onPress={() => {
-                                    if (isGuest) {
-                                        setShowGuestModal(true);
-                                    } else {
-                                        setShowPasswordModal(true);
-                                    }
-                                }}>
-                                    <View style={[styles.iconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
-                                        <Key size={20} color={colors.mutedForeground} />
-                                    </View>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={[styles.settingLabel, { color: colors.foreground }]}>Change Password</Text>
-                                        <Text style={[styles.settingDesc, { color: colors.mutedForeground }]}>Last changed 30 days ago</Text>
-                                    </View>
-                                    <ChevronRight size={20} color={colors.mutedForeground} />
-                                </Pressable>
-                                <View style={[styles.divider, { backgroundColor: colors.border }]} />
-                                <Pressable style={styles.accessRow} onPress={() => setShowPinModal(true)}>
-                                    <View style={[styles.iconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
-                                        <Lock size={20} color={colors.mutedForeground} />
-                                    </View>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={[styles.settingLabel, { color: colors.foreground }]}>Set PIN Code</Text>
-                                        <Text style={[styles.settingDesc, { color: colors.mutedForeground }]}>4-digit PIN for quick access</Text>
-                                    </View>
-                                    <ChevronRight size={20} color={colors.mutedForeground} />
-                                </Pressable>
+                            <ChevronRight size={20} color={colors.mutedForeground} />
+                        </Pressable>
+                        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+                        <Pressable style={styles.accessRow} onPress={() => setShowPinModal(true)}>
+                            <View style={[styles.iconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
+                                <Lock size={20} color={colors.mutedForeground} />
                             </View>
-                        </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={[styles.settingLabel, { color: colors.foreground }]}>Set PIN Code</Text>
+                                <Text style={[styles.settingDesc, { color: colors.mutedForeground }]}>4-digit PIN for quick access</Text>
+                            </View>
+                            <ChevronRight size={20} color={colors.mutedForeground} />
+                        </Pressable>
+                    </View>
+                </View>
 
                         {/* Change Password Modal */}
                         <Modal
@@ -629,9 +599,7 @@ export const PrivacyScreen: React.FC = () => {
                                 <View style={[styles.guestModalContent, { backgroundColor: colors.card, borderRadius: radius.card }]}>
                                     <Text style={[styles.guestModalTitle, { color: colors.foreground }]}>Guest Mode</Text>
                                     <Text style={[styles.guestModalText, { color: colors.mutedForeground }]}>
-                                        You are currently using the app as a guest.{"\n"}
-                                        All data is stored locally on this device.{"\n"}
-                                        Create an account to backup your data.
+                                        You are currently using the app as a guest.
                                     </Text>
                                     <View style={styles.guestModalButtons}>
                                         <Pressable
@@ -755,8 +723,6 @@ export const PrivacyScreen: React.FC = () => {
                                 <Text style={[styles.deleteText, { color: "#ef4444" }]}>Delete Account</Text>
                             </Pressable>
                         </View>
-                    </View>
-                )}
 
                 <View style={{ height: 40 }} />
             </ScrollView>
@@ -974,31 +940,6 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
     },
-    tabContainer: {
-        flexDirection: 'row',
-        borderBottomWidth: 1,
-        marginBottom: 20,
-    },
-    tab: {
-        flex: 1,
-        paddingVertical: 12,
-        alignItems: 'center',
-        position: 'relative',
-    },
-    activeTab: {
-        // Active tab styling handled by indicator
-    },
-    tabText: {
-        fontSize: 15,
-        fontWeight: '600',
-    },
-    tabIndicator: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: 2,
-    },
     guestCard: {
         padding: 20,
         marginBottom: 20,
@@ -1028,5 +969,22 @@ const styles = StyleSheet.create({
         flex: 1,
         textAlign: 'right',
         marginLeft: 16,
-    }
+    },
+    profileValueCompact: {
+        fontSize: 14,
+        fontWeight: '400',
+        marginLeft: 8,
+    },
+    memberInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+    },
+    memberDot: {
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: '#fff',
+    },
 });

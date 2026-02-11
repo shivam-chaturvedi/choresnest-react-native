@@ -40,7 +40,7 @@ export const useSyncStatus = () => {
         }
     }, []);
 
-    const refreshing = isSyncing || isManualRefreshing;
+    const refreshing = isManualRefreshing;
 
     return { isSyncing, isManualRefreshing, refreshing, refreshNow };
 };

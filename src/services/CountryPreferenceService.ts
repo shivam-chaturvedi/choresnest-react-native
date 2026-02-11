@@ -7,6 +7,14 @@ type CountryChangeListener = (config: CountryConfiguration) => void;
 
 const detectDeviceCountryCode = (): string | undefined => {
     try {
+        const deviceTimeZone = RNLocalize.getTimeZone();
+        if (deviceTimeZone) {
+            const zoneMatch = Object.values(COUNTRY_CONFIG).find(config => config.timeZone === deviceTimeZone);
+            if (zoneMatch) {
+                return zoneMatch.code;
+            }
+        }
+
         const deviceCountry = RNLocalize.getCountry();
         if (deviceCountry && isSupportedCountry(deviceCountry)) {
             return deviceCountry;
@@ -16,14 +24,6 @@ const detectDeviceCountryCode = (): string | undefined => {
         const localeMatch = locales.find(locale => locale.countryCode && isSupportedCountry(locale.countryCode));
         if (localeMatch?.countryCode) {
             return localeMatch.countryCode;
-        }
-
-        const deviceTimeZone = RNLocalize.getTimeZone();
-        if (deviceTimeZone) {
-            const zoneMatch = Object.values(COUNTRY_CONFIG).find(config => config.timeZone === deviceTimeZone);
-            if (zoneMatch) {
-                return zoneMatch.code;
-            }
         }
     } catch (error) {
         console.warn('CountryPreferenceService: device locale detection failed', error);

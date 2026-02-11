@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export default appSchema({
-    version: 6,
+    version: 7,
     tables: [
         tableSchema({
             name: 'users',
@@ -43,6 +43,7 @@ export default appSchema({
                 { name: 'recurrence_end_date', type: 'string', isOptional: true },
                 { name: 'notification_id', type: 'string', isOptional: true },
                 { name: 'reminder_offset_minutes', type: 'number', isOptional: true }, // 15, 30, 60, etc.
+                { name: 'created_at', type: 'number' },
                 { name: 'updated_at', type: 'number' }, // ✅ CRITICAL for reactivity
             ],
         }),

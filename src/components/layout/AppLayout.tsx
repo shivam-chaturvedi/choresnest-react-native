@@ -45,7 +45,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const { themeVersion } = useTheme();
   const radius = useThemeRadius();
   const { openSidebar } = useSidebar();
-  const { refreshing, refreshNow } = useSyncStatus();
+  const { isSyncing, refreshing, refreshNow } = useSyncStatus();
 
   const handleNavigate = useCallback(
     (route: BottomNavRoute) => {
@@ -66,7 +66,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [showAddTask, setShowAddTask] = useState(false);
 
-  const refreshControl = enablePullToRefresh ? (
+  const refreshControl = enablePullToRefresh && !isSyncing ? (
     <RefreshControl
       refreshing={refreshing}
       onRefresh={refreshNow}

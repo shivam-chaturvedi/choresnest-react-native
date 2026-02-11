@@ -293,6 +293,8 @@ const AppNavigatorInner = () => {
     };
   }, [isAuthenticated, isGuest, isLoading]);
 
+  const shouldShowInitialSetup = !hasMembersInDB && hasLocalOnboarding !== true;
+
   // Only show splash on initial load, not during auth operations
   // Don't wait for sync - show UI immediately once members check completes
   if (
@@ -312,7 +314,7 @@ const AppNavigatorInner = () => {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {isAuthenticated ? (
           <>
-            {(!hasMembersInDB && hasLocalOnboarding !== true) ? (
+            {shouldShowInitialSetup ? (
               <Stack.Screen name="InitialSetup">
                 {() => (
                   <InitialSetupScreen
@@ -348,17 +350,25 @@ const AppNavigatorInner = () => {
                 )}
               </Stack.Screen>
             ) : null}
-            <Stack.Screen name="Auth">
-              {({ navigation }: any) => (
-                <AuthScreen
-                  onAuthenticated={() => {
-                    // MainTabs or InitialSetup will render automatically due to state change
-                  }}
-                  onForgotPassword={() => navigation.navigate("ForgotPassword")}
-                  onPrivacy={() => navigation.navigate("Privacy")}
-                />
-              )}
-            </Stack.Screen>
+          </>
+        )}
+        <Stack.Screen name="Auth">
+          {({ navigation }: any) => (
+            <AuthScreen
+              onAuthenticated={() => {
+                const targetRoute = shouldShowInitialSetup ? "InitialSetup" : "MainTabs";
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: targetRoute }],
+                });
+              }}
+              onForgotPassword={() => navigation.navigate("ForgotPassword")}
+              onPrivacy={() => navigation.navigate("Privacy")}
+            />
+          )}
+        </Stack.Screen>
+        {!isAuthenticated && (
+          <>
             <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
             <Stack.Screen name="Privacy" component={PrivacyScreen} />
           </>
