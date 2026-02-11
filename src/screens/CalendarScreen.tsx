@@ -26,8 +26,8 @@ const hapticOptions = {
   enableVibrateFallback: true,
   ignoreAndroidSystemSettings: false,
 };
-import { addMonths, subMonths, addDays, subDays, startOfWeek, endOfWeek, isSameMonth, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval, addYears, startOfDay, isAfter } from "date-fns";
-import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { addMonths, subMonths, addDays, subDays, startOfWeek, endOfWeek, isSameMonth, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval, addYears, startOfDay, isAfter, isWithinInterval } from "date-fns";
+import { useNavigation, useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { getEventsForDate } from "../utils/EventUtils";
 import { parseDateTimeInZone } from "../utils/SafeDateUtils";
 import { formatInTimeZone, toZonedTime } from "date-fns-tz";
@@ -396,6 +396,7 @@ export const CalendarScreen: React.FC = () => {
   } = useFamily();
   const { openSidebar } = useSidebar();
   const navigation = useNavigation();
+  const isFocused = useIsFocused();
   const colors = useThemeColors();
   const radius = useThemeRadius();
   const { currentCountry } = useCountry();
@@ -460,26 +461,50 @@ export const CalendarScreen: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  useFocusEffect(
-    React.useCallback(() => {
-      if ((activeView === "Day" || activeView === "Week") && isSameDay(selectedDate, today)) {
-        // Wait for layout to be ready
-        const timer = setTimeout(() => {
-          const current = toZonedTime(new Date(), timeZone);
-          const minutes = (current.getHours() * 60) + current.getMinutes();
-          const y = (minutes / 60) * HOUR_HEIGHT;
-          // Scroll to 2 hours before current time to show context
-          const twoHoursInPx = 2 * HOUR_HEIGHT;
-          scrollViewRef.current?.scrollTo({
-            y: Math.max(0, y - twoHoursInPx),
-            animated: true
-          });
-        }, 500);
+  const scrollToCurrentTime = (animated = true) => {
+    // Only scroll if we are in Day or Week view
+    if (activeView !== "Day" && activeView !== "Week") return;
 
-        return () => clearTimeout(timer);
-      }
-    }, [activeView, selectedDate])
-  );
+    const currentZoned = toZonedTime(new Date(), timeZone);
+    const todayZoned = startOfDay(currentZoned);
+
+    // Check if 'today' is visible in the current view
+    let shouldScroll = false;
+
+    if (activeView === "Day") {
+      shouldScroll = isSameDay(selectedDate, todayZoned);
+    } else if (activeView === "Week") {
+      // In week view, selectedDate is one of the days in the week.
+      // We need to check if 'today' falls within the currently displayed week.
+      const startOfCurrentWeek = startOfWeek(selectedDate);
+      const endOfCurrentWeek = endOfWeek(selectedDate);
+      shouldScroll = isWithinInterval(todayZoned, { start: startOfCurrentWeek, end: endOfCurrentWeek });
+    }
+
+    if (shouldScroll) {
+      // Calculate scroll position
+      const minutes = (currentZoned.getHours() * 60) + currentZoned.getMinutes();
+      const y = (minutes / 60) * HOUR_HEIGHT;
+      // Scroll to 2 hours before current time to show context
+      const twoHoursInPx = 2 * HOUR_HEIGHT;
+
+      // Use a small timeout to ensure layout is ready if called immediately after render
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({
+          y: Math.max(0, y - twoHoursInPx),
+          animated: animated
+        });
+      }, 100);
+    }
+  };
+
+  // Scroll on mount, view change, or when returning to today
+  useEffect(() => {
+    if (isFocused) {
+      scrollToCurrentTime(true);
+    }
+  }, [activeView, selectedDate, isFocused]);
+
 
   const today = toZonedTime(new Date(), timeZone);
 
@@ -1093,7 +1118,11 @@ export const CalendarScreen: React.FC = () => {
             <Pressable onPress={() => navigateDate(-1)} style={[styles.navArrow, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.sm }]}>
               <AppIcon name="chevronLeft" size={20} color={colors.foreground} />
             </Pressable>
-            <Pressable onPress={() => setSelectedDate(toZonedTime(new Date(), timeZone))} style={[styles.todayBtn, { backgroundColor: colors.primary + '15', borderRadius: radius.sm }]}>
+            <Pressable onPress={() => {
+              const now = toZonedTime(new Date(), timeZone);
+              setSelectedDate(now);
+              // We rely on the useEffect [selectedDate] to trigger the scroll
+            }} style={[styles.todayBtn, { backgroundColor: colors.primary + '15', borderRadius: radius.sm }]}>
               <Text style={[styles.todayText, { color: colors.primary }]}>Today</Text>
             </Pressable>
             <Pressable onPress={() => navigateDate(1)} style={[styles.navArrow, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.sm }]}>

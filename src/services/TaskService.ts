@@ -40,7 +40,13 @@ const attemptInstantDelete = async (table: 'tasks' | 'events', id: string) => {
             console.warn('Instant delete skipped: user not authenticated', authError);
             return;
         }
-        await supabase.from(table).delete().eq('id', id).eq('profile_id', user.id);
+        // Use soft delete (update deleted=true) instead of hard delete
+        // This ensures the deletion is synced to other devices
+        await supabase
+            .from(table)
+            .update({ deleted: true, updated_at: new Date().toISOString() })
+            .eq('id', id)
+            .eq('profile_id', user.id);
     } catch (err) {
         console.warn(`Instant ${table} delete failed`, err);
     }

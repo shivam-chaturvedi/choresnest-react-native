@@ -19,7 +19,7 @@ export const pushEventToSupabase = async (eventId: string): Promise<void> => {
         }
         const updatedAt = event.updatedAt ?? Date.now();
 
-        const payload = {
+        const payload: any = {
             id: event.id,
             title: event.title,
             icon: event.icon,
@@ -36,6 +36,7 @@ export const pushEventToSupabase = async (eventId: string): Promise<void> => {
             recurrence_end_date: event.recurrenceEndDate,
             reminder_offset_minutes: event.reminderOffsetMinutes,
             time_zone: event.timeZone,
+            visibility: event.visibility,
             updated_at: new Date(updatedAt).toISOString(),
             profile_id: user.id,
         };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { formatInTimeZone, getTimezoneOffset } from "date-fns-tz";
+
 import { safeFormat } from "../../utils/SafeDateUtils";
 import {
   Modal,
@@ -328,47 +328,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
     }
   }, [memberId, members]);
 
-  const combineLocalDateTime = (date: Date | null, time: Date | null): Date | null => {
-    if (!date) return null;
-    const result = new Date(date);
-    result.setSeconds(0, 0);
-    if (time) {
-      result.setHours(time.getHours(), time.getMinutes(), 0, 0);
-    } else {
-      result.setHours(0, 0, 0, 0);
-    }
-    return result;
-  };
 
-  const toUtcFromLocal = (date: Date | null, time: Date | null, timeZone: string): Date | null => {
-    const combined = combineLocalDateTime(date, time);
-    if (!combined) return null;
-    const offset = getTimezoneOffset(timeZone, combined);
-    return new Date(combined.getTime() - offset);
-  };
-
-  const formatUtc = (utcDate: Date | null, pattern: string, fallback: string): string => {
-    if (!utcDate) return fallback;
-    try {
-      return formatInTimeZone(utcDate, "UTC", pattern);
-    } catch {
-      return fallback;
-    }
-  };
-
-  const formatUtcOptional = (utcDate: Date | null, pattern: string): string | undefined => {
-    if (!utcDate) return undefined;
-    try {
-      return formatInTimeZone(utcDate, "UTC", pattern);
-    } catch {
-      return undefined;
-    }
-  };
-
-  const formatDateOnlyUtc = (date: Date | null, timeZone: string): string | undefined => {
-    const utcDate = toUtcFromLocal(date, null, timeZone);
-    return formatUtcOptional(utcDate, "yyyy-MM-dd");
-  };
 
   const handleSave = async () => {
     try {
@@ -377,18 +337,12 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         return;
       }
 
-      const eventTimeZone = eventToEdit?.timeZone || currentCountry.timeZone;
-      const fallbackDate = new Date().toISOString().split("T")[0];
+      const deviceTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const fallbackTimeZone = deviceTimeZone || currentCountry.timeZone;
+      const eventTimeZone = eventToEdit?.timeZone || fallbackTimeZone;
 
-      const fallbackTime = startTime
-        ? startTime.toLocaleTimeString("en-US", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })
-        : "12:00 AM";
-
-      const startUtc = toUtcFromLocal(startDate, allDay ? null : startTime, eventTimeZone);
-      const formattedDate = formatUtc(startUtc, "yyyy-MM-dd", fallbackDate);
+      // FIX: Use local time directly instead of converting to UTC to prevent time shifts
+      const formattedDate = safeFormat(startDate, "yyyy-MM-dd");
 
       let formattedTime: string;
       let formattedEndTime: string | undefined;
@@ -398,18 +352,15 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         formattedTime = "12:00 AM";
         formattedEndTime = "11:59 PM";
       } else {
-        formattedTime = formatUtc(startUtc, "hh:mm aa", fallbackTime);
+        formattedTime = safeFormat(startTime, "hh:mm aa");
 
         if (endTime) {
-          const endUtcForTime = toUtcFromLocal(endDate || startDate, endTime, eventTimeZone);
-          formattedEndTime = endUtcForTime ? formatUtcOptional(endUtcForTime, "hh:mm aa") : undefined;
+          formattedEndTime = safeFormat(endTime, "hh:mm aa");
         }
       }
 
       if (endDate) {
-        const endTimeForDate = allDay ? null : (endTime || startTime);
-        const endUtcForDate = toUtcFromLocal(endDate, endTimeForDate, eventTimeZone);
-        formattedEndDate = endUtcForDate ? formatUtcOptional(endUtcForDate, "yyyy-MM-dd") : undefined;
+        formattedEndDate = safeFormat(endDate, "yyyy-MM-dd");
       }
 
       const reminderOffsetMinutes = reminder ? parseInt(reminderTime, 10) : -1;
@@ -451,7 +402,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             endDate: formattedEndDate,
             isRecurring: repeatType !== 'never',
             recurrenceRule: repeatType !== 'never' ? repeatType : undefined,
-            recurrenceEndDate: formatDateOnlyUtc(repeatEndDate, eventTimeZone),
+            recurrenceEndDate: safeFormat(repeatEndDate, "yyyy-MM-dd"),
             reminderOffsetMinutes,
             timeZone: eventTimeZone,
           });
@@ -481,9 +432,9 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             endDate: formattedEndDate,
             isRecurring: repeatType !== 'never',
             recurrenceRule: repeatType !== 'never' ? repeatType : undefined,
-            recurrenceEndDate: formatDateOnlyUtc(repeatEndDate, eventTimeZone),
+            recurrenceEndDate: safeFormat(repeatEndDate, "yyyy-MM-dd"),
             reminderOffsetMinutes,
-            timeZone: currentCountry.timeZone,
+            timeZone: eventTimeZone,
           });
         }
       }

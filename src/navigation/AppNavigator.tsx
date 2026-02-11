@@ -86,7 +86,7 @@ const AppNavigatorInner = () => {
   const [hasMembersInDB, setHasMembersInDB] = React.useState<boolean | null>(null);
   const [hasLocalOnboarding, setHasLocalOnboarding] = React.useState<boolean | null>(null);
   const [localOnboardingLoaded, setLocalOnboardingLoaded] = React.useState(false);
-  
+
   // Auto-sync hook - triggers sync on data changes (runs in background)
   // Hook checks isGuest internally, so it's safe to call always
   useAutoSync();
@@ -125,7 +125,7 @@ const AppNavigatorInner = () => {
 
     const triggerSync = (readOnly: boolean = false) => {
       const now = Date.now();
-      
+
       // Skip if sync is already in progress (check our local flag first)
       if (syncInProgress) {
         console.log('Sync trigger skipped - sync already in progress');
@@ -340,35 +340,28 @@ const AppNavigatorInner = () => {
                   <OnboardingScreen
                     onSkip={() => {
                       completeOnboarding();
-                      navigation.replace("Auth");
+                      // No navigation.replace needed, state change triggers re-render
                     }}
                     onComplete={() => {
                       completeOnboarding();
-                      navigation.replace("Auth");
+                      // No navigation.replace needed
                     }}
                   />
                 )}
               </Stack.Screen>
             ) : null}
-          </>
-        )}
-        <Stack.Screen name="Auth">
-          {({ navigation }: any) => (
-            <AuthScreen
-              onAuthenticated={() => {
-                const targetRoute = shouldShowInitialSetup ? "InitialSetup" : "MainTabs";
-                navigation.reset({
-                  index: 0,
-                  routes: [{ name: targetRoute }],
-                });
-              }}
-              onForgotPassword={() => navigation.navigate("ForgotPassword")}
-              onPrivacy={() => navigation.navigate("Privacy")}
-            />
-          )}
-        </Stack.Screen>
-        {!isAuthenticated && (
-          <>
+            <Stack.Screen name="Auth">
+              {({ navigation }: any) => (
+                <AuthScreen
+                  onAuthenticated={() => {
+                    // No navigation needed, state change to isAuthenticated=true will switch stacks
+                  }}
+                  onForgotPassword={() => navigation.navigate("ForgotPassword")}
+                  onPrivacy={() => navigation.navigate("Privacy")}
+                />
+              )}
+            </Stack.Screen>
+            {/* Pass navigation correctly */}
             <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
             <Stack.Screen name="Privacy" component={PrivacyScreen} />
           </>
