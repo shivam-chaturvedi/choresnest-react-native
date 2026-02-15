@@ -1,7 +1,7 @@
 import { database } from '../database';
 import Task from '../database/models/Task';
 import Event from '../database/models/Event';
-import { List, ListItem } from '../database/models/List';
+import { List, ListCategory, ListItem } from '../database/models/List';
 import { NotificationScheduler, getActiveMemberId } from './NotificationScheduler';
 import { NotificationPreferencesService } from './NotificationPreferencesService';
 import { parseReminderDateTime } from '../utils/ReminderDateTimeUtils';
@@ -10,6 +10,7 @@ import { CountryPreferenceService } from './CountryPreferenceService';
 import { formatDateTime } from '../utils/countryFormatting';
 import { SyncService } from './SyncService';
 import { Q } from '@nozbe/watermelondb';
+import { map } from 'rxjs/operators';
 import { supabase } from '../config/supabase';
 
 const syncAfterWrite = () => {
@@ -49,7 +50,103 @@ const severityMeta: Record<"success" | "warning" | "default", { tone: string; te
 const TASKS_ROUTE: NotificationRoute = { tab: "more", screen: "Tasks" };
 const EVENTS_ROUTE: NotificationRoute = { tab: "calendar" };
 
+const EVENT_OBSERVE_COLUMNS = ['updated_at', 'deleted'] as const;
+const TASK_OBSERVE_COLUMNS = ['updated_at', 'deleted'] as const;
+const LIST_OBSERVE_COLUMNS = ['updated_at', 'deleted'] as const;
+
+const serializeEventRecord = (event: Event) => ({
+    id: event.id,
+    title: event.title,
+    icon: event.icon,
+    dateString: event.dateString,
+    time: event.time,
+    endTime: event.endTime,
+    endDate: event.endDate,
+    memberId: event.memberId,
+    description: event.description,
+    notes: event.notes,
+    location: event.location,
+    visibility: event.visibility,
+    timeZone: event.timeZone,
+    isRecurring: event.isRecurring,
+    recurrenceRule: event.recurrenceRule,
+    recurrenceEndDate: event.recurrenceEndDate,
+    reminderOffsetMinutes: event.reminderOffsetMinutes,
+    notificationId: event.notificationId,
+    createdAt: event.createdAt,
+    updatedAt: event.updatedAt,
+    version: event.version,
+    deleted: event.deleted,
+});
+
+const serializeTaskRecord = (task: Task) => ({
+    id: task.id,
+    name: task.name,
+    icon: task.icon,
+    status: task.status,
+    priority: task.priority,
+    dueDisplay: task.dueDisplay,
+    dateString: task.dateString,
+    assigneeId: task.assigneeId,
+    tab: task.tab,
+    notificationId: task.notificationId,
+    reminderEnabled: task.reminderEnabled,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+    version: task.version,
+    deleted: task.deleted,
+});
+
+const serializeListRecord = (list: List) => ({
+    id: list.id,
+    name: list.name,
+    type: list.type,
+    icon: list.icon,
+    profileId: list.profileId,
+    createdAt: list.createdAt,
+    updatedAt: list.updatedAt,
+    version: list.version,
+    deleted: list.deleted,
+});
+
+const serializeListItemRecord = (item: ListItem) => ({
+    id: item.id,
+    name: item.name,
+    quantity: item.quantity,
+    unit: item.unit,
+    categoryId: item.categoryId,
+    addedById: item.addedById,
+    isCompleted: item.isCompleted,
+    purchasedAt: item.purchasedAt,
+    listId: item.listId,
+    profileId: item.profileId,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    version: item.version,
+    deleted: item.deleted,
+});
+
+const serializeListCategoryRecord = (category: ListCategory) => ({
+    id: category.id,
+    name: category.name,
+    icon: category.icon,
+    color: category.color,
+    profileId: category.profileId,
+    createdAt: category.createdAt,
+    updatedAt: category.updatedAt,
+    version: category.version,
+    deleted: category.deleted,
+});
+
+export type ListRecord = ReturnType<typeof serializeListRecord>;
+export type ListItemRecord = ReturnType<typeof serializeListItemRecord>;
+export type ListCategoryRecord = ReturnType<typeof serializeListCategoryRecord>;
+
 type GroceryItemPayload = Partial<ListItem> & { addedBy?: string };
+type ListPayload = { name: string; type: string; icon?: string };
+type ListUpdates = Partial<{ name: string; type: string; icon?: string }>;
+type CategoryPayload = { name: string; icon?: string; color?: string };
+type CategoryUpdates = Partial<{ name: string; icon: string; color: string }>;
 
 const pushHomeNotification = (
     title: string,
@@ -343,12 +440,21 @@ const handleEventNotificationJob = async (eventId: string, options: EventNotific
 
 export const TaskService = {
     // --- Tasks ---
-    observeTasks: () => database.get<Task>('tasks').query().observe(),
+    observeTasks: () => {
+        const query = database.get<Task>('tasks').query(
+            Q.where('deleted', false),
+        );
+        return query.observeWithColumns(TASK_OBSERVE_COLUMNS).pipe(
+            map(records => records.map(serializeTaskRecord))
+        );
+    },
 
     addTask: async (data: Partial<Task>) => {
-        // 1. Immediate DB Write
-        const task = await database.write(async () => {
-            return await database.get<Task>('tasks').create(t => {
+        const now = Date.now();
+        let createdTaskId: string | undefined;
+
+        await database.write(async () => {
+            const task = await database.get<Task>('tasks').create(t => {
                 t.name = data.name || 'Untitled';
                 t.status = data.status || 'pending';
                 t.priority = data.priority || 'medium';
@@ -358,22 +464,26 @@ export const TaskService = {
                 t.tab = data.tab || 'My Tasks';
                 t.icon = data.icon || '📝';
                 t.reminderEnabled = data.reminderEnabled ?? true;
-                t.createdAt = Date.now();
-                t.updatedAt = Date.now();
+                t.createdAt = now;
+                t.updatedAt = now;
+                t.version = 1;
+                t.deleted = false;
             });
+            createdTaskId = task.id;
         });
 
-        enqueueTaskNotificationJob(task.id, { showFeedback: false });
+        if (createdTaskId) {
+            enqueueTaskNotificationJob(createdTaskId, { showFeedback: false });
+        }
         syncAfterWrite();
-
-        return task;
     },
 
     updateTask: async (id: string, updates: Partial<Task>) => {
-        // 1. Immediate DB Write
-        const task = await database.write(async () => {
-            const t = await database.get<Task>('tasks').find(id);
-            await t.update(tsk => {
+        const now = Date.now();
+
+        await database.write(async () => {
+            const task = await database.get<Task>('tasks').find(id);
+            await task.update(tsk => {
                 if (updates.name !== undefined) tsk.name = updates.name;
                 if (updates.status !== undefined) tsk.status = updates.status;
                 if (updates.priority !== undefined) tsk.priority = updates.priority;
@@ -383,15 +493,13 @@ export const TaskService = {
                 if (updates.tab !== undefined) tsk.tab = updates.tab;
                 if (updates.icon !== undefined) tsk.icon = updates.icon;
                 if (updates.reminderEnabled !== undefined) tsk.reminderEnabled = updates.reminderEnabled;
-                tsk.updatedAt = Date.now();
+                tsk.updatedAt = now;
+                tsk.version = (tsk.version ?? 0) + 1;
             });
-            return t;
         });
 
-        enqueueTaskNotificationJob(task.id, { showFeedback: true });
+        enqueueTaskNotificationJob(id, { showFeedback: true });
         syncAfterWrite();
-
-        return task;
     },
 
     deleteTask: async (id: string) => {
@@ -401,9 +509,18 @@ export const TaskService = {
             notificationId = task.notificationId;
         } catch { /* ignore */ }
 
+        const now = Date.now();
         await database.write(async () => {
-            const task = await database.get<Task>('tasks').find(id);
-            await task.markAsDeleted();
+            try {
+                const task = await database.get<Task>('tasks').find(id);
+                await task.update(tsk => {
+                    tsk.deleted = true;
+                    tsk.updatedAt = now;
+                    tsk.version = (tsk.version ?? 0) + 1;
+                });
+            } catch (error) {
+                console.error('Error soft deleting task:', error);
+            }
         });
         syncAfterWrite();
 
@@ -413,13 +530,21 @@ export const TaskService = {
     },
 
     // --- Events ---
-    observeEvents: () => database.get<Event>('events').query().observe(),
+    observeEvents: () => {
+        const query = database.get<Event>('events').query(
+            Q.where('deleted', false),
+        );
+        return query.observeWithColumns(EVENT_OBSERVE_COLUMNS).pipe(
+            map(records => records.map(serializeEventRecord))
+        );
+    },
 
     addEvent: async (data: Partial<Event>) => {
-        // 1. Immediate DB Write (Optimistic UI Update)
-        console.log("TaskService: Starting addEvent write...");
-        const event = await database.write(async () => {
-            return await database.get<Event>('events').create(e => {
+        const now = Date.now();
+        let createdEventId: string | undefined;
+
+        await database.write(async () => {
+            const event = await database.get<Event>('events').create(e => {
                 e.title = data.title || 'Untitled';
                 e.dateString = data.dateString || '';
                 e.time = data.time || '';
@@ -436,22 +561,26 @@ export const TaskService = {
                 e.recurrenceRule = data.recurrenceRule;
                 e.recurrenceEndDate = data.recurrenceEndDate;
                 e.reminderOffsetMinutes = data.reminderOffsetMinutes ?? 15;
-                e.createdAt = Date.now();
-                e.updatedAt = Date.now();
+                e.createdAt = now;
+                e.updatedAt = now;
+                e.version = 1;
+                e.deleted = false;
             });
+            createdEventId = event.id;
         });
 
-        enqueueEventNotificationJob(event.id, { showFeedback: false });
+        if (createdEventId) {
+            enqueueEventNotificationJob(createdEventId, { showFeedback: false });
+        }
         syncAfterWrite();
-
-        return event;
     },
 
     updateEvent: async (id: string, updates: Partial<Event>) => {
-        // 1. Immediate DB Write
-        const event = await database.write(async () => {
-            const e = await database.get<Event>('events').find(id);
-            await e.update(ev => {
+        const now = Date.now();
+
+        await database.write(async () => {
+            const event = await database.get<Event>('events').find(id);
+            await event.update(ev => {
                 if (updates.title !== undefined) ev.title = updates.title;
                 if (updates.dateString !== undefined) ev.dateString = updates.dateString;
                 if (updates.time !== undefined) ev.time = updates.time;
@@ -466,58 +595,79 @@ export const TaskService = {
                 if (updates.recurrenceRule !== undefined) ev.recurrenceRule = updates.recurrenceRule;
                 if (updates.recurrenceEndDate !== undefined) ev.recurrenceEndDate = updates.recurrenceEndDate;
                 if (updates.reminderOffsetMinutes !== undefined) ev.reminderOffsetMinutes = updates.reminderOffsetMinutes;
-                ev.updatedAt = Date.now();
+                if (updates.timeZone !== undefined) ev.timeZone = updates.timeZone;
+                if (updates.visibility !== undefined) ev.visibility = updates.visibility;
+                ev.updatedAt = now;
+                ev.version = (ev.version ?? 0) + 1;
             });
-            return e;
         });
 
-        enqueueEventNotificationJob(event.id, { showFeedback: true, updates });
+        enqueueEventNotificationJob(id, { showFeedback: true, updates });
         syncAfterWrite();
-
-        return event;
     },
 
     deleteEvent: async (id: string) => {
-        // Fetch ID before deletion for notification cancellation
         let notificationId: string | undefined;
         try {
             const event = await database.get<Event>('events').find(id);
             notificationId = event.notificationId;
         } catch { /* ignore if not found */ }
 
+        const now = Date.now();
         await database.write(async () => {
             try {
                 const event = await database.get<Event>('events').find(id);
-                await event.markAsDeleted();
-            } catch (e) {
-                console.error('Error deleting event:', e);
+                await event.update(ev => {
+                    ev.deleted = true;
+                    ev.updatedAt = now;
+                    ev.version = (ev.version ?? 0) + 1;
+                });
+            } catch (error) {
+                console.error('Error soft deleting event:', error);
             }
         });
         syncAfterWrite();
 
-        // Background Cancel
         if (notificationId) {
             NotificationScheduler.cancelNotification(notificationId).catch(err => console.error('Bg cancel failed', err));
         }
     },
 
     // --- Lists (Groceries/Todos) ---
-    observeLists: () => database.get<List>('lists').query().observe(),
+    observeLists: (profileId?: string | null) => {
+        const effectiveProfileId = profileId ?? '';
+        const query = database.get<List>('lists').query(
+            Q.where('profile_id', effectiveProfileId),
+            Q.where('deleted', false),
+            Q.sortBy('updated_at', Q.desc)
+        );
+        return query.observeWithColumns(LIST_OBSERVE_COLUMNS).pipe(
+            map(records => records.map(serializeListRecord))
+        );
+    },
 
     observeShoppingListItems: (profileId?: string | null) => {
-        const collection = database.get<ListItem>('list_items');
-        const query = profileId
-            ? collection.query(
-                  Q.where('profile_id', profileId),
-                  Q.where('deleted', false),
-                  Q.sortBy('updated_at', Q.desc)
-              )
-            : collection.query(
-                  Q.where('profile_id', ''),
-                  Q.where('deleted', false),
-                  Q.sortBy('updated_at', Q.desc)
-              );
-        return query.observeWithColumns(['is_completed', 'purchased_at', 'name', 'quantity']);
+        const effectiveProfileId = profileId ?? '';
+        const query = database.get<ListItem>('list_items').query(
+            Q.where('profile_id', effectiveProfileId),
+            Q.where('deleted', false),
+            Q.sortBy('updated_at', Q.desc)
+        );
+        return query.observeWithColumns(LIST_OBSERVE_COLUMNS).pipe(
+            map(records => records.map(serializeListItemRecord))
+        );
+    },
+
+    observeCategories: (profileId?: string | null) => {
+        const effectiveProfileId = profileId ?? '';
+        const query = database.get<ListCategory>('list_categories').query(
+            Q.where('profile_id', effectiveProfileId),
+            Q.where('deleted', false),
+            Q.sortBy('updated_at', Q.desc)
+        );
+        return query.observeWithColumns(LIST_OBSERVE_COLUMNS).pipe(
+            map(records => records.map(serializeListCategoryRecord))
+        );
     },
 
     addGroceryItem: async (data: GroceryItemPayload) => {
@@ -528,34 +678,56 @@ export const TaskService = {
         }
         const now = Date.now();
         await database.write(async () => {
-            await database.get<ListItem>('list_items').create(i => {
-                i.profileId = profileId;
-                i.name = data.name || 'Item';
-                i.quantity = data.quantity || 1;
-                i.unit = data.unit || 'pcs';
+            const listsCollection = database.get<List>('lists');
+            const groceryLists = await listsCollection.query(
+                Q.where('profile_id', profileId),
+                Q.where('type', 'grocery'),
+                Q.where('deleted', false)
+            ).fetch();
+            let groceryListId = groceryLists[0]?.id;
+            if (!groceryListId) {
+                const created = await listsCollection.create(list => {
+                    list.profileId = profileId;
+                    list.name = 'Grocery';
+                    list.type = 'grocery';
+                    list.icon = 'shoppingCart';
+                    list.createdAt = now;
+                    list.updatedAt = now;
+                    list.version = 1;
+                    list.deleted = false;
+                });
+                groceryListId = created.id;
+            }
+
+            await database.get<ListItem>('list_items').create(item => {
+                const addedById = data.addedBy || data.addedById || 'system';
+                item.profileId = profileId;
+                item.listId = groceryListId!;
+                item.name = data.name || 'Item';
+                item.quantity = data.quantity ?? 1;
+                item.unit = data.unit || 'pcs';
                 if (data.categoryId) {
-                    i.categoryId = data.categoryId;
+                    item.categoryId = data.categoryId;
                 }
-                const addedById = data.addedBy || data.addedById;
-                i.addedById = addedById || 'system';
-                i.isCompleted = data.isCompleted ?? false;
+                item.addedById = addedById;
+                item.isCompleted = data.isCompleted ?? false;
                 if (data.purchasedAt) {
-                    i.purchasedAt = data.purchasedAt;
+                    item.purchasedAt = data.purchasedAt;
                 }
-                i.updatedAt = now;
-                i.createdAt = now;
-                i.version = 1;
-                i.deleted = false;
+                item.createdAt = now;
+                item.updatedAt = now;
+                item.version = 1;
+                item.deleted = false;
             });
         });
         syncAfterWrite();
     },
 
     toggleGroceryItem: async (id: string) => {
+        const now = Date.now();
         await database.write(async () => {
             const item = await database.get<ListItem>('list_items').find(id);
             const nextState = !item.isCompleted;
-            const now = Date.now();
             await item.update(i => {
                 i.isCompleted = nextState;
                 i.purchasedAt = nextState ? now : undefined;
@@ -567,13 +739,125 @@ export const TaskService = {
     },
 
     removeGroceryItem: async (id: string) => {
+        const now = Date.now();
         await database.write(async () => {
             const item = await database.get<ListItem>('list_items').find(id);
-            const now = Date.now();
             await item.update(i => {
                 i.deleted = true;
                 i.updatedAt = now;
                 i.version = (i.version ?? 0) + 1;
+            });
+        });
+        syncAfterWrite();
+    },
+
+    addList: async (data: ListPayload) => {
+        const profileId = await fetchActiveProfileId();
+        if (!profileId) {
+            console.warn('Skipping list create until profile is known');
+            return;
+        }
+        const now = Date.now();
+        await database.write(async () => {
+            await database.get<List>('lists').create(list => {
+                list.profileId = profileId;
+                list.name = (data.name || 'List').trim();
+                list.type = data.type;
+                list.icon = data.icon || 'list';
+                list.createdAt = now;
+                list.updatedAt = now;
+                list.version = 1;
+                list.deleted = false;
+            });
+        });
+        syncAfterWrite();
+    },
+
+    updateList: async (id: string, updates: ListUpdates) => {
+        const now = Date.now();
+        await database.write(async () => {
+            const list = await database.get<List>('lists').find(id);
+            await list.update(record => {
+                if (updates.name !== undefined) {
+                    record.name = updates.name;
+                }
+                if (updates.type !== undefined) {
+                    record.type = updates.type;
+                }
+                if (updates.icon !== undefined) {
+                    record.icon = updates.icon;
+                }
+                record.updatedAt = now;
+                record.version = (record.version ?? 0) + 1;
+            });
+        });
+        syncAfterWrite();
+    },
+
+    deleteList: async (id: string) => {
+        const now = Date.now();
+        await database.write(async () => {
+            const list = await database.get<List>('lists').find(id);
+            await list.update(record => {
+                record.deleted = true;
+                record.updatedAt = now;
+                record.version = (record.version ?? 0) + 1;
+            });
+        });
+        syncAfterWrite();
+    },
+
+    addCategory: async (data: CategoryPayload) => {
+        const profileId = await fetchActiveProfileId();
+        if (!profileId) {
+            console.warn('Skipping category create until profile is known');
+            return;
+        }
+        const now = Date.now();
+        await database.write(async () => {
+            await database.get<ListCategory>('list_categories').create(category => {
+                category.profileId = profileId;
+                category.name = data.name;
+                category.icon = data.icon || 'tag';
+                category.color = data.color || '#9CA3AF';
+                category.createdAt = now;
+                category.updatedAt = now;
+                category.version = 1;
+                category.deleted = false;
+            });
+        });
+        syncAfterWrite();
+    },
+
+    updateCategory: async (id: string, updates: CategoryUpdates) => {
+        const now = Date.now();
+        await database.write(async () => {
+            const category = await database.get<ListCategory>('list_categories').find(id);
+            await category.update(record => {
+                if (updates.name !== undefined) {
+                    record.name = updates.name;
+                }
+                if (updates.icon !== undefined) {
+                    record.icon = updates.icon;
+                }
+                if (updates.color !== undefined) {
+                    record.color = updates.color;
+                }
+                record.updatedAt = now;
+                record.version = (record.version ?? 0) + 1;
+            });
+        });
+        syncAfterWrite();
+    },
+
+    deleteCategory: async (id: string) => {
+        const now = Date.now();
+        await database.write(async () => {
+            const category = await database.get<ListCategory>('list_categories').find(id);
+            await category.update(record => {
+                record.deleted = true;
+                record.updatedAt = now;
+                record.version = (record.version ?? 0) + 1;
             });
         });
         syncAfterWrite();

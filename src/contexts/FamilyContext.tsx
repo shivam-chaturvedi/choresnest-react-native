@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from "react";
 import { FamilyService } from "../services/FamilyService";
 import { TaskService } from "../services/TaskService";
+import type { ListCategoryRecord, ListItemRecord } from "../services/TaskService";
 import { VaultService } from "../services/VaultService";
 import { supabase } from "../config/supabase";
 
@@ -107,17 +108,17 @@ export interface FamilyContextValue {
   addDocument: (doc: any) => Promise<any>;
   updateDocument: (id: string, updates: any) => Promise<any>;
   events: CalendarEvent[];
-  addEvent: (event: any) => Promise<any>;
-  updateEvent: (id: string, updates: any) => Promise<any>;
-  deleteEvent: (id: string) => Promise<any>;
+  addEvent: (event: any) => Promise<void>;
+  updateEvent: (id: string, updates: any) => Promise<void>;
+  deleteEvent: (id: string) => Promise<void>;
   groceryList: GroceryItem[];
   addGroceryItem: (item: any) => Promise<any>;
   toggleGroceryItem: (id: string) => Promise<any>;
   removeGroceryItem: (id: string) => Promise<any>;
   tasks: Task[];
-  addTask: (task: any) => Promise<any>;
-  updateTask: (id: string, updates: any) => Promise<any>;
-  deleteTask: (id: string) => Promise<any>;
+  addTask: (task: any) => Promise<void>;
+  updateTask: (id: string, updates: any) => Promise<void>;
+  deleteTask: (id: string) => Promise<void>;
   categories: any[];
   addCategory: () => void;
 }
@@ -154,10 +155,6 @@ const mapTaskModelToTask = (taskModel: any, membersById: Map<string, FamilyMembe
   icon: taskModel.icon,
 });
 
-const VALID_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
-
-const isValidDateString = (value: any): value is string => typeof value === "string" && VALID_DATE_REGEX.test(value);
-
 const normalizeVirtualId = (id: string): string => {
   if (!id) return id;
   const match = id.match(/^(.+?)_\d{4}-\d{2}-\d{2}_/);
@@ -173,8 +170,8 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [rawTasks, setRawTasks] = useState<any[]>([]);
   const [globalVault, setGlobalVault] = useState<any[]>([]);
   const [memberVaults, setMemberVaults] = useState<Record<string, any[]>>({});
-  const [groceryList, setGroceryList] = useState<GroceryItem[]>([]);
-  const [categories, setCategories] = useState<any[]>([]);
+  const [rawGroceryItems, setRawGroceryItems] = useState<ListItemRecord[]>([]);
+  const [rawCategories, setRawCategories] = useState<ListCategoryRecord[]>([]);
   const [profileId, setProfileId] = useState<string | null>(null);
 
   const membersById = useMemo(() => {
@@ -186,14 +183,9 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   }, [members]);
 
   const events = useMemo(() => {
-    const invalidDates: any[] = [];
     const missingMembers: any[] = [];
 
     const filtered = rawEvents.filter(eventModel => {
-      if (!isValidDateString(eventModel.dateString)) {
-        invalidDates.push(eventModel);
-        return false;
-      }
       if (eventModel.memberId && !membersById.has(eventModel.memberId)) {
         missingMembers.push(eventModel);
         return false;
@@ -201,9 +193,6 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       return true;
     });
 
-    if (invalidDates.length > 0) {
-      console.warn(`FamilyContext: Skipping ${invalidDates.length} events with invalid dateString`.trim());
-    }
     if (missingMembers.length > 0) {
       console.warn(`FamilyContext: Skipping ${missingMembers.length} events with missing members`.trim());
     }
@@ -211,26 +200,10 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     return filtered.map(eventModel => mapEventModelToCalendarEvent(eventModel, membersById));
   }, [rawEvents, membersById]);
 
-  const upsertRawEvent = (eventModel: any) => {
-    setRawEvents(prev => {
-      const filtered = prev.filter(ev => ev.id !== eventModel.id);
-      return [...filtered, eventModel];
-    });
-  };
-
-  const removeRawEvent = (id: string) => {
-    setRawEvents(prev => prev.filter(ev => ev.id !== id));
-  };
-
   const tasks = useMemo(() => {
-    const invalidDates: any[] = [];
     const missingAssignees: any[] = [];
 
     const filtered = rawTasks.filter(taskModel => {
-      if (!isValidDateString(taskModel.dateString)) {
-        invalidDates.push(taskModel);
-        return false;
-      }
       if (taskModel.assigneeId && !membersById.has(taskModel.assigneeId)) {
         missingAssignees.push(taskModel);
         return false;
@@ -238,15 +211,34 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       return true;
     });
 
-    if (invalidDates.length > 0) {
-      console.warn(`FamilyContext: Skipping ${invalidDates.length} tasks with invalid dateString`.trim());
-    }
     if (missingAssignees.length > 0) {
       console.warn(`FamilyContext: Skipping ${missingAssignees.length} tasks with missing assignees`.trim());
     }
 
     return filtered.map(taskModel => mapTaskModelToTask(taskModel, membersById));
   }, [rawTasks, membersById]);
+
+  const categories = useMemo(() => {
+    return rawCategories.map(cat => ({
+      id: cat.id,
+      name: cat.name,
+      icon: cat.icon,
+      color: cat.color,
+    }));
+  }, [rawCategories]);
+
+  const groceryList = useMemo(() => {
+    return rawGroceryItems.map(item => ({
+      id: item.id,
+      name: item.name,
+      quantity: item.quantity,
+      unit: item.unit,
+      completed: item.isCompleted,
+      categoryId: item.categoryId,
+      addedBy: item.addedById,
+      purchasedAt: item.purchasedAt,
+    }));
+  }, [rawGroceryItems]);
 
   // --- Load Family Name ---
   useEffect(() => {
@@ -421,9 +413,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const addEvent = async (e: any) => {
     try {
-      const event = await TaskService.addEvent(e);
-      upsertRawEvent(event);
-      return event;
+      await TaskService.addEvent(e);
     } catch (error) {
       console.error('Failed to add event:', error);
       throw new Error('Failed to add event. Please try again.');
@@ -433,9 +423,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const updateEvent = async (id: string, updates: any) => {
     try {
       const normalizedId = normalizeVirtualId(id);
-      const event = await TaskService.updateEvent(normalizedId, updates);
-      upsertRawEvent(event);
-      return event;
+      await TaskService.updateEvent(normalizedId, updates);
     } catch (error) {
       console.error('Failed to update event:', error);
       throw new Error('Failed to update event. Please try again.');
@@ -445,9 +433,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const deleteEvent = async (id: string) => {
     try {
       const normalizedId = normalizeVirtualId(id);
-      const result = await TaskService.deleteEvent(normalizedId);
-      removeRawEvent(normalizedId);
-      return result;
+      await TaskService.deleteEvent(normalizedId);
     } catch (error) {
       console.error('Failed to delete event:', error);
       throw new Error('Failed to delete event. Please try again.');
@@ -503,30 +489,13 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   // --- Observe Grocery List ---
   useEffect(() => {
     if (!profileId) {
-      setGroceryList([]);
+      setRawGroceryItems([]);
       return;
     }
     try {
       const sub = TaskService.observeShoppingListItems(profileId).subscribe({
         next: (items) => {
-          try {
-            // Map to grocery list format
-            const mapped = items.map(i => ({
-              id: i.id,
-              name: i.name,
-              quantity: i.quantity,
-              unit: i.unit,
-              completed: i.isCompleted,
-              categoryId: i.categoryId,
-              addedBy: i.addedById,
-              purchasedAt: i.purchasedAt,
-            }));
-            console.log(`FamilyContext: Grocery list updated with ${mapped.length} items`);
-            console.log(`FamilyContext: Completed items: ${mapped.filter(i => i.completed).length}`);
-            setGroceryList(mapped);
-          } catch (error) {
-            console.error('Error mapping grocery items:', error);
-          }
+          setRawGroceryItems(items);
         },
         error: (error) => {
           console.error('Error observing grocery list:', error);
@@ -535,6 +504,27 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       return () => sub.unsubscribe();
     } catch (error) {
       console.error('Error setting up grocery list subscription:', error);
+    }
+  }, [profileId]);
+
+  // --- Observe Grocery Categories ---
+  useEffect(() => {
+    if (!profileId) {
+      setRawCategories([]);
+      return;
+    }
+    try {
+      const sub = TaskService.observeCategories(profileId).subscribe({
+        next: (items) => {
+          setRawCategories(items);
+        },
+        error: (error) => {
+          console.error('Error observing grocery categories:', error);
+        }
+      });
+      return () => sub.unsubscribe();
+    } catch (error) {
+      console.error('Error setting up grocery categories subscription:', error);
     }
   }, [profileId]);
 

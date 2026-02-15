@@ -716,7 +716,7 @@ export const VaultScreen: React.FC = () => {
   };
 
   return (
-    <AppLayout showNav={false} showAddButton={false}>
+    <AppLayout showNav={false} showAddButton={true} onAddPress={handleScan}>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         {currentView === 'main' && (
           <View style={styles.header}>
@@ -794,10 +794,6 @@ export const VaultScreen: React.FC = () => {
           currentView === 'category' ? renderCategoryView() :
             renderAllView()}
 
-        {/* Floating Add Button */}
-        <Pressable style={[styles.fab, { backgroundColor: colors.primary, borderRadius: radius.full }]} onPress={handleScan}>
-          <Plus size={24} color={colors.primaryForeground} />
-        </Pressable>
 
         <DocumentScanner
           open={showScanner}
@@ -1093,19 +1089,5 @@ const styles = StyleSheet.create({
   },
   emergencySub: {
     fontSize: 12,
-  },
-  fab: {
-    position: 'absolute',
-    bottom: 24,
-    right: 24,
-    width: 56,
-    height: 56,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
   },
 });

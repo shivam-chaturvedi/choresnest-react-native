@@ -25,4 +25,5 @@ export default class Event extends Model {
     @field('updated_at') updatedAt!: number;
     @field('created_at') createdAt!: number;
     @field('version') version!: number;
+    @field('deleted') deleted!: boolean;
 }

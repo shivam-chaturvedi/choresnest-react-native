@@ -18,4 +18,5 @@ export default class Task extends Model {
     @field('updated_at') updatedAt!: number;
     @field('created_at') createdAt!: number;
     @field('version') version!: number;
+    @field('deleted') deleted!: boolean;
 }

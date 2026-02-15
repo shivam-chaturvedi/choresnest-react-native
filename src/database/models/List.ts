@@ -26,6 +26,7 @@ export class ListItem extends Model {
     }
 
     @relation('lists', 'list_id') list!: List;
+    @text('list_id') listId!: string;
     @text('name') name!: string;
     @field('quantity') quantity!: number;
     @text('unit') unit!: string;

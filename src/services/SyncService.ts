@@ -39,27 +39,26 @@ const MIN_SYNC_GAP_MS = 300;
 let lastSyncFinishedAt = 0;
 
 let realtimeChannel: RealtimeChannel | null = null;
-const ensureRealtimeEventsSubscription = (triggerSync: () => void) => {
+const ensureRealtimeSubscription = (triggerSync: () => void) => {
     if (realtimeChannel) {
         return;
     }
-    realtimeChannel = supabase.channel('realtime_events_sync');
-    realtimeChannel
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => {
-            triggerSync();
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
+    realtimeChannel = supabase.channel('realtime_sync');
+    const watchTables = ['lists', 'list_items', 'list_categories', 'events', 'tasks'];
+    watchTables.forEach((table) => {
+        realtimeChannel?.on('postgres_changes', { event: '*', schema: 'public', table }, () => {
             triggerSync();
         });
+    });
     const subscribeResult = realtimeChannel.subscribe((status) => {
         if (status !== 'SUBSCRIBED') {
             console.warn('Realtime sync subscription failed with status:', status);
-            teardownRealtimeEventsSubscription();
+            teardownRealtimeSubscription();
         }
     });
 };
 
-const teardownRealtimeEventsSubscription = () => {
+const teardownRealtimeSubscription = () => {
     if (!realtimeChannel) {
         return;
     }
@@ -385,7 +384,7 @@ export const SyncService = {
             return;
         }
         const userId = user.id;
-        ensureRealtimeEventsSubscription(() => {
+        ensureRealtimeSubscription(() => {
             void this.requestSyncSoon();
         });
         if (lastSyncedUserId && lastSyncedUserId !== userId) {
