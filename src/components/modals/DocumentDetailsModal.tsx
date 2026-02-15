@@ -5,10 +5,11 @@ import {
     Text,
     StyleSheet,
     Pressable,
-    TouchableWithoutFeedback,
     TextInput,
     ScrollView,
     Image,
+    TouchableWithoutFeedback,
+    TouchableOpacity,
 } from "react-native";
 import { X, Edit2, Save } from "lucide-react-native";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
@@ -94,7 +95,7 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
     const [nameError, setNameError] = useState('');
 
     useEffect(() => {
-        if (document) {
+        if (document && visible) {
             setDocumentName(document.name || '');
             setSelectedCategory(document.type || '');
             setPurchaseDate(document.purchaseDate || '');
@@ -112,7 +113,7 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
             setReminderOffsets(reminderRule?.offsets ? normalizeReminderOffsets(reminderRule.offsets) : [1]);
             setReminderTime(reminderRule?.timeOfDay || '09:00');
         }
-    }, [document]);
+    }, [document?.id, visible]);
 
     useEffect(() => {
         if (visible) {
@@ -454,13 +455,25 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                         </Text>
                         <View style={styles.headerButtons}>
                             {!isEditMode && (
-                                <Pressable onPress={() => setIsEditMode(true)} style={styles.editBtn} hitSlop={8}>
+                                <Pressable
+                                    onPress={() => setIsEditMode(true)}
+                                    style={styles.editBtn}
+                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                >
                                     <Edit2 size={20} color={colors.primary} />
                                 </Pressable>
                             )}
-                            <Pressable onPress={onClose} hitSlop={8}>
-                                <X size={20} color={colors.mutedForeground} />
-                            </Pressable>
+                            <TouchableOpacity
+                                onPress={() => {
+                                    console.log('[DocumentDetailsModal] X button pressed');
+                                    onClose();
+                                }}
+                                hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+                                style={styles.closeButton}
+                                activeOpacity={0.6}
+                            >
+                                <X size={24} color={colors.mutedForeground} />
+                            </TouchableOpacity>
                         </View>
                     </View>
 
@@ -588,6 +601,7 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.25,
         shadowRadius: 20,
         elevation: 10,
+        zIndex: 1, // Ensure modal content is above overlay
     },
     header: {
         flexDirection: "row",
@@ -601,11 +615,20 @@ const styles = StyleSheet.create({
     },
     headerButtons: {
         flexDirection: 'row',
-        gap: 12,
+        gap: 8,
         alignItems: 'center',
+        zIndex: 100, // Ensure buttons are above other elements
+        elevation: 100,
     },
     editBtn: {
-        padding: 4,
+        padding: 12,
+        zIndex: 100,
+    },
+    closeButton: {
+        padding: 12,
+        backgroundColor: 'transparent', // Ensure touch capture
+        zIndex: 100,
+        elevation: 100,
     },
     scrollContainer: {
         maxHeight: 500,

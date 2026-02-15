@@ -58,7 +58,10 @@ export const VaultScreen: React.FC = () => {
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [selectedDocument, setSelectedDocument] = useState<any>(null);
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
+  const [documentSnapshot, setDocumentSnapshot] = useState<VaultDocument | null>(null);
+  const pendingDocumentIdRef = React.useRef<string | null>(null);
+  const [scannerSession, setScannerSession] = useState<{ step: 'upload' | 'form'; file: SavedDocument | null } | null>(null);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [filters, setFilters] = useState<FilterOptions>({
     categories: [],
@@ -152,13 +155,48 @@ export const VaultScreen: React.FC = () => {
     return [...(globalVault || []), ...allMemberDocs];
   }, [globalVault, memberVaults]);
 
+  const selectedDocument = useMemo(() => {
+    if (!selectedDocumentId) return null;
+    return allDocs.find(d => d.id === selectedDocumentId) || null;
+  }, [selectedDocumentId, allDocs]);
+
+  const documentForModal = selectedDocument || documentSnapshot;
+
   useEffect(() => {
-    if (!selectedDocument) return;
-    const updated = allDocs.find(doc => doc.id === selectedDocument.id);
-    if (updated) {
-      setSelectedDocument(updated);
+    if (!showDetailsModal) {
+      return;
     }
-  }, [allDocs, selectedDocument]);
+
+    if (!selectedDocument) {
+      // Keep the modal open while syncs temporarily clear the query unless we explicitly
+      // cleared the selected ID (or the ID was dropped because the document was removed).
+      if (selectedDocumentId) {
+        console.log('[VaultScreen] Document temporarily missing during sync, keeping modal open for', selectedDocumentId);
+        return;
+      }
+
+      setShowDetailsModal(false);
+    }
+  }, [selectedDocument, selectedDocumentId, showDetailsModal]);
+
+  useEffect(() => {
+    if (!showDetailsModal) {
+      setDocumentSnapshot(null);
+      pendingDocumentIdRef.current = null;
+      return;
+    }
+
+    if (selectedDocument) {
+      setDocumentSnapshot(selectedDocument);
+      pendingDocumentIdRef.current = selectedDocument.id;
+      return;
+    }
+
+    if (selectedDocumentId && pendingDocumentIdRef.current !== selectedDocumentId) {
+      setDocumentSnapshot(null);
+      pendingDocumentIdRef.current = selectedDocumentId;
+    }
+  }, [selectedDocument, selectedDocumentId, showDetailsModal]);
 
   useEffect(() => {
     const ticker = setInterval(() => {
@@ -435,7 +473,7 @@ export const VaultScreen: React.FC = () => {
                   key={doc.id}
                   style={[styles.docRow, { backgroundColor: colors.card, borderRadius: radius.md }]}
                   onPress={() => {
-                    setSelectedDocument(doc);
+                    setSelectedDocumentId(doc.id);
                     setShowDetailsModal(true);
                   }}
                 >
@@ -487,7 +525,7 @@ export const VaultScreen: React.FC = () => {
                     key={doc.id}
                     style={[styles.docRow, { backgroundColor: colors.card, borderRadius: radius.md }]}
                     onPress={() => {
-                      setSelectedDocument(doc);
+                      setSelectedDocumentId(doc.id);
                       setShowDetailsModal(true);
                     }}
                   >
@@ -615,7 +653,7 @@ export const VaultScreen: React.FC = () => {
                 key={doc.id}
                 style={[styles.docRow, { backgroundColor: colors.card, borderRadius: radius.md }]}
                 onPress={() => {
-                  setSelectedDocument(doc);
+                  setSelectedDocumentId(doc.id);
                   setShowDetailsModal(true);
                 }}
               >
@@ -660,11 +698,21 @@ export const VaultScreen: React.FC = () => {
   );
 
   const handleScan = () => {
+    console.log('[VaultScreen] Opening scanner via handleScan');
     setShowScanner(true);
   };
 
   const handleUpload = () => {
+    console.log('[VaultScreen] Opening scanner via handleUpload');
     setShowScanner(true);
+  };
+
+  const handleScannerOpenChange = (open: boolean) => {
+    console.log('[VaultScreen] Scanner onOpenChange called with:', open);
+    setShowScanner(open);
+    if (!open) {
+      setScannerSession(null);
+    }
   };
 
   return (
@@ -753,8 +801,10 @@ export const VaultScreen: React.FC = () => {
 
         <DocumentScanner
           open={showScanner}
-          onOpenChange={setShowScanner}
+          onOpenChange={handleScannerOpenChange}
           onDocumentSaved={handleDocumentSaved}
+          persistedState={scannerSession}
+          onPersistedStateChange={setScannerSession}
         />
 
         <ImageViewerModal
@@ -765,8 +815,11 @@ export const VaultScreen: React.FC = () => {
 
         <DocumentDetailsModal
           visible={showDetailsModal}
-          onClose={() => setShowDetailsModal(false)}
-          document={selectedDocument}
+          onClose={() => {
+            setShowDetailsModal(false);
+            setSelectedDocumentId(null);
+          }}
+          document={documentForModal}
           onUpdate={updateDocument}
           onViewImage={(uri) => {
             setSelectedImageUri(uri);

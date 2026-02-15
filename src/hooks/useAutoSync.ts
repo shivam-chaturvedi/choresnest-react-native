@@ -27,6 +27,11 @@ export const useAutoSync = () => {
             return;
         }
 
+        if (!SyncService.isEnabled()) {
+            console.log('Auto-sync is disabled via Config.ENABLE_SYNC=false; skipping auto-sync observers.');
+            return;
+        }
+
         // Debounce sync calls to avoid too frequent syncing
         let syncTimeout: ReturnType<typeof setTimeout> | null = null;
         let lastSyncTime = 0;

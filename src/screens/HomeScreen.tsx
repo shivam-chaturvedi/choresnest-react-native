@@ -637,9 +637,11 @@ export const HomeScreen: React.FC = () => {
               <Text style={{ color: colors.mutedForeground, fontStyle: 'italic', marginVertical: 8 }}>Nothing on the calendar for today</Text>
             ) : (
               <ScrollView
-                style={{ maxHeight: SCHEDULE_ITEM_HEIGHT * 3 }}
+                style={{ maxHeight: SCHEDULE_ITEM_HEIGHT * 3.5 }}
                 contentContainerStyle={{ paddingBottom: 4 }}
-                showsVerticalScrollIndicator
+                showsVerticalScrollIndicator={true}
+                nestedScrollEnabled={true}
+                scrollEnabled={true}
               >
                 {todaysScheduleItems.map((item) => (
                   <Pressable

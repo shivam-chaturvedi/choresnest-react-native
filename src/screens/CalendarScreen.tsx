@@ -483,7 +483,12 @@ export const CalendarScreen: React.FC = () => {
 
     if (shouldScroll) {
       // Calculate scroll position
-      const minutes = (currentZoned.getHours() * 60) + currentZoned.getMinutes();
+      // Calculate scroll position using authentic time in target zone
+      const now = new Date();
+      const h = parseInt(formatInTimeZone(now, timeZone, 'H'), 10);
+      const m = parseInt(formatInTimeZone(now, timeZone, 'm'), 10);
+
+      const minutes = (h * 60) + m;
       const y = (minutes / 60) * HOUR_HEIGHT;
       // Scroll to 2 hours before current time to show context
       const twoHoursInPx = 2 * HOUR_HEIGHT;

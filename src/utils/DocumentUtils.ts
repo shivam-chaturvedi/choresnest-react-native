@@ -174,7 +174,13 @@ export const captureImage = async (): Promise<SavedDocument | null> => {
                         Alert.alert("Error", "Failed to save the scanned document.");
                         resolve(null);
                     }
+                } else {
+                    console.warn("Captured asset has no URI");
+                    resolve(null);
                 }
+            } else {
+                console.warn("Camera response has no assets");
+                resolve(null);
             }
         });
     });

@@ -114,6 +114,11 @@ const AppNavigatorInner = () => {
       return;
     }
 
+    if (!SyncService.isEnabled()) {
+      console.log('Background sync is disabled via Config.ENABLE_SYNC=false; skipping sync setup.');
+      return;
+    }
+
     let netInfoUnsubscribe: (() => void) | null = null;
     let syncInterval: ReturnType<typeof setInterval> | null = null;
     let appStateSubscription: any = null;
@@ -300,6 +305,7 @@ const AppNavigatorInner = () => {
   if (
     showSplash ||
     !localOnboardingLoaded ||
+    isLoading ||
     (isAuthenticated && !isLoading && hasMembersInDB === null)
   ) {
     return (
