@@ -1,7 +1,7 @@
 import React from "react";
 import { DefaultTheme, DarkTheme, NavigationContainer } from "@react-navigation/native";
 import { theme } from "../theme";
-import { createNativeStackNavigator, NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 
 import { SplashScreen } from "../screens/SplashScreen";
@@ -107,9 +107,8 @@ const AppNavigatorInner = () => {
     return () => clearTimeout(splashTimeout);
   }, [showSplash, hasMembersInDB]);
 
-  // Comprehensive sync setup: app restart, foreground, network changes, periodic
+  // Comprehensive sync setup: app restart, foreground, network changes
   React.useEffect(() => {
-    // Only sync if authenticated and not a guest
     if (!isAuthenticated || isGuest || isLoading) {
       return;
     }
@@ -120,119 +119,86 @@ const AppNavigatorInner = () => {
     }
 
     let netInfoUnsubscribe: (() => void) | null = null;
-    let syncInterval: ReturnType<typeof setInterval> | null = null;
     let appStateSubscription: any = null;
 
-    // Track last sync time to prevent too frequent syncs
-    let lastSyncTime = 0;
-    let syncInProgress = false;
-    const MIN_SYNC_INTERVAL = 5000; // Minimum 5 seconds between syncs
-
-    const triggerSync = (readOnly: boolean = false) => {
-      const now = Date.now();
-
-      // Skip if sync is already in progress (check our local flag first)
-      if (syncInProgress) {
-        console.log('Sync trigger skipped - sync already in progress');
+    const triggerSync = async (readOnly: boolean = false) => {
+      if (SyncService.isSyncing()) {
+        console.log('Sync trigger skipped - SyncService already running');
         return;
       }
 
-      // Skip if synced too recently (only for read-only syncs)
-      if (readOnly && now - lastSyncTime < MIN_SYNC_INTERVAL) {
-        console.log('Read sync skipped - too soon since last sync');
-        return;
-      }
-
-      // Set local flag to prevent multiple triggers
-      syncInProgress = true;
-      lastSyncTime = now;
-
-      // Run sync in background without blocking - don't await
-      (async () => {
-        try {
-          const isOnline = await SyncService.isOnline();
-          if (isOnline) {
-            // Don't await sync - let it run in background
-            // The sync function itself handles concurrent calls
-            SyncService.sync(readOnly)
-              .then(() => {
-                syncInProgress = false;
-              })
-              .catch(err => {
-                syncInProgress = false;
-                // Don't log concurrent sync errors - they're expected and handled by SyncService
-                if (!err?.message?.includes('Concurrent synchronization')) {
-                  console.error('Background sync failed:', err);
-                }
-              });
-          } else {
-            syncInProgress = false;
-          }
-        } catch (err) {
-          syncInProgress = false;
-          console.error('Sync trigger failed:', err);
+      try {
+        const isOnline = await SyncService.isOnline();
+        if (!isOnline) {
+          console.log('Sync skipped because device is offline');
+          return;
         }
-      })();
+
+        console.log(`Triggering ${readOnly ? 'read-only' : 'full'} sync from AppNavigator`);
+        await SyncService.sync(readOnly);
+      } catch (err) {
+        if (!(err as Error)?.message?.includes('Concurrent synchronization')) {
+          console.error('Background sync failed:', err);
+        }
+      }
     };
 
-    // Initial sync on mount (app start/restart) - check 1-hour gap for write sync
-    setTimeout(async () => {
-      try {
-        const shouldDoWriteSync = await SyncService.shouldDoWriteSync();
-        if (shouldDoWriteSync) {
-          console.log('App start: Last write sync was >1 hour ago, doing full sync');
-          triggerSync(false); // Full sync (read + write)
-        } else {
-          console.log('App start: Last write sync was <1 hour ago, doing read-only sync');
-          triggerSync(true); // Read-only sync
+      const runInitialSync = async () => {
+        try {
+          const shouldDoWriteSync = await SyncService.shouldDoWriteSync();
+          if (shouldDoWriteSync) {
+            console.log('App start: Last write sync was >1 hour ago, doing full sync');
+            void triggerSync(false);
+          } else {
+            console.log('App start: Last write sync was <1 hour ago, doing read-only sync');
+            void triggerSync(true);
+          }
+        } catch (err) {
+          console.error('Failed to check write sync requirement, doing read-only sync:', err);
+          void triggerSync(true);
         }
-      } catch (err) {
-        console.error('Failed to check write sync requirement, doing read-only sync:', err);
-        triggerSync(true); // Fallback to read-only on error
-      }
-    }, 500); // Increased delay to ensure UI is ready
+      };
 
-    // Sync when app comes to foreground - always read-only
+    runInitialSync();
+
     appStateSubscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active') {
-        // App came to foreground - read-only sync to get latest data
         console.log('App foreground: Doing read-only sync');
-        triggerSync(true);
+        void triggerSync(true);
       }
     });
 
-    // Listen for network changes and sync when coming online - read-only
     netInfoUnsubscribe = NetInfo.addEventListener(state => {
       if (state.isConnected) {
         console.log('Network connected: Doing read-only sync');
-        triggerSync(true); // Read-only sync on network change
+        void triggerSync(true);
       }
     });
-
-    // Periodic sync every 2 minutes when online - read-only only (write sync only on app start)
-    syncInterval = setInterval(() => {
-      // Don't await - run in background
-      NetInfo.fetch().then((currentState) => {
-        if (currentState.isConnected) {
-          // Periodic syncs are always read-only (write sync only happens on app start)
-          console.log('Periodic sync: Doing read-only sync');
-          triggerSync(true); // Read-only sync only
-        }
-      }).catch(err => {
-        console.error('Network check failed:', err);
-      });
-    }, 120000); // 2 minutes
 
     return () => {
       if (netInfoUnsubscribe) {
         netInfoUnsubscribe();
       }
-      if (syncInterval) {
-        clearInterval(syncInterval);
-      }
       if (appStateSubscription) {
         appStateSubscription.remove();
       }
+    };
+  }, [isAuthenticated, isGuest, isLoading]);
+
+  React.useEffect(() => {
+    if (!SyncService.isEnabled()) {
+      return;
+    }
+
+    if (isAuthenticated && !isGuest && !isLoading) {
+      SyncService.startPeriodicSync();
+      return () => {
+        SyncService.stopPeriodicSync();
+      };
+    }
+
+    return () => {
+      SyncService.stopPeriodicSync();
     };
   }, [isAuthenticated, isGuest, isLoading]);
 
@@ -383,7 +349,6 @@ const AppNavigatorInner = () => {
 const AppLockOverlay = () => {
   const {
     isLocked,
-    isAppLockEnabled,
     isBiometricEnabled,
     unlockWithPin,
     unlockWithBiometric,

@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export default appSchema({
-    version: 7,
+    version: 13,
     tables: [
         tableSchema({
             name: 'users',
@@ -11,16 +11,22 @@ export default appSchema({
                 { name: 'is_guest', type: 'boolean' },
                 { name: 'has_completed_onboarding', type: 'boolean' },
                 { name: 'active_profile_id', type: 'string', isOptional: true },
+                { name: 'version', type: 'number' },
             ],
         }),
         tableSchema({
             name: 'members', // Family Members
             columns: [
+                { name: 'profile_id', type: 'string', isIndexed: true },
+                { name: 'created_at', type: 'number' },
+                { name: 'updated_at', type: 'number' },
+                { name: 'deleted', type: 'boolean' },
                 { name: 'name', type: 'string' },
                 { name: 'symbol', type: 'string' },
                 { name: 'color', type: 'string' },
                 { name: 'role', type: 'string', isOptional: true },
                 { name: 'is_active', type: 'boolean' },
+                { name: 'version', type: 'number' },
             ],
         }),
         tableSchema({
@@ -33,6 +39,7 @@ export default appSchema({
                 { name: 'end_time', type: 'string', isOptional: true },
                 { name: 'end_date', type: 'string', isOptional: true },
                 { name: 'member_id', type: 'string' },
+                { name: 'profile_id', type: 'string', isOptional: true, isIndexed: true },
                 { name: 'location', type: 'string', isOptional: true },
                 { name: 'description', type: 'string', isOptional: true },
                 { name: 'notes', type: 'string', isOptional: true },
@@ -45,6 +52,8 @@ export default appSchema({
                 { name: 'reminder_offset_minutes', type: 'number', isOptional: true }, // 15, 30, 60, etc.
                 { name: 'created_at', type: 'number' },
                 { name: 'updated_at', type: 'number' }, // ✅ CRITICAL for reactivity
+                { name: 'deleted', type: 'boolean' },
+                { name: 'version', type: 'number' },
             ],
         }),
         tableSchema({
@@ -57,23 +66,36 @@ export default appSchema({
                 { name: 'due_display', type: 'string' }, // "Today", "Tomorrow" etc
                 { name: 'date', type: 'string' }, // YYYY-MM-DD
                 { name: 'assignee_id', type: 'string' },
+                { name: 'profile_id', type: 'string', isOptional: true, isIndexed: true },
                 { name: 'tab', type: 'string' }, // "My Tasks", "Family Tasks"
                 { name: 'notification_id', type: 'string', isOptional: true },
                 { name: 'reminder_enabled', type: 'boolean' }, // default true
+                { name: 'created_at', type: 'number' },
                 { name: 'updated_at', type: 'number' }, // ✅ CRITICAL for reactivity
+                { name: 'deleted', type: 'boolean' },
+                { name: 'version', type: 'number' },
             ],
         }),
         tableSchema({
             name: 'lists', // Grocery/Todo Lists
             columns: [
+                { name: 'profile_id', type: 'string', isIndexed: true },
+                { name: 'created_at', type: 'number' },
+                { name: 'updated_at', type: 'number' },
+                { name: 'deleted', type: 'boolean' },
                 { name: 'name', type: 'string' },
                 { name: 'type', type: 'string' }, // grocery, todo
                 { name: 'icon', type: 'string', isOptional: true },
+                { name: 'version', type: 'number' },
             ],
         }),
         tableSchema({
             name: 'list_items', // Grocery/Todo Items
             columns: [
+                { name: 'profile_id', type: 'string', isIndexed: true },
+                { name: 'created_at', type: 'number' },
+                { name: 'updated_at', type: 'number' },
+                { name: 'deleted', type: 'boolean' },
                 { name: 'list_id', type: 'string', isIndexed: true },
                 { name: 'name', type: 'string' },
                 { name: 'quantity', type: 'number' },
@@ -82,19 +104,26 @@ export default appSchema({
                 { name: 'added_by_id', type: 'string' },
                 { name: 'is_completed', type: 'boolean' },
                 { name: 'purchased_at', type: 'number', isOptional: true },
+                { name: 'version', type: 'number' },
             ],
         }),
         tableSchema({
             name: 'list_categories', // Grocery Categories
             columns: [
+                { name: 'profile_id', type: 'string', isIndexed: true },
+                { name: 'created_at', type: 'number' },
+                { name: 'updated_at', type: 'number' },
+                { name: 'deleted', type: 'boolean' },
                 { name: 'name', type: 'string' },
                 { name: 'icon', type: 'string' },
                 { name: 'color', type: 'string' },
+                { name: 'version', type: 'number' },
             ],
         }),
         tableSchema({
             name: 'recipes',
             columns: [
+                { name: 'profile_id', type: 'string', isIndexed: true },
                 { name: 'name', type: 'string' },
                 { name: 'description', type: 'string', isOptional: true },
                 { name: 'prep_time', type: 'string' },
@@ -114,37 +143,60 @@ export default appSchema({
                 { name: 'duration', type: 'number', isOptional: true },
                 { name: 'url', type: 'string', isOptional: true },
                 { name: 'images_json', type: 'string', isOptional: true }, // Store array of additional images
+                { name: 'created_at', type: 'number' },
+                { name: 'updated_at', type: 'number' },
+                { name: 'deleted', type: 'boolean' },
+                { name: 'version', type: 'number' },
             ],
         }),
         tableSchema({
             name: 'collections', // Recipe Collections
             columns: [
+                { name: 'profile_id', type: 'string', isIndexed: true },
+                { name: 'created_at', type: 'number' },
+                { name: 'updated_at', type: 'number' },
+                { name: 'deleted', type: 'boolean' },
                 { name: 'name', type: 'string' },
                 { name: 'description', type: 'string', isOptional: true },
                 { name: 'color', type: 'string' },
+                { name: 'version', type: 'number' },
             ],
         }),
         tableSchema({
             name: 'collection_recipes', // Many-to-Many link
             columns: [
+                { name: 'profile_id', type: 'string', isIndexed: true, isOptional: true },
+                { name: 'created_at', type: 'number' },
+                { name: 'updated_at', type: 'number' },
+                { name: 'deleted', type: 'boolean' },
                 { name: 'collection_id', type: 'string', isIndexed: true },
                 { name: 'recipe_id', type: 'string', isIndexed: true },
+                { name: 'version', type: 'number' },
             ],
         }),
         tableSchema({
             name: 'meal_plans',
             columns: [
+                { name: 'profile_id', type: 'string', isIndexed: true },
                 { name: 'date', type: 'string', isIndexed: true },
                 { name: 'type', type: 'string' }, // breakfast, lunch, dinner, snack
                 { name: 'recipe_id', type: 'string' },
                 { name: 'is_cooked', type: 'boolean' },
                 { name: 'notification_id', type: 'string', isOptional: true },
                 { name: 'reminder_minutes_before', type: 'number', isOptional: true }, // 30, 60
+                { name: 'created_at', type: 'number' },
+                { name: 'updated_at', type: 'number' },
+                { name: 'deleted', type: 'boolean' },
+                { name: 'version', type: 'number' },
             ],
         }),
         tableSchema({
             name: 'documents', // Vault Documents
             columns: [
+                { name: 'profile_id', type: 'string', isIndexed: true },
+                { name: 'created_at', type: 'number' },
+                { name: 'updated_at', type: 'number' },
+                { name: 'deleted', type: 'boolean' },
                 { name: 'name', type: 'string' },
                 { name: 'type', type: 'string' },
                 { name: 'icon', type: 'string' },
@@ -156,6 +208,7 @@ export default appSchema({
                 { name: 'meta_json', type: 'string' }, // Flexible metadata for different doc types
                 { name: 'notification_ids_json', type: 'string', isOptional: true }, // Array of notification IDs for multiple reminders
                 { name: 'reminder_days_before', type: 'number', isOptional: true }, // 7, 14, 30
+                { name: 'version', type: 'number' },
             ],
         }),
         tableSchema({
@@ -171,6 +224,7 @@ export default appSchema({
                 { name: 'created_at', type: 'number' },
                 { name: 'updated_at', type: 'number' },
                 { name: 'deleted', type: 'boolean' },
+                { name: 'version', type: 'number' },
             ],
         }),
         tableSchema({
@@ -183,11 +237,15 @@ export default appSchema({
                 { name: 'created_at', type: 'number' },
                 { name: 'updated_at', type: 'number' },
                 { name: 'deleted', type: 'boolean' },
+                { name: 'version', type: 'number' },
             ],
         }),
         tableSchema({
             name: 'notes',
             columns: [
+                { name: 'profile_id', type: 'string', isIndexed: true },
+                { name: 'created_at', type: 'number' },
+                { name: 'deleted', type: 'boolean' },
                 { name: 'title', type: 'string' },
                 { name: 'preview', type: 'string' },
                 { name: 'tag', type: 'string', isOptional: true },
@@ -196,64 +254,98 @@ export default appSchema({
                 { name: 'updated_at', type: 'number' },
                 { name: 'folder_id', type: 'string', isIndexed: true },
                 { name: 'blocks_json', type: 'string' },
+                { name: 'version', type: 'number' },
             ],
         }),
         tableSchema({
             name: 'folders', // Note Folders
             columns: [
+                { name: 'profile_id', type: 'string', isIndexed: true },
+                { name: 'created_at', type: 'number' },
+                { name: 'updated_at', type: 'number' },
+                { name: 'deleted', type: 'boolean' },
                 { name: 'title', type: 'string' },
                 { name: 'icon', type: 'string' },
+                { name: 'version', type: 'number' },
             ],
         }),
         tableSchema({
             name: 'app_lock',
             columns: [
+                { name: 'profile_id', type: 'string', isIndexed: true },
                 { name: 'enabled', type: 'boolean' },
                 { name: 'biometric_enabled', type: 'boolean' },
                 { name: 'pin_hash', type: 'string' },
                 { name: 'created_at', type: 'number' },
                 { name: 'updated_at', type: 'number' },
+                { name: 'deleted', type: 'boolean' },
+                { name: 'version', type: 'number' },
             ],
         }),
         tableSchema({
             name: 'settings', // App Settings key-value
             columns: [
+                { name: 'profile_id', type: 'string', isIndexed: true },
+                { name: 'created_at', type: 'number' },
+                { name: 'updated_at', type: 'number' },
+                { name: 'deleted', type: 'boolean' },
                 { name: 'key', type: 'string', isIndexed: true },
                 { name: 'value', type: 'string' },
+                { name: 'version', type: 'number' },
             ],
         }),
         tableSchema({
             name: 'user_preferences',
             columns: [
+                { name: 'profile_id', type: 'string', isIndexed: true },
                 { name: 'country_code', type: 'string' },
                 { name: 'created_at', type: 'number' },
                 { name: 'updated_at', type: 'number' },
+                { name: 'deleted', type: 'boolean' },
+                { name: 'version', type: 'number' },
             ],
         }),
         tableSchema({
             name: 'notification_preferences',
             columns: [
+                { name: 'profile_id', type: 'string', isIndexed: true },
                 { name: 'category', type: 'string', isIndexed: true }, // events, tasks, documents, meals, budgets
                 { name: 'enabled', type: 'boolean' },
                 { name: 'reminder_offset_minutes', type: 'number', isOptional: true },
                 { name: 'updated_at', type: 'number' },
+                { name: 'created_at', type: 'number' },
+                { name: 'deleted', type: 'boolean' },
+                { name: 'version', type: 'number' },
             ],
         }),
         tableSchema({
             name: 'quiet_hours',
             columns: [
+                { name: 'profile_id', type: 'string', isIndexed: true },
                 { name: 'enabled', type: 'boolean' },
                 { name: 'start_hour', type: 'number' }, // 0-23
                 { name: 'start_minute', type: 'number' }, // 0-59
                 { name: 'end_hour', type: 'number' },
                 { name: 'end_minute', type: 'number' },
+                { name: 'created_at', type: 'number' },
+                { name: 'updated_at', type: 'number' },
+                { name: 'deleted', type: 'boolean' },
+                { name: 'version', type: 'number' },
             ],
         }),
         tableSchema({
             name: 'app_settings',
             columns: [
+                { name: 'profile_id', type: 'string', isIndexed: true },
+                { name: 'created_at', type: 'number' },
+                { name: 'updated_at', type: 'number' },
+                { name: 'deleted', type: 'boolean' },
                 { name: 'has_completed_onboarding', type: 'boolean' },
+                { name: 'version', type: 'number' },
             ],
         }),
     ],
 });
+
+// Acceptance Checklist:
+// - Confirm local Watermelon tables (notes, folders, lists, etc.) now include profile_id/updated_at/deleted/version so SyncService/tombstones stay consistent across Device A and Device B.

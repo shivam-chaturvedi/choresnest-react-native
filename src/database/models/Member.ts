@@ -9,4 +9,5 @@ export default class Member extends Model {
     @text('color') color!: string;
     @text('role') role!: string;
     @field('is_active') isActive!: boolean;
+    @field('version') version!: number;
 }

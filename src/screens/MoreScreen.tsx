@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   Pressable,
   Alert,
   Modal,
+  ActivityIndicator,
 } from "react-native";
 import { useNavigation, NavigationProp } from "@react-navigation/native";
 import { AppLayout } from "../components/layout";
@@ -16,6 +17,8 @@ import { AppIcon, AppIconName } from "../components/ui/AppIcon";
 import { useFamily, FamilyMember } from "../contexts/FamilyContext";
 import { PROFILE_COLORS } from "../constants/profileColors";
 import { useAuth } from "../contexts/AuthContext";
+import { useSyncStatus } from "../hooks/useSyncStatus";
+import { SyncService } from "../services/SyncService";
 import Config from "react-native-config";
 
 interface MenuItem {
@@ -38,9 +41,47 @@ export const MoreScreen: React.FC = () => {
   const radius = useThemeRadius();
   const navigation = useNavigation<NavigationProp<Record<string, undefined>>>();
   const { openSidebar } = useSidebar();
-  const { logout } = useAuth();
+  const { logout, isGuest } = useAuth();
   const { activeMember, members, setActiveMember } = useFamily();
   const [showProfileSwitcher, setShowProfileSwitcher] = useState(false);
+  const { isSyncing } = useSyncStatus();
+  
+  const [syncSummary, setSyncSummary] = useState(() => SyncService.getLastSyncSummary());
+  const [manualMessage, setManualMessage] = useState<string | null>(null);
+  const [isManualSyncing, setIsManualSyncing] = useState(false);
+  const syncButtonDisabled = isGuest || isSyncing || isManualSyncing;
+  const statusLabel = isSyncing || isManualSyncing ? 'Syncing…' : 'Idle';
+  const formatTimestamp = (value: number | null) =>
+    value ? new Date(value).toLocaleString() : 'Never';
+  const nextAllowedText = syncSummary.nextAllowedAt && syncSummary.nextAllowedAt > Date.now()
+    ? new Date(syncSummary.nextAllowedAt).toLocaleTimeString()
+    : 'Now';
+
+  const handleManualSync = async () => {
+    if (syncButtonDisabled) {
+      if (isGuest) {
+        setManualMessage('Sync not available for guest mode');
+      }
+      return;
+    }
+    setManualMessage(null);
+    setIsManualSyncing(true);
+    try {
+      await SyncService.manualSyncNow();
+      setSyncSummary(SyncService.getLastSyncSummary());
+    } catch (error) {
+      console.error('Manual sync failed', error);
+      setManualMessage('Sync failed. Try again soon.');
+    } finally {
+      setIsManualSyncing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isSyncing) {
+      setSyncSummary(SyncService.getLastSyncSummary());
+    }
+  }, [isSyncing]);
 
   // Safe access to profile color
   const activeProfileColor = activeMember?.color
@@ -175,9 +216,6 @@ export const MoreScreen: React.FC = () => {
     }] : [])
   ];
 
-  // Add useAuth import at top if not present (handled by prev step or assumes knowledge, but I will do it purely here if I can, wait I need to add import line)
-  // Since I can't check imports with this tool easily in one go for existing files without overwriting, I will assume I need to add the import too.
-  // Actually, I'll use multi_replace to be safe.
   const handleLogout = async () => {
     try {
       Alert.alert(
@@ -299,11 +337,11 @@ export const MoreScreen: React.FC = () => {
             <AppIcon name="rotateCw" size={20} color={colors.mutedForeground} />
           </Pressable>
 
-          {sections.map((section) => (
-            <View key={section.title} style={styles.sectionContainer}>
-              <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>{section.title}</Text>
-              <View style={[styles.sectionCard, { backgroundColor: colors.card, shadowColor: colors.foreground, borderRadius: radius.card }]}>
-                {section.items.map((item, index) => {
+      {sections.map((section) => (
+        <View key={section.title} style={styles.sectionContainer}>
+          <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>{section.title}</Text>
+          <View style={[styles.sectionCard, { backgroundColor: colors.card, shadowColor: colors.foreground, borderRadius: radius.card }]}>
+            {section.items.map((item, index) => {
                   if (item.label === "Nutrition & Health") return null;
 
                   return (
@@ -334,9 +372,48 @@ export const MoreScreen: React.FC = () => {
                     </Pressable>
                   );
                 })}
-              </View>
-            </View>
-          ))}
+          </View>
+        </View>
+      ))}
+
+      <View
+        style={[
+          styles.syncPanel,
+          { backgroundColor: colors.card, shadowColor: colors.foreground, borderRadius: radius.card },
+        ]}
+      >
+        <Text style={[styles.syncTitle, { color: colors.foreground }]}>Sync Status</Text>
+        <Pressable
+          style={({ pressed }) => [
+            styles.syncButton,
+            { borderColor: colors.border, backgroundColor: syncButtonDisabled ? colors.muted : colors.primary },
+            pressed && !syncButtonDisabled && { opacity: 0.7 },
+          ]}
+          onPress={handleManualSync}
+          disabled={syncButtonDisabled}
+          accessibilityRole="button"
+          accessibilityLabel="Manual sync"
+        >
+          <View style={styles.syncButtonContent}>
+            {isManualSyncing ? (
+              <ActivityIndicator size="small" color={colors.primaryForeground} />
+            ) : (
+              <AppIcon name="rotateCw" size={18} color={colors.primaryForeground} />
+            )}
+            <Text style={[styles.syncButtonText, { color: colors.primaryForeground }]}> 
+              {isManualSyncing ? 'Syncing…' : 'Sync Now'}
+            </Text>
+          </View>
+        </Pressable>
+        <Text style={[styles.syncStatusText, { color: colors.mutedForeground }]}>Status: {statusLabel}</Text>
+        <Text style={[styles.syncMetaText, { color: colors.mutedForeground }]}>Last synced: {formatTimestamp(syncSummary.lastSuccessAt)}</Text>
+        <Text style={[styles.syncMetaText, { color: colors.mutedForeground }]}>Next allowed: {nextAllowedText}</Text>
+        {(manualMessage || (isGuest && syncButtonDisabled)) && (
+          <Text style={[styles.syncMetaText, { color: colors.danger }]}> 
+            {manualMessage ?? 'Sync not available for guest mode'}
+          </Text>
+        )}
+      </View>
 
           <Pressable style={[styles.logoutButton, { backgroundColor: colors.card, shadowColor: colors.foreground, borderColor: colors.border, borderRadius: radius.card }]} onPress={handleLogout}>
             <AppIcon name="logOut" size={20} color={colors.danger} />
@@ -578,5 +655,44 @@ const styles = StyleSheet.create({
   },
   optionName: {
     fontSize: 16
-  }
+  },
+  syncPanel: {
+    marginVertical: 16,
+    padding: 16,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  syncTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  syncButton: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  syncButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  syncButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  syncStatusText: {
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  syncMetaText: {
+    fontSize: 12,
+    marginBottom: 2,
+  },
 });

@@ -39,6 +39,7 @@ export const SyncIndicator: React.FC = () => {
 
     return (
         <Animated.View
+            pointerEvents="none"
             style={[
                 styles.container,
                 {

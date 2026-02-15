@@ -28,6 +28,7 @@ export class Recipe extends Model {
     @text('audio_path') audioPath?: string;
     @field('duration') duration?: number;
     @text('url') url?: string;
+    @field('version') version!: number;
 
     @children('collection_recipes') collectionRecipes: any;
 }
@@ -41,6 +42,7 @@ export class Collection extends Model {
     @text('name') name!: string;
     @text('description') description?: string;
     @text('color') color!: string;
+    @field('version') version!: number;
 
     @children('collection_recipes') collectionRecipes: any;
 }
@@ -51,4 +53,6 @@ export class CollectionRecipe extends Model {
         collections: { type: 'belongs_to' as const, key: 'collection_id' },
         recipes: { type: 'belongs_to' as const, key: 'recipe_id' },
     }
+
+    @field('version') version!: number;
 }

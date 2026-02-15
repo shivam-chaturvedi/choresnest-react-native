@@ -14,6 +14,7 @@ export class Transaction extends Model {
     @field('created_at') createdAt!: number;
     @field('updated_at') updatedAt!: number;
     @field('deleted') deleted!: boolean;
+    @field('version') version!: number;
 }
 
 export class Budget extends Model {
@@ -26,4 +27,5 @@ export class Budget extends Model {
     @field('created_at') createdAt!: number;
     @field('updated_at') updatedAt!: number;
     @field('deleted') deleted!: boolean;
+    @field('version') version!: number;
 }

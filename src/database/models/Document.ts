@@ -16,4 +16,5 @@ export default class Document extends Model {
     @json('meta_json', (json: any) => json) meta!: any;
     @text('notification_ids_json') notificationIdsJson?: string;
     @field('reminder_days_before') reminderDaysBefore?: number;
+    @field('version') version!: number;
 }

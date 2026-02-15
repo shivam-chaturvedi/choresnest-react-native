@@ -27,7 +27,8 @@ const hapticOptions = {
   ignoreAndroidSystemSettings: false,
 };
 import { addMonths, subMonths, addDays, subDays, startOfWeek, endOfWeek, isSameMonth, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval, addYears, startOfDay, isAfter, isWithinInterval } from "date-fns";
-import { useNavigation, useFocusEffect, useIsFocused } from "@react-navigation/native";
+import { Day } from "date-fns";
+import { useNavigation, useIsFocused } from "@react-navigation/native";
 import { getEventsForDate } from "../utils/EventUtils";
 import { parseDateTimeInZone } from "../utils/SafeDateUtils";
 import { formatInTimeZone, toZonedTime } from "date-fns-tz";
@@ -401,6 +402,7 @@ export const CalendarScreen: React.FC = () => {
   const radius = useThemeRadius();
   const { currentCountry } = useCountry();
   const timeZone = currentCountry.timeZone;
+  const weekOptions = { weekStartsOn: (currentCountry.code === 'US' ? 0 : 1) as Day };
 
   const [activeView, setActiveView] = useState("Day");
   const [selectedDate, setSelectedDate] = useState(() => toZonedTime(new Date(), timeZone));
@@ -453,6 +455,7 @@ export const CalendarScreen: React.FC = () => {
   /* New state for current time line */
   const [now, setNow] = useState(new Date());
   const scrollViewRef = useRef<ScrollView>(null);
+  const scrollOffsetRef = useRef(0);
   const headerScrollRef = useRef<ScrollView>(null);
   const HOUR_HEIGHT = 60;
 
@@ -461,9 +464,12 @@ export const CalendarScreen: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
+  const layoutReadyRef = useRef(false);
+
   const scrollToCurrentTime = (animated = true) => {
     // Only scroll if we are in Day or Week view
     if (activeView !== "Day" && activeView !== "Week") return;
+    if (!layoutReadyRef.current) return;
 
     const currentZoned = toZonedTime(new Date(), timeZone);
     const todayZoned = startOfDay(currentZoned);
@@ -476,39 +482,47 @@ export const CalendarScreen: React.FC = () => {
     } else if (activeView === "Week") {
       // In week view, selectedDate is one of the days in the week.
       // We need to check if 'today' falls within the currently displayed week.
-      const startOfCurrentWeek = startOfWeek(selectedDate);
-      const endOfCurrentWeek = endOfWeek(selectedDate);
+      const startOfCurrentWeek = startOfWeek(selectedDate, weekOptions);
+      const endOfCurrentWeek = endOfWeek(selectedDate, weekOptions);
       shouldScroll = isWithinInterval(todayZoned, { start: startOfCurrentWeek, end: endOfCurrentWeek });
     }
 
     if (shouldScroll) {
-      // Calculate scroll position
-      // Calculate scroll position using authentic time in target zone
+      // Calculate scroll position using the target timezone to avoid local-time drift
       const now = new Date();
       const h = parseInt(formatInTimeZone(now, timeZone, 'H'), 10);
       const m = parseInt(formatInTimeZone(now, timeZone, 'm'), 10);
 
       const minutes = (h * 60) + m;
       const y = (minutes / 60) * HOUR_HEIGHT;
-      // Scroll to 2 hours before current time to show context
       const twoHoursInPx = 2 * HOUR_HEIGHT;
 
-      // Use a small timeout to ensure layout is ready if called immediately after render
-      setTimeout(() => {
+      // requestAnimationFrame ensures the layout has been measured before scrolling (no arbitrary timeout)
+      requestAnimationFrame(() => {
         scrollViewRef.current?.scrollTo({
           y: Math.max(0, y - twoHoursInPx),
-          animated: animated
+          animated,
         });
-      }, 100);
+      });
+    }
+  };
+
+  const handleTimelineLayout = () => {
+    if (!layoutReadyRef.current) {
+      layoutReadyRef.current = true;
+      scrollToCurrentTime(false);
     }
   };
 
   // Scroll on mount, view change, or when returning to today
   useEffect(() => {
-    if (isFocused) {
-      scrollToCurrentTime(true);
-    }
-  }, [activeView, selectedDate, isFocused]);
+    requestAnimationFrame(() => {
+      scrollViewRef.current?.scrollTo({
+        y: scrollOffsetRef.current,
+        animated: false,
+      });
+    });
+  }, []);
 
 
   const today = toZonedTime(new Date(), timeZone);
@@ -525,6 +539,9 @@ export const CalendarScreen: React.FC = () => {
   }, [tasks, filterMember]);
 
   const zonedNow = toZonedTime(now, timeZone);
+  const currentTimeHours = parseInt(formatInTimeZone(now, timeZone, 'H'), 10);
+  const currentTimeMinutes = parseInt(formatInTimeZone(now, timeZone, 'm'), 10);
+  const currentTimeTop = (currentTimeHours * HOUR_HEIGHT) + (currentTimeMinutes * (HOUR_HEIGHT / 60));
 
   const calendarItems = useMemo<CalendarListEntry[]>(() => {
     const eventItems = filteredEvents.map((e: CalendarEvent) => ({
@@ -566,7 +583,7 @@ export const CalendarScreen: React.FC = () => {
     } else if (activeView === "Week") {
       setSelectedDate(prev => {
         const nextWeek = direction > 0 ? addDays(prev, 7) : subDays(prev, 7);
-        return startOfWeek(nextWeek);
+        return startOfWeek(nextWeek, weekOptions);
       });
     } else {
       setSelectedDate(prev => addDays(prev, direction));
@@ -574,13 +591,13 @@ export const CalendarScreen: React.FC = () => {
   };
 
   const generateMonthDays = () => {
-    const start = startOfWeek(startOfMonth(selectedDate));
-    const end = endOfWeek(endOfMonth(selectedDate));
+    const start = startOfWeek(startOfMonth(selectedDate), weekOptions);
+    const end = endOfWeek(endOfMonth(selectedDate), weekOptions);
     return eachDayOfInterval({ start, end });
   };
 
   const generateWeekDays = () => {
-    const start = startOfWeek(selectedDate);
+    const start = startOfWeek(selectedDate, weekOptions);
     return Array.from({ length: 7 }).map((_, i) => addDays(start, i));
   };
 
@@ -746,8 +763,13 @@ export const CalendarScreen: React.FC = () => {
             ref={scrollViewRef}
             style={{ height: 300 }}
             contentContainerStyle={{ height: 24 * HOUR_HEIGHT }}
+            onLayout={handleTimelineLayout}
             nestedScrollEnabled={true}
             showsVerticalScrollIndicator={false}
+            scrollEventThrottle={16}
+            onScroll={(event) => {
+              scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+            }}
           >
             <View style={{ flexDirection: 'row', height: '100%' }}>
               <View style={{ width: 50, borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: colors.card, zIndex: 20 }}>
@@ -959,7 +981,7 @@ export const CalendarScreen: React.FC = () => {
                     <View
                       style={{
                         position: 'absolute',
-                        top: (zonedNow.getHours() * HOUR_HEIGHT) + (zonedNow.getMinutes() * (HOUR_HEIGHT / 60)),
+                        top: currentTimeTop,
                         left: 0,
                         right: 0,
                         flexDirection: 'row',

@@ -1,10 +1,8 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import { database } from '../database';
 import { Transaction as DbTransaction, Budget as DbBudget } from '../database/models/Finance';
 import { Q } from '@nozbe/watermelondb';
 import { SyncService } from '../services/SyncService';
-import { pushTransactionToSupabase } from '../services/pushTransactionToSupabase';
-import { pushBudgetToSupabase } from '../services/pushBudgetToSupabase';
 import { supabase } from '../config/supabase';
 
 export interface Transaction {
@@ -194,76 +192,9 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
         return () => subscription.unsubscribe();
     }, [profileId]);
 
-    const scheduleTransactionPush = (transaction: Transaction) => {
-        void (async () => {
-            try {
-                if (!(await SyncService.isOnline())) {
-                    return;
-                }
-                await pushTransactionToSupabase(transaction);
-            } catch (error) {
-                console.warn('Instant transaction push skipped', error);
-            }
-        })();
-    };
-
-    const scheduleBudgetPush = (category: string, amount: number) => {
-        const meta = budgetMeta[category];
-        const updatedAt = Date.now();
-        void (async () => {
-            try {
-                if (!(await SyncService.isOnline())) {
-                    return;
-                }
-                const result = await pushBudgetToSupabase(category, amount, {
-                    month: new Date().toISOString().slice(0, 7),
-                    recordId: meta?.recordId,
-                    createdAt: meta?.createdAt,
-                    updatedAt,
-                });
-                if (result) {
-                    setBudgetMeta(prev => ({
-                        ...prev,
-                        [category]: {
-                            recordId: result.recordId,
-                            createdAt: result.createdAt,
-                        },
-                    }));
-                }
-            } catch (error) {
-                console.warn('Instant budget push skipped', error);
-            }
-        })();
-    };
-
-    const attemptInstantDeleteFinance = async (
-        table: 'transactions' | 'budgets',
-        identifier: string,
-        options?: { category?: string; month?: string }
-    ) => {
-        try {
-            if (!(await SyncService.isOnline())) {
-                return;
-            }
-            const { data: { user }, error: authError } = await supabase.auth.getUser();
-            if (authError || !user) {
-                console.warn('Instant finance delete skipped: user not authenticated', authError);
-                return;
-            }
-            if (table === 'transactions') {
-                await supabase.from('transactions').delete().eq('id', identifier).eq('profile_id', user.id);
-                return;
-            }
-            const month = options?.month ?? new Date().toISOString().slice(0, 7);
-            const recordId = identifier || `${user.id}-${month}-${options?.category ?? ''}`;
-            if (!recordId || !options?.category) {
-                return;
-            }
-            await supabase.from('budgets').delete().eq('id', recordId).eq('profile_id', user.id);
-        } catch (error) {
-            console.warn(`Instant ${table} delete failed`, error);
-        }
-    };
+    const syncAfterWrite = useCallback(() => {
+        void SyncService.requestSyncSoon();
+    }, []);
 
     const addTransaction = (transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>) => {
         const timestamp = Date.now();
@@ -287,6 +218,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
                         rec.createdAt = timestamp;
                         rec.updatedAt = timestamp;
                         rec.deleted = false;
+                        rec.version = 1;
                     });
                     createdTransaction = {
                         id: record.id,
@@ -302,7 +234,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
                 });
 
                 if (createdTransaction) {
-                    scheduleTransactionPush(createdTransaction);
+                    syncAfterWrite();
                 }
             } catch (error) {
                 console.warn('Failed to persist transaction locally', error);
@@ -326,6 +258,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
                         tx.type = updates.type ?? tx.type;
                         tx.category = updates.category ?? tx.category;
                         tx.updatedAt = now;
+                        tx.version = (tx.version ?? 0) + 1;
                     });
                     updatedTransaction = {
                         id: record.id,
@@ -340,7 +273,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
                     };
                 });
                 if (updatedTransaction) {
-                    scheduleTransactionPush(updatedTransaction);
+                    syncAfterWrite();
                 }
             } catch (error) {
                 console.warn('Failed to update transaction locally', error);
@@ -354,12 +287,14 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
                 await database.write(async () => {
                     const collection = database.get<DbTransaction>('transactions');
                     const record = await collection.find(id);
+                    const now = Date.now();
                     await record.update(tx => {
                         tx.deleted = true;
-                        tx.updatedAt = Date.now();
+                        tx.updatedAt = now;
+                        tx.version = (tx.version ?? 0) + 1;
                     });
                 });
-                void attemptInstantDeleteFinance('transactions', id);
+                syncAfterWrite();
             } catch (error) {
                 console.warn('Failed to mark transaction deleted locally', error);
             }
@@ -380,6 +315,8 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
                     const collection = database.get<DbBudget>('budgets');
                     const matches = await collection
                         .query(
+                            Q.where('profile_id', profileId),
+                            Q.where('deleted', false),
                             Q.where('category', category),
                             Q.where('month', month),
                             Q.sortBy('updated_at', Q.desc)
@@ -392,6 +329,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
                             record.amount = amount;
                             record.updatedAt = now;
                             record.deleted = false;
+                            record.version = (record.version ?? 0) + 1;
                         });
                     } else {
                         budgetRecord = await collection.create(record => {
@@ -402,6 +340,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
                             record.createdAt = now;
                             record.updatedAt = now;
                             record.deleted = false;
+                            record.version = 1;
                         });
                     }
                 });
@@ -416,7 +355,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
                     }));
                 }
 
-                scheduleBudgetPush(category, amount);
+                syncAfterWrite();
             } catch (error) {
                 console.warn('Failed to persist budget locally', error);
             }
@@ -429,10 +368,16 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
             const originalRecordId = budgetMeta[category]?.recordId || '';
             let recordIdToDelete = originalRecordId;
             try {
+                if (!profileId) {
+                    console.warn('Skipping budget delete until profile is known');
+                    return;
+                }
                 await database.write(async () => {
                     const collection = database.get<DbBudget>('budgets');
                     const matches = await collection
                         .query(
+                            Q.where('profile_id', profileId),
+                            Q.where('deleted', false),
                             Q.where('category', category),
                             Q.where('month', month)
                         )
@@ -446,6 +391,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
                             record.update(r => {
                                 r.deleted = true;
                                 r.updatedAt = now;
+                                r.version = (r.version ?? 0) + 1;
                             })
                         )
                     );
@@ -455,7 +401,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
                     delete next[category];
                     return next;
                 });
-                void attemptInstantDeleteFinance('budgets', recordIdToDelete, { category, month });
+                syncAfterWrite();
             } catch (error) {
                 console.warn('Failed to delete budget locally', error);
             }
@@ -488,3 +434,7 @@ export const useFinance = () => {
     }
     return context;
 };
+
+// Acceptance Checklist:
+// - Device A adds/edits/deletes transactions or budgets (profile-aware) and Device B sees the tombstoned change through SyncService.requestSyncSoon().
+// - Switch profiles on Device B; only the matching budgets/transactions appear after sync, proving profile isolation and debounced write-only pushes.

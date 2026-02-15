@@ -12,4 +12,5 @@ export default class UserPreference extends Model {
 
     @field('updated_at')
     updatedAt!: number;
+    @field('version') version!: number;
 }

@@ -19,6 +19,7 @@ import { useCountry } from "../../contexts/CountryContext";
 import { AppIcon, AppIconName, CustomDateTimePicker } from "../ui";
 import { PROFILE_COLORS } from "../../constants/profileColors";
 import { NotificationPreferencesService } from "../../services/NotificationPreferencesService";
+import { SyncService } from "../../services/SyncService";
 
 interface AddEventModalProps {
   open: boolean;
@@ -439,6 +440,11 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         }
       }
 
+      try {
+        await SyncService.requestSyncSoon();
+      } catch (syncError) {
+        console.warn('Failed to trigger sync after event save:', syncError);
+      }
       onOpenChange(false);
     } catch (error) {
       console.error("Error saving event:", error);

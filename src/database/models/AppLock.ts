@@ -9,4 +9,5 @@ export default class AppLock extends Model {
     @field('pin_hash') pinHash!: string;
     @field('created_at') createdAt!: number;
     @field('updated_at') updatedAt!: number;
+    @field('version') version!: number;
 }

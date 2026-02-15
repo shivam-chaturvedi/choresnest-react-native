@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useMemo, ReactNo
 import { FamilyService } from "../services/FamilyService";
 import { TaskService } from "../services/TaskService";
 import { VaultService } from "../services/VaultService";
+import { supabase } from "../config/supabase";
 
 // Re-export interfaces (keeping compatibility or updating as needed)
 export interface FamilyMember {
@@ -174,6 +175,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [memberVaults, setMemberVaults] = useState<Record<string, any[]>>({});
   const [groceryList, setGroceryList] = useState<GroceryItem[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
+  const [profileId, setProfileId] = useState<string | null>(null);
 
   const membersById = useMemo(() => {
     const map = new Map<string, FamilyMember>();
@@ -249,6 +251,35 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   // --- Load Family Name ---
   useEffect(() => {
     FamilyService.getFamilyName().then(setFamilyNameState);
+  }, []);
+
+  // --- Track Profile ---
+  useEffect(() => {
+    let mounted = true;
+    const refreshProfile = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (mounted) {
+          setProfileId(user?.id ?? null);
+        }
+      } catch (error) {
+        console.warn("FamilyContext: Failed to resolve profile id", error);
+        if (mounted) {
+          setProfileId(null);
+        }
+      }
+    };
+    refreshProfile();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) {
+        return;
+      }
+      setProfileId(session?.user?.id ?? null);
+    });
+    return () => {
+      mounted = false;
+      subscription?.unsubscribe();
+    };
   }, []);
 
   const setFamilyName = (name: string) => {
@@ -471,8 +502,12 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // --- Observe Grocery List ---
   useEffect(() => {
+    if (!profileId) {
+      setGroceryList([]);
+      return;
+    }
     try {
-      const sub = TaskService.observeShoppingListItems().subscribe({
+      const sub = TaskService.observeShoppingListItems(profileId).subscribe({
         next: (items) => {
           try {
             // Map to grocery list format
@@ -501,7 +536,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     } catch (error) {
       console.error('Error setting up grocery list subscription:', error);
     }
-  }, []);
+  }, [profileId]);
 
 
   // ... Expose methods ...
@@ -605,3 +640,7 @@ export const useFamily = () => {
   }
   return context;
 };
+
+// Acceptance Checklist:
+// - Device A (profile X) edits grocery list items while Device B is on the same profile; only profile X's tombstoned changes appear via SyncService.requestSyncSoon().
+// - Switch profiles on either device; grocery list clears and only the new profile's inventory returns after the next synced pull, proving multi-profile isolation.

@@ -8,10 +8,29 @@ import { parseReminderDateTime } from '../utils/ReminderDateTimeUtils';
 import { NotificationCenter, NotificationRoute } from './NotificationCenter';
 import { CountryPreferenceService } from './CountryPreferenceService';
 import { formatDateTime } from '../utils/countryFormatting';
-import { pushEventToSupabase } from './pushEventToSupabase';
-import { pushTaskToSupabase } from './pushTaskToSupabase';
 import { SyncService } from './SyncService';
+import { Q } from '@nozbe/watermelondb';
 import { supabase } from '../config/supabase';
+
+const syncAfterWrite = () => {
+    void SyncService.requestSyncSoon();
+};
+
+const fetchActiveProfileId = async (): Promise<string | null> => {
+    try {
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (error) {
+            console.warn('TaskService: Unable to resolve profile for list item write', error);
+        }
+        if (!user) {
+            return null;
+        }
+        return user.id;
+    } catch (error) {
+        console.error('TaskService: Failed to read profile for list item write', error);
+        return null;
+    }
+};
 
 const formatReminderDateTimeDisplay = (date: Date) =>
     formatDateTime(date, CountryPreferenceService.getCurrentCountry(), {
@@ -29,28 +48,6 @@ const severityMeta: Record<"success" | "warning" | "default", { tone: string; te
 
 const TASKS_ROUTE: NotificationRoute = { tab: "more", screen: "Tasks" };
 const EVENTS_ROUTE: NotificationRoute = { tab: "calendar" };
-
-const attemptInstantDelete = async (table: 'tasks' | 'events', id: string) => {
-    try {
-        if (!(await SyncService.isOnline())) {
-            return;
-        }
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        if (authError || !user) {
-            console.warn('Instant delete skipped: user not authenticated', authError);
-            return;
-        }
-        // Use soft delete (update deleted=true) instead of hard delete
-        // This ensures the deletion is synced to other devices
-        await supabase
-            .from(table)
-            .update({ deleted: true, updated_at: new Date().toISOString() })
-            .eq('id', id)
-            .eq('profile_id', user.id);
-    } catch (err) {
-        console.warn(`Instant ${table} delete failed`, err);
-    }
-};
 
 type GroceryItemPayload = Partial<ListItem> & { addedBy?: string };
 
@@ -367,14 +364,7 @@ export const TaskService = {
         });
 
         enqueueTaskNotificationJob(task.id, { showFeedback: false });
-
-        try {
-            if (await SyncService.isOnline()) {
-                void pushTaskToSupabase(task.id);
-            }
-        } catch (onlineError) {
-            console.warn('Instant task push skipped (connectivity check failed)', onlineError);
-        }
+        syncAfterWrite();
 
         return task;
     },
@@ -399,14 +389,7 @@ export const TaskService = {
         });
 
         enqueueTaskNotificationJob(task.id, { showFeedback: true });
-
-        try {
-            if (await SyncService.isOnline()) {
-                void pushTaskToSupabase(task.id);
-            }
-        } catch (onlineError) {
-            console.warn('Instant task push skipped (connectivity check failed)', onlineError);
-        }
+        syncAfterWrite();
 
         return task;
     },
@@ -422,8 +405,7 @@ export const TaskService = {
             const task = await database.get<Task>('tasks').find(id);
             await task.markAsDeleted();
         });
-
-        void attemptInstantDelete('tasks', id);
+        syncAfterWrite();
 
         if (notificationId) {
             NotificationScheduler.cancelNotification(notificationId).catch(err => console.error('Bg cancel failed', err));
@@ -460,14 +442,7 @@ export const TaskService = {
         });
 
         enqueueEventNotificationJob(event.id, { showFeedback: false });
-
-        try {
-            if (await SyncService.isOnline()) {
-                void pushEventToSupabase(event.id);
-            }
-        } catch (onlineError) {
-            console.warn('Instant event push skipped (connectivity check failed)', onlineError);
-        }
+        syncAfterWrite();
 
         return event;
     },
@@ -497,14 +472,7 @@ export const TaskService = {
         });
 
         enqueueEventNotificationJob(event.id, { showFeedback: true, updates });
-
-        try {
-            if (await SyncService.isOnline()) {
-                void pushEventToSupabase(event.id);
-            }
-        } catch (onlineError) {
-            console.warn('Instant event push skipped (connectivity check failed)', onlineError);
-        }
+        syncAfterWrite();
 
         return event;
     },
@@ -525,8 +493,7 @@ export const TaskService = {
                 console.error('Error deleting event:', e);
             }
         });
-
-        void attemptInstantDelete('events', id);
+        syncAfterWrite();
 
         // Background Cancel
         if (notificationId) {
@@ -537,15 +504,32 @@ export const TaskService = {
     // --- Lists (Groceries/Todos) ---
     observeLists: () => database.get<List>('lists').query().observe(),
 
-    observeShoppingListItems: () => {
-        return database.get<ListItem>('list_items')
-            .query()
-            .observeWithColumns(['is_completed', 'purchased_at', 'name', 'quantity']);
+    observeShoppingListItems: (profileId?: string | null) => {
+        const collection = database.get<ListItem>('list_items');
+        const query = profileId
+            ? collection.query(
+                  Q.where('profile_id', profileId),
+                  Q.where('deleted', false),
+                  Q.sortBy('updated_at', Q.desc)
+              )
+            : collection.query(
+                  Q.where('profile_id', ''),
+                  Q.where('deleted', false),
+                  Q.sortBy('updated_at', Q.desc)
+              );
+        return query.observeWithColumns(['is_completed', 'purchased_at', 'name', 'quantity']);
     },
 
     addGroceryItem: async (data: GroceryItemPayload) => {
+        const profileId = await fetchActiveProfileId();
+        if (!profileId) {
+            console.warn('Skipping grocery write until profile is known');
+            return;
+        }
+        const now = Date.now();
         await database.write(async () => {
             await database.get<ListItem>('list_items').create(i => {
+                i.profileId = profileId;
                 i.name = data.name || 'Item';
                 i.quantity = data.quantity || 1;
                 i.unit = data.unit || 'pcs';
@@ -558,25 +542,44 @@ export const TaskService = {
                 if (data.purchasedAt) {
                     i.purchasedAt = data.purchasedAt;
                 }
+                i.updatedAt = now;
+                i.createdAt = now;
+                i.version = 1;
+                i.deleted = false;
             });
         });
+        syncAfterWrite();
     },
 
     toggleGroceryItem: async (id: string) => {
         await database.write(async () => {
             const item = await database.get<ListItem>('list_items').find(id);
             const nextState = !item.isCompleted;
+            const now = Date.now();
             await item.update(i => {
                 i.isCompleted = nextState;
-                i.purchasedAt = nextState ? Date.now() : undefined;
+                i.purchasedAt = nextState ? now : undefined;
+                i.updatedAt = now;
+                i.version = (i.version ?? 0) + 1;
             });
         });
+        syncAfterWrite();
     },
 
     removeGroceryItem: async (id: string) => {
         await database.write(async () => {
             const item = await database.get<ListItem>('list_items').find(id);
-            await item.markAsDeleted();
+            const now = Date.now();
+            await item.update(i => {
+                i.deleted = true;
+                i.updatedAt = now;
+                i.version = (i.version ?? 0) + 1;
+            });
         });
+        syncAfterWrite();
     }
 };
+
+// Acceptance Checklist:
+// - Device A adds/toggles/deletes grocery list items for a profile and Device B sees the tombstoned changes via SyncService.requestSyncSoon() (debounced write path only).
+// - Rapid consecutive list edits on Device A trigger only one debounced sync; verify Device B updates once after the window.
