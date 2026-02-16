@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from "react";
 import { FamilyService } from "../services/FamilyService";
 import { TaskService } from "../services/TaskService";
-import type { ListCategoryRecord, ListItemRecord } from "../services/TaskService";
+import { ListService } from "../services/ListService";
+import type { ListCategoryRecord, ListItemRecord } from "../services/ListService";
 import { VaultService } from "../services/VaultService";
 import { supabase } from "../config/supabase";
 
@@ -101,6 +102,7 @@ export interface FamilyContextValue {
   setActiveMember: (member: FamilyMember) => Promise<void>;
   addMember: (member: any) => Promise<void>;
   removeMember: (id: string) => Promise<void>;
+  deleteMemberCascade: (id: string) => Promise<void>;
   updateMember: (id: string, updates: any) => Promise<void>;
   updateMemberColor: (id: string, color: string) => Promise<void>;
   globalVault: VaultDocument[];
@@ -240,10 +242,24 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }));
   }, [rawGroceryItems]);
 
-  // --- Load Family Name ---
+  // --- Family Name Subscription ---
   useEffect(() => {
-    FamilyService.getFamilyName().then(setFamilyNameState);
-  }, []);
+    if (!profileId) {
+      setFamilyNameState("Family Chores");
+      return;
+    }
+    try {
+      const sub = FamilyService.observeFamilyName(profileId).subscribe({
+        next: setFamilyNameState,
+        error: (error) => {
+          console.error("FamilyContext: Failed to observe family name", error);
+        }
+      });
+      return () => sub.unsubscribe();
+    } catch (error) {
+      console.error("FamilyContext: Error setting up family name subscription", error);
+    }
+  }, [profileId]);
 
   // --- Track Profile ---
   useEffect(() => {
@@ -275,21 +291,23 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   }, []);
 
   const setFamilyName = (name: string) => {
-    try {
-      setFamilyNameState(name);
-      FamilyService.setFamilyName(name).catch(error => {
-        console.error('Failed to save family name:', error);
-        // Don't throw - name is updated in memory
-      });
-    } catch (error) {
-      console.error('Error setting family name:', error);
+    if (!profileId) {
+      console.warn('FamilyContext: Profile ID unavailable while setting family name');
+      return;
     }
+    FamilyService.setFamilyName(profileId, name).catch((error) => {
+      console.error('Failed to save family name:', error);
+    });
   };
 
   // --- Observe Members ---
   useEffect(() => {
+    if (!profileId) {
+      setMembers([]);
+      return;
+    }
     try {
-      const sub = FamilyService.observeMembers().subscribe({
+      const sub = FamilyService.observeMembers(profileId).subscribe({
         next: (rawMembers) => {
           try {
             const mapped = rawMembers.map(m => ({
@@ -313,38 +331,34 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     } catch (error) {
       console.error('Error setting up members subscription:', error);
     }
-  }, []);
+  }, [profileId]);
 
   // --- Active Member Helper ---
   const activeMember = members.find((m) => m.isActive) || null;
 
   const setActiveMember = async (member: FamilyMember) => {
     try {
-      console.log('FamilyContext: Setting active member to:', member.name, member.id);
-      await FamilyService.setActiveMember(member.id);
-      console.log('FamilyContext: Active member updated in database');
-
-      // Force immediate re-fetch to update UI
-      const updatedMembers = await FamilyService.getAllMembers();
-      const mapped = updatedMembers.map(m => ({
-        id: m.id,
-        name: m.name,
-        symbol: m.symbol,
-        color: m.color,
-        isActive: m.isActive,
-        role: m.role
-      }));
-      setMembers(mapped);
-      console.log('FamilyContext: Members state updated, new active:', mapped.find(m => m.isActive)?.name);
+      if (!profileId) {
+        console.warn('FamilyContext: Profile ID unavailable for active member update');
+        return;
+      }
+      await FamilyService.setActiveMember(profileId, member.id);
 
       // Reschedule notifications for the new active profile
       const { NotificationScheduler } = await import('../services/NotificationScheduler');
       await NotificationScheduler.rescheduleNotificationsForActiveProfile();
-      console.log('FamilyContext: Notifications rescheduled for active profile');
     } catch (error) {
       console.error('FamilyContext: Error setting active member:', error);
       throw error;
     }
+  };
+
+  const ensureProfileId = () => {
+    if (!profileId) {
+      console.warn('FamilyContext: Profile ID unavailable for member mutation');
+      return null;
+    }
+    return profileId;
   };
 
   // --- Observe Events ---
@@ -493,7 +507,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       return;
     }
     try {
-      const sub = TaskService.observeShoppingListItems(profileId).subscribe({
+      const sub = ListService.observeShoppingListItems(profileId).subscribe({
         next: (items) => {
           setRawGroceryItems(items);
         },
@@ -514,7 +528,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       return;
     }
     try {
-      const sub = TaskService.observeCategories(profileId).subscribe({
+      const sub = ListService.observeCategories(profileId).subscribe({
         next: (items) => {
           setRawCategories(items);
         },
@@ -531,6 +545,14 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // ... Expose methods ...
 
+  const handleCascadeDelete = async (id: string) => {
+    const pid = ensureProfileId();
+    if (!pid) {
+      return;
+    }
+    await FamilyService.deleteMemberCascade(pid, id);
+  };
+
   return (
     <FamilyContext.Provider
       value={{
@@ -540,57 +562,21 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         activeMember,
         setActiveMember,
         addMember: async (m: any) => {
-          await FamilyService.addMember(m.name, m.symbol, m.color, m.isActive ?? false);
-          const updated = await FamilyService.getAllMembers();
-          const mapped = updated.map(mem => ({
-            id: mem.id,
-            name: mem.name,
-            symbol: mem.symbol,
-            color: mem.color,
-            isActive: mem.isActive,
-            role: mem.role
-          }));
-          setMembers(mapped);
+          const pid = ensureProfileId();
+          if (!pid) return;
+          await FamilyService.addMember(pid, m.name, m.symbol, m.color, m.isActive ?? false);
         },
-        removeMember: async (id: string) => {
-          await FamilyService.deleteMember(id);
-          const updated = await FamilyService.getAllMembers();
-          const mapped = updated.map(mem => ({
-            id: mem.id,
-            name: mem.name,
-            symbol: mem.symbol,
-            color: mem.color,
-            isActive: mem.isActive,
-            role: mem.role
-          }));
-          setMembers(mapped);
-        },
+        removeMember: handleCascadeDelete,
+        deleteMemberCascade: handleCascadeDelete,
         updateMember: async (id: string, u: any) => {
-          await FamilyService.updateMember(id, u);
-          const updated = await FamilyService.getAllMembers();
-          const mapped = updated.map(mem => ({
-            id: mem.id,
-            name: mem.name,
-            symbol: mem.symbol,
-            color: mem.color,
-            isActive: mem.isActive,
-            role: mem.role
-          }));
-          setMembers(mapped);
+          const pid = ensureProfileId();
+          if (!pid) return;
+          await FamilyService.updateMember(pid, id, u);
         },
         updateMemberColor: async (id: string, c: string) => {
-          await FamilyService.updateMember(id, { color: c });
-          // No refresh strictly needed if updateMember handles it, but good to be safe if this is called independently
-          const updated = await FamilyService.getAllMembers();
-          const mapped = updated.map(mem => ({
-            id: mem.id,
-            name: mem.name,
-            symbol: mem.symbol,
-            color: mem.color,
-            isActive: mem.isActive,
-            role: mem.role
-          }));
-          setMembers(mapped);
+          const pid = ensureProfileId();
+          if (!pid) return;
+          await FamilyService.updateMember(pid, id, { color: c });
         },
 
         globalVault,
@@ -605,9 +591,9 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         deleteEvent,
 
         groceryList,
-        addGroceryItem: TaskService.addGroceryItem,
-        toggleGroceryItem: TaskService.toggleGroceryItem,
-        removeGroceryItem: TaskService.removeGroceryItem,
+        addGroceryItem: ListService.addGroceryItem,
+        toggleGroceryItem: ListService.toggleGroceryItem,
+        removeGroceryItem: ListService.removeGroceryItem,
 
         tasks,
         addTask,

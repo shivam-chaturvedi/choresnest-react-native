@@ -10,4 +10,8 @@ export default class Member extends Model {
     @text('role') role!: string;
     @field('is_active') isActive!: boolean;
     @field('version') version!: number;
+    @field('profile_id') profileId!: string;
+    @field('created_at') createdAt!: number;
+    @field('updated_at') updatedAt!: number;
+    @field('deleted') deleted!: boolean;
 }

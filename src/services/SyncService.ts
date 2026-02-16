@@ -44,7 +44,19 @@ const ensureRealtimeSubscription = (triggerSync: () => void) => {
         return;
     }
     realtimeChannel = supabase.channel('realtime_sync');
-    const watchTables = ['lists', 'list_items', 'list_categories', 'events', 'tasks'];
+    const watchTables = [
+        'lists',
+        'list_items',
+        'list_categories',
+        'events',
+        'tasks',
+        'members',
+        'settings',
+        'app_settings',
+        'recipes',
+        'collections',
+        'collection_recipes',
+    ];
     watchTables.forEach((table) => {
         realtimeChannel?.on('postgres_changes', { event: '*', schema: 'public', table }, () => {
             triggerSync();

@@ -25,7 +25,7 @@ const AVATARS = ["👤", "👩", "👨", "👶", "👧", "👦", "🧒", "👴",
 export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, memberToEdit }) => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
-  const { addMember, updateMember, members } = useFamily();
+  const { addMember, updateMember, deleteMemberCascade, members } = useFamily();
 
   const availableColors = PROFILE_COLORS.filter(c => !members.some((m: any) => m.color === c.value && m.id !== memberToEdit?.id));
   const initialColor = availableColors.length > 0 ? availableColors[0].value : PROFILE_COLORS[0].value;
@@ -34,6 +34,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, m
   const [error, setError] = useState("");
   const [selectedAvatar, setSelectedAvatar] = useState(AVATARS[0]);
   const [selectedColor, setSelectedColor] = useState(initialColor);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Initialize form when modal opens or memberToEdit changes
   React.useEffect(() => {
@@ -48,6 +49,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, m
         setSelectedColor(initialColor);
       }
       setError("");
+      setIsDeleting(false);
     }
   }, [open, memberToEdit]);
 
@@ -78,6 +80,33 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, m
       console.error("Failed to save member:", error);
       Alert.alert("Error", "Failed to save member. Please try again.");
     }
+  };
+
+  const handleDelete = () => {
+    if (!memberToEdit) return;
+    Alert.alert(
+      "Delete Member",
+      `Are you sure you want to remove ${memberToEdit.name}? This will remove their tasks, events, documents, and list items.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setIsDeleting(true);
+              await deleteMemberCascade(memberToEdit.id);
+              onClose();
+            } catch (error) {
+              console.error("Failed to delete member:", error);
+              Alert.alert("Error", "Unable to delete member right now.");
+            } finally {
+              setIsDeleting(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -177,6 +206,23 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, m
             >
               <Text style={[styles.addButtonText, { color: colors.foreground }]}>{memberToEdit ? "Update Member" : "Add Member"}</Text>
             </Pressable>
+            {memberToEdit && (
+              <Pressable
+                style={[
+                  styles.deleteButton,
+                  {
+                    marginTop: 12,
+                    borderRadius: radius.md,
+                    borderColor: colors.danger,
+                    backgroundColor: colors.danger + '15',
+                  }
+                ]}
+                onPress={handleDelete}
+                disabled={isDeleting}
+              >
+                <Text style={[styles.deleteButtonText, { color: colors.danger }]}>Delete Member</Text>
+              </Pressable>
+            )}
           </View>
 
         </Pressable>
@@ -247,4 +293,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   }
+  ,
+  deleteButton: {
+    width: '100%',
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  deleteButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
 });

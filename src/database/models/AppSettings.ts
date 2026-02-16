@@ -6,4 +6,8 @@ export default class AppSettings extends Model {
 
     @field('has_completed_onboarding') hasCompletedOnboarding!: boolean;
     @field('version') version!: number;
+    @field('profile_id') profileId!: string;
+    @field('created_at') createdAt!: number;
+    @field('updated_at') updatedAt!: number;
+    @field('deleted') deleted!: boolean;
 }
