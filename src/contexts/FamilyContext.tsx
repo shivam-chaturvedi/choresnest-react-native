@@ -78,7 +78,6 @@ export interface VaultDocument {
   category?: string;
   expiryDate?: string;
   filePath?: string;
-  fileUri?: string;
   uri?: string;
   purchaseDate?: string;
   warrantyTillDate?: string;
@@ -132,7 +131,7 @@ const mapEventModelToCalendarEvent = (eventModel: any, membersById: Map<string, 
   date: eventModel.dateString || "",
   time: eventModel.time,
   endTime: eventModel.endTime,
-  memberId: eventModel.memberId && membersById.has(eventModel.memberId) ? eventModel.memberId : undefined,
+  memberId: eventModel.memberId,
   description: eventModel.description,
   notes: eventModel.notes,
   recurrenceRule: eventModel.recurrenceRule,
@@ -187,37 +186,35 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const events = useMemo(() => {
     const missingMembers: any[] = [];
 
-    const filtered = rawEvents.filter(eventModel => {
+    const normalized = rawEvents.map(eventModel => {
       if (eventModel.memberId && !membersById.has(eventModel.memberId)) {
         missingMembers.push(eventModel);
-        return false;
       }
-      return true;
+      return eventModel;
     });
 
     if (missingMembers.length > 0) {
-      console.warn(`FamilyContext: Skipping ${missingMembers.length} events with missing members`.trim());
+      console.warn(`FamilyContext: ${missingMembers.length} events reference missing members`.trim());
     }
 
-    return filtered.map(eventModel => mapEventModelToCalendarEvent(eventModel, membersById));
+    return normalized.map(eventModel => mapEventModelToCalendarEvent(eventModel, membersById));
   }, [rawEvents, membersById]);
 
   const tasks = useMemo(() => {
     const missingAssignees: any[] = [];
 
-    const filtered = rawTasks.filter(taskModel => {
+    const normalized = rawTasks.map(taskModel => {
       if (taskModel.assigneeId && !membersById.has(taskModel.assigneeId)) {
         missingAssignees.push(taskModel);
-        return false;
       }
-      return true;
+      return taskModel;
     });
 
     if (missingAssignees.length > 0) {
-      console.warn(`FamilyContext: Skipping ${missingAssignees.length} tasks with missing assignees`.trim());
+      console.warn(`FamilyContext: ${missingAssignees.length} tasks reference missing assignees`.trim());
     }
 
-    return filtered.map(taskModel => mapTaskModelToTask(taskModel, membersById));
+    return normalized.map(taskModel => mapTaskModelToTask(taskModel, membersById));
   }, [rawTasks, membersById]);
 
   const categories = useMemo(() => {
@@ -456,8 +453,14 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // --- Observe Vault ---
   useEffect(() => {
+    if (!profileId) {
+      setGlobalVault([]);
+      setMemberVaults({});
+      return;
+    }
+
     try {
-      const sub = VaultService.observeAllDocuments().subscribe({
+      const sub = VaultService.observeAllDocuments(profileId).subscribe({
         next: (docs) => {
           try {
             const g: any[] = [];
@@ -465,6 +468,8 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
             docs.forEach(d => {
               const meta = d.meta || {};
+              const cachedUri = VaultService.getCachedLocalUri(d.id);
+              const docUri = cachedUri ?? d.filePath;
               const docObj = {
                 id: d.id,
                 name: d.name,
@@ -473,8 +478,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                 date: d.date,
                 memberId: d.memberId,
                 filePath: d.filePath,
-                uri: d.filePath, // Map for VaultUtils
-                fileUri: d.filePath, // Alias
+                uri: docUri, // Map for VaultUtils
                 ...meta,  // Merge meta fields (expiryDate, etc.) to top level
               };
               if (d.memberId === 'global') {
@@ -498,7 +502,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     } catch (error) {
       console.error('Error setting up vault subscription:', error);
     }
-  }, []);
+  }, [profileId]);
 
   // --- Observe Grocery List ---
   useEffect(() => {

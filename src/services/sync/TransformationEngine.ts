@@ -192,6 +192,21 @@ export const transformRecordForSupabase = (
         }
     }
 
+    if (table === 'documents') {
+        if (transformed.meta_json === undefined && transformed.meta !== undefined) {
+            transformed.meta_json = transformed.meta;
+            delete transformed.meta;
+        }
+        if (transformed.meta_json !== undefined && typeof transformed.meta_json !== 'string') {
+            try {
+                transformed.meta_json = JSON.stringify(transformed.meta_json ?? {});
+            } catch (jsonMetaError) {
+                console.warn('Failed to stringify document meta_json for Supabase push:', jsonMetaError);
+                transformed.meta_json = JSON.stringify({});
+            }
+        }
+    }
+
     const now = new Date().toISOString();
     const normalizedUpdatedAt = ensureIsoTimestamp(transformed.updated_at ?? transformed.updatedAt) ?? now;
     const normalizedCreatedAt = ensureIsoTimestamp(transformed.created_at ?? transformed.createdAt) ?? normalizedUpdatedAt ?? now;

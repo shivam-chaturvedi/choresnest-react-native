@@ -192,10 +192,17 @@ export const VaultScreen: React.FC = () => {
       return;
     }
 
-    if (selectedDocumentId && pendingDocumentIdRef.current !== selectedDocumentId) {
+    if (!selectedDocumentId) {
       setDocumentSnapshot(null);
-      pendingDocumentIdRef.current = selectedDocumentId;
+      pendingDocumentIdRef.current = null;
+      return;
     }
+
+    if (pendingDocumentIdRef.current === selectedDocumentId) {
+      return;
+    }
+
+    pendingDocumentIdRef.current = selectedDocumentId;
   }, [selectedDocument, selectedDocumentId, showDetailsModal]);
 
   useEffect(() => {
@@ -244,29 +251,30 @@ export const VaultScreen: React.FC = () => {
     { id: 'warranty', name: 'Warranties', icon: '🛡️', count: categoryCounts.warranty, color: colors.info + '30' },
     { id: 'bill', name: 'Bills', icon: '🧾', count: categoryCounts.bill, color: colors.warning + '30' },
     { id: 'insurance', name: 'Insurance', icon: '📋', count: categoryCounts.insurance, color: colors.success + '30' },
-    { id: 'service', name: 'Service', icon: '🔧', count: categoryCounts.service, color: colors.muted + '50' },
-    { id: 'certificate', name: 'Certificates', icon: '📜', count: categoryCounts.certificate, color: colors.border },
-    { id: 'receipt', name: 'Receipts', icon: '🧾', count: categoryCounts.receipt, color: colors.primary + '30' },
-  ];
+      { id: 'service', name: 'Service', icon: '🔧', count: categoryCounts.service, color: colors.muted + '50' },
+      { id: 'certificate', name: 'Certificates', icon: '📜', count: categoryCounts.certificate, color: colors.border },
+      { id: 'receipt', name: 'Receipts', icon: '🧾', count: categoryCounts.receipt, color: colors.primary + '30' },
+      { id: 'other', name: 'Other', icon: '📄', count: categoryCounts.other, color: colors.muted + '30' },
+    ];
 
   // Calculate storage on mount and when docs change
-  const docFingerprint = useMemo(
-    () =>
-      allDocs
-        .map(doc =>
-          [
-            doc.id,
-            doc.filePath || doc.uri || doc.fileUri || '',
-            doc.date,
-            doc.warrantyTillDate || '',
-            doc.billDate || '',
-            doc.nextServiceDate || '',
-            doc.expiryDate || '',
-          ].join(':')
-        )
-        .join('|'),
-    [allDocs]
-  );
+    const docFingerprint = useMemo(
+        () =>
+            allDocs
+                .map(doc =>
+                  [
+                    doc.id,
+                    doc.filePath || doc.uri || '',
+                    doc.date,
+                    doc.warrantyTillDate || '',
+                    doc.billDate || '',
+                    doc.nextServiceDate || '',
+                    doc.expiryDate || '',
+                  ].join(':')
+                )
+                .join('|'),
+        [allDocs]
+    );
 
   useEffect(() => {
     const calcStorage = async () => {

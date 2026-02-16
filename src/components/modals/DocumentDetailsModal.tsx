@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
     Modal,
     View,
@@ -15,6 +15,7 @@ import { X, Edit2, Save } from "lucide-react-native";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { VaultDocument } from "../../contexts/FamilyContext";
 import { NotificationCenter } from "../../services/NotificationCenter";
+import { VaultStorageService } from "../../services/VaultStorageService";
 import { DateTimePicker } from "../ui/SimpleDatePicker";
 import {
     formatReminderRuleSummary,
@@ -30,7 +31,7 @@ interface DocumentDetailsModalProps {
     visible: boolean;
     onClose: () => void;
     document: VaultDocument | null;
-    onUpdate: (docId: string, updates: Partial<Omit<VaultDocument, "id">>) => void;
+    onUpdate: (docId: string, updates: Partial<Omit<VaultDocument, "id">>) => Promise<any>;
     onViewImage?: (uri: string) => void;
 }
 
@@ -74,8 +75,10 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
         });
     };
     const [isEditMode, setIsEditMode] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const lastInitializedDocIdRef = useRef<string | null>(null);
 
-    const viewUri = document?.uri || document?.filePath || document?.fileUri;
+    const viewUri = document?.uri || document?.filePath;
 
     // Form fields
     const [documentName, setDocumentName] = useState('');
@@ -94,26 +97,41 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
     const [reminderTime, setReminderTime] = useState('09:00');
     const [nameError, setNameError] = useState('');
 
+    const hydrateForm = (doc: VaultDocument) => {
+        setDocumentName(doc.name || '');
+        setSelectedCategory(doc.type || '');
+        setPurchaseDate(doc.purchaseDate || '');
+        setWarrantyTillDate(doc.warrantyTillDate || '');
+        setBillAmount(doc.billAmount || '');
+        setBillDate(doc.billDate || '');
+        setProvider(doc.provider || '');
+        setPolicyNumber(doc.policyNumber || '');
+        setPremiumAmount(doc.premiumAmount || '');
+        setServiceDate(doc.serviceDate || '');
+        setNextServiceDate(doc.nextServiceDate || '');
+        setCost(doc.cost || '');
+        const reminderField = getPrimaryReminderField(doc.type);
+        const reminderRule = reminderField ? (doc.reminderRules || []).find(rule => rule.field === reminderField) : undefined;
+        setReminderOffsets(reminderRule?.offsets ? normalizeReminderOffsets(reminderRule.offsets) : [1]);
+        setReminderTime(reminderRule?.timeOfDay || '09:00');
+    };
+
     useEffect(() => {
-        if (document && visible) {
-            setDocumentName(document.name || '');
-            setSelectedCategory(document.type || '');
-            setPurchaseDate(document.purchaseDate || '');
-            setWarrantyTillDate(document.warrantyTillDate || '');
-            setBillAmount(document.billAmount || '');
-            setBillDate(document.billDate || '');
-            setProvider(document.provider || '');
-            setPolicyNumber(document.policyNumber || '');
-            setPremiumAmount(document.premiumAmount || '');
-            setServiceDate(document.serviceDate || '');
-            setNextServiceDate(document.nextServiceDate || '');
-            setCost(document.cost || '');
-            const reminderField = getPrimaryReminderField(document.type);
-            const reminderRule = reminderField ? (document.reminderRules || []).find(rule => rule.field === reminderField) : undefined;
-            setReminderOffsets(reminderRule?.offsets ? normalizeReminderOffsets(reminderRule.offsets) : [1]);
-            setReminderTime(reminderRule?.timeOfDay || '09:00');
+        // Reset the init marker whenever the modal closes so a future open can rehydrate fresh state.
+        if (!visible) {
+            lastInitializedDocIdRef.current = null;
+            return;
         }
-    }, [document?.id, visible]);
+        if (!document || isEditMode) {
+            return;
+        }
+        // Avoid re-hydrating while the user is editing the same document (sync updates may produce new references).
+        if (lastInitializedDocIdRef.current === document.id) {
+            return;
+        }
+        hydrateForm(document);
+        lastInitializedDocIdRef.current = document.id;
+    }, [document, visible, isEditMode]);
 
     useEffect(() => {
         if (visible) {
@@ -124,7 +142,7 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
 
     if (!document) return null;
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!documentName.trim()) {
             setNameError('Document Name is required');
             return;
@@ -140,8 +158,9 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
             other: '📄',
         };
 
+        setIsSaving(true);
         try {
-            onUpdate(document.id, {
+            await onUpdate(document.id, {
                 name: documentName,
                 type: selectedCategory as any,
                 icon: categoryIcons[selectedCategory] || '📄',
@@ -163,6 +182,8 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
         } catch (error) {
             console.error("Failed to update document:", error);
             pushNotification("Error", "Failed to update document.", "warning");
+        } finally {
+            setIsSaving(false);
         }
 
     };
@@ -232,29 +253,60 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
         );
     };
 
+    const stripUri = (uri: string): string => {
+        return uri.split(/[?#]/)[0];
+    };
+
+    const hasReplacementScheme = (uri: string): boolean => {
+        const lower = uri.toLowerCase();
+        return (
+            lower.startsWith('http://') ||
+            lower.startsWith('https://') ||
+            lower.startsWith('file://') ||
+            lower.startsWith('content://')
+        );
+    };
+
+    const isRemoteStoragePath = (uri: string): boolean => {
+        if (!uri) return false;
+        const trimmed = uri.trim();
+        if (!trimmed || trimmed.startsWith('/') || hasReplacementScheme(trimmed) || trimmed.includes('://')) {
+            return false;
+        }
+        return trimmed.includes('/');
+    };
+
+    const isImageUri = (uri: string): boolean => {
+        const candidate = stripUri(uri).toLowerCase();
+        return /\.(jpg|jpeg|png|webp|heic)$/i.test(candidate);
+    };
+
     const handleViewFile = async () => {
         if (!viewUri) return;
-
-        const isImage = (uri: string) => {
-            const lower = uri.toLowerCase();
-            return lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png') || lower.endsWith('.webp') || lower.endsWith('.heic');
-        };
-
-        if (!isImage(viewUri)) {
+        let uriToOpen = viewUri;
+        if (isRemoteStoragePath(viewUri)) {
             try {
-                await FileViewer.open(viewUri, { showOpenWithDialog: true });
+                uriToOpen = await VaultStorageService.getSignedUrl(viewUri, 60);
+            } catch (error) {
+                console.error('Error fetching signed URL for document:', error);
+                pushNotification("Error", "Could not load this file. Please try again.", "warning");
+                return;
+            }
+        }
+
+        if (!isImageUri(uriToOpen)) {
+            try {
+                await FileViewer.open(uriToOpen, { showOpenWithDialog: true });
             } catch (e) {
                 console.log('Error opening file:', e);
                 pushNotification("Error", "Could not open this file.", "warning");
             }
         } else {
-            // It is an image
             if (onViewImage) {
-                onViewImage(viewUri);
+                onViewImage(uriToOpen);
             } else {
-                // Fallback to FileViewer if no handler provided
                 try {
-                    await FileViewer.open(viewUri);
+                    await FileViewer.open(uriToOpen);
                 } catch (e) {
                     console.log('Error opening image:', e);
                 }
@@ -264,9 +316,9 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
 
     const getViewButtonLabel = () => {
         if (!viewUri) return 'View File';
-        const lower = viewUri.toLowerCase();
-        if (lower.endsWith('.pdf')) return 'View PDF';
-        if (lower.match(/\.(jpg|jpeg|png|webp|heic)$/i)) return 'View Image';
+        const clean = stripUri(viewUri).toLowerCase();
+        if (clean.endsWith('.pdf')) return 'View PDF';
+        if (clean.match(/\.(jpg|jpeg|png|webp|heic)$/i)) return 'View Image';
         return 'View File';
     };
 
@@ -535,7 +587,15 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                                         <Text style={[styles.cancelButtonText, { color: colors.foreground }]}>Cancel</Text>
                                     </Pressable>
                                     <Pressable
-                                        style={[styles.saveButton, { backgroundColor: colors.primary, borderRadius: radius.md }]}
+                                        disabled={isSaving}
+                                        style={[
+                                            styles.saveButton,
+                                            {
+                                                backgroundColor: colors.primary,
+                                                borderRadius: radius.md,
+                                                opacity: isSaving ? 0.7 : 1,
+                                            },
+                                        ]}
                                         onPress={handleSave}
                                     >
                                         <Save size={16} color={colors.primaryForeground} style={{ marginRight: 6 }} />

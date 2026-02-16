@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export default appSchema({
-    version: 13,
+    version: 14,
     tables: [
         tableSchema({
             name: 'users',
@@ -199,15 +199,15 @@ export default appSchema({
                 { name: 'deleted', type: 'boolean' },
                 { name: 'name', type: 'string' },
                 { name: 'type', type: 'string' },
-                { name: 'icon', type: 'string' },
+                { name: 'icon', type: 'string', isOptional: true },
                 { name: 'date', type: 'string' },
                 { name: 'expiry_date', type: 'string', isOptional: true },
-                { name: 'member_id', type: 'string', isIndexed: true }, // or 'global'
-                { name: 'shared_with_json', type: 'string' },
-                { name: 'file_path', type: 'string', isOptional: true }, // Local FS path
-                { name: 'meta_json', type: 'string' }, // Flexible metadata for different doc types
-                { name: 'notification_ids_json', type: 'string', isOptional: true }, // Array of notification IDs for multiple reminders
-                { name: 'reminder_days_before', type: 'number', isOptional: true }, // 7, 14, 30
+                { name: 'member_id', type: 'string', isOptional: true, isIndexed: true },
+                { name: 'shared_with_json', type: 'string', isOptional: true },
+                { name: 'file_path', type: 'string', isOptional: true },
+                { name: 'meta_json', type: 'string', isOptional: true },
+                { name: 'notification_ids_json', type: 'string', isOptional: true },
+                { name: 'reminder_days_before', type: 'number', isOptional: true },
                 { name: 'version', type: 'number' },
             ],
         }),

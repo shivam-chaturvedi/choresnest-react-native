@@ -356,5 +356,9 @@ export default schemaMigrations({
                 unsafeExecuteSql('UPDATE settings SET deleted = 0 WHERE deleted IS NULL;'),
             ],
         },
+        {
+            toVersion: 14,
+            steps: [],
+        },
     ],
 });

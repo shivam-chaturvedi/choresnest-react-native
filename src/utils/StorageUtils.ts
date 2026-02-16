@@ -27,13 +27,30 @@ export const formatStorageSize = (bytes: number): string => {
     return `${gb.toFixed(2)} GB`;
 };
 
+const looksLikeLocalUri = (uri?: string): boolean => {
+    if (!uri) {
+        return false;
+    }
+    const lower = uri.toLowerCase();
+    return (
+        lower.startsWith('file://') ||
+        lower.startsWith('content://') ||
+        uri.startsWith('/')
+    );
+};
+
 export const calculateTotalStorage = async (documents: Array<{ uri?: string }>): Promise<number> => {
     let totalBytes = 0;
 
     for (const doc of documents) {
-        if (doc.uri) {
-            const size = await calculateFileSize(doc.uri);
+        if (!looksLikeLocalUri(doc.uri)) {
+            continue;
+        }
+        try {
+            const size = await calculateFileSize(doc.uri!);
             totalBytes += size;
+        } catch {
+            // Already handled by calculateFileSize (which logs), but guard in case
         }
     }
 

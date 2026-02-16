@@ -26,6 +26,7 @@ export const SYNC_TABLES: TableSyncConfig[] = [
     { key: 'budgets', phase: 2 },
     { key: 'meal_plans', hasProfileId: false, phase: 2 },
     { key: 'list_items', remoteTable: 'list_items', hasProfileId: true, addProfileId: true, phase: 2 },
+    { key: 'documents', remoteTable: 'documents', hasProfileId: true, addProfileId: true, phase: 2 },
     { key: 'notes', hasProfileId: true, addProfileId: true, phase: 3 },
 ];
 

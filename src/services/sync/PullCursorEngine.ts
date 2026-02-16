@@ -17,7 +17,7 @@ const logIndexHint = () => {
   hasLoggedIndexHint = true;
   const tableList = SYNC_TABLES.map(config => config.remoteTable ?? config.key).join(', ');
   console.warn(
-    `Sync performance improves when Supabase tables (${tableList}) index profile_id, updated_at, id; please add those indexes for cursor stability.`
+    `Sync performance improves when Supabase tables (${tableList}) index profile_id and updated_at; please add those indexes for cursor stability.`
   );
 };
 
@@ -92,30 +92,17 @@ export const pullTableChangesWithCursor = async (opts: PullCursorEngineOptions):
       break;
     }
 
-    let lastCursorAt: string | undefined;
-    for (const row of data) {
-      if (totalFetched >= maxRecords) {
-        break;
-      }
-      const normalized = normalizeUpdatedAtValue(row.updated_at ?? row.updatedAt);
-      if (!normalized) {
-        recordSchemaMismatch(table, targetTable, row);
-        continue;
-      }
-      rows.push(row);
-      lastCursorAt = normalized;
-      totalFetched += 1;
-    }
+    rows.push(...data);
+    totalFetched += data.length;
 
-    if (!lastCursorAt) {
+    const lastRow = data[data.length - 1];
+    const lastUpdatedAt = normalizeUpdatedAtValue(lastRow.updated_at ?? lastRow.updatedAt);
+    if (!lastUpdatedAt) {
+      recordSchemaMismatch(table, targetTable, lastRow);
       break;
     }
 
-    cursor = { updatedAt: lastCursorAt };
-
-    if (totalFetched >= maxRecords) {
-      break;
-    }
+    cursor = { updatedAt: lastUpdatedAt };
 
     if (data.length < pageSize) {
       break;
@@ -129,6 +116,3 @@ export const pullTableChangesWithCursor = async (opts: PullCursorEngineOptions):
   const lastPulledDate = new Date(normalizedLastPulled);
   return classifyPullRows(table, rows, lastPulledDate);
 };
-
-// Acceptance Checklist:
-// - Simulate a row without updated_at on Device A; PullCursorEngine should record a schema_mismatch conflict and skip it, allowing pagination to finish without looping.

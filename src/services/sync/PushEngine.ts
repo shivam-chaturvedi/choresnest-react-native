@@ -215,6 +215,9 @@ export const pushTableChanges = async ({
 
             if (serverRow) {
                 if (localVersion <= serverVersion) {
+                    console.warn(
+                        `[PushEngine] Skipping ${table} record ${record.id} because local version ${localVersion} <= server version ${serverVersion}.`
+                    );
                     if (localVersion < serverVersion) {
                         buildConflictPayload(table, record.id, localVersion, serverVersion, ['version'], 'server_newer');
                         conflictCount += 1;
@@ -225,7 +228,6 @@ export const pushTableChanges = async ({
 
             const merged = mergeWithServer(serverRow, payload);
             merged.version = localVersion > 0 ? localVersion : 1;
-            merged.updated_at = new Date().toISOString();
 
             recordsToUpsert.push(merged);
         }
@@ -268,6 +270,9 @@ export const pushTableChanges = async ({
         const localVersion = localDeleteVersions.get(id) ?? 0;
         const serverVersion = coerceVersion(serverRows.get(id)?.version);
         if (serverVersion >= localVersion) {
+            console.warn(
+                `[PushEngine] Skipping delete for ${table} record ${id} because server version ${serverVersion} >= local version ${localVersion}.`
+            );
             if (serverVersion > localVersion) {
                 buildConflictPayload(table, id, localVersion, serverVersion, ['version'], 'server_newer');
                 conflictCount += 1;
@@ -280,11 +285,9 @@ export const pushTableChanges = async ({
     const deleteChunks = chunkArray(deletionsToApply, SYNC_DELETE_BATCH_SIZE);
     for (const chunk of deleteChunks) {
         try {
-            const updatedAt = new Date().toISOString();
             const payload = chunk.map(id => ({
                 id,
                 deleted: true,
-                updated_at: updatedAt,
                 version: Math.max(localDeleteVersions.get(id) ?? 0, 1),
             }));
             const { error } = await supabase.from(targetTable).upsert(payload, { onConflict: 'id' });
