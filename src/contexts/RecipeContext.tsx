@@ -280,54 +280,50 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     return map;
   }, [rawCollectionLinks]);
 
-  const recipes = useMemo<RecipeType[]>(
-    () =>
-      rawRecipes.map((record) => {
-        const data = record._raw;
+  const recipes = useMemo(() =>
+    rawRecipes.map((record) => {
         const numericId = getRecipeNumericId(record.id);
         const nutrition = record.nutrition ?? { kcal: '-', protein: '-', carbs: '-', fats: '-' };
         return {
           id: numericId,
-          name: data.name,
-          image: data.image_path ?? record.imagePath,
-          time: data.prep_time || record.prepTime || record.cookTime || '',
-          servings: data.servings ?? record.servings,
-          tags: data.tags_json ?? record.tags ?? [],
-          saved: data.is_saved ?? record.isSaved,
-          ingredients: data.ingredients_json ?? record.ingredients ?? [],
+          name: record.name,
+          image: record.imagePath,
+          time: record.prepTime || record.cookTime || '',
+          servings: record.servings ?? 0,
+          tags: record.tags ?? [],
+          saved: record.isSaved,
+          ingredients: record.ingredients ?? [],
           nutrition: {
             kcal: nutrition.kcal ?? '-',
             protein: nutrition.protein ?? '-',
             carbs: nutrition.carbs ?? '-',
             fats: nutrition.fats ?? '-',
           },
-          audio: data.audio_path ?? record.audioPath || undefined,
-          duration: data.duration ?? record.duration ?? undefined,
-          url: data.url ?? record.url || undefined,
-          images: data.images_json ?? record.images ?? undefined,
+          audio: record.audioPath ?? undefined,
+          duration: record.duration ?? undefined,
+          url: record.url ?? undefined,
+          images: record.images ?? undefined,
           countryCode: undefined,
         };
-      }),
+      }) as RecipeType[],
     [rawRecipes]
   );
 
-  const collections = useMemo<RecipeCollection[]>(
-    () =>
+  const collections = useMemo(() =>
       rawCollections.map((record) => {
-        const data = record._raw;
         const numericId = getCollectionNumericId(record.id);
         const linkedRecipes = Array.from(
           new Set(collectionRecipeMap.get(record.id) ?? [])
         ).map((recipeRecordId) => getRecipeNumericId(recipeRecordId));
         return {
           id: numericId,
-          name: data.name,
-          description: data.description,
-          color: data.color,
+          name: record.name,
+          description: record.description,
+          color: record.color,
           count: linkedRecipes.length,
           recipeIds: linkedRecipes,
         };
-      }),
+      }) as RecipeCollection[],
     [rawCollections, collectionRecipeMap]
   );
 

@@ -80,6 +80,7 @@ export interface VaultDocument {
   expiryDate?: string;
   filePath?: string;
   uri?: string;
+  localUri?: string;
   uploadStatus?: string;
   remotePath?: string;
   purchaseDate?: string;

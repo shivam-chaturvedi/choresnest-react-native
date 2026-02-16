@@ -77,9 +77,10 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
     };
     const [isEditMode, setIsEditMode] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [signedUrl, setSignedUrl] = useState<string | null>(null);
     const { snapshot: documentSnapshot } = useDocumentModalSnapshot(document);
 
-    const viewUri = document?.uri || document?.filePath;
+    const viewUri = signedUrl ?? document?.localUri ?? undefined;
 
     // Form fields
     const [documentName, setDocumentName] = useState('');
@@ -133,6 +134,37 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
             setNameError('');
         }
     }, [visible]);
+
+    useEffect(() => {
+        if (!document) {
+            setSignedUrl(null);
+            return;
+        }
+        if (document.localUri) {
+            setSignedUrl(null);
+            return;
+        }
+        if (document.uploadStatus !== 'uploaded' || !document.remotePath) {
+            setSignedUrl(null);
+            return;
+        }
+        let active = true;
+        VaultStorageService.getSignedUrl(document.remotePath, 60)
+            .then(url => {
+                if (active) {
+                    setSignedUrl(url);
+                }
+            })
+            .catch(error => {
+                console.error('Failed to fetch signed URL for document modal:', error);
+                if (active) {
+                    setSignedUrl(null);
+                }
+            });
+        return () => {
+            active = false;
+        };
+    }, [document?.localUri, document?.remotePath, document?.uploadStatus]);
 
     if (!document) return null;
 
@@ -251,41 +283,28 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
         return uri.split(/[?#]/)[0];
     };
 
-    const hasReplacementScheme = (uri: string): boolean => {
-        const lower = uri.toLowerCase();
-        return (
-            lower.startsWith('http://') ||
-            lower.startsWith('https://') ||
-            lower.startsWith('file://') ||
-            lower.startsWith('content://')
-        );
-    };
-
-    const isRemoteStoragePath = (uri: string): boolean => {
-        if (!uri) return false;
-        const trimmed = uri.trim();
-        if (!trimmed || trimmed.startsWith('/') || hasReplacementScheme(trimmed) || trimmed.includes('://')) {
-            return false;
-        }
-        return trimmed.includes('/');
-    };
-
     const isImageUri = (uri: string): boolean => {
         const candidate = stripUri(uri).toLowerCase();
         return /\.(jpg|jpeg|png|webp|heic)$/i.test(candidate);
     };
 
     const handleViewFile = async () => {
-        if (!viewUri) return;
+        if (!document) return;
         let uriToOpen = viewUri;
-        if (isRemoteStoragePath(viewUri)) {
+        if (!uriToOpen && document.remotePath) {
             try {
-                uriToOpen = await VaultStorageService.getSignedUrl(viewUri, 60);
+                uriToOpen = await VaultStorageService.getSignedUrl(document.remotePath, 60);
+                setSignedUrl(uriToOpen);
             } catch (error) {
                 console.error('Error fetching signed URL for document:', error);
                 pushNotification("Error", "Could not load this file. Please try again.", "warning");
                 return;
             }
+        }
+
+        if (!uriToOpen) {
+            pushNotification("Error", "No file available to show.", "warning");
+            return;
         }
 
         if (!isImageUri(uriToOpen)) {
@@ -309,8 +328,9 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
     };
 
     const getViewButtonLabel = () => {
-        if (!viewUri) return 'View File';
-        const clean = stripUri(viewUri).toLowerCase();
+        const sourceForLabel = viewUri ?? document?.remotePath ?? '';
+        if (!sourceForLabel) return 'View File';
+        const clean = stripUri(sourceForLabel).toLowerCase();
         if (clean.endsWith('.pdf')) return 'View PDF';
         if (clean.match(/\.(jpg|jpeg|png|webp|heic)$/i)) return 'View Image';
         return 'View File';
