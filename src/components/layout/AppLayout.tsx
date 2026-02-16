@@ -14,7 +14,7 @@ import { QuickAddModal } from "../modals/QuickAddModal";
 import { AddEventModal } from "../modals/AddEventModal";
 import { AddTaskModal } from "../modals/AddTaskModal";
 import { useTheme, useThemeRadius } from "../../contexts/ThemeContext";
-import { useSyncStatus } from "../../hooks/useSyncStatus";
+import { useManualSync } from "../../hooks/useSyncStatus";
 import { PanGestureHandler, State, PanGestureHandlerStateChangeEvent } from "react-native-gesture-handler";
 import { useSidebar } from "../../contexts/SidebarContext";
 
@@ -45,7 +45,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const { themeVersion } = useTheme();
   const radius = useThemeRadius();
   const { openSidebar } = useSidebar();
-  const { isSyncing, refreshing, refreshNow } = useSyncStatus();
+  const { refreshing, refreshNow } = useManualSync();
 
   const handleNavigate = useCallback(
     (route: BottomNavRoute) => {
@@ -66,7 +66,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [showAddTask, setShowAddTask] = useState(false);
 
-  const refreshControl = enablePullToRefresh && !isSyncing ? (
+  const refreshControl = enablePullToRefresh ? (
     <RefreshControl
       refreshing={refreshing}
       onRefresh={refreshNow}

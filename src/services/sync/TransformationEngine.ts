@@ -22,6 +22,17 @@ const FIELD_MAPPINGS: Record<string, Record<string, string>> = {
         folderId: 'folder_id',
         blocks: 'blocks_json',
     },
+    documents: {
+        filePath: 'file_path',
+        localUri: 'local_uri',
+        remotePath: 'remote_path',
+        uploadStatus: 'upload_status',
+        uploadAttempts: 'upload_attempts',
+        lastUploadError: 'last_upload_error',
+        contentType: 'content_type',
+        fileSize: 'file_size',
+        checksum: 'checksum',
+    },
 };
 
 export const coerceTimestamp = (value: string | number | Date | undefined | null): number => {

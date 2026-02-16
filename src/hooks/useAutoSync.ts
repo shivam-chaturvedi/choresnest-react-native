@@ -78,25 +78,19 @@ export const useAutoSync = () => {
 
         // Subscribe to all collections that need syncing
         const collections = [
-            'members',
-            'settings',
-            'user_preferences',
             'events',
             'tasks',
+            'documents',
+            'transactions',
+            'budgets',
             'lists',
             'list_items',
             'list_categories',
             'recipes',
-            'collections',
             'collection_recipes',
+            'collections',
             'meal_plans',
-            'documents',
-            'transactions',
-            'budgets',
-            'folders',
             'notes',
-            'notification_preferences',
-            'quiet_hours',
         ];
 
         collections.forEach(collectionName => {

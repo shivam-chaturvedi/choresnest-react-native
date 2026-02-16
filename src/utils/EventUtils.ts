@@ -1,6 +1,6 @@
 import { differenceInDays, isAfter, isBefore, isSameDay, startOfDay } from "date-fns";
-import { formatInTimeZone, toZonedTime } from "date-fns-tz";
-import { safeFormat, parseDateTimeInZone } from "./SafeDateUtils";
+import { toZonedTime } from "date-fns-tz";
+import { safeFormatInTimeZone, safeTimeZone, parseDateTimeInZone } from "./SafeDateUtils";
 import { CalendarEvent, Task } from "../contexts/FamilyContext";
 
 export type CalendarItem = (CalendarEvent | Task) & {
@@ -18,9 +18,10 @@ export const getEventsForDate = (
     tasks: Task[],
     timeZone: string
 ): CalendarItem[] => {
-    const targetZoned = toZonedTime(date, timeZone);
+    const safeZone = safeTimeZone(timeZone);
+    const targetZoned = toZonedTime(date, safeZone);
     const baseTargetDate = startOfDay(targetZoned);
-    const baseTargetDateStr = formatInTimeZone(targetZoned, timeZone, "yyyy-MM-dd");
+    const baseTargetDateStr = safeFormatInTimeZone(targetZoned, safeZone, "yyyy-MM-dd");
     const targetDateStr = baseTargetDateStr;
 
     const result: CalendarItem[] = [];
@@ -42,7 +43,7 @@ export const getEventsForDate = (
 
     // Process Events
     events.forEach(event => {
-        const eventTimeZone = event.timeZone || timeZone;
+        const eventTimeZone = safeTimeZone(event.timeZone, safeZone);
         const eventStartDate = parseDateTimeInZone(event.date, eventTimeZone, event.time);
         if (!eventStartDate) return;
 
@@ -50,7 +51,7 @@ export const getEventsForDate = (
             ? parseDateTimeInZone(event.endDate, eventTimeZone, event.endTime || event.time) || eventStartDate
             : eventStartDate;
         const recurrenceEnd = event.recurrenceEndDate ? parseDateTimeInZone(event.recurrenceEndDate, eventTimeZone) : null;
-        const targetDateStr = formatInTimeZone(date, eventTimeZone, "yyyy-MM-dd");
+        const targetDateStr = safeFormatInTimeZone(date, eventTimeZone, "yyyy-MM-dd");
         const targetDate = startOfDay(toZonedTime(date, eventTimeZone));
         const eventStartZoned = eventStartDate;
         const eventEndZoned = eventEndDate;
@@ -60,8 +61,8 @@ export const getEventsForDate = (
         if (!event.isRecurring) {
             // Check if target date is within [start, end]
             // using string comparison for safety or date comparison
-            const startString = formatInTimeZone(eventStartZoned, eventTimeZone, "yyyy-MM-dd");
-            const endString = formatInTimeZone(eventEndZoned, eventTimeZone, "yyyy-MM-dd");
+            const startString = safeFormatInTimeZone(eventStartZoned, eventTimeZone, "yyyy-MM-dd");
+            const endString = safeFormatInTimeZone(eventEndZoned, eventTimeZone, "yyyy-MM-dd");
 
             if (targetDateStr >= startString && targetDateStr <= endString) {
                 result.push(event);

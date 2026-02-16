@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 import { safeFormat } from "../../utils/SafeDateUtils";
 import {
@@ -114,6 +114,11 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   const [notes, setNotes] = useState("");
   // Removed visibility and time zone states as requested
 
+  const membersRef = useRef(members);
+  useEffect(() => {
+    membersRef.current = members;
+  }, [members]);
+
   useEffect(() => {
     let isMounted = true;
     NotificationPreferencesService.getReminderTime("events")
@@ -131,23 +136,21 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   }, []);
 
   useEffect(() => {
-    if (!open || eventToEdit) return;
-    const now = new Date();
-    setStartDate(now);
-    setStartTime(now);
-    setEndDate(null);
-    setEndTime(null);
-  }, [open, eventToEdit]);
+    if (!open) {
+      return;
+    }
 
-  useEffect(() => {
+    const membersSnapshot = membersRef.current;
+    const findMember = (id?: string) => membersSnapshot.find((m) => m.id === id);
+    const defaultMember = membersSnapshot.find((m) => m.isActive) || membersSnapshot[0] || null;
+
     if (eventToEdit) {
-      // Initialize with existing event data
+      setActiveTab((eventToEdit as any).type === 'task' ? 'task' : 'event');
       setName(eventToEdit.title);
       setDescription(eventToEdit.description || "");
       setNotes(eventToEdit.notes || "");
       setStartDate(new Date(eventToEdit.date));
 
-      // Parse time
       if (eventToEdit.time === "All Day") {
         setAllDay(true);
       } else {
@@ -160,7 +163,6 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
           if (period === "PM" && hours !== 12) hours += 12;
           if (period === "AM" && hours === 12) hours = 0;
-          // If no period, assume 24h unless it's obviously ambiguous (e.g. 10:00 could be AM or PM, usually treat as 24h -> 10:00 is 10AM, 22:00 is 10PM)
 
           const timeDate = new Date();
           timeDate.setHours(hours, minutes, 0, 0);
@@ -182,11 +184,12 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
           timeDate.setHours(hours, minutes, 0, 0);
           setEndTime(timeDate);
         }
+      } else {
+        setEndTime(null);
       }
 
       setMemberId(eventToEdit.memberId || "");
 
-      // Handle Task vs Event type if provided from CalendarScreen
       const anyEvent = eventToEdit as any;
       if (anyEvent.type === 'task') {
         setActiveTab('task');
@@ -197,13 +200,20 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         setSelectedIcon(eventToEdit.icon || "📅");
       }
 
-      const member = members.find((m: any) => m.id === eventToEdit.memberId);
-      if (member) setColor(member.color);
+      const member = findMember(eventToEdit.memberId);
+      if (member) {
+        setColor(member.color);
+      } else if (defaultMember) {
+        setColor(defaultMember.color);
+      }
 
-      // Set explicit additional fields
       if (eventToEdit.recurrenceRule) setRepeatType(eventToEdit.recurrenceRule);
       if (eventToEdit.recurrenceEndDate) setRepeatEndDate(new Date(eventToEdit.recurrenceEndDate));
-      if (eventToEdit.endDate) setEndDate(new Date(eventToEdit.endDate));
+      if (eventToEdit.endDate) {
+        setEndDate(new Date(eventToEdit.endDate));
+      } else {
+        setEndDate(null);
+      }
       if (eventToEdit.reminderOffsetMinutes !== undefined) {
         if (eventToEdit.reminderOffsetMinutes < 0) {
           setReminder(false);
@@ -217,18 +227,15 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         setReminder(true);
         setReminderTime(defaultEventReminderMinutes.toString());
       }
-
     } else {
-      // Reset form for new event
       setActiveTab('event');
       setName("");
       setDescription("");
+      setNotes("");
 
-      // Parse initialDate if provided
       const initDate = initialDate ? new Date(initialDate) : new Date();
       setStartDate(initDate);
 
-      // Parse initialTime if provided (format: "HH:MM AM/PM")
       const initTime = new Date();
       if (initialTime) {
         const timeParts = initialTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
@@ -256,28 +263,17 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       setAllDay(false);
       setLocation("");
 
-      // Default to active member if available
-      const activeMemberObj = (members && members.length > 0)
-        ? (members.find((m: any) => m.isActive) || members[0])
-        : null;
+      const fallbackMember = defaultMember;
+      setMemberId(fallbackMember?.id || membersSnapshot[0]?.id || "");
+      setColor(fallbackMember?.color || "member-blue");
 
-      setMemberId(activeMemberObj?.id || members[0]?.id || "");
-
-      // Auto-set color based on active/initial member
-      const initialColor = activeMemberObj ? activeMemberObj.color : "member-blue";
-      setColor(initialColor);
-
-      setRepeatType("never");
-      setRepeatEndDate(null);
-      setReminder(true);
       setRepeatType("never");
       setRepeatEndDate(null);
       setReminder(true);
       setReminderTime(defaultEventReminderMinutes.toString());
-      setNotes("");
       setShowRepeatOptions(false);
     }
-  }, [open, initialDate, initialTime, members, eventToEdit, defaultEventReminderMinutes]);
+  }, [open, eventToEdit?.id, initialDate, initialTime, defaultEventReminderMinutes]);
 
 
 
@@ -319,15 +315,21 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
   // Update color when member selection changes
   useEffect(() => {
-    const selectedMember = members.find((m: any) => m.id === memberId);
+    const currentMembers = membersRef.current;
+    const selectedMember = currentMembers.find((m: any) => m.id === memberId);
     if (selectedMember) {
       setColor(selectedMember.color);
-    } else if (members.length > 0 && !memberId) {
-      const active = members.find((m: any) => m.isActive) || members[0];
-      setMemberId(active.id);
-      setColor(active.color);
+      return;
     }
-  }, [memberId, members]);
+
+    if (!memberId && currentMembers.length > 0) {
+      const active = currentMembers.find((m: any) => m.isActive) || currentMembers[0];
+      if (active) {
+        setMemberId(active.id);
+        setColor(active.color);
+      }
+    }
+  }, [memberId]);
 
 
 

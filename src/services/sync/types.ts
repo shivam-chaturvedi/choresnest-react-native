@@ -36,6 +36,7 @@ export type ConflictHook = (conflict: ConflictRecord) => void;
 
 export type PullCursor = {
     updatedAt: string;
+    id: string;
 };
 
 export type PullCursorEngineOptions = {

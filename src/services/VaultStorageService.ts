@@ -1,4 +1,7 @@
+import { Buffer } from 'buffer';
+import RNFS from 'react-native-fs';
 import { supabase } from '../config/supabase';
+import { uuidv4 } from '../utils/uuid';
 
 const VAULT_BUCKET = 'vault-documents';
 
@@ -58,27 +61,52 @@ const inferMimeType = (fileName: string): string | undefined => {
     }
 };
 
-const resolveContentType = (file: VaultDocumentFile, blob: Blob, fileName: string): string | undefined => {
+const resolveContentType = (file: VaultDocumentFile, fileName: string): string | undefined => {
     if (file.type) {
         return file.type;
-    }
-    if (blob.type) {
-        return blob.type;
     }
     return inferMimeType(fileName);
 };
 
-const ensureBlob = async (uri: string): Promise<Blob> => {
-    const response = await fetch(uri);
-    if (!response.ok) {
-        throw new Error(`Failed to load vault asset: ${response.status} ${response.statusText}`);
+const toUint8ArrayFromBase64 = (base64: string): Uint8Array => {
+    const buffer = Buffer.from(base64, 'base64');
+    return new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+};
+
+const readLocalFileAsArray = async (uri: string): Promise<Uint8Array> => {
+    const isContentUri = uri.startsWith('content://');
+    const normalized = uri.startsWith('file://') ? uri.replace(/^file:\/\//i, '') : uri;
+    if (!isContentUri) {
+        const exists = await RNFS.exists(normalized);
+        if (!exists) {
+            throw new Error(`VaultStorageService: Local file not found at ${normalized}`);
+        }
     }
-    return await response.blob();
+    const base64 = await RNFS.readFile(normalized, 'base64');
+    return toUint8ArrayFromBase64(base64);
+};
+
+const ensureArrayBuffer = async (uri: string): Promise<Uint8Array> => {
+    try {
+        const response = await fetch(uri);
+        if (!response.ok) {
+            throw new Error(`Failed to load vault asset: ${response.status} ${response.statusText}`);
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        return new Uint8Array(arrayBuffer);
+    } catch (error) {
+        const isLocal = uri.startsWith('file://') || uri.startsWith('/');
+        if (!isLocal) {
+            throw error;
+        }
+        console.warn('VaultStorageService: fetch failed, falling back to RNFS read', { uri, error });
+        return await readLocalFileAsArray(uri);
+    }
 };
 
 const buildObjectPath = (profileId: string, documentId: string, fileName: string): string => {
-    const timestamp = Date.now();
-    return `${profileId}/${documentId}/${timestamp}_${fileName}`;
+    const uniqueId = uuidv4();
+    return `${profileId}/${documentId}/${uniqueId}_${fileName}`;
 };
 
 export const VaultStorageService = {
@@ -89,18 +117,28 @@ export const VaultStorageService = {
         if (!file?.uri) {
             throw new Error('VaultStorageService: File URI is required for upload');
         }
-        const blob = await ensureBlob(file.uri);
+        const buffer = await ensureArrayBuffer(file.uri);
         const fileName = sanitizeFileName(file.name ?? getFileNameFromUri(file.uri));
         const objectPath = buildObjectPath(profileId, documentId, fileName);
-        const contentType = resolveContentType(file, blob, fileName);
-        const { error } = await supabase.storage
-            .from(VAULT_BUCKET)
-            .upload(objectPath, blob, {
-                upsert: true,
-                contentType,
-            });
+        const contentType = resolveContentType(file, fileName);
+        console.log('VaultStorageService: uploading to bucket', VAULT_BUCKET, objectPath);
+        const { error } = await supabase.storage.from(VAULT_BUCKET).upload(objectPath, buffer, {
+            upsert: true,
+            contentType,
+        });
         if (error) {
-            throw new Error(`Failed to upload vault document: ${error.message ?? error.toString()}`);
+            console.error('VaultStorageService: upload failed', {
+                bucket: VAULT_BUCKET,
+                path: objectPath,
+                message: error.message ?? error.toString(),
+                status: error?.status,
+                details: error?.details,
+                hint: error?.hint,
+                error,
+            });
+            const uploadError = new Error(`Failed to upload vault document: ${error.message ?? error.toString()}`);
+            (uploadError as any).cause = error;
+            throw uploadError;
         }
         return objectPath;
     },

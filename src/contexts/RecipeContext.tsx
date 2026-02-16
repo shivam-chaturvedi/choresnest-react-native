@@ -9,7 +9,7 @@ import React, {
 } from 'react';
 import { database } from '../database';
 import { Q } from '@nozbe/watermelondb';
-import { v4 as uuidv4 } from 'react-native-uuid';
+import { uuidv4 } from '../utils/uuid';
 import { Recipe as RecipeType, RecipeCollection } from '../types/recipes';
 import {
   Recipe as RecipeModel,
@@ -283,27 +283,28 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const recipes = useMemo<RecipeType[]>(
     () =>
       rawRecipes.map((record) => {
+        const data = record._raw;
         const numericId = getRecipeNumericId(record.id);
         const nutrition = record.nutrition ?? { kcal: '-', protein: '-', carbs: '-', fats: '-' };
         return {
           id: numericId,
-          name: record.name,
-          image: record.imagePath,
-          time: record.prepTime || record.cookTime || '',
-          servings: record.servings,
-          tags: record.tags ?? [],
-          saved: record.isSaved,
-          ingredients: record.ingredients ?? [],
+          name: data.name,
+          image: data.image_path ?? record.imagePath,
+          time: data.prep_time || record.prepTime || record.cookTime || '',
+          servings: data.servings ?? record.servings,
+          tags: data.tags_json ?? record.tags ?? [],
+          saved: data.is_saved ?? record.isSaved,
+          ingredients: data.ingredients_json ?? record.ingredients ?? [],
           nutrition: {
             kcal: nutrition.kcal ?? '-',
             protein: nutrition.protein ?? '-',
             carbs: nutrition.carbs ?? '-',
             fats: nutrition.fats ?? '-',
           },
-          audio: record.audioPath || undefined,
-          duration: record.duration ?? undefined,
-          url: record.url || undefined,
-          images: record.images ?? undefined,
+          audio: data.audio_path ?? record.audioPath || undefined,
+          duration: data.duration ?? record.duration ?? undefined,
+          url: data.url ?? record.url || undefined,
+          images: data.images_json ?? record.images ?? undefined,
           countryCode: undefined,
         };
       }),
@@ -313,15 +314,16 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const collections = useMemo<RecipeCollection[]>(
     () =>
       rawCollections.map((record) => {
+        const data = record._raw;
         const numericId = getCollectionNumericId(record.id);
         const linkedRecipes = Array.from(
           new Set(collectionRecipeMap.get(record.id) ?? [])
         ).map((recipeRecordId) => getRecipeNumericId(recipeRecordId));
         return {
           id: numericId,
-          name: record.name,
-          description: record.description,
-          color: record.color,
+          name: data.name,
+          description: data.description,
+          color: data.color,
           count: linkedRecipes.length,
           recipeIds: linkedRecipes,
         };
@@ -353,7 +355,7 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         await database.write(async () => {
           const collection = database.get<RecipeModel>('recipes');
           await collection.create((record) => {
-            record.id = recipeId;
+            record._raw.id = recipeId;
             record.profileId = effectiveProfileId;
             record.name = newRecipeData.name;
             record.imagePath = finalImages[0] ?? '';

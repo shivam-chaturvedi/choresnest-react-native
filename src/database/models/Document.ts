@@ -13,6 +13,14 @@ export default class Document extends Model {
     @text('member_id') memberId?: string;
     @json('shared_with_json', (json: any) => json) sharedWithIds!: string[];
     @text('file_path') filePath?: string;
+    @text('remote_path') remotePath?: string;
+    @text('local_uri') localUri?: string;
+    @text('upload_status') uploadStatus!: string;
+    @field('upload_attempts') uploadAttempts!: number;
+    @text('last_upload_error') lastUploadError?: string;
+    @text('content_type') contentType?: string;
+    @field('file_size') fileSize?: number;
+    @text('checksum') checksum?: string;
     @json('meta_json', (json: any) => json) meta!: any;
     @text('notification_ids_json') notificationIdsJson?: string;
     @field('reminder_days_before') reminderDaysBefore?: number;

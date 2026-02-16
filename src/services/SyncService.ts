@@ -12,6 +12,7 @@ import {
 import { clearConflictHistory, getConflictHistory } from './sync/ConflictEngine';
 import { BackoffFailureType, ConflictRecord, TableChangeSet } from './sync/types';
 import { resetSyncCursorState } from './sync/SyncCursorStore';
+import { REALTIME_WATCH_TABLES } from './sync/realtime/RealtimeWatchList';
 
 const parseBooleanFlag = (value: string | undefined, defaultValue: boolean): boolean => {
     if (value === undefined || value === null) {
@@ -44,19 +45,7 @@ const ensureRealtimeSubscription = (triggerSync: () => void) => {
         return;
     }
     realtimeChannel = supabase.channel('realtime_sync');
-    const watchTables = [
-        'lists',
-        'list_items',
-        'list_categories',
-        'events',
-        'tasks',
-        'members',
-        'settings',
-        'app_settings',
-        'recipes',
-        'collections',
-        'collection_recipes',
-    ];
+    const watchTables = REALTIME_WATCH_TABLES;
     watchTables.forEach((table) => {
         realtimeChannel?.on('postgres_changes', { event: '*', schema: 'public', table }, () => {
             triggerSync();

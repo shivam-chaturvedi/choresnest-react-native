@@ -1,20 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SyncService } from '../services/SyncService';
 
-export const useSyncStatus = () => {
-    const [isSyncing, setIsSyncing] = useState(SyncService.getSyncStatus());
+export const useManualSync = () => {
     const [isManualRefreshing, setIsManualRefreshing] = useState(false);
     const manualRefreshPromise = useRef<Promise<void> | null>(null);
     const isMountedRef = useRef(true);
-
-    useEffect(() => {
-        const unsubscribe = SyncService.onSyncStatusChange((syncing) => {
-            setIsSyncing(syncing);
-        });
-        return () => {
-            unsubscribe();
-        };
-    }, []);
 
     useEffect(() => {
         return () => {
@@ -38,9 +28,24 @@ export const useSyncStatus = () => {
                 setIsManualRefreshing(false);
             }
         }
+        return promise;
     }, []);
 
-    const refreshing = isManualRefreshing;
+    return { isManualRefreshing, refreshing: isManualRefreshing, refreshNow };
+};
 
-    return { isSyncing, isManualRefreshing, refreshing, refreshNow };
+export const useSyncStatus = () => {
+    const [isSyncing, setIsSyncing] = useState(SyncService.getSyncStatus());
+    const manualSync = useManualSync();
+
+    useEffect(() => {
+        const unsubscribe = SyncService.onSyncStatusChange((syncing) => {
+            setIsSyncing(syncing);
+        });
+        return () => {
+            unsubscribe();
+        };
+    }, []);
+
+    return { isSyncing, ...manualSync };
 };

@@ -7,15 +7,24 @@ export interface SupabaseResponse<T = any> {
 }
 
 export class SupabaseService {
+    private static logError(error: PostgrestError | null, context: string) {
+        if (error) {
+            console.error(`Supabase error [${context}]`, error.message ?? error.toString(), error);
+        }
+    }
     /**
      * Auth Methods
      */
     static async getSession() {
-        return await supabase.auth.getSession();
+        const result = await supabase.auth.getSession();
+        this.logError(result.error ?? null, 'getSession');
+        return result;
     }
 
     static async getUser() {
-        return await supabase.auth.getUser();
+        const result = await supabase.auth.getUser();
+        this.logError(result.error ?? null, 'getUser');
+        return result;
     }
 
     static async signUp(email: string, pass: string, name: string) {
@@ -28,6 +37,7 @@ export class SupabaseService {
                 },
             },
         });
+        this.logError(error, 'signUp');
         return { data, error };
     }
 
@@ -36,15 +46,20 @@ export class SupabaseService {
             email,
             password: pass,
         });
+        this.logError(error, 'signIn');
         return { data, error };
     }
 
     static async signOut() {
-        return await supabase.auth.signOut();
+        const result = await supabase.auth.signOut();
+        this.logError(result.error ?? null, 'signOut');
+        return result;
     }
 
     static async resetPasswordForEmail(email: string) {
-        return await supabase.auth.resetPasswordForEmail(email);
+        const result = await supabase.auth.resetPasswordForEmail(email);
+        this.logError(result.error ?? null, 'resetPasswordForEmail');
+        return result;
     }
 
     static async updateProfile(userId: string, updates: { name?: string; color?: string; icon?: string; locale?: string }) {
@@ -54,6 +69,7 @@ export class SupabaseService {
             .eq('id', userId)
             .select()
             .single();
+        this.logError(error, 'updateProfile');
         return { data, error };
     }
 
@@ -68,9 +84,8 @@ export class SupabaseService {
     static async checkConnection(): Promise<boolean> {
         try {
             const { data, error } = await supabase.from('members').select('count', { count: 'exact', head: true });
+            this.logError(error, 'checkConnection');
             if (error) {
-                // If the table doesn't exist, it might still throw, but that means we connected. 
-                // We can also just check auth health.
                 console.warn("Supabase check connection warning:", error.message);
                 return false;
             }

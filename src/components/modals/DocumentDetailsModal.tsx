@@ -26,6 +26,7 @@ import {
     VaultReminderRule,
 } from "../../utils/VaultReminderUtils";
 import FileViewer from 'react-native-file-viewer';
+import { useDocumentModalSnapshot } from "../documents/DocumentModalSnapshot";
 
 interface DocumentDetailsModalProps {
     visible: boolean;
@@ -76,7 +77,7 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
     };
     const [isEditMode, setIsEditMode] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
-    const lastInitializedDocIdRef = useRef<string | null>(null);
+    const { snapshot: documentSnapshot } = useDocumentModalSnapshot(document);
 
     const viewUri = document?.uri || document?.filePath;
 
@@ -117,21 +118,14 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
     };
 
     useEffect(() => {
-        // Reset the init marker whenever the modal closes so a future open can rehydrate fresh state.
         if (!visible) {
-            lastInitializedDocIdRef.current = null;
             return;
         }
-        if (!document || isEditMode) {
+        if (!documentSnapshot || isEditMode) {
             return;
         }
-        // Avoid re-hydrating while the user is editing the same document (sync updates may produce new references).
-        if (lastInitializedDocIdRef.current === document.id) {
-            return;
-        }
-        hydrateForm(document);
-        lastInitializedDocIdRef.current = document.id;
-    }, [document, visible, isEditMode]);
+        hydrateForm(documentSnapshot);
+    }, [documentSnapshot, visible, isEditMode]);
 
     useEffect(() => {
         if (visible) {

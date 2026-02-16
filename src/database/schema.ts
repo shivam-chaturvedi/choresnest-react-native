@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export default appSchema({
-    version: 14,
+    version: 15,
     tables: [
         tableSchema({
             name: 'users',
@@ -205,6 +205,14 @@ export default appSchema({
                 { name: 'member_id', type: 'string', isOptional: true, isIndexed: true },
                 { name: 'shared_with_json', type: 'string', isOptional: true },
                 { name: 'file_path', type: 'string', isOptional: true },
+                { name: 'local_uri', type: 'string', isOptional: true },
+                { name: 'remote_path', type: 'string', isOptional: true },
+                { name: 'upload_status', type: 'string' },
+                { name: 'upload_attempts', type: 'number' },
+                { name: 'last_upload_error', type: 'string', isOptional: true },
+                { name: 'content_type', type: 'string', isOptional: true },
+                { name: 'file_size', type: 'number', isOptional: true },
+                { name: 'checksum', type: 'string', isOptional: true },
                 { name: 'meta_json', type: 'string', isOptional: true },
                 { name: 'notification_ids_json', type: 'string', isOptional: true },
                 { name: 'reminder_days_before', type: 'number', isOptional: true },

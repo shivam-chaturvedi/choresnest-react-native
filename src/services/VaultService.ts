@@ -3,10 +3,9 @@ import Document from '../database/models/Document';
 import { Q } from '@nozbe/watermelondb';
 import { NotificationScheduler } from './NotificationScheduler';
 import { DocumentInput } from './DocumentInput';
-import { VaultStorageService } from './VaultStorageService';
 import { SyncService } from './SyncService';
 import { SupabaseService } from './SupabaseService';
-import { v4 as uuidv4 } from 'react-native-uuid';
+import { uuidv4 } from '../utils/uuid';
 
 const localUriCache = new Map<string, string>();
 
@@ -120,8 +119,9 @@ export const VaultService = {
     },
 
     addDocument: async (data: DocumentInput) => {
-        if (!data.filePath) {
-            console.error('VaultService: filePath is required to upload a document');
+        const localUri = data.localUri ?? data.filePath;
+        if (!localUri) {
+            console.error('VaultService: localUri or filePath is required to add a document');
             return null;
         }
 
@@ -132,14 +132,6 @@ export const VaultService = {
         }
 
         const documentId = String(uuidv4());
-        let objectPath: string;
-
-        try {
-            objectPath = await VaultStorageService.upload(profileId, documentId, { uri: data.filePath });
-        } catch (error) {
-            console.error('VaultService: failed to upload document file to vault storage', error);
-            return null;
-        }
 
         try {
             const createdDoc = await database.write(async () => {
@@ -153,7 +145,15 @@ export const VaultService = {
                     d.date = data.date || new Date().toISOString();
                     d.memberId = data.memberId || 'global';
                     d.sharedWithIds = data.sharedWithIds || [];
-                    d.filePath = objectPath;
+                    d.localUri = localUri;
+                    d.remotePath = null;
+                    d.filePath = null;
+                    d.uploadStatus = 'pending_upload';
+                    d.uploadAttempts = 0;
+                    d.lastUploadError = null;
+                    d.contentType = null;
+                    d.fileSize = null;
+                    d.checksum = null;
                     d.createdAt = now;
                     d.updatedAt = now;
                     d.deleted = false;
@@ -165,7 +165,7 @@ export const VaultService = {
                 });
             });
 
-            cacheLocalUri(documentId, data.filePath);
+            cacheLocalUri(documentId, localUri);
 
             NotificationScheduler.syncDocumentReminders(createdDoc).catch(err =>
                 console.error('Failed to schedule document notifications:', err)
@@ -187,17 +187,6 @@ export const VaultService = {
         }
 
         let updatedDoc: Document | null = null;
-        let newObjectPath: string | undefined;
-
-        if (updates.filePath) {
-            try {
-                newObjectPath = await VaultStorageService.upload(profileId, id, { uri: updates.filePath });
-            } catch (error) {
-                console.error('VaultService: failed to re-upload document file', error);
-                return;
-            }
-        }
-
         try {
             await database.write(async () => {
                 const doc = await database.get<Document>('documents').find(id);
@@ -213,9 +202,18 @@ export const VaultService = {
                     if (updates.date !== undefined) d.date = updates.date;
                     if (updates.memberId !== undefined) d.memberId = updates.memberId;
                     if (updates.sharedWithIds !== undefined) d.sharedWithIds = updates.sharedWithIds;
-                    if (newObjectPath) {
-                        d.filePath = newObjectPath;
-                        cacheLocalUri(id, updates.filePath);
+                    const updatedLocalUri = updates.localUri ?? updates.filePath;
+                    if (updatedLocalUri) {
+                        d.localUri = updatedLocalUri;
+                        d.remotePath = null;
+                        d.filePath = null;
+                        d.uploadStatus = 'pending_upload';
+                        d.uploadAttempts = 0;
+                        d.lastUploadError = null;
+                        d.contentType = null;
+                        d.fileSize = null;
+                        d.checksum = null;
+                        cacheLocalUri(id, updatedLocalUri);
                     }
                     d.meta = buildMetaFromInput(updates, d.meta || {});
                     if (typeof updates.reminderDaysBefore === 'number') {

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useEffect } from "react";
+import React, { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import {
   StyleSheet,
   Text,
@@ -14,7 +14,6 @@ import { AppLayout } from "../components/layout/AppLayout";
 import { AddEventModal } from "../components/modals/AddEventModal";
 import { GlobalSearch } from "../components/search/GlobalSearch";
 import { useFamily, CalendarEvent, Task } from "../contexts/FamilyContext";
-import { theme } from "../theme";
 import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { AppIcon } from "../components/ui/AppIcon";
 import { PROFILE_COLORS } from "../constants/profileColors";
@@ -28,18 +27,18 @@ const hapticOptions = {
 };
 import { addMonths, subMonths, addDays, subDays, startOfWeek, endOfWeek, isSameMonth, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval, addYears, startOfDay, isAfter, isWithinInterval } from "date-fns";
 import { Day } from "date-fns";
-import { useNavigation, useIsFocused } from "@react-navigation/native";
 import { getEventsForDate } from "../utils/EventUtils";
-import { parseDateTimeInZone } from "../utils/SafeDateUtils";
-import { formatInTimeZone, toZonedTime } from "date-fns-tz";
-
-const filteredEvents = (events: any[], filterMember: string | null) => {
-  if (!filterMember) return events;
-  return events.filter((e) => e.memberId === filterMember);
-};
+import { parseDateTimeInZone, safeFormatInTimeZone, safeTimeZone } from "../utils/SafeDateUtils";
+import { toZonedTime } from "date-fns-tz";
+import { useObservableValue } from "../hooks/useObservableValue";
+import { TaskService } from "../services/TaskService";
+import type { Observable } from "rxjs";
 
 type CalendarListEntry = (CalendarEvent & { type: 'event'; isVirtual?: boolean; originalDate?: string; timeZone?: string }) | (Pick<Task, 'id' | 'icon' | 'date' | 'priority'> & { type: 'task'; title: string; time: string; memberId?: string; timeZone?: string });
 type UpcomingEntry = CalendarListEntry & { nextDate: Date };
+type ObservableValue<T> = T extends Observable<infer U> ? U : never;
+type TaskServiceEventRecord = ObservableValue<ReturnType<typeof TaskService.observeEvents>>;
+type TaskServiceTaskRecord = ObservableValue<ReturnType<typeof TaskService.observeTasks>>;
 
 const parseTimeToDate = (date: Date, time?: string): Date => {
   const result = new Date(date.getTime());
@@ -58,6 +57,31 @@ const parseTimeToDate = (date: Date, time?: string): Date => {
 
   result.setHours(hours, minutes, 0, 0);
   return result;
+};
+
+const TIME_FORMAT_REGEX = /(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i;
+
+const normalizeTimeString = (value?: string | null): string => {
+  if (!value) return "All Day";
+  const match = value.trim().match(TIME_FORMAT_REGEX);
+  if (!match) return "All Day";
+  const rawHours = parseInt(match[1], 10);
+  const minutes = (match[2] || "00").padStart(2, "0");
+  const period = match[3].toUpperCase();
+
+  const normalizedHours = period === "PM" && rawHours !== 12
+    ? rawHours + 12
+    : period === "AM" && rawHours === 12
+      ? 0
+      : rawHours;
+
+  const displayHours = normalizedHours === 0
+    ? 12
+    : normalizedHours > 12
+      ? normalizedHours - 12
+      : normalizedHours;
+
+  return `${displayHours}:${minutes} ${period}`;
 };
 
 const advanceRecurrenceDate = (date: Date, rule: string): Date | null => {
@@ -109,7 +133,7 @@ const getNextRecurringOccurrence = (event: CalendarEvent, reference: Date, fallb
 
 const getNextCandidateForEntry = (entry: CalendarListEntry, reference: Date, fallbackTimeZone: string): Date | null => {
   const entryTimeZone = entry.timeZone || fallbackTimeZone;
-  const baseDate = parseDateTimeInZone(entry.date, entry.time, entryTimeZone);
+  const baseDate = parseDateTimeInZone(entry.date, entryTimeZone, entry.time);
   if (!baseDate) return null;
 
   if (entry.type === "event" && entry.isRecurring) {
@@ -202,16 +226,16 @@ const DraggableEvent: React.FC<{
         // In the new Week view (Single Day with Header), we disable dragging between days
         // because only one day is rendered at a time in the body.
 
-        if (activeView === "Week") {
-          // Allow easier dragging between days (threshold: 1/3 screen width)
-          const colShift = Math.round(deltaX / (Dimensions.get('window').width / 3));
-          if (colShift !== 0) {
-            const eventTimeZone = event.timeZone || timeZone;
-            const currentZoned = parseDateTimeInZone(event.date, eventTimeZone) || new Date();
-            currentZoned.setDate(currentZoned.getDate() + colShift);
-            newDate = formatInTimeZone(currentZoned, eventTimeZone, "yyyy-MM-dd");
+          if (activeView === "Week") {
+            // Allow easier dragging between days (threshold: 1/3 screen width)
+            const colShift = Math.round(deltaX / (Dimensions.get('window').width / 3));
+            if (colShift !== 0) {
+              const eventTimeZone = event.timeZone || timeZone;
+              const currentZoned = parseDateTimeInZone(event.date, eventTimeZone, event.time) || new Date();
+              currentZoned.setDate(currentZoned.getDate() + colShift);
+              newDate = safeFormatInTimeZone(currentZoned, eventTimeZone, "yyyy-MM-dd");
+            }
           }
-        }
 
         // Calculate new start time in minutes
         const totalMinutes = (totalY / HOUR_HEIGHT) * 60;
@@ -393,16 +417,66 @@ const DraggableEvent: React.FC<{
 
 export const CalendarScreen: React.FC = () => {
   const {
-    members, activeMember, events, tasks, addEvent, updateEvent, updateTask,
+    members, activeMember, addEvent, updateEvent, updateTask,
   } = useFamily();
   const { openSidebar } = useSidebar();
-  const navigation = useNavigation();
-  const isFocused = useIsFocused();
   const colors = useThemeColors();
   const radius = useThemeRadius();
   const { currentCountry } = useCountry();
-  const timeZone = currentCountry.timeZone;
-  const weekOptions = { weekStartsOn: (currentCountry.code === 'US' ? 0 : 1) as Day };
+  const timeZone = safeTimeZone(currentCountry.timeZone);
+  const weekOptions = useMemo(
+    () => ({ weekStartsOn: (currentCountry.code === 'US' ? 0 : 1) as Day }),
+    [currentCountry.code]
+  );
+  const observeEvents = useCallback(() => TaskService.observeEvents(), []);
+  const rawEvents = useObservableValue(
+    observeEvents,
+    [],
+    [] as TaskServiceEventRecord[]
+  );
+  const observeTasks = useCallback(() => TaskService.observeTasks(), []);
+  const rawTasks = useObservableValue(
+    observeTasks,
+    [],
+    [] as TaskServiceTaskRecord[]
+  );
+  const events = useMemo<CalendarEvent[]>(() => {
+    const fallbackZone = timeZone;
+    return rawEvents.reduce<CalendarEvent[]>((acc, record) => {
+      const date = (record as any).dateString || record.date || "";
+      if (!date) return acc;
+      const sanitizedTimeZone = safeTimeZone((record as any).timeZone, fallbackZone);
+      const sanitizedTime = normalizeTimeString((record as any).time);
+      const parsed = parseDateTimeInZone(
+        date,
+        sanitizedTimeZone,
+        sanitizedTime === "All Day" ? undefined : sanitizedTime
+      );
+      if (!parsed) return acc;
+      acc.push({
+        ...record,
+        date,
+        time: sanitizedTime,
+        timeZone: sanitizedTimeZone,
+      });
+      return acc;
+    }, []);
+  }, [rawEvents, timeZone]);
+  const tasks = useMemo<Task[]>(() => {
+    const fallbackZone = timeZone;
+    return rawTasks.reduce<Task[]>((acc, record) => {
+      const date = (record as any).dateString || record.date || "";
+      if (!date) return acc;
+      if (!parseDateTimeInZone(date, fallbackZone)) return acc;
+      const sanitizedTime = normalizeTimeString((record as any).due || (record as any).dueDisplay);
+      acc.push({
+        ...record,
+        date,
+        due: sanitizedTime,
+      });
+      return acc;
+    }, []);
+  }, [rawTasks, timeZone]);
 
   const [activeView, setActiveView] = useState("Day");
   const [selectedDate, setSelectedDate] = useState(() => toZonedTime(new Date(), timeZone));
@@ -420,11 +494,7 @@ export const CalendarScreen: React.FC = () => {
 
   const formatZoned = (value: Date | undefined, pattern: string) => {
     if (!value) return "";
-    try {
-      return formatInTimeZone(value, timeZone, pattern);
-    } catch {
-      return "";
-    }
+    return safeFormatInTimeZone(value, timeZone, pattern);
   };
 
   const showPermissionToast = (type: 'event' | 'task') => {
@@ -457,6 +527,8 @@ export const CalendarScreen: React.FC = () => {
   const scrollViewRef = useRef<ScrollView>(null);
   const scrollOffsetRef = useRef(0);
   const headerScrollRef = useRef<ScrollView>(null);
+  const autoScrollEnabledRef = useRef(true);
+  const manualScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const HOUR_HEIGHT = 60;
 
   useEffect(() => {
@@ -466,46 +538,56 @@ export const CalendarScreen: React.FC = () => {
 
   const layoutReadyRef = useRef(false);
 
-  const scrollToCurrentTime = (animated = true) => {
-    // Only scroll if we are in Day or Week view
+  const scrollToCurrentTime = useCallback((animated = true) => {
     if (activeView !== "Day" && activeView !== "Week") return;
     if (!layoutReadyRef.current) return;
 
     const currentZoned = toZonedTime(new Date(), timeZone);
     const todayZoned = startOfDay(currentZoned);
-
-    // Check if 'today' is visible in the current view
     let shouldScroll = false;
 
     if (activeView === "Day") {
       shouldScroll = isSameDay(selectedDate, todayZoned);
-    } else if (activeView === "Week") {
-      // In week view, selectedDate is one of the days in the week.
-      // We need to check if 'today' falls within the currently displayed week.
+    } else {
       const startOfCurrentWeek = startOfWeek(selectedDate, weekOptions);
       const endOfCurrentWeek = endOfWeek(selectedDate, weekOptions);
       shouldScroll = isWithinInterval(todayZoned, { start: startOfCurrentWeek, end: endOfCurrentWeek });
     }
 
-    if (shouldScroll) {
-      // Calculate scroll position using the target timezone to avoid local-time drift
-      const now = new Date();
-      const h = parseInt(formatInTimeZone(now, timeZone, 'H'), 10);
-      const m = parseInt(formatInTimeZone(now, timeZone, 'm'), 10);
+    if (!shouldScroll) return;
 
-      const minutes = (h * 60) + m;
-      const y = (minutes / 60) * HOUR_HEIGHT;
-      const twoHoursInPx = 2 * HOUR_HEIGHT;
+    const now = new Date();
+    const hour = parseInt(safeFormatInTimeZone(now, timeZone, 'H', '0'), 10);
+    const minute = parseInt(safeFormatInTimeZone(now, timeZone, 'm', '0'), 10);
+    const minutes = (hour * 60) + minute;
+    const y = (minutes / 60) * HOUR_HEIGHT;
+    const twoHoursInPx = 2 * HOUR_HEIGHT;
 
-      // requestAnimationFrame ensures the layout has been measured before scrolling (no arbitrary timeout)
-      requestAnimationFrame(() => {
-        scrollViewRef.current?.scrollTo({
-          y: Math.max(0, y - twoHoursInPx),
-          animated,
-        });
+    requestAnimationFrame(() => {
+      scrollViewRef.current?.scrollTo({
+        y: Math.max(0, y - twoHoursInPx),
+        animated,
       });
+    });
+  }, [activeView, selectedDate, timeZone, weekOptions]);
+
+  const suspendAutoScroll = useCallback(() => {
+    if (manualScrollTimeoutRef.current) {
+      clearTimeout(manualScrollTimeoutRef.current);
+      manualScrollTimeoutRef.current = null;
     }
-  };
+    autoScrollEnabledRef.current = false;
+  }, []);
+
+  const scheduleAutoScrollResume = useCallback(() => {
+    if (manualScrollTimeoutRef.current) {
+      clearTimeout(manualScrollTimeoutRef.current);
+    }
+    manualScrollTimeoutRef.current = setTimeout(() => {
+      autoScrollEnabledRef.current = true;
+      scrollToCurrentTime(true);
+    }, 6000);
+  }, [scrollToCurrentTime]);
 
   const handleTimelineLayout = () => {
     if (!layoutReadyRef.current) {
@@ -524,6 +606,19 @@ export const CalendarScreen: React.FC = () => {
     });
   }, []);
 
+  useEffect(() => {
+    if (!autoScrollEnabledRef.current) return;
+    scrollToCurrentTime(false);
+  }, [now, activeView, scrollToCurrentTime]);
+
+  useEffect(() => {
+    return () => {
+      if (manualScrollTimeoutRef.current) {
+        clearTimeout(manualScrollTimeoutRef.current);
+      }
+    };
+  }, []);
+
 
   const today = toZonedTime(new Date(), timeZone);
 
@@ -539,8 +634,8 @@ export const CalendarScreen: React.FC = () => {
   }, [tasks, filterMember]);
 
   const zonedNow = toZonedTime(now, timeZone);
-  const currentTimeHours = parseInt(formatInTimeZone(now, timeZone, 'H'), 10);
-  const currentTimeMinutes = parseInt(formatInTimeZone(now, timeZone, 'm'), 10);
+  const currentTimeHours = parseInt(safeFormatInTimeZone(now, timeZone, 'H', '0'), 10);
+  const currentTimeMinutes = parseInt(safeFormatInTimeZone(now, timeZone, 'm', '0'), 10);
   const currentTimeTop = (currentTimeHours * HOUR_HEIGHT) + (currentTimeMinutes * (HOUR_HEIGHT / 60));
 
   const calendarItems = useMemo<CalendarListEntry[]>(() => {
@@ -556,7 +651,7 @@ export const CalendarScreen: React.FC = () => {
         title: t.name,
         icon: t.icon,
         date: t.date,
-        time: t.due && t.due.match(/\d+:\d+\s*(AM|PM)/i) ? t.due : "All Day",
+        time: t.due || "All Day",
         memberId: t.assignee,
         type: 'task' as const,
         priority: t.priority,
@@ -564,7 +659,7 @@ export const CalendarScreen: React.FC = () => {
       }));
 
     return [...eventItems, ...taskItems];
-  }, [filteredEvents, filteredTasks]);
+  }, [filteredEvents, filteredTasks, timeZone]);
 
   const upcomingItems = useMemo<UpcomingEntry[]>(() => {
     const entries: UpcomingEntry[] = [];
@@ -575,7 +670,32 @@ export const CalendarScreen: React.FC = () => {
       }
     });
     return entries.sort((a, b) => a.nextDate.getTime() - b.nextDate.getTime());
-  }, [calendarItems, zonedNow]);
+  }, [calendarItems, zonedNow, timeZone]);
+
+  const todayUpcomingItems = useMemo<UpcomingEntry[]>(() => {
+    if (!selectedDate) return [];
+    const nowMinutes = currentTimeHours * 60 + currentTimeMinutes;
+    const targetDateStr = safeFormatInTimeZone(zonedNow, timeZone, "yyyy-MM-dd");
+    if (!targetDateStr) return [];
+    return calendarItems
+      .map(item => {
+        const entryTimeZone = item.timeZone || timeZone;
+        const entryDate = parseDateTimeInZone(item.date, entryTimeZone, item.time);
+        if (!entryDate) return null;
+        return { entry: item, date: entryDate, timeZone: entryTimeZone };
+      })
+      .filter(
+        (value): value is { entry: CalendarListEntry; date: Date; timeZone: string } =>
+          value !== null
+      )
+      .filter(({ date, timeZone: entryTZ }) => safeFormatInTimeZone(date, entryTZ, "yyyy-MM-dd") === targetDateStr)
+      .map(({ entry, date }) => ({ ...entry, nextDate: date }))
+      .filter(entry => {
+        const minutes = entry.nextDate.getHours() * 60 + entry.nextDate.getMinutes();
+        return minutes >= nowMinutes;
+      })
+      .sort((a, b) => a.nextDate.getTime() - b.nextDate.getTime());
+  }, [calendarItems, zonedNow, currentTimeHours, currentTimeMinutes, timeZone, selectedDate]);
 
   const navigateDate = (direction: number) => {
     if (activeView === "Month") {
@@ -770,6 +890,10 @@ export const CalendarScreen: React.FC = () => {
             onScroll={(event) => {
               scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
             }}
+            onScrollBeginDrag={suspendAutoScroll}
+            onMomentumScrollBegin={suspendAutoScroll}
+            onScrollEndDrag={scheduleAutoScrollResume}
+            onMomentumScrollEnd={scheduleAutoScrollResume}
           >
             <View style={{ flexDirection: 'row', height: '100%' }}>
               <View style={{ width: 50, borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: colors.card, zIndex: 20 }}>
@@ -1160,10 +1284,37 @@ export const CalendarScreen: React.FC = () => {
           {activeView === "Month" && renderMonthView()}
           {(activeView === "Week" || activeView === "Day") && renderTimeline(activeView === "Week" ? weekDays : [selectedDate])}
 
+          {todayUpcomingItems.length > 0 && (
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>📆 Today ahead</Text>
+              {todayUpcomingItems.map(event => {
+                const displayTime = event.time && event.time !== "All Day" ? event.time : "All Day";
+                return (
+                  <Pressable
+                    key={`${event.id}-${event.nextDate.getTime()}-today`}
+                    onPress={() => {
+                      setSelectedEvent(event);
+                      setShowAddEventModal(true);
+                    }}
+                    style={[styles.upcomingItem, { backgroundColor: colors.card, borderRadius: radius.card }]}
+                  >
+                    <View style={styles.upcomingLeft}>
+                      <Text style={{ fontSize: 24 }}>{event.icon}</Text>
+                      <View>
+                        <Text style={[styles.upcomingTitle, { color: colors.foreground }]}>{event.title}</Text>
+                        <Text style={[styles.upcomingMeta, { color: colors.mutedForeground }]}>{displayTime}</Text>
+                      </View>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>📋 Upcoming Events</Text>
             {upcomingItems.slice(0, 3).map(event => {
-              const displayDate = formatInTimeZone(event.nextDate, timeZone, "MMM d");
+              const displayDate = safeFormatInTimeZone(event.nextDate, timeZone, "MMM d");
               const displayTime = event.time && event.time !== "All Day" ? event.time : "All Day";
               return (
                 <Pressable

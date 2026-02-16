@@ -67,6 +67,7 @@ export interface GroceryCategory {
 }
 
 import { VaultReminderRule } from "../utils/VaultReminderUtils";
+import { DocumentUploadScheduler } from "../services/sync/DocumentUploadScheduler";
 
 export interface VaultDocument {
   id: string;
@@ -79,6 +80,8 @@ export interface VaultDocument {
   expiryDate?: string;
   filePath?: string;
   uri?: string;
+  uploadStatus?: string;
+  remotePath?: string;
   purchaseDate?: string;
   warrantyTillDate?: string;
   billAmount?: string;
@@ -287,6 +290,17 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     };
   }, []);
 
+  useEffect(() => {
+    if (!profileId) {
+      DocumentUploadScheduler.stop();
+      return;
+    }
+    DocumentUploadScheduler.startForUser(profileId);
+    return () => {
+      DocumentUploadScheduler.stop();
+    };
+  }, [profileId]);
+
   const setFamilyName = (name: string) => {
     if (!profileId) {
       console.warn('FamilyContext: Profile ID unavailable while setting family name');
@@ -479,6 +493,8 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                 memberId: d.memberId,
                 filePath: d.filePath,
                 uri: docUri, // Map for VaultUtils
+                uploadStatus: d.uploadStatus,
+                remotePath: d.remotePath,
                 ...meta,  // Merge meta fields (expiryDate, etc.) to top level
               };
               if (d.memberId === 'global') {

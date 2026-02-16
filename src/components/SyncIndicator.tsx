@@ -1,39 +1,29 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Text, StyleSheet, Animated, ActivityIndicator } from 'react-native';
 import { useThemeColors } from '../contexts/ThemeContext';
-import { SyncService } from '../services/SyncService';
+import { useSyncStatus } from '../hooks/useSyncStatus';
 import { useAuth } from '../contexts/AuthContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export const SyncIndicator: React.FC = () => {
-    const [isSyncing, setIsSyncing] = useState(false);
+    const { isSyncing } = useSyncStatus();
     const { isGuest } = useAuth();
     const colors = useThemeColors();
-    const fadeAnim = React.useRef(new Animated.Value(0)).current;
+    const fadeAnim = useRef(new Animated.Value(0)).current;
     const insets = useSafeAreaInsets();
 
     useEffect(() => {
-        // Don't show sync indicator for guests
         if (isGuest) {
             return;
         }
+        Animated.timing(fadeAnim, {
+            toValue: isSyncing ? 1 : 0,
+            duration: 200,
+            useNativeDriver: true,
+        }).start();
+    }, [fadeAnim, isGuest, isSyncing]);
 
-        const unsubscribe = SyncService.onSyncStatusChange((syncing) => {
-            setIsSyncing(syncing);
-            
-            // Animate in/out
-            Animated.timing(fadeAnim, {
-                toValue: syncing ? 1 : 0,
-                duration: 200,
-                useNativeDriver: true,
-            }).start();
-        });
-
-        return unsubscribe;
-    }, [fadeAnim, isGuest]);
-
-    // Don't show for guests
-    if (isGuest || !isSyncing) {
+    if (isGuest) {
         return null;
     }
 

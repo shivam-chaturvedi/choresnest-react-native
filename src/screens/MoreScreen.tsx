@@ -17,7 +17,6 @@ import { AppIcon, AppIconName } from "../components/ui/AppIcon";
 import { useFamily, FamilyMember } from "../contexts/FamilyContext";
 import { PROFILE_COLORS } from "../constants/profileColors";
 import { useAuth } from "../contexts/AuthContext";
-import { useSyncStatus } from "../hooks/useSyncStatus";
 import { SyncService } from "../services/SyncService";
 import Config from "react-native-config";
 
@@ -44,13 +43,12 @@ export const MoreScreen: React.FC = () => {
   const { logout, isGuest } = useAuth();
   const { activeMember, members, setActiveMember } = useFamily();
   const [showProfileSwitcher, setShowProfileSwitcher] = useState(false);
-  const { isSyncing } = useSyncStatus();
   
   const [syncSummary, setSyncSummary] = useState(() => SyncService.getLastSyncSummary());
   const [manualMessage, setManualMessage] = useState<string | null>(null);
   const [isManualSyncing, setIsManualSyncing] = useState(false);
-  const syncButtonDisabled = isGuest || isSyncing || isManualSyncing;
-  const statusLabel = isSyncing || isManualSyncing ? 'Syncing…' : 'Idle';
+  const syncButtonDisabled = isGuest || isManualSyncing;
+  const statusLabel = isManualSyncing ? 'Syncing…' : 'Idle';
   const formatTimestamp = (value: number | null) =>
     value ? new Date(value).toLocaleString() : 'Never';
   const nextAllowedText = syncSummary.nextAllowedAt && syncSummary.nextAllowedAt > Date.now()
@@ -78,10 +76,13 @@ export const MoreScreen: React.FC = () => {
   };
 
   useEffect(() => {
-    if (!isSyncing) {
-      setSyncSummary(SyncService.getLastSyncSummary());
-    }
-  }, [isSyncing]);
+    const unsubscribe = SyncService.onSyncStatusChange((syncing) => {
+      if (!syncing) {
+        setSyncSummary(SyncService.getLastSyncSummary());
+      }
+    });
+    return unsubscribe;
+  }, []);
 
   // Safe access to profile color
   const activeProfileColor = activeMember?.color

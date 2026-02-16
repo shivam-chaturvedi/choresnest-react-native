@@ -1,5 +1,5 @@
 import { isValid, format as dateFnsFormat } from 'date-fns';
-import { getTimezoneOffset } from 'date-fns-tz';
+import { formatInTimeZone, getTimezoneOffset } from 'date-fns-tz';
 
 /**
  * Safely parses a date string or object into a valid Date object.
@@ -24,7 +24,7 @@ export const safeParseDate = (date: string | Date | null | undefined): Date | nu
     return null;
 };
 
-const DEFAULT_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+export const DEFAULT_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 const buildDateFromParts = (dateStr: string, hours = 0, minutes = 0): Date | null => {
     if (!dateStr) return null;
@@ -78,6 +78,35 @@ export const safeFormat = (date: Date | null | undefined, formatStr: string, fal
     if (!date || !isValid(date)) return fallback;
     try {
         return dateFnsFormat(date, formatStr);
+    } catch {
+        return fallback;
+    }
+};
+
+export const isValidTimeZone = (timeZone?: string | null): timeZone is string => {
+    if (!timeZone) return false;
+    try {
+        Intl.DateTimeFormat(undefined, { timeZone });
+        return true;
+    } catch {
+        return false;
+    }
+};
+
+export const safeTimeZone = (timeZone?: string | null, fallback: string = DEFAULT_TIMEZONE): string => {
+    return isValidTimeZone(timeZone) ? timeZone : fallback;
+};
+
+export const safeFormatInTimeZone = (
+    date: Date | null | undefined,
+    timeZone: string | null | undefined,
+    formatStr: string,
+    fallback: string = ''
+): string => {
+    if (!date || !isValid(date)) return fallback;
+    if (!timeZone || !isValidTimeZone(timeZone)) return fallback;
+    try {
+        return formatInTimeZone(date, timeZone, formatStr);
     } catch {
         return fallback;
     }

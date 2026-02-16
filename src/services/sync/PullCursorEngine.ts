@@ -39,7 +39,17 @@ const getRecordId = (row: unknown): string | undefined => {
   if (!row || typeof row !== 'object') {
     return undefined;
   }
-  return (row as { id?: string }).id;
+  const typedRow = row as Record<string, unknown>;
+  if (typeof typedRow.id === 'string') {
+    return typedRow.id;
+  }
+  if (typeof typedRow.document_id === 'string') {
+    return typedRow.document_id;
+  }
+  if (typeof typedRow.uuid === 'string') {
+    return typedRow.uuid;
+  }
+  return undefined;
 };
 
 const recordSchemaMismatch = (table: string, targetTable: string, row: unknown) => {
@@ -72,7 +82,8 @@ export const pullTableChangesWithCursor = async (opts: PullCursorEngineOptions):
   const targetTable = remoteTable ?? table;
   const normalizedLastPulled = lastPulled ? new Date(lastPulled).toISOString() : new Date(0).toISOString();
   const rows: any[] = [];
-  let cursor: PullCursor = opts.lastCursor ?? { updatedAt: normalizedLastPulled };
+  const defaultCursorId = `${targetTable}-init`;
+  let cursor: PullCursor = opts.lastCursor ?? { updatedAt: normalizedLastPulled, id: defaultCursorId };
   let totalFetched = 0;
 
   while (totalFetched < maxRecords) {
@@ -102,7 +113,16 @@ export const pullTableChangesWithCursor = async (opts: PullCursorEngineOptions):
       break;
     }
 
-    cursor = { updatedAt: lastUpdatedAt };
+    const nextCursorId = getRecordId(lastRow);
+    if (!nextCursorId) {
+      recordSchemaMismatch(table, targetTable, lastRow);
+      break;
+    }
+
+    cursor = {
+      updatedAt: lastUpdatedAt,
+      id: nextCursorId,
+    };
 
     if (data.length < pageSize) {
       break;

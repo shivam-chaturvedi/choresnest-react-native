@@ -360,5 +360,48 @@ export default schemaMigrations({
             toVersion: 14,
             steps: [],
         },
+        {
+            toVersion: 15,
+            steps: [
+                addColumns({
+                    table: 'documents',
+                    columns: [
+                        { name: 'local_uri', type: 'string', isOptional: true },
+                        { name: 'remote_path', type: 'string', isOptional: true },
+                        { name: 'upload_status', type: 'string', isOptional: true },
+                        { name: 'upload_attempts', type: 'number', isOptional: true },
+                        { name: 'last_upload_error', type: 'string', isOptional: true },
+                        { name: 'content_type', type: 'string', isOptional: true },
+                        { name: 'file_size', type: 'number', isOptional: true },
+                        { name: 'checksum', type: 'string', isOptional: true },
+                    ],
+                }),
+                unsafeExecuteSql(`
+                    UPDATE documents
+                    SET remote_path = COALESCE(remote_path, file_path)
+                    WHERE remote_path IS NULL;
+                `),
+                unsafeExecuteSql(`
+                    UPDATE documents
+                    SET upload_status = 'uploaded',
+                        upload_attempts = CASE
+                            WHEN upload_attempts IS NULL OR upload_attempts < 1 THEN 1
+                            ELSE upload_attempts
+                        END
+                    WHERE COALESCE(remote_path, file_path) IS NOT NULL
+                      AND (upload_status IS NULL OR upload_status = '');
+                `),
+                unsafeExecuteSql(`
+                    UPDATE documents
+                    SET upload_status = 'pending_upload'
+                    WHERE upload_status IS NULL;
+                `),
+                unsafeExecuteSql(`
+                    UPDATE documents
+                    SET upload_attempts = 0
+                    WHERE upload_attempts IS NULL;
+                `),
+            ],
+        },
     ],
 });

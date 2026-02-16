@@ -6,6 +6,7 @@ import { AppSettingsService } from "../services/AppSettingsService";
 import { ProfileBootstrapService } from "../services/ProfileBootstrapService";
 import { Session, User as SupabaseUser } from "@supabase/supabase-js";
 import { getHumanReadableMessage } from "../utils/SupabaseErrorHandler";
+import { DocumentUploadScheduler } from "../services/sync/DocumentUploadScheduler";
 
 interface User {
     id: string;
@@ -51,6 +52,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
                         email: session.user.email!,
                         name: session.user.user_metadata?.name
                     });
+                    DocumentUploadScheduler.startForUser(session.user.id);
+                } else {
+                    setUser(null);
+                    setIsGuest(false);
+                    DocumentUploadScheduler.stop();
                 }
 
                 // Check guest mode independently
@@ -86,6 +92,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
                 });
                 setIsGuest(false);
                 AsyncStorage.removeItem("IS_GUEST");
+                DocumentUploadScheduler.startForUser(session.user.id);
                 // Trigger Sync dynamically to avoid circular dependency - run in background, don't block
                 // SyncService handles concurrent calls internally, so this is safe
                 (async () => {
@@ -107,10 +114,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
                 })();
             } else {
                 setUser(null);
+                DocumentUploadScheduler.stop();
             }
         });
 
-        return () => subscription.unsubscribe();
+        return () => {
+            subscription.unsubscribe();
+            DocumentUploadScheduler.stop();
+        };
     }, []);
 
     const login = async (email: string, pass: string): Promise<boolean> => {
@@ -161,6 +172,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
             ProfileBootstrapService.resetCache();
             setIsGuest(true);
             setUser(null);
+            DocumentUploadScheduler.stop();
             setHasCompletedOnboarding(true); // Ensure this is true on login
 
             await AsyncStorage.setItem("IS_GUEST", "true");
@@ -183,6 +195,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
             setUser(null);
             setIsGuest(false);
             await AsyncStorage.removeItem("IS_GUEST");
+            DocumentUploadScheduler.stop();
             // Supabase client handles session removal
         } catch (error: any) {
             const message = getHumanReadableMessage(error, 'logout');
