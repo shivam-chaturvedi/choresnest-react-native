@@ -9,4 +9,5 @@ export default class QuietHours extends Model {
     @field('start_minute') startMinute!: number;
     @field('end_hour') endHour!: number;
     @field('end_minute') endMinute!: number;
+    @field('version') version!: number;
 }

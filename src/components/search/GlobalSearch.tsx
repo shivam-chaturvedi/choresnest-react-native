@@ -70,12 +70,10 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
   const [query, setQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [results, setResults] = useState<SearchResult[]>([]);
-  const PREVIEW_LIMIT = 5;
-
   const buildContextResults = (filter: string): SearchResult[] => {
     switch (filter) {
       case "event":
-        return (events || []).slice(0, PREVIEW_LIMIT).map((e: any) => ({
+        return (events || []).map((e: any) => ({
           id: `evt-${e.id}`,
           type: "event" as const,
           title: e.title,
@@ -85,7 +83,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
           meta: e.time,
         }));
       case "task":
-        return (tasks || []).slice(0, PREVIEW_LIMIT).map((t: any) => ({
+        return (tasks || []).map((t: any) => ({
           id: `task-${t.id}`,
           type: "task" as const,
           title: t.name,
@@ -97,7 +95,6 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
       case "grocery":
         return (groceryList || [])
           .filter((item: any) => !item.completed)
-          .slice(0, PREVIEW_LIMIT)
           .map((item: any, index: number) => ({
             id: `grocery-${item.id ?? index}`,
             type: "grocery" as const,
@@ -106,9 +103,9 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
             icon: "🛒",
             path: "lists",
             meta: item.quantity ? `${item.quantity} ${item.unit ?? ""}`.trim() : "",
-          }))
+          }));
       case "recipe":
-        return (recipes || []).slice(0, PREVIEW_LIMIT).map((r: any) => ({
+        return (recipes || []).map((r: any) => ({
           id: `recipe-${r.id}`,
           type: "recipe" as const,
           title: r.name,
@@ -121,7 +118,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
           ((docs as any[]) || []).map((doc: any) => ({ ...doc, memberId }))
         );
         const allDocs = [...(globalVault || []), ...memberDocs];
-        return allDocs.slice(0, PREVIEW_LIMIT).map(doc => ({
+        return allDocs.map(doc => ({
           id: `doc-${doc.id ?? doc.documentId ?? Math.random().toString(36).slice(2, 8)}`,
           type: "document" as const,
           title: doc.name,
@@ -146,7 +143,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
   useEffect(() => {
     if (!query.trim()) {
       if (activeFilter) {
-        setResults(buildContextResults(activeFilter).slice(0, PREVIEW_LIMIT));
+        setResults(buildContextResults(activeFilter));
       } else {
         setResults([]);
       }

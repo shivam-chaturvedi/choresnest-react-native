@@ -11,7 +11,7 @@ import {
   Alert
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { AppLayout } from "../components/layout/AppLayout";
+import { AppLayout } from "../components/layout";
 import { theme } from "../theme";
 import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import { useSidebar } from "../contexts/SidebarContext";
@@ -160,7 +160,6 @@ export const NotificationsScreen: React.FC = () => {
 
   // Delivery Methods State
   const [pushEnabled, setPushEnabled] = useState(true);
-  const [emailEnabled, setEmailEnabled] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
   // Modal Visibility State
@@ -194,7 +193,6 @@ export const NotificationsScreen: React.FC = () => {
       }));
 
       setPushEnabled(prefs.pushEnabled);
-      setEmailEnabled(prefs.emailEnabled);
       setSoundEnabled(prefs.soundEnabled);
 
       // Load quiet hours
@@ -279,17 +277,6 @@ export const NotificationsScreen: React.FC = () => {
     };
     updatePush();
   }, [pushEnabled]);
-
-  useEffect(() => {
-    const updateEmail = async () => {
-      try {
-        await NotificationPreferencesService.setEmailEnabled(emailEnabled);
-      } catch (error) {
-        console.error('Error updating email preference:', error);
-      }
-    };
-    updateEmail();
-  }, [emailEnabled]);
 
   useEffect(() => {
     const updateSound = async () => {
@@ -549,18 +536,6 @@ export const NotificationsScreen: React.FC = () => {
               <Switch
                 value={pushEnabled}
                 onValueChange={setPushEnabled}
-                trackColor={{ false: colors.muted, true: colors.primary }}
-              />
-            </View>
-            <View style={[styles.divider, { backgroundColor: colors.border }]} />
-            <View style={styles.deliveryRow}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <Mail size={20} color={colors.mutedForeground} />
-                <Text style={[styles.labelTitle, { color: colors.foreground, fontSize: 14 }]}>Email Notifications</Text>
-              </View>
-              <Switch
-                value={emailEnabled}
-                onValueChange={setEmailEnabled}
                 trackColor={{ false: colors.muted, true: colors.primary }}
               />
             </View>

@@ -13,6 +13,7 @@ export const hashPin = (pin: string) => {
 
 interface UpdatePayload {
     enabled?: boolean;
+    biometricEnabled?: boolean;
     pinHash?: string;
 }
 
@@ -29,6 +30,7 @@ class AppLockService {
         await database.write(async () => {
             created = await database.get<AppLock>('app_lock').create(lock => {
                 lock.enabled = false;
+                lock.biometricEnabled = false;
                 lock.pinHash = '';
                 lock.createdAt = Date.now();
                 lock.updatedAt = Date.now();
@@ -44,6 +46,9 @@ class AppLockService {
             await record.update(lock => {
                 if (payload.enabled !== undefined) {
                     lock.enabled = payload.enabled;
+                }
+                if (payload.biometricEnabled !== undefined) {
+                    lock.biometricEnabled = payload.biometricEnabled;
                 }
                 if (payload.pinHash !== undefined) {
                     lock.pinHash = payload.pinHash;
@@ -68,6 +73,14 @@ class AppLockService {
 
     async disableAppLock() {
         return this.updateRecord({ enabled: false });
+    }
+
+    async enableBiometric() {
+        return this.updateRecord({ biometricEnabled: true, enabled: false });
+    }
+
+    async disableBiometric() {
+        return this.updateRecord({ biometricEnabled: false });
     }
 }
 

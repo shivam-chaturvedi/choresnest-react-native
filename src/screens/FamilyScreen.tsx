@@ -6,8 +6,8 @@ import {
   ScrollView,
   Pressable,
 } from "react-native";
-import { AppLayout } from "../components/layout/AppLayout";
-import { useFamily } from "../contexts/FamilyContext";
+import { AppLayout } from "../components/layout";
+import { useFamily, FamilyMember } from "../contexts/FamilyContext";
 import { theme } from "../theme";
 import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import { useSidebar } from "../contexts/SidebarContext";
@@ -22,6 +22,7 @@ import {
 } from "lucide-react-native";
 import { PROFILE_COLORS } from "../constants/profileColors";
 import { FamilyOnboarding } from "../components/family/FamilyOnboarding";
+import { AddMemberModal } from "../components/modals/AddMemberModal";
 
 // No explicit roles as per new requirement
 
@@ -31,6 +32,8 @@ export const FamilyScreen: React.FC = () => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<FamilyMember | null>(null);
+  const [showMemberModal, setShowMemberModal] = useState(false);
 
   // Helper to get color values
   const getColor = (colorName: string) => {
@@ -68,31 +71,47 @@ export const FamilyScreen: React.FC = () => {
 
         {/* Members List */}
         <Text style={[styles.sectionHeader, { color: colors.foreground }]}>Members</Text>
-        <View style={{ gap: 8 }}>
-          {members.map((member) => (
-            <View key={member.id} style={[styles.memberCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
-              <View style={[styles.avatar, { backgroundColor: member.color || colors.muted, borderRadius: radius.card }]}>
-                <Text style={{ fontSize: 24 }}>{member.symbol}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.memberName, { color: colors.foreground }]}>{member.name}</Text>
-                <View style={styles.statusContainer}>
-                  <View style={[styles.roleBadge, { backgroundColor: PROFILE_COLORS.find(c => c.value === member.color)?.hex + "20", borderRadius: radius.xs }]}>
-                    <Text style={[styles.roleText, { color: PROFILE_COLORS.find(c => c.value === member.color)?.hex }]}>{PROFILE_COLORS.find(c => c.value === member.color)?.name || "Member"}</Text>
-                  </View>
-                  {member.isActive && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                      <View style={[styles.onlineDot, { backgroundColor: colors.success, borderRadius: radius.xs }]} />
-                      <Text style={[styles.onlineText, { color: colors.success }]}>Active Profile</Text>
-                    </View>
-                  )}
+                <View style={{ gap: 8 }}>
+          {members.map((member) => {
+            const handleLongPress = () => {
+              setSelectedMember(member);
+              setShowMemberModal(true);
+            };
+            return (
+              <Pressable
+                key={member.id}
+                onLongPress={handleLongPress}
+                style={[styles.memberCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}
+              >
+                <View style={[styles.avatar, { backgroundColor: member.color || colors.muted, borderRadius: radius.card }]}>
+                  <Text style={{ fontSize: 24 }}>{member.symbol}</Text>
                 </View>
-              </View>
-              <Pressable style={styles.editIconButton} onPress={() => setShowOnboarding(true)}>
-                <Edit size={16} color={colors.mutedForeground} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.memberName, { color: colors.foreground }]}>{member.name}</Text>
+                  <View style={styles.statusContainer}>
+                    <View style={[styles.roleBadge, { backgroundColor: PROFILE_COLORS.find(c => c.value === member.color)?.hex + "20", borderRadius: radius.xs }]}>
+                      <Text style={[styles.roleText, { color: PROFILE_COLORS.find(c => c.value === member.color)?.hex }]}>{PROFILE_COLORS.find(c => c.value === member.color)?.name || "Member"}</Text>
+                    </View>
+                    {member.isActive && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <View style={[styles.onlineDot, { backgroundColor: colors.success, borderRadius: radius.xs }]} />
+                        <Text style={[styles.onlineText, { color: colors.success }]}>Active Profile</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+                <Pressable
+                  style={styles.editIconButton}
+                  onPress={() => {
+                    setSelectedMember(member);
+                    setShowMemberModal(true);
+                  }}
+                >
+                  <Edit size={16} color={colors.mutedForeground} />
+                </Pressable>
               </Pressable>
-            </View>
-          ))}
+            );
+          })}
         </View>
 
 
@@ -104,6 +123,14 @@ export const FamilyScreen: React.FC = () => {
 
       </ScrollView>
       <FamilyOnboarding open={showOnboarding} onClose={() => setShowOnboarding(false)} />
+      <AddMemberModal
+        open={showMemberModal}
+        onClose={() => {
+          setShowMemberModal(false);
+          setSelectedMember(null);
+        }}
+        memberToEdit={selectedMember ?? undefined}
+      />
     </AppLayout>
   );
 };

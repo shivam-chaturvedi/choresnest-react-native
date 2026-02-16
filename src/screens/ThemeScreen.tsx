@@ -7,7 +7,7 @@ import {
   Pressable,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { AppLayout } from "../components/layout/AppLayout";
+import { AppLayout } from "../components/layout";
 import { theme } from "../theme";
 import { useTheme, useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { Check } from "lucide-react-native";

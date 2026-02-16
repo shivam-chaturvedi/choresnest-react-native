@@ -21,8 +21,6 @@ export interface ExportStats {
 const ASYNC_KEYS = {
     recipes: '@family_chores_recipes',
     collections: '@family_chores_collections',
-    transactions: 'FINANCE_TRANSACTIONS',
-    budgets: 'FINANCE_BUDGETS',
 };
 
 export const exportService = {
@@ -95,22 +93,9 @@ export const exportService = {
             ]);
 
             // Fetch AsyncStorage counts with error handling
-            const [asRecipes, asCollections, asTransactions, asBudgets] = await Promise.all([
+            const [asRecipes, asCollections] = await Promise.all([
                 getAsyncCount(ASYNC_KEYS.recipes),
                 getAsyncCount(ASYNC_KEYS.collections),
-                getAsyncCount(ASYNC_KEYS.transactions),
-                (async () => {
-                    // Budgets is an object in Async Storage, not array
-                    try {
-                        const json = await AsyncStorage.getItem(ASYNC_KEYS.budgets);
-                        if (!json) return 0;
-                        const parsed = JSON.parse(json);
-                        return parsed && typeof parsed === 'object' ? Object.keys(parsed).length : 0;
-                    } catch (error) {
-                        console.error('getStats: Error reading budgets from AsyncStorage', error);
-                        return 0;
-                    }
-                })(),
             ]);
 
             return {
@@ -122,7 +107,7 @@ export const exportService = {
                 documents,
                 notes: notes + folders,
                 // Combine DB + Async Storage
-                expenses: wmTransactions + wmBudgets + asTransactions + asBudgets,
+                expenses: wmTransactions + wmBudgets,
                 system: users + members + settings + notifPrefs + quietHours + appLock + userPrefs,
             };
         } catch (error) {
@@ -238,9 +223,6 @@ export const exportService = {
         if (selectedData.includes('expenses')) {
             await addTableData('transactions', 'transactions');
             await addTableData('budgets', 'budgets');
-            // Add Async Storage Data
-            await addAsyncData(ASYNC_KEYS.transactions, 'transactions_async');
-            await addAsyncData(ASYNC_KEYS.budgets, 'budgets_async');
         }
         if (selectedData.includes('system')) {
             await addTableData('users', 'users');
@@ -647,17 +629,6 @@ export const exportService = {
             ]);
         }
 
-        // TRANSACTIONS/EXPENSES (from AsyncStorage)
-        if (data.transactions_async && data.transactions_async.length > 0) {
-            html += renderTable('Expenses (App Storage)', data.transactions_async, [
-                { header: 'Name', key: 'name' },
-                { header: 'Amount', key: 'amount', render: (i) => `$${Number(i.amount).toFixed(2)}` },
-                { header: 'Type', key: 'type' },
-                { header: 'Category', key: 'category' },
-                { header: 'Date', key: 'date' }
-            ]);
-        }
-
         // BUDGETS (from WatermelonDB)
         if (data.budgets && data.budgets.length > 0) {
             html += renderTable('Budgets (Database)', data.budgets, [
@@ -665,21 +636,6 @@ export const exportService = {
                 { header: 'Amount', key: 'amount', render: (b) => `$${Number(b.amount).toFixed(2)}` },
                 { header: 'Month', key: 'month' }
             ]);
-        }
-
-        // BUDGETS (from AsyncStorage - stored as object)
-        if (data.budgets_async && data.budgets_async.length > 0) {
-            const budgetObj = data.budgets_async[0]; // It's wrapped in array
-            if (budgetObj && typeof budgetObj === 'object') {
-                const budgetEntries = Object.entries(budgetObj).map(([category, amount]) => ({
-                    category,
-                    amount
-                }));
-                html += renderTable('Budgets (App Storage)', budgetEntries, [
-                    { header: 'Category', key: 'category', render: (b) => b.category.charAt(0).toUpperCase() + b.category.slice(1) },
-                    { header: 'Amount', key: 'amount', render: (b) => `$${Number(b.amount).toFixed(2)}` }
-                ]);
-            }
         }
 
         // SETTINGS

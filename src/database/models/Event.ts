@@ -11,6 +11,7 @@ export default class Event extends Model {
     @text('end_time') endTime?: string;
     @text('end_date') endDate?: string;
     @text('member_id') memberId!: string;
+    @text('profile_id') profileId?: string;
     @text('location') location?: string;
     @text('description') description?: string;
     @text('notes') notes?: string;
@@ -22,4 +23,7 @@ export default class Event extends Model {
     @text('notification_id') notificationId?: string;
     @field('reminder_offset_minutes') reminderOffsetMinutes?: number;
     @field('updated_at') updatedAt!: number;
+    @field('created_at') createdAt!: number;
+    @field('version') version!: number;
+    @field('deleted') deleted!: boolean;
 }

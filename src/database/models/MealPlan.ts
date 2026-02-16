@@ -10,4 +10,5 @@ export default class MealPlan extends Model {
     @field('is_cooked') isCooked!: boolean;
     @text('notification_id') notificationId?: string;
     @field('reminder_minutes_before') reminderMinutesBefore?: number;
+    @field('version') version!: number;
 }

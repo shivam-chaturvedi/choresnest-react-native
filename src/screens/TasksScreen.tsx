@@ -7,7 +7,7 @@ import {
   Pressable,
   Alert,
 } from "react-native";
-import { AppLayout } from "../components/layout/AppLayout";
+import { AppLayout } from "../components/layout";
 
 import { AddTaskModal } from "../components/modals/AddTaskModal";
 import { GlobalSearch } from "../components/search/GlobalSearch";

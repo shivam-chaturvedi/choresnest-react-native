@@ -1,6 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { AppLayout } from "../components/layout/AppLayout";
+import { AppLayout } from "../components/layout";
 import { theme } from "../theme";
 
 const createUtilityScreen = (title: string, subtitle?: string) => () => (

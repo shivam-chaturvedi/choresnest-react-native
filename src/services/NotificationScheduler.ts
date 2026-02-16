@@ -5,6 +5,7 @@ import { Q } from '@nozbe/watermelondb';
 import Event from '../database/models/Event';
 import Task from '../database/models/Task';
 import Document from '../database/models/Document';
+import Member from '../database/models/Member';
 import { NotificationPreferencesService } from './NotificationPreferencesService';
 import { parseReminderDateTime } from '../utils/ReminderDateTimeUtils';
 import { checkPermission, requestPermission } from '../utils/permissions';
@@ -132,6 +133,7 @@ const describeRepeat = (repeatType: RepeatType) => {
 
 const DEFAULT_WEEKDAY_SCHEDULE = [1, 2, 3, 4, 5];
 const MANUAL_REPEAT_TYPES: RepeatType[] = ['biweekly', 'weekday', 'monthly', 'yearly', 'custom'];
+// Note: 'hourly' is NOT in MANUAL_REPEAT_TYPES because it's handled by RepeatFrequency.HOURLY in Notifee
 
 const getNextWeekday = (date: Date, allowed: number[]) => {
     const next = new Date(date);
@@ -162,6 +164,9 @@ const computeNextDate = (
     const next = new Date(current);
 
     switch (repeatType) {
+        case 'hourly':
+            next.setHours(next.getHours() + 1);
+            return next;
         case 'biweekly':
             next.setDate(next.getDate() + 14);
             return next;
@@ -459,7 +464,20 @@ const normalizeRepeatType = (rule?: string | RepeatType): RepeatType => {
 
 let alarmPermissionChecked = false;
 let alarmPermissionGranted = false;
-let alarmSettingsPrompted = false;
+
+/**
+ * Get the currently active member ID from the database
+ */
+export const getActiveMemberId = async (): Promise<string | null> => {
+    try {
+        const members = await database.get<Member>('members').query(Q.where('is_active', true)).fetch();
+        return members.length > 0 ? members[0].id : null;
+    } catch (error) {
+        console.error('Failed to get active member:', error);
+        return null;
+    }
+};
+let alarmSettingsNotificationSent = false;
 
 const ensureAlarmPermission = async (promptToOpenSettings = false): Promise<boolean> => {
     if (Platform.OS !== 'android') return true;
@@ -473,15 +491,17 @@ const ensureAlarmPermission = async (promptToOpenSettings = false): Promise<bool
         alarmPermissionChecked = true;
         alarmPermissionGranted = enabled;
 
-        if (!enabled && promptToOpenSettings && !alarmSettingsPrompted) {
-            alarmSettingsPrompted = true;
-            NotificationCenter.addNotification({
-                title: "Enable exact alarms",
-                detail: "Allow Exact Alarms (Android S/14+) so reminders fire on time.",
-                tone: 'rgba(245,158,11,0.2)',
-                textColor: '#F59E0B',
-                icon: 'alertCircle',
-            });
+        if (!enabled && promptToOpenSettings) {
+            if (!alarmSettingsNotificationSent) {
+                alarmSettingsNotificationSent = true;
+                NotificationCenter.addNotification({
+                    title: "Enable exact alarms",
+                    detail: "Allow Exact Alarms (Android S/14+) so reminders fire on time.",
+                    tone: 'rgba(245,158,11,0.2)',
+                    textColor: '#F59E0B',
+                    icon: 'alertCircle',
+                });
+            }
             await notifee.openAlarmPermissionSettings();
         }
 
@@ -490,6 +510,91 @@ const ensureAlarmPermission = async (promptToOpenSettings = false): Promise<bool
         console.warn("Failed to query alarm permission:", error);
         return alarmPermissionGranted;
     }
+};
+
+type NotificationJob = () => Promise<void>;
+const notificationJobQueue: NotificationJob[] = [];
+let notificationJobRunning = false;
+
+const processNotificationJobQueue = async (): Promise<void> => {
+    if (notificationJobRunning) {
+        return;
+    }
+    notificationJobRunning = true;
+    while (notificationJobQueue.length > 0) {
+        const job = notificationJobQueue.shift()!;
+        try {
+            await job();
+        } catch (error) {
+            console.error('Notification job failed:', error);
+        }
+    }
+    notificationJobRunning = false;
+};
+
+export const MIN_FUTURE_BUFFER_MS = 60_000; // always leave a minute buffer
+const STALE_THRESHOLD_MS = 5 * 60_000; // more than 5 minutes old is considered stale
+const DUPLICATE_WINDOW_MS = 1_000; // treat timestamps within 1s as duplicates
+
+export const getSafeFutureTimestamp = (
+    input: Date | number | string | undefined | null,
+    options?: { bufferMs?: number; staleThresholdMs?: number }
+): number | null => {
+    const bufferMs = options?.bufferMs ?? MIN_FUTURE_BUFFER_MS;
+    const staleThresholdMs = options?.staleThresholdMs ?? STALE_THRESHOLD_MS;
+    if (input === null || input === undefined) {
+        return null;
+    }
+
+    let timestamp: number;
+    if (typeof input === 'number') {
+        timestamp = input;
+    } else if (typeof input === 'string') {
+        timestamp = Date.parse(input);
+    } else if (input instanceof Date) {
+        timestamp = input.getTime();
+    } else {
+        return null;
+    }
+
+    if (!Number.isFinite(timestamp) || Number.isNaN(timestamp)) {
+        return null;
+    }
+
+    const now = Date.now();
+    if (timestamp < now - staleThresholdMs) {
+        return null;
+    }
+
+    if (timestamp < now) {
+        return now + bufferMs;
+    }
+
+    if (timestamp < now + bufferMs) {
+        return now + bufferMs;
+    }
+
+    return timestamp;
+};
+
+const buildNotificationKey = (category: NotificationCategory, data: NotificationData): string => {
+    const idFields = ['eventId', 'taskId', 'documentId', 'mealPlanId', 'budgetId'];
+    for (const field of idFields) {
+        const value = data.data?.[field];
+        if (value) {
+            return `${category}:${field}:${value}`;
+        }
+    }
+    const payloadSignature = JSON.stringify({ title: data.title, body: data.body, data: data.data ?? {} });
+    return `${category}:generic:${payloadSignature}`;
+};
+
+const notificationMetaByKey = new Map<string, { notificationId: string; timestamp: number }>();
+const notificationKeyById = new Map<string, string>();
+
+export const resetNotificationSchedulerState = (): void => {
+    notificationMetaByKey.clear();
+    notificationKeyById.clear();
 };
 
 export const NotificationScheduler = {
@@ -506,6 +611,11 @@ export const NotificationScheduler = {
         } catch (error) {
             console.error('Failed to initialize notifications:', error);
         }
+    },
+
+    enqueueJob(job: NotificationJob) {
+        notificationJobQueue.push(job);
+        void processNotificationJobQueue();
     },
 
     /**
@@ -701,12 +811,32 @@ export const NotificationScheduler = {
             }
 
             const quietAdjustedDate = await this.adjustForQuietHours(candidateDate);
-            if (quietAdjustedDate <= new Date() && repeatType === 'none') {
-                console.log(`Notification not scheduled: trigger date ${quietAdjustedDate.toISOString()} is in the past`);
-                return null;
-            }
-
             let finalTrigger = quietAdjustedDate;
+
+            if (repeatType === 'hourly' && finalTrigger <= new Date()) {
+                const now = new Date();
+                const originalMinutes = candidateDate.getMinutes();
+                const originalSeconds = candidateDate.getSeconds();
+                const originalMilliseconds = candidateDate.getMilliseconds();
+                
+                finalTrigger = new Date(candidateDate);
+                
+                while (finalTrigger <= now) {
+                    finalTrigger.setHours(finalTrigger.getHours() + 1);
+                }
+                
+                finalTrigger.setMinutes(originalMinutes);
+                finalTrigger.setSeconds(originalSeconds);
+                finalTrigger.setMilliseconds(originalMilliseconds);
+                
+                finalTrigger = await this.adjustForQuietHours(finalTrigger);
+                
+                if (finalTrigger <= now) {
+                    finalTrigger.setHours(finalTrigger.getHours() + 1);
+                    finalTrigger = await this.adjustForQuietHours(finalTrigger);
+                }
+            }
+            
             if (repeatType === 'weekday') {
                 const allowedDays = repeatMeta?.daysOfWeek ?? DEFAULT_WEEKDAY_SCHEDULE;
                 if (!allowedDays.includes(finalTrigger.getDay())) {
@@ -717,12 +847,34 @@ export const NotificationScheduler = {
                 }
             }
 
+            const notificationKey = buildNotificationKey(category, data);
+            const rawTimestamp = finalTrigger.getTime();
+            const safeTimestamp = getSafeFutureTimestamp(finalTrigger, {
+                bufferMs: MIN_FUTURE_BUFFER_MS,
+                staleThresholdMs: STALE_THRESHOLD_MS,
+            });
+            if (!safeTimestamp) {
+                console.warn(`[Scheduler] Skipping ${category} notification for ${notificationKey} because trigger ${finalTrigger.toISOString()} is stale or invalid.`);
+                return null;
+            }
+
+            if (safeTimestamp !== rawTimestamp) {
+                console.warn(`[Scheduler] Adjusting ${category} trigger for ${notificationKey} from ${new Date(rawTimestamp).toISOString()} to ${new Date(safeTimestamp).toISOString()} to keep it in the future.`);
+            }
+
+            finalTrigger = new Date(safeTimestamp);
+            const existingMeta = notificationMetaByKey.get(notificationKey);
+            if (existingMeta && Math.abs(existingMeta.timestamp - safeTimestamp) < DUPLICATE_WINDOW_MS) {
+                console.log(`[Scheduler] Reusing existing ${category} notification ${existingMeta.notificationId} for ${notificationKey} (timestamp unchanged).`);
+                return existingMeta.notificationId;
+            }
+            
             const repeatFrequency = repeatFrequencyForType(repeatType);
 
             // Create trigger
             const trigger: TimestampTrigger = {
                 type: TriggerType.TIMESTAMP,
-                timestamp: finalTrigger.getTime(),
+                timestamp: safeTimestamp,
                 repeatFrequency,
                 alarmManager: {
                     allowWhileIdle: true,
@@ -754,6 +906,11 @@ export const NotificationScheduler = {
                 },
                 trigger
             );
+
+            if (notificationId) {
+                notificationMetaByKey.set(notificationKey, { notificationId, timestamp: safeTimestamp });
+                notificationKeyById.set(notificationId, notificationKey);
+            }
 
             console.log(`✓ Scheduled ${category} notification: ${notificationId} for ${finalTrigger.toISOString()} ${repeatType !== 'none' ? `(Repeat: ${repeatType})` : ''}`);
 
@@ -837,6 +994,12 @@ export const NotificationScheduler = {
      */
     async cancelNotification(id: string): Promise<void> {
         if (!id) return;
+
+        const mappedKey = notificationKeyById.get(id);
+        if (mappedKey) {
+            notificationKeyById.delete(id);
+            notificationMetaByKey.delete(mappedKey);
+        }
 
         try {
             await notifee.cancelTriggerNotification(id);
@@ -1111,8 +1274,27 @@ export const NotificationScheduler = {
                 }
             }
 
+            // Get active member ID - only schedule notifications for active profile
+            const activeMemberId = await getActiveMemberId();
+            if (!activeMemberId) {
+                console.log('No active member found, skipping notification scheduling');
+                return;
+            }
+
             // === SCHEDULE PASS: Events ===
             for (const event of events) {
+                // Filter: Only schedule notifications for events assigned to active member
+                if (event.memberId !== activeMemberId) {
+                    // Cancel notification if it exists but event is not for active member
+                    if (event.notificationId) {
+                        await notifee.cancelTriggerNotification(event.notificationId);
+                        await database.write(async () => {
+                            await event.update(e => { e.notificationId = null as any; });
+                        });
+                    }
+                    continue;
+                }
+
                 if (event.reminderOffsetMinutes !== undefined && event.reminderOffsetMinutes < 0) continue;
 
                 // Check if already scheduled (from our clean map)
@@ -1148,7 +1330,16 @@ export const NotificationScheduler = {
                 const manualRepeat = isManualRepeatType(repeatType);
 
                 let targetEventDate = eventDate;
-                if (manualRepeat) {
+                
+                // For hourly repeats, find the next occurrence if the event time is in the past
+                if (repeatType === 'hourly' && eventDate <= new Date()) {
+                    const now = new Date();
+                    targetEventDate = new Date(eventDate);
+                    // Keep incrementing by 1 hour until we find a future time
+                    while (targetEventDate <= now) {
+                        targetEventDate.setHours(targetEventDate.getHours() + 1);
+                    }
+                } else if (manualRepeat) {
                     const nextEventDate = findNextManualEventDate(eventDate, repeatType, repeatMeta, reminderMinutes);
                     if (!nextEventDate) continue;
                     targetEventDate = nextEventDate;
@@ -1167,6 +1358,7 @@ export const NotificationScheduler = {
                     },
                     triggerDate,
                     {
+                        repeatType,
                         repeatMeta,
                         notifyCenter: true, // Visible in Bell icon list
                         promptForAlarm: true // Explicitly ensure exact alarm permission
@@ -1182,6 +1374,18 @@ export const NotificationScheduler = {
 
             // === SCHEDULE PASS: Tasks ===
             for (const task of tasks) {
+                // Filter: Only schedule notifications for tasks assigned to active member
+                if (task.assigneeId !== activeMemberId) {
+                    // Cancel notification if it exists but task is not for active member
+                    if (task.notificationId) {
+                        await notifee.cancelTriggerNotification(task.notificationId);
+                        await database.write(async () => {
+                            await task.update(t => { t.notificationId = null as any; });
+                        });
+                    }
+                    continue;
+                }
+
                 if (task.status === 'done' || !task.reminderEnabled) continue;
 
                 if (taskTriggerMap.has(task.id)) {
@@ -1247,6 +1451,52 @@ export const NotificationScheduler = {
             console.error('Failed to reschedule missing notifications:', error);
         }
     },
+
+    /**
+     * Reschedule all notifications for the currently active profile
+     * Called when user switches profiles to cancel old notifications and schedule new ones
+     */
+    async rescheduleNotificationsForActiveProfile(): Promise<void> {
+        try {
+            console.log('Rescheduling notifications for active profile...');
+            
+            // Cancel all existing trigger notifications
+            const existingTriggers = await notifee.getTriggerNotifications();
+            for (const trigger of existingTriggers) {
+                const id = trigger.notification.id;
+                if (id) {
+                    await notifee.cancelTriggerNotification(id);
+                }
+            }
+
+            resetNotificationSchedulerState();
+
+            // Clear notification IDs from database
+            const events = await database.collections.get<Event>('events').query().fetch();
+            const tasks = await database.collections.get<Task>('tasks').query().fetch();
+
+            await database.write(async () => {
+                for (const event of events) {
+                    if (event.notificationId) {
+                        await event.update(e => { e.notificationId = null as any; });
+                    }
+                }
+                for (const task of tasks) {
+                    if (task.notificationId) {
+                        await task.update(t => { t.notificationId = null as any; });
+                    }
+                }
+            });
+
+            // Reschedule all notifications (will filter by active member)
+            await this.rescheduleAllMissing();
+            
+            console.log('✓ Notifications rescheduled for active profile');
+        } catch (error) {
+            console.error('Failed to reschedule notifications for active profile:', error);
+        }
+    },
+
     computeNextDate,
     getNextWeekday,
     getNextCustomDate,

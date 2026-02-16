@@ -1,12 +1,41 @@
 import { database } from '../database';
 import UserPreference from '../database/models/UserPreference';
 import { COUNTRY_CONFIG, DEFAULT_COUNTRY_CODE, CountryConfiguration, getCountryConfig, isSupportedCountry } from '../config/countries';
+import * as RNLocalize from 'react-native-localize';
 
 type CountryChangeListener = (config: CountryConfiguration) => void;
 
+const detectDeviceCountryCode = (): string | undefined => {
+    try {
+        const deviceTimeZone = RNLocalize.getTimeZone();
+        if (deviceTimeZone) {
+            const zoneMatch = Object.values(COUNTRY_CONFIG).find(config => config.timeZone === deviceTimeZone);
+            if (zoneMatch) {
+                return zoneMatch.code;
+            }
+        }
+
+        const deviceCountry = RNLocalize.getCountry();
+        if (deviceCountry && isSupportedCountry(deviceCountry)) {
+            return deviceCountry;
+        }
+
+        const locales = RNLocalize.getLocales();
+        const localeMatch = locales.find(locale => locale.countryCode && isSupportedCountry(locale.countryCode));
+        if (localeMatch?.countryCode) {
+            return localeMatch.countryCode;
+        }
+    } catch (error) {
+        console.warn('CountryPreferenceService: device locale detection failed', error);
+    }
+
+    return undefined;
+};
+
+const fallbackCountryCode = detectDeviceCountryCode() ?? DEFAULT_COUNTRY_CODE;
 const preferencesCollection = () => database.get<UserPreference>('user_preferences');
 
-let cachedCountryCode = DEFAULT_COUNTRY_CODE;
+let cachedCountryCode = fallbackCountryCode;
 let preferenceRecordId: string | null = null;
 const listeners = new Set<CountryChangeListener>();
 
@@ -41,7 +70,7 @@ const getOrCreatePreferenceRecord = async (): Promise<UserPreference> => {
 
     return await database.write(async () => {
         const created = await collection.create(pref => {
-            pref.countryCode = DEFAULT_COUNTRY_CODE;
+            pref.countryCode = cachedCountryCode;
             pref.createdAt = Date.now();
             pref.updatedAt = Date.now();
         });
@@ -54,7 +83,18 @@ export const CountryPreferenceService = {
     async loadPreferences() {
         try {
             const record = await getOrCreatePreferenceRecord();
-            cachedCountryCode = record.countryCode || DEFAULT_COUNTRY_CODE;
+            const normalized = record.countryCode && isSupportedCountry(record.countryCode)
+                ? record.countryCode
+                : cachedCountryCode;
+            if (!record.countryCode || record.countryCode !== normalized) {
+                await database.write(async () => {
+                    await record.update(pref => {
+                        pref.countryCode = normalized;
+                        pref.updatedAt = Date.now();
+                    });
+                });
+            }
+            cachedCountryCode = normalized;
             notifyListeners();
         } catch (error) {
             console.error('Failed to load country preferences:', error);

@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useMemo, useCall
 import { database } from '../database';
 import { Folder as DbFolder, Note as DbNote } from '../database/models/Note';
 import { Q } from '@nozbe/watermelondb';
+import { SyncService } from '../services/SyncService';
+import { supabase } from '../config/supabase';
 
 // Types
 export interface NoteBlock {
@@ -14,10 +16,10 @@ export interface NoteBlock {
 export interface Note {
     id: string;
     title: string;
-    preview: string; // For list view
+    preview: string;
     tag: string;
     color: string;
-    updatedAt: string;
+    updatedAt: number;
     blocks: NoteBlock[];
     isStarred?: boolean;
     folderId: string;
@@ -45,6 +47,10 @@ const NotesContext = createContext<NotesContextType | undefined>(undefined);
 export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [folderMeta, setFolderMeta] = useState<{ id: string; title: string; icon: string }[]>([]);
     const [notes, setNotes] = useState<Note[]>([]);
+    const [profileId, setProfileId] = useState<string | null>(null);
+    const syncAfterWrite = useCallback(() => {
+        void SyncService.requestSyncSoon();
+    }, []);
 
     const folders = useMemo(() => {
         return folderMeta.map(folder => ({
@@ -53,100 +59,206 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }));
     }, [folderMeta, notes]);
 
+    useEffect(() => {
+        let mounted = true;
+        const refreshProfile = async () => {
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (mounted) {
+                    setProfileId(user?.id ?? null);
+                }
+            } catch (error) {
+                console.warn('NotesContext: Failed to read profile id', error);
+                if (mounted) {
+                    setProfileId(null);
+                }
+            }
+        };
+        refreshProfile();
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            if (!mounted) return;
+            setProfileId(session?.user?.id ?? null);
+        });
+        return () => {
+            mounted = false;
+            subscription?.unsubscribe();
+        };
+    }, []);
+
     const ensureDefaultFolder = useCallback(async () => {
+        if (!profileId) {
+            return;
+        }
         try {
             const collection = database.get<DbFolder>('folders');
-            const existing = await collection.query().fetch();
+            const existing = await collection
+                .query(
+                    Q.where('profile_id', profileId),
+                    Q.where('deleted', false)
+                )
+                .fetch();
             if (existing.length === 0) {
+                let createdDefault = false;
                 await database.write(async () => {
+                    const now = Date.now();
                     await collection.create(folder => {
                         folder.title = 'Notes';
                         folder.icon = 'file';
+                        folder.profileId = profileId;
+                        folder.deleted = false;
+                        folder.createdAt = now;
+                        folder.updatedAt = now;
+                        folder.version = 1;
                     });
+                    createdDefault = true;
                 });
+                if (createdDefault) {
+                    syncAfterWrite();
+                }
             }
         } catch (error) {
             console.error("Failed to ensure notes folder:", error);
         }
-    }, []);
+    }, [profileId, syncAfterWrite]);
 
     useEffect(() => {
+        if (!profileId) {
+            setFolderMeta([]);
+            setNotes([]);
+            return;
+        }
         ensureDefaultFolder();
-    }, [ensureDefaultFolder]);
+    }, [profileId, ensureDefaultFolder]);
 
     useEffect(() => {
+        if (!profileId) {
+            setFolderMeta([]);
+            return;
+        }
         const collection = database.get<DbFolder>('folders');
-        const subscription = collection.query().observe().subscribe({
-            next: (records) => {
-                setFolderMeta(records.map(record => ({
-                    id: record.id,
-                    title: record.title,
-                    icon: record.icon,
-                })));
-            },
-            error: (error) => console.error("Notes folder subscription failed", error),
-        });
-        return () => subscription.unsubscribe();
-    }, []);
-
-    useEffect(() => {
-        const collection = database.get<DbNote>('notes');
-        // We use observeWithColumns to ensure we receive updates when these specific fields change
-        // We also add a sort to ensure the initial order is correct, though JS generic sort handles re-ordering
-        const subscription = collection.query(
-            Q.sortBy('updated_at', Q.desc)
-        ).observeWithColumns(['title', 'preview', 'is_starred', 'updated_at', 'blocks_json']).subscribe({
-            next: (records) => {
-                console.log(`📥 NotesContext: Received ${records.length} notes update`);
-                const mapped = records
-                    .map(record => ({
+        const subscription = collection
+            .query(
+                Q.where('profile_id', profileId),
+                Q.where('deleted', false)
+            )
+            .observe()
+            .subscribe({
+                next: (records) => {
+                    setFolderMeta(records.map(record => ({
                         id: record.id,
                         title: record.title,
-                        preview: record.preview || 'No content',
-                        tag: record.tag || 'General',
-                        color: record.color,
-                        updatedAt: new Date(record.updatedAt).toISOString(),
-                        blocks: Array.isArray(record.blocks) ? record.blocks : [],
-                        isStarred: record.isStarred,
-                        folderId: record.folderId,
-                    }))
-                    // Sort again in JS to be absolutely sure the UI reflects the latest order
-                    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-                setNotes(mapped);
-            },
-            error: (error) => console.error("Notes subscription failed", error),
-        });
+                        icon: record.icon,
+                    })));
+                },
+                error: (error) => console.error("Notes folder subscription failed", error),
+            });
         return () => subscription.unsubscribe();
-    }, []);
+    }, [profileId, syncAfterWrite]);
+
+    useEffect(() => {
+        if (!profileId) {
+            setNotes([]);
+            return;
+        }
+        const collection = database.get<DbNote>('notes');
+        const subscription = collection
+            .query(
+                Q.where('profile_id', profileId),
+                Q.where('deleted', false),
+                Q.sortBy('updated_at', Q.desc)
+            )
+            .observeWithColumns(['title', 'preview', 'is_starred', 'updated_at', 'blocks_json'])
+            .subscribe({
+                next: (records) => {
+                    console.log(`📥 NotesContext: Received ${records.length} notes update`);
+                    const mapped = records
+                        .map(record => {
+                            const safeUpdatedAt = typeof record.updatedAt === 'number' ? record.updatedAt : Date.now();
+                            const safeBlocks = Array.isArray(record.blocks) ? record.blocks : [];
+                            return {
+                                id: record.id,
+                                title: record.title,
+                                preview: record.preview || 'No content',
+                                tag: record.tag || 'General',
+                                color: record.color,
+                                updatedAt: safeUpdatedAt,
+                                blocks: safeBlocks,
+                                isStarred: record.isStarred,
+                                folderId: record.folderId,
+                            };
+                        })
+                        .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+                    setNotes(mapped);
+                },
+                error: (error) => console.error("Notes subscription failed", error),
+            });
+        return () => subscription.unsubscribe();
+    }, [profileId]);
 
     const addFolder = useCallback(async (title: string) => {
         try {
             if (!title) return;
+            if (!profileId) {
+                console.warn('Skipping folder create until profile is known');
+                return;
+            }
             await database.write(async () => {
-                await database.get<DbFolder>('folders').create(folder => {
+                const collection = database.get<DbFolder>('folders');
+                const now = Date.now();
+                await collection.create(folder => {
                     folder.title = title;
                     folder.icon = 'folder';
+                    folder.profileId = profileId;
+                    folder.deleted = false;
+                    folder.createdAt = now;
+                    folder.updatedAt = now;
+                    folder.version = 1;
                 });
             });
+            syncAfterWrite();
         } catch (error) {
             console.error("Error adding folder:", error);
         }
-    }, []);
+    }, [profileId, syncAfterWrite]);
 
     const deleteFolder = useCallback(async (id: string) => {
+        if (!id) return;
+        if (!profileId) {
+            console.warn('Skipping folder delete until profile is known');
+            return;
+        }
         try {
-            if (!id) return;
             await database.write(async () => {
                 const notesCollection = database.get<DbNote>('notes');
-                const folderNotes = await notesCollection.query(Q.where('folder_id', id)).fetch();
-                await Promise.all(folderNotes.map(note => note.destroyPermanently()));
+                const folderNotes = await notesCollection
+                    .query(
+                        Q.where('folder_id', id),
+                        Q.where('profile_id', profileId),
+                        Q.where('deleted', false)
+                    )
+                    .fetch();
+                const now = Date.now();
+                await Promise.all(
+                    folderNotes.map(note =>
+                        note.update(n => {
+                            n.deleted = true;
+                            n.updatedAt = now;
+                            n.version = (n.version ?? 0) + 1;
+                        })
+                    )
+                );
                 const folder = await database.get<DbFolder>('folders').find(id);
-                await folder.destroyPermanently();
+                await folder.update(f => {
+                    f.deleted = true;
+                    f.updatedAt = now;
+                    f.version = (f.version ?? 0) + 1;
+                });
             });
+            syncAfterWrite();
         } catch (error) {
             console.error("Error deleting folder:", error);
         }
-    }, []);
+    }, [profileId, syncAfterWrite]);
 
     const computePreview = (noteData?: Partial<Note>) => {
         // Try to find the first non-empty block with meaningful content
@@ -181,27 +293,39 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const addNote = useCallback(async (folderId: string, noteData?: Partial<Note>) => {
         if (!folderId) return null;
+        if (!profileId) {
+            console.warn('Skipping note create until profile is known');
+            return null;
+        }
         try {
             let createdId: string | null = null;
             await database.write(async () => {
+                const now = Date.now();
                 const note = await database.get<DbNote>('notes').create(record => {
                     record.title = noteData?.title || 'Untitled';
                     record.preview = computePreview(noteData);
                     record.tag = noteData?.tag || 'General';
                     record.color = noteData?.color || '#fff';
                     record.isStarred = noteData?.isStarred || false;
-                    record.updatedAt = Date.now();
+                    record.updatedAt = now;
+                    record.createdAt = now;
                     record.folderId = folderId;
+                    record.profileId = profileId;
+                    record.deleted = false;
+                    record.version = 1;
                     record.blocks = noteData?.blocks || [{ id: '1', type: 'text', content: '' }];
                 });
                 createdId = note.id;
             });
+            if (createdId) {
+                syncAfterWrite();
+            }
             return createdId;
         } catch (error) {
             console.error("Error adding note:", error);
             return null;
         }
-    }, []);
+    }, [profileId]);
 
     const updateNote = useCallback(async (noteId: string, updates: Partial<Note>) => {
         if (!noteId) return;
@@ -209,6 +333,7 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             console.log('📝 Updating note in DB:', noteId, updates);
             await database.write(async () => {
                 const note = await database.get<DbNote>('notes').find(noteId);
+                const now = Date.now();
                 await note.update(record => {
                     if (updates.title !== undefined) record.title = updates.title;
                     if (updates.preview !== undefined) record.preview = updates.preview;
@@ -218,9 +343,11 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                         record.blocks = updates.blocks;
                     }
                     if (updates.isStarred !== undefined) record.isStarred = updates.isStarred;
-                    record.updatedAt = Date.now();
+                    record.updatedAt = now;
+                    record.version = (record.version ?? 0) + 1;
                 });
             });
+            syncAfterWrite();
             console.log('✅ Note updated in DB successfully');
         } catch (error: any) {
             if (error?.message?.includes('not found')) {
@@ -229,19 +356,25 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 console.error("Error updating note:", error);
             }
         }
-    }, []);
+    }, [syncAfterWrite]);
 
     const deleteNote = useCallback(async (noteId: string) => {
         if (!noteId) return;
         try {
             await database.write(async () => {
                 const note = await database.get<DbNote>('notes').find(noteId);
-                await note.destroyPermanently();
+                const now = Date.now();
+                await note.update(record => {
+                    record.deleted = true;
+                    record.updatedAt = now;
+                    record.version = (record.version ?? 0) + 1;
+                });
             });
+            syncAfterWrite();
         } catch (error) {
             console.error("Error deleting note:", error);
         }
-    }, []);
+    }, [syncAfterWrite]);
 
     const getNote = useCallback((noteId: string) => {
         if (!noteId) return undefined;
@@ -262,3 +395,7 @@ export const useNotes = () => {
     }
     return context;
 };
+
+// Acceptance Checklist:
+// - Device A creates/updates/deletes folders/notes for a profile; Device B receives each tombstoned change via SyncService.requestSyncSoon() without duplicate-create warnings.
+// - Switch to another profile; local folders/notes clear and only that profile's data appears after sync, proving profile-aware defaults and pull handling.

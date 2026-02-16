@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Pressable, Text, View, StyleSheet, Platform, ViewStyle, TextStyle } from "react-native";
 import RNDateTimePicker from "@react-native-community/datetimepicker";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
@@ -10,6 +10,7 @@ interface SimpleDatePickerProps {
     placeholder?: string;
     buttonStyle?: ViewStyle;
     textStyle?: TextStyle;
+    onOpenRequested?: (open: () => void) => void;
 }
 
 export const DateTimePicker: React.FC<SimpleDatePickerProps> = ({
@@ -18,10 +19,14 @@ export const DateTimePicker: React.FC<SimpleDatePickerProps> = ({
     placeholder = "Select date",
     buttonStyle,
     textStyle,
+    onOpenRequested,
 }) => {
     const colors = useThemeColors();
     const radius = useThemeRadius();
     const [show, setShow] = useState(false);
+    const openPicker = useCallback(() => {
+        setShow(true);
+    }, []);
 
     const dateValue = value ? new Date(value) : new Date();
 
@@ -45,6 +50,10 @@ export const DateTimePicker: React.FC<SimpleDatePickerProps> = ({
         });
     };
 
+    useEffect(() => {
+        onOpenRequested?.(openPicker);
+    }, [onOpenRequested, openPicker]);
+
     return (
         <View>
             <Pressable
@@ -53,7 +62,7 @@ export const DateTimePicker: React.FC<SimpleDatePickerProps> = ({
                     { backgroundColor: colors.background, borderColor: colors.border, borderRadius: radius.md },
                     buttonStyle,
                 ]}
-                onPress={() => setShow(true)}
+                onPress={openPicker}
             >
                 <Calendar size={16} color={colors.mutedForeground} style={styles.icon} />
                 <Text style={[

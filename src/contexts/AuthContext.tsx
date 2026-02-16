@@ -3,8 +3,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "../config/supabase";
 import { SupabaseService } from "../services/SupabaseService";
 import { AppSettingsService } from "../services/AppSettingsService";
+import { ProfileBootstrapService } from "../services/ProfileBootstrapService";
 import { Session, User as SupabaseUser } from "@supabase/supabase-js";
 import { getHumanReadableMessage } from "../utils/SupabaseErrorHandler";
+import { DocumentUploadScheduler } from "../services/sync/DocumentUploadScheduler";
 
 interface User {
     id: string;
@@ -50,6 +52,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
                         email: session.user.email!,
                         name: session.user.user_metadata?.name
                     });
+                    DocumentUploadScheduler.startForUser(session.user.id);
+                } else {
+                    setUser(null);
+                    setIsGuest(false);
+                    DocumentUploadScheduler.stop();
                 }
 
                 // Check guest mode independently
@@ -76,7 +83,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
         initializeAuth();
 
         // Listen for changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
             if (session?.user) {
                 setUser({
                     id: session.user.id,
@@ -85,16 +92,41 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
                 });
                 setIsGuest(false);
                 AsyncStorage.removeItem("IS_GUEST");
+                DocumentUploadScheduler.startForUser(session.user.id);
+                // Trigger Sync dynamically to avoid circular dependency - run in background, don't block
+                // SyncService handles concurrent calls internally, so this is safe
+                (async () => {
+                    try {
+                        const { SyncService } = await import("../services/SyncService");
+                        // Check if sync is already in progress before triggering
+                        if (!SyncService.getSyncStatus()) {
+                            // Don't await - let sync run in background
+                            SyncService.sync().catch(err => {
+                                // Don't log concurrent sync errors - they're expected
+                                if (!err?.message?.includes('Concurrent synchronization')) {
+                                    console.error("Background sync failed:", err);
+                                }
+                            });
+                        }
+                    } catch (err) {
+                        console.error("Failed to load SyncService", err);
+                    }
+                })();
             } else {
                 setUser(null);
+                DocumentUploadScheduler.stop();
             }
         });
 
-        return () => subscription.unsubscribe();
+        return () => {
+            subscription.unsubscribe();
+            DocumentUploadScheduler.stop();
+        };
     }, []);
 
     const login = async (email: string, pass: string): Promise<boolean> => {
         setIsLoading(true);
+        ProfileBootstrapService.resetCache();
         try {
             const { error } = await SupabaseService.signIn(email, pass);
             if (error) {
@@ -115,6 +147,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
 
     const signup = async (email: string, pass: string, name: string): Promise<boolean> => {
         setIsLoading(true);
+        ProfileBootstrapService.resetCache();
         try {
             const { error } = await SupabaseService.signUp(email, pass, name);
             if (error) {
@@ -136,29 +169,33 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
     const loginAsGuest = async () => {
         try {
             setIsLoading(true);
+            ProfileBootstrapService.resetCache();
             setIsGuest(true);
             setUser(null);
+            DocumentUploadScheduler.stop();
             setHasCompletedOnboarding(true); // Ensure this is true on login
 
             await AsyncStorage.setItem("IS_GUEST", "true");
             await AsyncStorage.removeItem("AUTH_USER");
             await AsyncStorage.setItem("HAS_COMPLETED_ONBOARDING", "true");
-        } catch (error) {
-            console.error("Guest login failed:", error);
-            // Re-throw with user-friendly message
-            throw new Error("Failed to continue as guest. Please try again.");
-        } finally {
-            setIsLoading(false);
-        }
+    } catch (error) {
+        console.error("Guest login failed:", error);
+        // Re-throw with user-friendly message
+        throw new Error("Failed to continue as guest. Please try again.");
+    } finally {
+        setIsLoading(false);
+    }
     };
 
     const logout = async () => {
         setIsLoading(true);
         try {
+            ProfileBootstrapService.resetCache();
             await SupabaseService.signOut();
             setUser(null);
             setIsGuest(false);
             await AsyncStorage.removeItem("IS_GUEST");
+            DocumentUploadScheduler.stop();
             // Supabase client handles session removal
         } catch (error: any) {
             const message = getHumanReadableMessage(error, 'logout');
@@ -181,6 +218,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
     const deleteAccount = async () => {
         setIsLoading(true);
         try {
+            ProfileBootstrapService.resetCache();
             // Import DataCleanupService dynamically to avoid circular dependencies
             const { DataCleanupService } = await import('../services/DataCleanupService');
 

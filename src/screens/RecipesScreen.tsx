@@ -11,7 +11,7 @@ import {
   Image,
 } from "react-native";
 import { useNavigation, NavigationProp } from "@react-navigation/native";
-import { AppLayout } from "../components/layout/AppLayout";
+import { AppLayout } from "../components/layout";
 import { GlobalSearch } from "../components/search/GlobalSearch";
 import { theme } from "../theme";
 import { useSidebar } from "../contexts/SidebarContext";

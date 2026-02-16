@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { AppLayout } from '../components/layout/AppLayout';
+import { AppLayout } from '../components/layout';
 import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import { useFinance, Transaction } from '../contexts/FinanceContext';
 import { DateTimePicker } from '../components/ui/SimpleDatePicker';
@@ -153,6 +153,11 @@ export const ExpensesHistoryScreen: React.FC = () => {
     };
   }, [filteredTransactions]);
 
+  const weekPickerOpener = useRef<() => void>();
+  const registerWeekPickerOpener = useCallback((openFn: () => void) => {
+    weekPickerOpener.current = openFn;
+  }, []);
+
   const renderFilterControls = () => {
     const weekRangeLabel = formatWeekRangeLabel(historyWeekStart);
     const normalizedYearOptions = yearOptions.length ? yearOptions : [new Date().getFullYear().toString()];
@@ -212,20 +217,25 @@ export const ExpensesHistoryScreen: React.FC = () => {
           {historyFilter === 'week' && (
             <View style={styles.weekSelector}>
               <Text style={[styles.weekLabel, { color: colors.mutedForeground }]}>Week range</Text>
-              <View style={styles.weekPickerRow}>
-                <DateTimePicker
-                  value={historyWeekStart}
-                  onChange={setHistoryWeekStart}
-                  placeholder="Select week start"
-                  buttonStyle={styles.weekPickerButton}
-                  textStyle={styles.weekPickerText}
-                />
-                <View style={styles.weekRangeContainer}>
-                  <Text style={[styles.weekRangeText, { color: colors.foreground }]}>{weekRangeLabel}</Text>
-                  <Text style={[styles.weekRangeHint, { color: colors.mutedForeground }]}>Aligned to the selected start date</Text>
-                </View>
-              </View>
-            </View>
+          <View style={styles.weekPickerRow}>
+            <DateTimePicker
+              value={historyWeekStart}
+              onChange={setHistoryWeekStart}
+              placeholder="Select week start"
+              buttonStyle={styles.weekPickerButton}
+              textStyle={styles.weekPickerText}
+              onOpenRequested={registerWeekPickerOpener}
+            />
+            <Pressable
+              style={styles.weekRangeContainer}
+              onPress={() => weekPickerOpener.current?.()}
+              hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+            >
+              <Text style={[styles.weekRangeText, { color: colors.foreground }]}>{weekRangeLabel}</Text>
+              <Text style={[styles.weekRangeHint, { color: colors.mutedForeground }]}>Aligned to the selected start date</Text>
+            </Pressable>
+          </View>
+        </View>
           )}
           {historyFilter === 'year' && (
             <ScrollView
@@ -346,7 +356,7 @@ export const ExpensesHistoryScreen: React.FC = () => {
   );
 
   return (
-    <AppLayout showNav={false} showAddButton={false}>
+    <AppLayout showNav={false} showAddButton={false} disableScroll>
       <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
         <FlatList
           data={filteredTransactions}
@@ -420,36 +430,39 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   weekSelector: {
-    gap: 4,
+    gap: 6,
   },
   weekLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
   weekPickerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
   },
   weekPickerButton: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    minHeight: 50,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    minHeight: 34,
+    justifyContent: 'center',
+    maxHeight: 38,
   },
   weekPickerText: {
     fontWeight: '600',
+    fontSize: 13,
   },
   weekRangeContainer: {
     flex: 1,
   },
   weekRangeText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
   },
   weekRangeHint: {
-    fontSize: 12,
-    marginTop: 4,
+    fontSize: 11,
+    marginTop: 2,
   },
   yearScroll: {
     gap: 8,

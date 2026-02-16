@@ -7,6 +7,7 @@ export class Recipe extends Model {
         collection_recipes: { type: 'has_many' as const, foreignKey: 'recipe_id' },
     }
 
+    @text('profile_id') profileId!: string;
     @text('name') name!: string;
     @text('description') description?: string;
     @text('prep_time') prepTime!: string;
@@ -28,6 +29,10 @@ export class Recipe extends Model {
     @text('audio_path') audioPath?: string;
     @field('duration') duration?: number;
     @text('url') url?: string;
+    @field('created_at') createdAt!: number;
+    @field('updated_at') updatedAt!: number;
+    @field('deleted') deleted!: boolean;
+    @field('version') version!: number;
 
     @children('collection_recipes') collectionRecipes: any;
 }
@@ -38,9 +43,14 @@ export class Collection extends Model {
         collection_recipes: { type: 'has_many' as const, foreignKey: 'collection_id' },
     }
 
+    @text('profile_id') profileId!: string;
     @text('name') name!: string;
     @text('description') description?: string;
     @text('color') color!: string;
+    @field('created_at') createdAt!: number;
+    @field('updated_at') updatedAt!: number;
+    @field('deleted') deleted!: boolean;
+    @field('version') version!: number;
 
     @children('collection_recipes') collectionRecipes: any;
 }
@@ -51,4 +61,12 @@ export class CollectionRecipe extends Model {
         collections: { type: 'belongs_to' as const, key: 'collection_id' },
         recipes: { type: 'belongs_to' as const, key: 'recipe_id' },
     }
+
+    @text('profile_id') profileId!: string;
+    @text('collection_id') collectionId!: string;
+    @text('recipe_id') recipeId!: string;
+    @field('created_at') createdAt!: number;
+    @field('updated_at') updatedAt!: number;
+    @field('deleted') deleted!: boolean;
+    @field('version') version!: number;
 }

@@ -8,4 +8,5 @@ export default class NotificationPreference extends Model {
     @field('enabled') enabled!: boolean;
     @field('reminder_offset_minutes') reminderOffsetMinutes!: number;
     @field('updated_at') updatedAt!: number;
+    @field('version') version!: number;
 }

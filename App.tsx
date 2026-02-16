@@ -28,6 +28,9 @@ import {
 } from "./src/services/NotificationScheduler";
 import { CountryProvider } from "./src/contexts/CountryContext";
 import { appLockManager } from "./src/services/AppLockManager";
+import { SyncIndicator } from "./src/components/SyncIndicator";
+import { SyncService } from "./src/services/SyncService";
+import NetInfo from "@react-native-community/netinfo";
 
 const App = () => {
   useEffect(() => {
@@ -126,11 +129,8 @@ const App = () => {
     return () => unsubscribe();
   }, []);
 
-  const [shouldRequireStartupAuth] = useState(false);
-
-  useEffect(() => {
-    appLockManager.requestFreshAuth();
-  }, []);
+  // Note: Sync setup is handled in AppNavigatorInner where we have access to auth context
+  // This ensures sync only runs when user is authenticated
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -150,7 +150,7 @@ const App = () => {
                         />
                         <SafeAreaView style={styles.appWrapper} edges={["top", "bottom", "left", "right"]}>
                           <ErrorBoundary>
-                            <AppNavigator shouldRequireAuthOnStartup={shouldRequireStartupAuth} />
+                            <AppNavigator />
                           </ErrorBoundary>
                         </SafeAreaView>
                       </ToastProvider>

@@ -5,4 +5,9 @@ export default class AppSettings extends Model {
     static table = 'app_settings';
 
     @field('has_completed_onboarding') hasCompletedOnboarding!: boolean;
+    @field('version') version!: number;
+    @field('profile_id') profileId!: string;
+    @field('created_at') createdAt!: number;
+    @field('updated_at') updatedAt!: number;
+    @field('deleted') deleted!: boolean;
 }

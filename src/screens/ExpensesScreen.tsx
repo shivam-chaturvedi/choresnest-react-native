@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Pressable, RefreshControl } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { AppLayout } from '../components/layout/AppLayout';
+import { AppLayout } from '../components/layout';
 import { theme } from '../theme';
 import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import {
@@ -26,6 +26,7 @@ import { runOnJS } from 'react-native-reanimated';
 import { useFinance, Transaction } from '../contexts/FinanceContext';
 import { ScreenErrorView } from '../components/ui/ScreenErrorView';
 import { useCountry } from '../contexts/CountryContext';
+import { SyncService } from '../services/SyncService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -38,6 +39,7 @@ export const ExpensesScreen: React.FC = () => {
   const [activeTab, setActiveTab] = useState('Overview');
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
   const [budgetModalOpen, setBudgetModalOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [viewDate, setViewDate] = useState(new Date()); // For month navigation in trend chart
   const { openSidebar } = useSidebar();
 
@@ -51,6 +53,17 @@ export const ExpensesScreen: React.FC = () => {
     setScreenError(message);
   }, []);
   const resetScreenError = useCallback(() => setScreenError(null), []);
+
+  const handlePullToRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await SyncService.sync(true);
+    } catch (error) {
+      console.error('Manual read-only sync failed:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
 
 
   const handlePrevMonth = () => {
@@ -515,9 +528,15 @@ export const ExpensesScreen: React.FC = () => {
   }
 
   return (
-    <AppLayout showNav={false} showAddButton={false}>
+    <AppLayout showNav={false} showAddButton={true} onAddPress={() => setExpenseModalOpen(true)}>
       <GestureDetector gesture={panGesture}>
-        <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={isRefreshing} onRefresh={handlePullToRefresh} tintColor={colors.primary} />
+          }
+        >
           {/* Header */}
           <View style={styles.header}>
             <TouchableOpacity onPress={openSidebar} style={[styles.iconButton, { backgroundColor: colors.card, borderRadius: radius.md }]}>
@@ -804,14 +823,6 @@ export const ExpensesScreen: React.FC = () => {
         </ScrollView>
       </GestureDetector>
 
-      {/* Floating Action Button - Only one now */}
-      <TouchableOpacity
-        style={[styles.fab, { backgroundColor: colors.primary, borderRadius: radius.full }]}
-        onPress={() => setExpenseModalOpen(true)}
-      >
-        <Plus size={32} color="#fff" />
-      </TouchableOpacity>
-
       <AddExpenseModal
         visible={expenseModalOpen}
         onClose={() => setExpenseModalOpen(false)}
@@ -1050,17 +1061,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12
   },
-  fab: {
-    position: 'absolute',
-    bottom: 24,
-    right: 24,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
+
   barChartRow: {
     flexDirection: 'row',
     alignItems: 'center',

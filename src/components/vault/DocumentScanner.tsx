@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
     Modal,
     View,
@@ -9,6 +9,7 @@ import {
     ActivityIndicator,
     TextInput,
     ScrollView,
+    TouchableOpacity,
 } from "react-native";
 import { Camera, Upload, X } from "lucide-react-native";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
@@ -23,6 +24,13 @@ import {
     REMINDER_OFFSET_OPTIONS,
     VaultReminderRule,
 } from "../../utils/VaultReminderUtils";
+
+type ScannerStep = 'upload' | 'form';
+
+interface ScannerSession {
+    step: ScannerStep;
+    file: SavedDocument | null;
+}
 
 interface DocumentScannerProps {
     open: boolean;
@@ -40,7 +48,10 @@ interface DocumentScannerProps {
         serviceDate?: string;
         nextServiceDate?: string;
         cost?: string;
+        reminderRules?: VaultReminderRule[];
     }) => void;
+    persistedState?: ScannerSession | null;
+    onPersistedStateChange?: (state: ScannerSession | null) => void;
 }
 
 const CATEGORIES = [
@@ -57,6 +68,8 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
     open,
     onOpenChange,
     onDocumentSaved,
+    persistedState,
+    onPersistedStateChange,
 }) => {
     const colors = useThemeColors();
     const radius = useThemeRadius();
@@ -89,7 +102,9 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
     const [reminderOffsets, setReminderOffsets] = useState<number[]>([1]);
     const [reminderTime, setReminderTime] = useState('09:00');
 
-    const resetForm = () => {
+    const prevOpenRef = useRef(false);
+
+    const resetForm = useCallback(() => {
         setStep('upload');
         setSelectedFile(null);
         setDocumentName('');
@@ -107,7 +122,14 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
         setCost('');
         setReminderOffsets([1]);
         setReminderTime('09:00');
-    };
+        onPersistedStateChange?.(null);
+    }, [onPersistedStateChange]);
+
+    const handleExplicitClose = useCallback(() => {
+        console.log('[DocumentScanner] Explicit close requested - resetting state');
+        resetForm();
+        onOpenChange(false);
+    }, [onOpenChange, resetForm]);
 
     const pushNotification = (title: string, detail: string, severity: "success" | "warning" | "default") => {
         NotificationCenter.addNotification({
@@ -130,45 +152,87 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
         });
     };
 
+    useEffect(() => {
+        const prevOpen = prevOpenRef.current;
+        if (!prevOpen && open && !persistedState) {
+            resetForm();
+        }
+        prevOpenRef.current = open;
+    }, [open, resetForm, persistedState]);
+
+    useEffect(() => {
+        if (!open || !persistedState) return;
+        const { file, step: persistedStep } = persistedState;
+        if (file && (!selectedFile || selectedFile.uri !== file.uri)) {
+            setSelectedFile(file);
+        }
+        if (step !== persistedStep) {
+            setStep(persistedStep);
+        }
+    }, [open, persistedState, selectedFile, step]);
+
+    useEffect(() => {
+        console.log('[DocumentScanner] mounted');
+        return () => {
+            console.log('[DocumentScanner] unmounted');
+        };
+    }, []);
+
     // if (!open) return null; // Logic handled by wrapper
 
     const handleCamera = async () => {
+        console.log('[DocumentScanner] handleCamera called');
         if (loading) {
+            console.log('[DocumentScanner] Already loading, returning');
             return;
         }
         setLoading(true);
         try {
+            console.log('[DocumentScanner] Calling captureImage()');
             const doc = await captureImage();
+            console.log('[DocumentScanner] captureImage returned:', doc ? 'Document received' : 'null');
             if (doc) {
+                console.log('[DocumentScanner] Setting selectedFile and step to form');
                 setSelectedFile(doc);
-                // Don't pre-fill document name - let user enter it
                 setStep('form');
+                onPersistedStateChange?.({ step: 'form', file: doc });
+            } else {
+                console.log('[DocumentScanner] No document returned from captureImage');
             }
         } catch (error) {
-            console.error(error);
+            console.error('[DocumentScanner] Error in handleCamera:', error);
             pushNotification("Error", "Failed to capture image.", "warning");
         } finally {
             setLoading(false);
+            console.log('[DocumentScanner] handleCamera completed, loading set to false');
         }
     };
 
     const handleUpload = async () => {
+        console.log('[DocumentScanner] handleUpload called');
         if (loading) {
+            console.log('[DocumentScanner] Already loading, returning');
             return;
         }
         setLoading(true);
         try {
+            console.log('[DocumentScanner] Calling pickDocument()');
             const doc = await pickDocument();
+            console.log('[DocumentScanner] pickDocument returned:', doc ? 'Document received' : 'null');
             if (doc) {
+                console.log('[DocumentScanner] Setting selectedFile and step to form');
                 setSelectedFile(doc);
-                // Don't pre-fill document name - let user enter it
                 setStep('form');
+                onPersistedStateChange?.({ step: 'form', file: doc });
+            } else {
+                console.log('[DocumentScanner] No document returned from pickDocument');
             }
         } catch (error) {
-            console.error(error);
+            console.error('[DocumentScanner] Error in handleUpload:', error);
             pushNotification("Error", "Failed to upload document.", "warning");
         } finally {
             setLoading(false);
+            console.log('[DocumentScanner] handleUpload completed, loading set to false');
         }
     };
 
@@ -206,6 +270,12 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
     };
 
     const handleClose = () => {
+        console.log('[DocumentScanner] handleClose requested - current step:', step);
+        // Prevent dismissing the modal via backdrop or system close while the user edits the form
+        if (step === 'form') {
+            console.log('[DocumentScanner] Close request ignored during form step');
+            return;
+        }
         resetForm();
         onOpenChange(false);
     };
@@ -403,7 +473,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
             onRequestClose={handleClose}
         >
             <View style={styles.modalContainer}>
-                <TouchableWithoutFeedback onPress={handleClose}>
+                <TouchableWithoutFeedback>
                     <View style={styles.overlay} />
                 </TouchableWithoutFeedback>
 
@@ -412,10 +482,20 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
                         <Text style={[styles.headerTitle, { color: colors.foreground }]}>
                             {step === 'upload' ? 'Upload Document' : 'Document Details'}
                         </Text>
-                        <Pressable onPress={handleClose} hitSlop={8}>
-                            <X size={20} color={colors.mutedForeground} />
-                        </Pressable>
                     </View>
+
+                    {/* Absolute Close Button */}
+                    <TouchableOpacity
+                        onPress={() => {
+                            console.log('[DocumentScanner] X button pressed - requesting explicit close');
+                            handleExplicitClose();
+                        }}
+                        hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+                        style={styles.absoluteCloseBtn}
+                        activeOpacity={0.6}
+                    >
+                        <X size={24} color={colors.mutedForeground} />
+                    </TouchableOpacity>
 
                     {step === 'upload' ? (
                         <View style={[styles.dashedContainer, { borderColor: colors.border, backgroundColor: colors.muted }]}>
@@ -502,7 +582,11 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
                             <View style={styles.buttonGroup}>
                                 <Pressable
                                     style={[styles.cancelButton, { backgroundColor: colors.muted, borderRadius: radius.md }]}
-                                    onPress={handleClose}
+                                    onPress={() => {
+                                        console.log('[DocumentScanner] Cancel button pressed');
+                                        resetForm();
+                                        onOpenChange(false);
+                                    }}
                                 >
                                     <Text style={[styles.cancelButtonText, { color: colors.foreground }]}>Cancel</Text>
                                 </Pressable>
@@ -521,10 +605,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
     );
 };
 
-export const DocumentScanner: React.FC<DocumentScannerProps> = (props) => {
-    if (!props.open) return null;
-    return <DocumentScannerInner {...props} />;
-};
+export const DocumentScanner: React.FC<DocumentScannerProps> = DocumentScannerInner;
 
 const styles = StyleSheet.create({
     modalContainer: {
@@ -547,6 +628,16 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.25,
         shadowRadius: 20,
         elevation: 10,
+        position: 'relative', // For absolute positioning children
+    },
+    absoluteCloseBtn: {
+        position: 'absolute',
+        top: 20,
+        right: 20,
+        padding: 8,
+        zIndex: 100,
+        elevation: 100,
+        backgroundColor: 'transparent',
     },
     header: {
         flexDirection: "row",

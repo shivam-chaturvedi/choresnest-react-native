@@ -439,7 +439,11 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
         try {
             // Common Validation
             if (!name.trim()) {
-                showToast({ title: "Error", description: "Recipe name is required", type: "warning" });
+                showToast({ 
+                    title: "Validation Error", 
+                    description: "Recipe name is required. Please enter a name for your recipe.", 
+                    type: "error" 
+                });
                 return;
             }
 
@@ -449,7 +453,41 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
                 const validIngredients = ingredients.filter(i => i.name.trim());
 
                 if (validIngredients.length === 0) {
-                    showToast({ title: "Error", description: "Please add at least one ingredient with a name", type: "warning" });
+                    showToast({ 
+                        title: "Validation Error", 
+                        description: "At least one ingredient is required. Please add at least one ingredient with a name.", 
+                        type: "error" 
+                    });
+                    return;
+                }
+
+                // Validate prep time
+                if (!prepTime || prepTime.trim() === '') {
+                    showToast({ 
+                        title: "Validation Error", 
+                        description: "Prep time is required. Please enter the preparation time in minutes.", 
+                        type: "error" 
+                    });
+                    return;
+                }
+
+                // Validate cook time
+                if (!cookTime || cookTime.trim() === '') {
+                    showToast({ 
+                        title: "Validation Error", 
+                        description: "Cook time is required. Please enter the cooking time in minutes.", 
+                        type: "error" 
+                    });
+                    return;
+                }
+
+                // Validate servings
+                if (!servings || servings.trim() === '') {
+                    showToast({ 
+                        title: "Validation Error", 
+                        description: "Servings is required. Please enter the number of servings.", 
+                        type: "error" 
+                    });
                     return;
                 }
 
@@ -458,23 +496,68 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
                 const parsedCookTime = parseInt(cookTime || '0', 10);
                 const parsedServings = parseInt(servings || '4', 10);
 
-                if (isNaN(parsedPrepTime) || isNaN(parsedCookTime) || isNaN(parsedServings)) {
-                    showToast({ title: "Error", description: "Please enter valid numbers for time and servings", type: "warning" });
+                if (isNaN(parsedPrepTime) || parsedPrepTime < 0) {
+                    showToast({ 
+                        title: "Validation Error", 
+                        description: "Invalid prep time. Please enter a valid number (0 or greater) for preparation time.", 
+                        type: "error" 
+                    });
+                    return;
+                }
+
+                if (isNaN(parsedCookTime) || parsedCookTime < 0) {
+                    showToast({ 
+                        title: "Validation Error", 
+                        description: "Invalid cook time. Please enter a valid number (0 or greater) for cooking time.", 
+                        type: "error" 
+                    });
+                    return;
+                }
+
+                if (isNaN(parsedServings) || parsedServings <= 0) {
+                    showToast({ 
+                        title: "Validation Error", 
+                        description: "Invalid servings. Please enter a valid number greater than 0 for servings.", 
+                        type: "error" 
+                    });
                     return;
                 }
             } else if (activeTab === "Link") {
                 if (!linkUrl.trim()) {
-                    showToast({ title: "Error", description: "Recipe URL is required", type: "warning" });
+                    showToast({ 
+                        title: "Validation Error", 
+                        description: "Recipe URL is required. Please enter a valid recipe link.", 
+                        type: "error" 
+                    });
+                    return;
+                }
+                // Validate URL format
+                try {
+                    new URL(linkUrl.trim());
+                } catch {
+                    showToast({ 
+                        title: "Validation Error", 
+                        description: "Invalid URL format. Please enter a valid recipe URL (e.g., https://example.com/recipe).", 
+                        type: "error" 
+                    });
                     return;
                 }
             } else if (activeTab === "Image") {
                 if (images.length === 0) {
-                    showToast({ title: "Error", description: "Please upload at least one image", type: "warning" });
+                    showToast({ 
+                        title: "Validation Error", 
+                        description: "At least one image is required. Please upload at least one recipe image.", 
+                        type: "error" 
+                    });
                     return;
                 }
             } else if (activeTab === "Audio") {
                 if (!audioPath) {
-                    showToast({ title: "Error", description: "Please record audio", type: "warning" });
+                    showToast({ 
+                        title: "Validation Error", 
+                        description: "Audio recording is required. Please record the recipe instructions.", 
+                        type: "error" 
+                    });
                     return;
                 }
             }

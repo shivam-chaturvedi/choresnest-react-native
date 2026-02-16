@@ -6,6 +6,7 @@ export interface DocumentInput {
     memberId?: string;
     sharedWithIds?: string[];
     filePath?: string;
+    localUri?: string;
     meta?: any;
     reminderDaysBefore?: number;
 

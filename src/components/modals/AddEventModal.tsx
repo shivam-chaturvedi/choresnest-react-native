@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from "react";
-import { format } from "date-fns"; // Keeping specific functions if needed, but we'll try to use safeFormat
-import { toZonedTime } from "date-fns-tz";
-import { safeFormat, ensureDate, safeParseDate } from "../../utils/SafeDateUtils";
+import React, { useState, useEffect, useRef } from "react";
+
+import { safeFormat } from "../../utils/SafeDateUtils";
 import {
   Modal,
   Pressable,
@@ -20,6 +19,7 @@ import { useCountry } from "../../contexts/CountryContext";
 import { AppIcon, AppIconName, CustomDateTimePicker } from "../ui";
 import { PROFILE_COLORS } from "../../constants/profileColors";
 import { NotificationPreferencesService } from "../../services/NotificationPreferencesService";
+import { SyncService } from "../../services/SyncService";
 
 interface AddEventModalProps {
   open: boolean;
@@ -45,7 +45,6 @@ const eventColors = [
 
 const repeatOptions = [
   { value: "never", label: "Never repeats" },
-  { value: "hourly", label: "Every hour" },
   { value: "daily", label: "Every day" },
   { value: "weekly", label: "Every week" },
   { value: "biweekly", label: "Every 2 weeks" },
@@ -88,10 +87,8 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const buildLocalizedNow = () => toZonedTime(new Date(), currentCountry.timeZone);
-
-  const [startDate, setStartDate] = useState(() => buildLocalizedNow());
-  const [startTime, setStartTime] = useState(() => buildLocalizedNow());
+  const [startDate, setStartDate] = useState(() => new Date());
+  const [startTime, setStartTime] = useState(() => new Date());
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [endTime, setEndTime] = useState<Date | null>(null);
   const [selectedIcon, setSelectedIcon] = useState("📅");
@@ -117,6 +114,11 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   const [notes, setNotes] = useState("");
   // Removed visibility and time zone states as requested
 
+  const membersRef = useRef(members);
+  useEffect(() => {
+    membersRef.current = members;
+  }, [members]);
+
   useEffect(() => {
     let isMounted = true;
     NotificationPreferencesService.getReminderTime("events")
@@ -134,23 +136,21 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   }, []);
 
   useEffect(() => {
-    if (!open || eventToEdit) return;
-    const localizedNow = buildLocalizedNow();
-    setStartDate(localizedNow);
-    setStartTime(localizedNow);
-    setEndDate(null);
-    setEndTime(null);
-  }, [open, eventToEdit, currentCountry.timeZone]);
+    if (!open) {
+      return;
+    }
 
-  useEffect(() => {
+    const membersSnapshot = membersRef.current;
+    const findMember = (id?: string) => membersSnapshot.find((m) => m.id === id);
+    const defaultMember = membersSnapshot.find((m) => m.isActive) || membersSnapshot[0] || null;
+
     if (eventToEdit) {
-      // Initialize with existing event data
+      setActiveTab((eventToEdit as any).type === 'task' ? 'task' : 'event');
       setName(eventToEdit.title);
       setDescription(eventToEdit.description || "");
       setNotes(eventToEdit.notes || "");
       setStartDate(new Date(eventToEdit.date));
 
-      // Parse time
       if (eventToEdit.time === "All Day") {
         setAllDay(true);
       } else {
@@ -163,7 +163,6 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
           if (period === "PM" && hours !== 12) hours += 12;
           if (period === "AM" && hours === 12) hours = 0;
-          // If no period, assume 24h unless it's obviously ambiguous (e.g. 10:00 could be AM or PM, usually treat as 24h -> 10:00 is 10AM, 22:00 is 10PM)
 
           const timeDate = new Date();
           timeDate.setHours(hours, minutes, 0, 0);
@@ -185,11 +184,12 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
           timeDate.setHours(hours, minutes, 0, 0);
           setEndTime(timeDate);
         }
+      } else {
+        setEndTime(null);
       }
 
       setMemberId(eventToEdit.memberId || "");
 
-      // Handle Task vs Event type if provided from CalendarScreen
       const anyEvent = eventToEdit as any;
       if (anyEvent.type === 'task') {
         setActiveTab('task');
@@ -200,13 +200,20 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         setSelectedIcon(eventToEdit.icon || "📅");
       }
 
-      const member = members.find((m: any) => m.id === eventToEdit.memberId);
-      if (member) setColor(member.color);
+      const member = findMember(eventToEdit.memberId);
+      if (member) {
+        setColor(member.color);
+      } else if (defaultMember) {
+        setColor(defaultMember.color);
+      }
 
-      // Set explicit additional fields
       if (eventToEdit.recurrenceRule) setRepeatType(eventToEdit.recurrenceRule);
       if (eventToEdit.recurrenceEndDate) setRepeatEndDate(new Date(eventToEdit.recurrenceEndDate));
-      if (eventToEdit.endDate) setEndDate(new Date(eventToEdit.endDate));
+      if (eventToEdit.endDate) {
+        setEndDate(new Date(eventToEdit.endDate));
+      } else {
+        setEndDate(null);
+      }
       if (eventToEdit.reminderOffsetMinutes !== undefined) {
         if (eventToEdit.reminderOffsetMinutes < 0) {
           setReminder(false);
@@ -220,18 +227,15 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         setReminder(true);
         setReminderTime(defaultEventReminderMinutes.toString());
       }
-
     } else {
-      // Reset form for new event
       setActiveTab('event');
       setName("");
       setDescription("");
+      setNotes("");
 
-      // Parse initialDate if provided
       const initDate = initialDate ? new Date(initialDate) : new Date();
       setStartDate(initDate);
 
-      // Parse initialTime if provided (format: "HH:MM AM/PM")
       const initTime = new Date();
       if (initialTime) {
         const timeParts = initialTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
@@ -259,28 +263,17 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       setAllDay(false);
       setLocation("");
 
-      // Default to active member if available
-      const activeMemberObj = (members && members.length > 0)
-        ? (members.find((m: any) => m.isActive) || members[0])
-        : null;
+      const fallbackMember = defaultMember;
+      setMemberId(fallbackMember?.id || membersSnapshot[0]?.id || "");
+      setColor(fallbackMember?.color || "member-blue");
 
-      setMemberId(activeMemberObj?.id || "1");
-
-      // Auto-set color based on active/initial member
-      const initialColor = activeMemberObj ? activeMemberObj.color : "member-blue";
-      setColor(initialColor);
-
-      setRepeatType("never");
-      setRepeatEndDate(null);
-      setReminder(true);
       setRepeatType("never");
       setRepeatEndDate(null);
       setReminder(true);
       setReminderTime(defaultEventReminderMinutes.toString());
-      setNotes("");
       setShowRepeatOptions(false);
     }
-  }, [open, initialDate, initialTime, members, eventToEdit, defaultEventReminderMinutes]);
+  }, [open, eventToEdit?.id, initialDate, initialTime, defaultEventReminderMinutes]);
 
 
 
@@ -322,47 +315,62 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
   // Update color when member selection changes
   useEffect(() => {
-    const selectedMember = members.find((m: any) => m.id === memberId);
+    const currentMembers = membersRef.current;
+    const selectedMember = currentMembers.find((m: any) => m.id === memberId);
     if (selectedMember) {
       setColor(selectedMember.color);
+      return;
     }
-  }, [memberId, members]);
 
-  const handleSave = () => {
+    if (!memberId && currentMembers.length > 0) {
+      const active = currentMembers.find((m: any) => m.isActive) || currentMembers[0];
+      if (active) {
+        setMemberId(active.id);
+        setColor(active.color);
+      }
+    }
+  }, [memberId]);
+
+
+
+  const handleSave = async () => {
     try {
       if (!name.trim()) {
         Alert.alert("Missing Information", `Please enter a ${activeTab === 'event' ? 'event' : 'task'} name.`);
         return;
       }
 
-      // Format date as YYYY-MM-DD using local time
+      const deviceTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const fallbackTimeZone = deviceTimeZone || currentCountry.timeZone;
+      const eventTimeZone = eventToEdit?.timeZone || fallbackTimeZone;
+
+      // FIX: Use local time directly instead of converting to UTC to prevent time shifts
       const formattedDate = safeFormat(startDate, "yyyy-MM-dd");
 
-      // Format time as HH:MM AM/PM
-      // For all-day events, set start time to 12:00 AM and end time to 11:59 PM
       let formattedTime: string;
       let formattedEndTime: string | undefined;
+      let formattedEndDate: string | undefined;
 
       if (allDay) {
         formattedTime = "12:00 AM";
         formattedEndTime = "11:59 PM";
       } else {
-        formattedTime = startTime.toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-        formattedEndTime = endTime ? endTime.toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }) : undefined;
+        formattedTime = safeFormat(startTime, "hh:mm aa");
+
+        if (endTime) {
+          formattedEndTime = safeFormat(endTime, "hh:mm aa");
+        }
+      }
+
+      if (endDate) {
+        formattedEndDate = safeFormat(endDate, "yyyy-MM-dd");
       }
 
       const reminderOffsetMinutes = reminder ? parseInt(reminderTime, 10) : -1;
-      const eventTimeZone = eventToEdit?.timeZone || currentCountry.timeZone;
 
       if (activeTab === 'task') {
         if (isEditing && eventToEdit) {
-          updateTask(eventToEdit.id, {
+          await updateTask(eventToEdit.id, {
             name: name.trim(),
             icon: taskIcon,
             priority: taskPriority as any,
@@ -371,7 +379,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             assigneeId: memberId,
           });
         } else {
-          addTask({
+          await addTask({
             name: name.trim(),
             icon: taskIcon,
             priority: taskPriority as any,
@@ -384,7 +392,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         }
       } else {
         if (isEditing && eventToEdit) {
-          updateEvent(eventToEdit.id, {
+          await updateEvent(eventToEdit.id, {
             title: name.trim(),
             description: description.trim(),
             notes: notes.trim(),
@@ -394,10 +402,10 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             icon: selectedIcon,
             memberId,
             location,
-            endDate: endDate ? safeFormat(endDate, "yyyy-MM-dd") : undefined,
+            endDate: formattedEndDate,
             isRecurring: repeatType !== 'never',
             recurrenceRule: repeatType !== 'never' ? repeatType : undefined,
-            recurrenceEndDate: repeatEndDate ? safeFormat(repeatEndDate, "yyyy-MM-dd") : undefined,
+            recurrenceEndDate: safeFormat(repeatEndDate, "yyyy-MM-dd"),
             reminderOffsetMinutes,
             timeZone: eventTimeZone,
           });
@@ -414,7 +422,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             }
           }
 
-          addEvent({
+          await addEvent({
             title: name.trim(),
             description: description.trim(),
             notes: notes.trim(),
@@ -424,16 +432,21 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             icon: selectedIcon,
             memberId,
             location,
-            endDate: endDate ? safeFormat(endDate, "yyyy-MM-dd") : undefined,
+            endDate: formattedEndDate,
             isRecurring: repeatType !== 'never',
             recurrenceRule: repeatType !== 'never' ? repeatType : undefined,
-            recurrenceEndDate: repeatEndDate ? safeFormat(repeatEndDate, "yyyy-MM-dd") : undefined,
+            recurrenceEndDate: safeFormat(repeatEndDate, "yyyy-MM-dd"),
             reminderOffsetMinutes,
-            timeZone: currentCountry.timeZone,
+            timeZone: eventTimeZone,
           });
         }
       }
 
+      try {
+        await SyncService.requestSyncSoon();
+      } catch (syncError) {
+        console.warn('Failed to trigger sync after event save:', syncError);
+      }
       onOpenChange(false);
     } catch (error) {
       console.error("Error saving event:", error);

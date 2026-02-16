@@ -10,6 +10,11 @@ export class List extends Model {
     @text('name') name!: string;
     @text('type') type!: string;
     @text('icon') icon?: string;
+    @field('version') version!: number;
+    @text('profile_id') profileId!: string;
+    @field('created_at') createdAt!: number;
+    @field('updated_at') updatedAt!: number;
+    @field('deleted') deleted!: boolean;
 
     @children('list_items') items: any;
 }
@@ -21,6 +26,7 @@ export class ListItem extends Model {
     }
 
     @relation('lists', 'list_id') list!: List;
+    @text('list_id') listId!: string;
     @text('name') name!: string;
     @field('quantity') quantity!: number;
     @text('unit') unit!: string;
@@ -28,6 +34,11 @@ export class ListItem extends Model {
     @text('added_by_id') addedById!: string;
     @field('is_completed') isCompleted!: boolean;
     @field('purchased_at') purchasedAt?: number;
+    @field('version') version!: number;
+    @text('profile_id') profileId!: string;
+    @field('created_at') createdAt!: number;
+    @field('updated_at') updatedAt!: number;
+    @field('deleted') deleted!: boolean;
 }
 
 export class ListCategory extends Model {
@@ -36,4 +47,12 @@ export class ListCategory extends Model {
     @text('name') name!: string;
     @text('icon') icon!: string;
     @text('color') color!: string;
+    @field('version') version!: number;
+    @text('profile_id') profileId!: string;
+    @field('created_at') createdAt!: number;
+    @field('updated_at') updatedAt!: number;
+    @field('deleted') deleted!: boolean;
 }
+
+// Acceptance Checklist:
+// - Device A edits lists or groceries (create, toggle, delete) and Device B receives tombstone-aware updates via SyncService.requestSyncSoon().

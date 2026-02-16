@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
     Modal,
     Pressable,
@@ -58,7 +58,18 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
     const countries = listCountries();
     const [selectedCountryCode, setSelectedCountryCode] = useState(currentCountry.code);
     const [countryDropdownOpen, setCountryDropdownOpen] = useState(false);
+    const [countrySearch, setCountrySearch] = useState("");
     const selectedCountry = countries.find((country) => country.code === selectedCountryCode) ?? currentCountry;
+    const normalizedSearch = countrySearch.trim().toLowerCase();
+    const filteredCountries = useMemo(() => {
+        if (!normalizedSearch) {
+            return countries;
+        }
+        return countries.filter((country) => {
+            const searchable = `${country.name} ${country.code} ${country.locale} ${country.timeZone}`.toLowerCase();
+            return searchable.includes(normalizedSearch);
+        });
+    }, [countries, normalizedSearch]);
 
     // Initialize localMembers from context when modal opens
     React.useEffect(() => {
@@ -80,6 +91,12 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
             setCountryDropdownOpen(false);
         }
     }, [open]);
+
+    React.useEffect(() => {
+        if (!countryDropdownOpen) {
+            setCountrySearch("");
+        }
+    }, [countryDropdownOpen]);
 
     const usedColors = localMembers.map((m: any) => m.color);
 
@@ -220,8 +237,20 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
                             </Pressable>
                             {countryDropdownOpen && (
                                 <View style={[styles.countryList, { borderColor: colors.border, backgroundColor: colors.card, shadowColor: colors.shadow }]}>
-                                    <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={true}>
-                                        {countries.map((country) => (
+                                    <TextInput
+                                        value={countrySearch}
+                                        onChangeText={setCountrySearch}
+                                        placeholder="Search country or region"
+                                        placeholderTextColor={colors.mutedForeground}
+                                        style={[
+                                            styles.countrySearchInput,
+                                            { borderColor: colors.border, color: colors.foreground },
+                                        ]}
+                                        autoCorrect={false}
+                                        autoCapitalize="words"
+                                    />
+                                    <ScrollView nestedScrollEnabled showsVerticalScrollIndicator contentContainerStyle={styles.countryListContent} keyboardShouldPersistTaps="handled">
+                                        {filteredCountries.map((country) => (
                                             <Pressable
                                                 key={country.code}
                                                 onPress={() => {
@@ -241,6 +270,11 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
                                                 <Text style={{ color: colors.primary }}>{country.code}</Text>
                                             </Pressable>
                                         ))}
+                                        {filteredCountries.length === 0 && (
+                                            <Text style={[styles.countryEmptyText, { color: colors.mutedForeground }]}>
+                                                No countries match your search.
+                                            </Text>
+                                        )}
                                     </ScrollView>
                                 </View>
                             )}
@@ -612,6 +646,15 @@ const styles = StyleSheet.create({
         maxHeight: 240,
         overflow: 'hidden',
     },
+    countrySearchInput: {
+        width: '100%',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderBottomWidth: 1,
+    },
+    countryListContent: {
+        paddingVertical: 4,
+    },
     countryItem: {
         width: '100%',
         flexDirection: 'row',
@@ -619,6 +662,11 @@ const styles = StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 10,
         borderBottomWidth: 1,
+    },
+    countryEmptyText: {
+        padding: 12,
+        fontSize: 12,
+        textAlign: 'center',
     },
     outlineButtonText: {
         fontWeight: '600',

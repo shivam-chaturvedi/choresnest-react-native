@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
-import { AppLayout } from "../components/layout/AppLayout";
+import { AppLayout } from "../components/layout";
 import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { listCountries } from "../config/countries";
 import { useCountry } from "../contexts/CountryContext";
@@ -73,6 +73,7 @@ export const SettingsScreen: React.FC = () => {
             );
           })}
         </View>
+
       </ScrollView>
     </AppLayout>
   );
