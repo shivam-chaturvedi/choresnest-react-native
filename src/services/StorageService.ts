@@ -2,10 +2,12 @@ import { supabase } from '../config/supabase';
 import RNFS from 'react-native-fs';
 import NetInfo from '@react-native-community/netinfo';
 import { uuidv4 } from '../utils/uuid';
+import { decode } from '../utils/base64';
 
 const IMAGE_BUCKET = 'recipe-images';
 const AUDIO_BUCKET = 'recipe-audio';
 const THUMBNAIL_BUCKET = 'recipe-thumbnails';
+const PUBLIC_BUCKETS = new Set<string>([IMAGE_BUCKET, AUDIO_BUCKET, THUMBNAIL_BUCKET]);
 const MAX_IMAGE_SIZE = 8 * 1024 * 1024;
 const MAX_AUDIO_SIZE = 10 * 1024 * 1024;
 const MAX_RETRY_ATTEMPTS = 3;
@@ -239,9 +241,11 @@ const attemptUpload = async (
   path: string,
   payload: UploadFormDataFile
 ): Promise<void> => {
-  const formData = new FormData();
-  formData.append('file', payload as any);
-  const { error } = await supabase.storage.from(bucket).upload(path, formData as any, {
+  const fileUri = stripFileScheme(payload.uri);
+  const base64Data = await RNFS.readFile(fileUri, 'base64');
+  const fileData = decode(base64Data);
+
+  const { error } = await supabase.storage.from(bucket).upload(path, fileData, {
     upsert: true,
     contentType: payload.type ?? 'application/octet-stream',
   });
@@ -305,7 +309,7 @@ const createSignedUrl = async (bucket: string, path: string): Promise<string> =>
   if (error || !data || !data.signedUrl) {
     const message = error?.message ? error.message : 'Unable to obtain signed URL';
     const err = new Error(`Failed to create signed URL for ${bucket}/${path}: ${message}`);
-    Object.assign(err, { code: error?.code, status: error?.status ?? error?.statusCode });
+    Object.assign(err, { code: (error as any)?.code, status: error?.status ?? (error as any)?.statusCode });
     throw err;
   }
   return data.signedUrl;
@@ -317,6 +321,42 @@ const cleanupOrphan = async (bucket: string, path: string): Promise<void> => {
   } catch (error) {
     // best effort cleanup
   }
+};
+
+const normalizeStoragePath = (path?: string | null): string | null => {
+  if (!path) {
+    return null;
+  }
+  const trimmed = path.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return trimmed.replace(/^\/+/, '');
+};
+
+const isPublicBucket = (bucket: string): boolean => PUBLIC_BUCKETS.has(bucket);
+
+const getBucketPublicUrl = (bucket: string, path?: string | null): string | null => {
+  const normalizedPath = normalizeStoragePath(path);
+  if (!normalizedPath) {
+    return null;
+  }
+  const { data } = supabase.storage.from(bucket).getPublicUrl(normalizedPath);
+  return data?.publicUrl ?? null;
+};
+
+const getBucketObjectUrl = async (
+  bucket: string,
+  path?: string | null
+): Promise<string | null> => {
+  const normalizedPath = normalizeStoragePath(path);
+  if (!normalizedPath) {
+    return null;
+  }
+  if (PUBLIC_BUCKETS.has(bucket)) {
+    return getBucketPublicUrl(bucket, normalizedPath);
+  }
+  return await createSignedUrl(bucket, normalizedPath);
 };
 
 const requireContext = (profileId: string, recipeId: string): void => {
@@ -355,8 +395,7 @@ const uploadAsset = async (
     };
     await uploadWithRetry(bucket, uploadPath, payload);
     uploaded = true;
-    const signedUrl = await createSignedUrl(bucket, uploadPath);
-    return signedUrl;
+    return uploadPath;
   } catch (error) {
     if (uploaded) {
       await cleanupOrphan(bucket, uploadPath);
@@ -393,8 +432,8 @@ export const uploadMultipleRecipeImages = async (
   }
   const results: string[] = [];
   for (const file of files) {
-    const publicUrl = await uploadRecipeImage(profileId, recipeId, file);
-    results.push(publicUrl);
+    const remotePath = await uploadRecipeImage(profileId, recipeId, file);
+    results.push(remotePath);
   }
   return results;
 };
@@ -410,4 +449,11 @@ export const uploadRecipeAudio = async (
   return uploadAsset(AUDIO_BUCKET, profileId, recipeId, file, fileName);
 };
 
-export { IMAGE_BUCKET, AUDIO_BUCKET, THUMBNAIL_BUCKET };
+export {
+  IMAGE_BUCKET,
+  AUDIO_BUCKET,
+  THUMBNAIL_BUCKET,
+  isPublicBucket,
+  getBucketPublicUrl,
+  getBucketObjectUrl,
+};

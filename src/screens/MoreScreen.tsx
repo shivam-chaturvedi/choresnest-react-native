@@ -54,6 +54,7 @@ export const MoreScreen: React.FC = () => {
   const nextAllowedText = syncSummary.nextAllowedAt && syncSummary.nextAllowedAt > Date.now()
     ? new Date(syncSummary.nextAllowedAt).toLocaleTimeString()
     : 'Now';
+  const debugToolsEnabled = (Config.ENABLE_DEBUG_TOOLS ?? '').trim().toLowerCase() === 'true';
 
   const handleManualSync = async () => {
     if (syncButtonDisabled) {
@@ -89,10 +90,6 @@ export const MoreScreen: React.FC = () => {
     ? (PROFILE_COLORS.find(c => c.value === activeMember.color)?.hex || colors.primary)
     : colors.primary;
 
-  // Debug: Log Config.ENABLE_DEBUG_TOOLS value
-  console.log('Config.ENABLE_DEBUG_TOOLS value:', Config.ENABLE_DEBUG_TOOLS);
-  console.log('Config.ENABLE_DEBUG_TOOLS type:', typeof Config.ENABLE_DEBUG_TOOLS);
-  console.log('Config.ENABLE_DEBUG_TOOLS === "true":', Config.ENABLE_DEBUG_TOOLS === "true");
 
   const sections: MenuSection[] = [
     {
@@ -202,7 +199,7 @@ export const MoreScreen: React.FC = () => {
         },
       ],
     },
-    ...(Config.ENABLE_DEBUG_TOOLS === "true" ? [{
+    ...(debugToolsEnabled ? [{
       title: "DEVELOPER",
       items: [
         {

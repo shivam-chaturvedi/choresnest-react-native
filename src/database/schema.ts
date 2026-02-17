@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export default appSchema({
-    version: 15,
+    version: 17,
     tables: [
         tableSchema({
             name: 'users',
@@ -131,7 +131,7 @@ export default appSchema({
                 { name: 'servings', type: 'number' },
                 { name: 'difficulty', type: 'string', isOptional: true },
                 { name: 'calories', type: 'string', isOptional: true }, // mapped from nutrition.kcal
-                { name: 'image_path', type: 'string' },
+                { name: 'image_path', type: 'string', isOptional: true },
                 { name: 'is_saved', type: 'boolean' },
                 { name: 'rating', type: 'number', isOptional: true },
                 { name: 'author', type: 'string', isOptional: true },
@@ -140,9 +140,18 @@ export default appSchema({
                 { name: 'tags_json', type: 'string' },
                 { name: 'nutrition_json', type: 'string', isOptional: true }, // Store full object
                 { name: 'audio_path', type: 'string', isOptional: true },
+                { name: 'local_audio_uri', type: 'string', isOptional: true },
                 { name: 'duration', type: 'number', isOptional: true },
                 { name: 'url', type: 'string', isOptional: true },
                 { name: 'images_json', type: 'string', isOptional: true }, // Store array of additional images
+                { name: 'local_image_uris', type: 'string', isOptional: true },
+                { name: 'remote_image_paths', type: 'string', isOptional: true },
+                { name: 'image_checksums_json', type: 'string', isOptional: true },
+                { name: 'remote_audio_path', type: 'string', isOptional: true },
+                { name: 'audio_checksum', type: 'string', isOptional: true },
+                { name: 'upload_status', type: 'string', isOptional: true },
+                { name: 'upload_attempts', type: 'number', isOptional: true },
+                { name: 'last_upload_error', type: 'string', isOptional: true },
                 { name: 'created_at', type: 'number' },
                 { name: 'updated_at', type: 'number' },
                 { name: 'deleted', type: 'boolean' },

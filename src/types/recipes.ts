@@ -14,7 +14,7 @@ export interface RecipeNutrition {
 export interface Recipe {
     id: number;
     name: string;
-    image: string;
+    image?: string;
     time: string;
     servings: number;
     tags: string[];
@@ -26,6 +26,15 @@ export interface Recipe {
     url?: string;
     images?: string[];
     countryCode?: string;
+    uploadStatus?: string;
+    localImageUris?: string[];
+    localAudioUri?: string;
+    remoteImagePaths?: string[];
+    remoteAudioPath?: string;
+    uploadAttempts?: number;
+    lastUploadError?: string;
+    description?: string;
+    instructions?: string[];
 }
 
 export interface RecipeCollection {

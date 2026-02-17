@@ -4,7 +4,7 @@ import { AppIcon } from '../ui/AppIcon';
 import { useThemeColors } from '../../contexts/ThemeContext';
 
 interface RecipeImageProps {
-    image: string;
+    image?: string | null;
     size?: number;
     iconSize?: number;
     emojiSize?: number;
@@ -22,11 +22,16 @@ export const RecipeImage: React.FC<RecipeImageProps> = ({
 }) => {
     const colors = useThemeColors();
 
+    const normalizedImage = typeof image === 'string' ? image.trim() : '';
+    if (!normalizedImage) {
+        return null;
+    }
+
     // Default Icon/Emoji sizes if not provided
     const finalIconSize = iconSize || Math.floor(size * 0.55);
     const finalEmojiSize = emojiSize || Math.floor(size * 0.65);
 
-    if (image === "AUDIO_ICON" || image === "mic") {
+    if (normalizedImage === "AUDIO_ICON" || normalizedImage === "mic") {
         return (
             <View style={[styles.container, { width: size, height: size, borderRadius, backgroundColor: colors.muted }, style]}>
                 <AppIcon name="mic" size={finalIconSize} color={colors.primary} />
@@ -34,7 +39,7 @@ export const RecipeImage: React.FC<RecipeImageProps> = ({
         );
     }
 
-    if (image === "LINK_ICON" || image === "link") {
+    if (normalizedImage === "LINK_ICON" || normalizedImage === "link") {
         return (
             <View style={[styles.container, { width: size, height: size, borderRadius, backgroundColor: colors.muted }, style]}>
                 <AppIcon name="link" size={finalIconSize} color={colors.primary} />
@@ -42,20 +47,24 @@ export const RecipeImage: React.FC<RecipeImageProps> = ({
         );
     }
 
-    if (image.startsWith('http') || image.startsWith('file:') || image.startsWith('content:')) {
+    if (
+        normalizedImage.startsWith('http') ||
+        normalizedImage.startsWith('file:') ||
+        normalizedImage.startsWith('content:')
+    ) {
         return (
             <Image
-                source={{ uri: image }}
+                source={{ uri: normalizedImage }}
                 style={[{ width: size, height: size, borderRadius }, style]}
                 resizeMode="cover"
             />
         );
     }
 
-    // Fallback to Emoji
+    // Render string (emoji/text) if provided
     return (
         <View style={[styles.container, { width: size, height: size, borderRadius, backgroundColor: colors.muted }, style]}>
-            <Text style={{ fontSize: finalEmojiSize }}>{image}</Text>
+            <Text style={{ fontSize: finalEmojiSize }}>{normalizedImage}</Text>
         </View>
     );
 };

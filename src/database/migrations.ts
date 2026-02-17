@@ -403,5 +403,57 @@ export default schemaMigrations({
                 `),
             ],
         },
+        {
+            toVersion: 16,
+            steps: [
+                addColumns({
+                    table: 'recipes',
+                    columns: [
+                        { name: 'local_image_uris', type: 'string', isOptional: true },
+                        { name: 'local_audio_uri', type: 'string', isOptional: true },
+                        { name: 'remote_image_paths', type: 'string', isOptional: true },
+                        { name: 'remote_audio_path', type: 'string', isOptional: true },
+                        { name: 'upload_status', type: 'string', isOptional: true },
+                        { name: 'upload_attempts', type: 'number', isOptional: true },
+                        { name: 'last_upload_error', type: 'string', isOptional: true },
+                    ],
+                }),
+                unsafeExecuteSql(`
+                    UPDATE recipes
+                    SET local_image_uris = COALESCE(local_image_uris, '[]')
+                    WHERE local_image_uris IS NULL;
+                `),
+                unsafeExecuteSql(`
+                    UPDATE recipes
+                    SET remote_image_paths = COALESCE(remote_image_paths, '[]')
+                    WHERE remote_image_paths IS NULL;
+                `),
+                unsafeExecuteSql(`
+                    UPDATE recipes
+                    SET upload_status = COALESCE(NULLIF(upload_status, ''), 'uploaded');
+                `),
+                unsafeExecuteSql(`
+                    UPDATE recipes
+                    SET upload_attempts = COALESCE(upload_attempts, 0);
+                `),
+            ],
+        },
+        {
+            toVersion: 17,
+            steps: [
+                addColumns({
+                    table: 'recipes',
+                    columns: [
+                        { name: 'image_checksums_json', type: 'string', isOptional: true },
+                        { name: 'audio_checksum', type: 'string', isOptional: true },
+                    ],
+                }),
+                unsafeExecuteSql(`
+                    UPDATE recipes
+                    SET image_checksums_json = COALESCE(image_checksums_json, '[]')
+                    WHERE image_checksums_json IS NULL;
+                `),
+            ],
+        },
     ],
 });
