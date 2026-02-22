@@ -10,6 +10,7 @@ import {
     Pressable,
     Alert,
     Image,
+    ActivityIndicator,
 } from "react-native";
 import { AppIcon } from "../ui/AppIcon";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
@@ -24,6 +25,9 @@ import { requestPermission } from "../../utils/permissions";
 import { getAudioRecorder, SafeAudioRecorderType } from "../../utils/AudioRecorder";
 import { RecordBackType, PlayBackType } from 'react-native-nitro-sound';
 import { RecipeImage } from "../recipes/RecipeImage";
+import NetInfo from "@react-native-community/netinfo";
+import { DocumentUploadScheduler } from "../../services/sync/DocumentUploadScheduler";
+import { saveRecipeImage, saveRecipeAudio } from "../../services/RecipeMediaStorage";
 
 interface AddNewRecipeModalProps {
     open: boolean;
@@ -49,11 +53,26 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
     const [cookTime, setCookTime] = useState("");
     const [servings, setServings] = useState("");
     const [ingredients, setIngredients] = useState<{ name: string; quantity: string; unit: string }[]>([{ name: "", quantity: "", unit: "" }]);
-    const [instructions, setInstructions] = useState<string[]>([""]);
+
+    const DEFAULT_INSTRUCTIONS = [
+        "Wash your hands thoroughly with soap and water.",
+        "Rinse all fresh leafy greens, fruits, and vegetables.",
+        "Clean and sanitize your cooking area and utensils.",
+        "Gather and measure all ingredients before starting.",
+        "Read through the entire recipe to understand the steps.",
+        "Taste your food as you cook and adjust seasoning if needed."
+    ];
+
+    const [instructions, setInstructions] = useState<string[]>(
+        props.recipe?.instructions && props.recipe.instructions.length > 0
+            ? props.recipe.instructions
+            : DEFAULT_INSTRUCTIONS
+    );
     const [tags, setTags] = useState<string[]>([]);
     const [tagInput, setTagInput] = useState("");
     const [linkUrl, setLinkUrl] = useState("");
     const [manualTime, setManualTime] = useState("");
+    const [validationError, setValidationError] = useState<string | null>(null);
 
     // Nutrition State
     const [kcal, setKcal] = useState("");
@@ -75,10 +94,13 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
     const [isPlaying, setIsPlaying] = useState(false);
     const [recordingTime, setRecordingTime] = useState(0); // in seconds
     const [playbackTime, setPlaybackTime] = useState(0); // in seconds
-    const [imagePath, setImagePath] = useState<string | null>(props.recipe?.image || null);
     const [images, setImages] = useState<string[]>(props.recipe?.images || []);
+    const [localImageUris, setLocalImageUris] = useState<string[]>(props.recipe?.localImageUris || []);
     const [audioPath, setAudioPath] = useState<string | null>(props.recipe?.audio || null);
+    const [localAudioUri, setLocalAudioUri] = useState<string | null>(props.recipe?.localAudioUri || null);
     const [isLoadingAudio, setIsLoadingAudio] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
+    const [isConnected, setIsConnected] = useState(true);
 
     // Audio Recorder Ref
     const audioRecorderPlayerRef = React.useRef<SafeAudioRecorderType | null>(null);
@@ -122,13 +144,15 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
     // Initial load for editing
     React.useEffect(() => {
         if (props.recipe) {
-            // ... existing code ...
-            // ... skipping strictly unchanged lines, just structure ... 
             setName(props.recipe.name);
+            setImages(props.recipe.images || []);
+            setLocalImageUris(props.recipe.localImageUris || []);
+            setAudioPath(props.recipe.audio || null);
+            setLocalAudioUri(props.recipe.localAudioUri || null);
+
             const totalMin = parseInt(props.recipe.time) || 15;
             setPrepTime((totalMin > 15 ? 15 : 5).toString());
             setCookTime((totalMin > 15 ? totalMin - 15 : totalMin - 5).toString());
-            setServings(props.recipe.servings.toString());
             setServings(props.recipe.servings.toString());
             setIngredients(props.recipe.ingredients.map(i => ({
                 name: i.name,
@@ -166,6 +190,47 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
             }
         };
     }, [props.recipe]);
+
+    const showSyncButton =
+        Boolean(props.recipe) &&
+        ['pending_upload', 'failed'].includes(props.recipe?.uploadStatus ?? '') &&
+        isConnected;
+
+    const handleSyncNow = async () => {
+        if (isSyncing) return;
+        setIsSyncing(true);
+        try {
+            await DocumentUploadScheduler.requestRecipeUploadNow();
+        } catch (error) {
+            console.error('AddNewRecipeModal: failed to trigger recipe upload', error);
+        } finally {
+            setIsSyncing(false);
+        }
+    };
+
+    React.useEffect(() => {
+        const unsubscribe = NetInfo.addEventListener(state => {
+            setIsConnected(Boolean(state.isConnected && state.isInternetReachable !== false));
+        });
+        return () => unsubscribe();
+    }, []);
+
+    React.useEffect(() => {
+        if (!open) {
+            setValidationError(null);
+        }
+    }, [open]);
+
+    const playbackProgressPercent = React.useMemo(() => {
+        if (!recordingTime || recordingTime <= 0) {
+            return 0;
+        }
+        const percent = (playbackTime / recordingTime) * 100;
+        if (Number.isNaN(percent)) {
+            return 0;
+        }
+        return Math.min(100, Math.max(0, percent));
+    }, [playbackTime, recordingTime]);
 
     // Helpers
     const formatTime = (seconds: number) => {
@@ -255,7 +320,9 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
 
             pauseTimer();
 
-            setAudioPath(result);
+            const saved = await saveRecipeAudio(result);
+            setAudioPath(saved);
+            setLocalAudioUri(saved);
             setIsRecording(false);
             setIsPaused(false);
 
@@ -327,6 +394,7 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
             setIsRecording(false);
             setPlaybackTime(0);
             setIsPlaying(false);
+            setLocalAudioUri(null);
             showToast({ title: "Deleted", description: "Recording deleted", type: "success" });
         } catch (error) {
             console.error("Error deleting recording:", error);
@@ -358,14 +426,25 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
                         .map(asset => asset.uri)
                         .filter((uri): uri is string => !!uri);
 
-                    setImages(prev => [...prev, ...newUris]);
-                    showToast({ title: "Success", description: `${newUris.length} image(s) added`, type: "success" });
+                    const savedUris: string[] = [];
+                    for (const uri of newUris) {
+                        const saved = await saveRecipeImage(uri);
+                        savedUris.push(saved);
+                    }
+
+                    setImages(prev => [...prev, ...savedUris]);
+                    setLocalImageUris(prev => [...prev, ...savedUris]);
+                    showToast({ title: "Success", description: `${savedUris.length} image(s) added`, type: "success" });
                 }
             }
         } catch (error) {
             console.error("Error selecting image:", error);
             showToast({ title: "Error", description: "Failed to select image", type: "warning" });
         }
+    };
+    const handleRemoveImage = (index: number) => {
+        setImages((prev) => prev.filter((_, i) => i !== index));
+        setLocalImageUris((prev) => prev.filter((_, i) => i !== index));
     };
     const handleRemoveIngredient = (index: number) => {
         const newIngredients = [...ingredients];
@@ -410,10 +489,8 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
         setPrepTime("");
         setCookTime("");
         setServings("");
-        setCookTime("");
-        setServings("");
         setIngredients([{ name: "", quantity: "", unit: "" }]);
-        setInstructions([""]);
+        setInstructions(DEFAULT_INSTRUCTIONS);
         setTags([]);
         setTagInput("");
         setLinkUrl("");
@@ -422,8 +499,9 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
         setCarbs("");
         setFats("");
         setAudioPath(null);
-        setImagePath(null);
         setImages([]);
+        setLocalImageUris([]);
+        setLocalAudioUri(null);
 
         setIsRecording(false);
         setIsPaused(false);
@@ -432,18 +510,17 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
         setPlaybackTime(0);
         setManualTime("");
 
+        setValidationError(null);
+
         resetTimer(); // Reset local timer refs
     };
 
     const handleSave = () => {
         try {
+            setValidationError(null);
             // Common Validation
             if (!name.trim()) {
-                showToast({ 
-                    title: "Validation Error", 
-                    description: "Recipe name is required. Please enter a name for your recipe.", 
-                    type: "error" 
-                });
+                setValidationError("Recipe name is required. Please enter a name for your recipe.");
                 return;
             }
 
@@ -453,41 +530,25 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
                 const validIngredients = ingredients.filter(i => i.name.trim());
 
                 if (validIngredients.length === 0) {
-                    showToast({ 
-                        title: "Validation Error", 
-                        description: "At least one ingredient is required. Please add at least one ingredient with a name.", 
-                        type: "error" 
-                    });
+                    setValidationError("At least one ingredient is required. Please add at least one ingredient with a name.");
                     return;
                 }
 
                 // Validate prep time
                 if (!prepTime || prepTime.trim() === '') {
-                    showToast({ 
-                        title: "Validation Error", 
-                        description: "Prep time is required. Please enter the preparation time in minutes.", 
-                        type: "error" 
-                    });
+                    setValidationError("Prep time is required. Please enter the preparation time in minutes.");
                     return;
                 }
 
                 // Validate cook time
                 if (!cookTime || cookTime.trim() === '') {
-                    showToast({ 
-                        title: "Validation Error", 
-                        description: "Cook time is required. Please enter the cooking time in minutes.", 
-                        type: "error" 
-                    });
+                    setValidationError("Cook time is required. Please enter the cooking time in minutes.");
                     return;
                 }
 
                 // Validate servings
                 if (!servings || servings.trim() === '') {
-                    showToast({ 
-                        title: "Validation Error", 
-                        description: "Servings is required. Please enter the number of servings.", 
-                        type: "error" 
-                    });
+                    setValidationError("Servings is required. Please enter the number of servings.");
                     return;
                 }
 
@@ -497,67 +558,39 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
                 const parsedServings = parseInt(servings || '4', 10);
 
                 if (isNaN(parsedPrepTime) || parsedPrepTime < 0) {
-                    showToast({ 
-                        title: "Validation Error", 
-                        description: "Invalid prep time. Please enter a valid number (0 or greater) for preparation time.", 
-                        type: "error" 
-                    });
+                    setValidationError("Invalid prep time. Please enter a valid number (0 or greater) for preparation time.");
                     return;
                 }
 
                 if (isNaN(parsedCookTime) || parsedCookTime < 0) {
-                    showToast({ 
-                        title: "Validation Error", 
-                        description: "Invalid cook time. Please enter a valid number (0 or greater) for cooking time.", 
-                        type: "error" 
-                    });
+                    setValidationError("Invalid cook time. Please enter a valid number (0 or greater) for cooking time.");
                     return;
                 }
 
                 if (isNaN(parsedServings) || parsedServings <= 0) {
-                    showToast({ 
-                        title: "Validation Error", 
-                        description: "Invalid servings. Please enter a valid number greater than 0 for servings.", 
-                        type: "error" 
-                    });
+                    setValidationError("Invalid servings. Please enter a valid number greater than 0 for servings.");
                     return;
                 }
             } else if (activeTab === "Link") {
                 if (!linkUrl.trim()) {
-                    showToast({ 
-                        title: "Validation Error", 
-                        description: "Recipe URL is required. Please enter a valid recipe link.", 
-                        type: "error" 
-                    });
+                    setValidationError("Recipe URL is required. Please enter a valid recipe link.");
                     return;
                 }
                 // Validate URL format
                 try {
                     new URL(linkUrl.trim());
                 } catch {
-                    showToast({ 
-                        title: "Validation Error", 
-                        description: "Invalid URL format. Please enter a valid recipe URL (e.g., https://example.com/recipe).", 
-                        type: "error" 
-                    });
+                    setValidationError("Invalid URL format. Please enter a valid recipe URL (e.g., https://example.com/recipe).");
                     return;
                 }
             } else if (activeTab === "Image") {
                 if (images.length === 0) {
-                    showToast({ 
-                        title: "Validation Error", 
-                        description: "At least one image is required. Please upload at least one recipe image.", 
-                        type: "error" 
-                    });
+                    setValidationError("At least one image is required. Please upload at least one recipe image.");
                     return;
                 }
             } else if (activeTab === "Audio") {
                 if (!audioPath) {
-                    showToast({ 
-                        title: "Validation Error", 
-                        description: "Audio recording is required. Please record the recipe instructions.", 
-                        type: "error" 
-                    });
+                    setValidationError("Audio recording is required. Please record the recipe instructions.");
                     return;
                 }
             }
@@ -585,9 +618,10 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
                 formattedUrl = `https://${formattedUrl}`;
             }
 
+            const hasLocalMedia = localImageUris.length > 0 || Boolean(localAudioUri);
             const recipeData = {
                 name: name.trim(),
-                image: images.length > 0 ? images[0] : (activeTab === "Link" ? "LINK_ICON" : activeTab === "Audio" ? "AUDIO_ICON" : "🍲"),
+                image: images.length > 0 ? images[0] : undefined,
                 time: activeTab === "Audio" ? (manualTime ? `${manualTime} min` : formatTime(recordingTime)) :
                     (activeTab === "Text" ? ((parsedPrepTime + parsedCookTime) > 0 ? `${parsedPrepTime + parsedCookTime} min` : "") :
                         (manualTime ? `${manualTime} min` : "")),
@@ -603,7 +637,14 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
                 audio: audioPath || undefined,
                 duration: recordingTime > 0 ? recordingTime : undefined,
                 url: formattedUrl,
-                images: images.length > 0 ? images : undefined,
+                images: images.length > 0 ? images : [],
+                localImageUris: localImageUris.length > 0 ? localImageUris : [],
+                localAudioUri: localAudioUri || undefined,
+                uploadStatus: hasLocalMedia ? 'pending_upload' : undefined,
+                uploadAttempts: hasLocalMedia ? 0 : undefined,
+                lastUploadError: undefined,
+                description: description.trim(),
+                instructions: instructions.filter(i => i.trim()),
             };
 
             if (props.recipe) {
@@ -1024,7 +1065,7 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
                                 <RecipeImage image={img} size={80} borderRadius={12} />
                                 <TouchableOpacity
                                     style={{ position: 'absolute', top: 4, right: 4, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 12, width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}
-                                    onPress={() => setImages(images.filter((_, i) => i !== index))}
+                                    onPress={() => handleRemoveImage(index)}
                                 >
                                     <AppIcon name="x" size={14} color="#fff" />
                                 </TouchableOpacity>
@@ -1131,7 +1172,7 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
                                 <AppIcon name={isPlaying ? "pause" : "play"} size={24} color={isLoadingAudio ? colors.mutedForeground : colors.foreground} />
                             </TouchableOpacity>
                             <View style={{ flex: 1, height: 4, backgroundColor: colors.border, borderRadius: 2 }}>
-                                <View style={{ width: `${Math.min(100, (playbackTime / recordingTime) * 100)}%`, height: '100%', backgroundColor: colors.foreground, borderRadius: 2 }} />
+                                <View style={{ width: `${playbackProgressPercent}%`, height: '100%', backgroundColor: colors.foreground, borderRadius: 2 }} />
                             </View>
                             <View style={{ flexDirection: 'row', gap: 8 }}>
                                 <AppIcon name="moreVertical" size={20} color={colors.mutedForeground} />
@@ -1202,8 +1243,36 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
                         <TouchableOpacity onPress={onClose} style={styles.closeButton}>
                             <AppIcon name="x" size={24} color={colors.foreground} />
                         </TouchableOpacity>
+                        {showSyncButton && (
+                            <TouchableOpacity
+                                style={[styles.syncBadge, { backgroundColor: colors.primary }]}
+                                onPress={handleSyncNow}
+                                disabled={isSyncing || !isConnected}
+                            >
+                                {isSyncing ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <Text style={styles.syncBadgeText}>Sync Now</Text>
+                                )}
+                            </TouchableOpacity>
+                        )}
                     </View>
 
+                    {/* Validation Banner */}
+                    {validationError && (
+                        <View
+                            style={[
+                                styles.validationBanner,
+                                {
+                                    borderColor: colors.danger,
+                                    backgroundColor: colors.danger + "15",
+                                },
+                            ]}
+                        >
+                            <AppIcon name="alertCircle" size={16} color={colors.danger} style={{ marginRight: 8 }} />
+                            <Text style={[styles.validationText, { color: colors.danger }]}>{validationError}</Text>
+                        </View>
+                    )}
                     {/* Tabs */}
                     {!isEditingMode && renderTabs()}
 
@@ -1297,6 +1366,20 @@ const styles = StyleSheet.create({
     tabText: {
         fontWeight: '600',
         fontSize: 14,
+    },
+    validationBanner: {
+        marginHorizontal: 20,
+        marginBottom: 12,
+        borderWidth: 1,
+        padding: 12,
+        borderRadius: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    validationText: {
+        flex: 1,
+        fontSize: 14,
+        fontWeight: '600',
     },
     contentScroll: {
         paddingHorizontal: 20,
@@ -1428,6 +1511,21 @@ const styles = StyleSheet.create({
     btnPrimaryText: {
         fontWeight: '700',
         fontSize: 16,
+    },
+    syncBadge: {
+        position: 'absolute',
+        top: 14,
+        right: 48,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    syncBadgeText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: '600',
     },
     // Image Tab
     uploadArea: {

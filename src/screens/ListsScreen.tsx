@@ -20,6 +20,9 @@ import { useSidebar } from "../contexts/SidebarContext";
 import { AppIcon, CustomDateTimePicker } from "../components/ui";
 import { ScreenErrorView } from "../components/ui/ScreenErrorView";
 import { AddShoppingItemModal } from "../components/modals/AddShoppingItemModal";
+import Config from "react-native-config";
+
+const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 
 type GroceryRowProps = {
   item: GroceryItem;
@@ -87,18 +90,18 @@ const GroceryRow = React.memo<GroceryRowProps>(({
         ]}
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-          <View style={[styles.categoryIconSmall, { backgroundColor: (categoryColor || colors.muted) + '20' }]}> 
+          <View style={[styles.categoryIconSmall, { backgroundColor: (categoryColor || colors.muted) + '20' }]}>
             <Text style={{ fontSize: 16 }}>{categoryIcon || "📦"}</Text>
           </View>
           <View style={{ flex: 1, marginLeft: 12 }}>
             <Text style={[styles.itemName, { color: colors.foreground, textDecorationLine: isPurchased ? 'line-through' : 'none', opacity: isPurchased ? 0.7 : 1 }]}>{item.name}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
               <Text style={[styles.itemDetail, { color: colors.mutedForeground }]}>{item.quantity} {item.unit}</Text>
-              <View style={[styles.addedByBadge, { backgroundColor: colors.muted, borderRadius: radius.sm, marginLeft: 8 }]}> 
+              <View style={[styles.addedByBadge, { backgroundColor: colors.muted, borderRadius: radius.sm, marginLeft: 8 }]}>
                 <Text style={{ fontSize: 10 }}>{getMemberIcon(item.addedBy || "")}</Text>
               </View>
               {isPurchased && item.purchasedAt && (
-                <Text style={[styles.itemDetail, { color: colors.mutedForeground, marginLeft: 8 }]}> 
+                <Text style={[styles.itemDetail, { color: colors.mutedForeground, marginLeft: 8 }]}>
                   {new Date(item.purchasedAt).toLocaleDateString()} at {new Date(item.purchasedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </Text>
               )}
@@ -492,12 +495,14 @@ export const ListsScreen: React.FC = () => {
                       </View>
                     </View>
 
-                    <View style={styles.heroActions}>
-                      <Pressable onPress={handleOpenImport} style={[styles.heroBtn, { backgroundColor: colors.background, borderColor: colors.success + '30', borderRadius: radius.md }]}>
-                        <AppIcon name="calendar" size={14} color={colors.foreground} style={{ marginRight: 6 }} />
-                        <Text style={{ fontSize: 12, fontWeight: '600', color: colors.foreground }}>From Meal Plan</Text>
-                      </Pressable>
-                    </View>
+                    {ENABLE_RECIPE_AND_MEALS && (
+                      <View style={styles.heroActions}>
+                        <Pressable onPress={handleOpenImport} style={[styles.heroBtn, { backgroundColor: colors.background, borderColor: colors.success + '30', borderRadius: radius.md }]}>
+                          <AppIcon name="calendar" size={14} color={colors.foreground} style={{ marginRight: 6 }} />
+                          <Text style={{ fontSize: 12, fontWeight: '600', color: colors.foreground }}>From Meal Plan</Text>
+                        </Pressable>
+                      </View>
+                    )}
                   </View>
 
 

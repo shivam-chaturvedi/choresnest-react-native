@@ -132,7 +132,6 @@ export const VaultStorageService = {
                 path: objectPath,
                 message: error.message ?? error.toString(),
                 status: error?.status,
-                details: error?.details,
                 hint: error?.hint,
                 error,
             });

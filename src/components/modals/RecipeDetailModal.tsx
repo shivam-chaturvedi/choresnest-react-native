@@ -10,60 +10,29 @@ import {
     ToastAndroid,
     Alert,
     Animated,
+    ActivityIndicator,
 } from "react-native";
 import { AppIcon } from "../ui/AppIcon";
 import { RecipeImage } from "../recipes/RecipeImage";
 import { useThemeColors } from "../../contexts/ThemeContext";
 import { Recipe } from "../../types/recipes";
 import { ToastItem, ActiveToast } from "../ui/Toast";
+import UploadStatusIndicator from "../ui/UploadStatusIndicator";
+import NetInfo from "@react-native-community/netinfo";
+import { DocumentUploadScheduler } from "../../services/sync/DocumentUploadScheduler";
+import { getRecipeType } from "../../utils/recipeUtils";
 
 interface RecipeDetailModalProps {
     recipe: Recipe | null;
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onAddToGroceryList?: (recipe: Recipe) => Promise<boolean>;
-    onBookmark?: (recipe: Recipe) => void;
+    onBookmark?: (recipe: Recipe) => boolean;
     onEdit?: (recipe: Recipe) => void;
     onDelete?: (recipe: Recipe) => void;
 }
 
-// Mock nutrition data
-const getNutritionData = (recipe: Recipe) => ({
-    calories: Math.round(recipe.servings * 150 + recipe.ingredients.length * 25),
-    protein: Math.round(recipe.ingredients.length * 3.5),
-    carbs: Math.round(recipe.servings * 20 + recipe.ingredients.length * 5),
-    fat: Math.round(recipe.servings * 8 + recipe.ingredients.length * 2),
-});
 
-// Mock dynamic instructions
-const getInstructions = (recipe: Recipe): string[] => {
-    const baseSteps = [
-        `Gather all ${recipe.ingredients.length} ingredients and prep your workspace.`,
-        "Wash and prepare all vegetables if applicable.",
-    ];
-
-    if (recipe.tags.includes("Vegetarian")) {
-        baseSteps.push("Heat oil in a large pan over medium heat.");
-        baseSteps.push("Add aromatics like onion, garlic, and ginger. Sauté until fragrant.");
-        baseSteps.push("Add the main vegetables and cook until tender.");
-        baseSteps.push("Season with spices and salt to taste.");
-        baseSteps.push("Garnish with fresh herbs before serving.");
-    } else if (recipe.tags.includes("High Protein")) {
-        baseSteps.push("Marinate the protein with spices for 15 minutes.");
-        baseSteps.push("Heat a pan or grill over medium-high heat.");
-        baseSteps.push("Cook the protein until golden and cooked through.");
-        baseSteps.push("Let rest for 5 minutes before slicing.");
-        baseSteps.push("Serve with sides and garnish.");
-    } else {
-        baseSteps.push("Prepare the base sauce or marinade.");
-        baseSteps.push("Cook main ingredients according to recipe requirements.");
-        baseSteps.push("Combine all elements and simmer if needed.");
-        baseSteps.push("Taste and adjust seasoning.");
-        baseSteps.push("Plate beautifully and serve warm.");
-    }
-
-    return baseSteps;
-};
 
 export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
     recipe,
@@ -75,11 +44,36 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
     onDelete,
 }) => {
     const colors = useThemeColors();
-
+    const [isConnected, setIsConnected] = React.useState(true);
+    const [isSyncing, setIsSyncing] = React.useState(false);
+    const [localToast, setLocalToast] = React.useState<ActiveToast | null>(null);
+    React.useEffect(() => {
+        const unsubscribe = NetInfo.addEventListener(state => {
+            const connected = Boolean(state.isConnected && state.isInternetReachable !== false);
+            setIsConnected(connected);
+        });
+        return () => unsubscribe();
+    }, []);
     if (!recipe) return null;
+    const showSyncButton = ['pending_upload', 'failed'].includes(recipe.uploadStatus ?? '') && isConnected;
+    const handleSyncNow = async () => {
+        if (isSyncing) {
+            return;
+        }
+        setIsSyncing(true);
+        try {
+            await DocumentUploadScheduler.requestRecipeUploadNow();
+        } catch (error) {
+            console.error('RecipeDetailModal: failed to trigger recipe upload', error);
+        } finally {
+            setIsSyncing(false);
+        }
+    };
 
-    const nutrition = getNutritionData(recipe);
-    const instructions = getInstructions(recipe);
+
+    const recipeType = getRecipeType(recipe);
+    const isAudioRecipe = recipeType === 'audio';
+    const instructions = recipe.instructions || [];
 
     const showNativeToast = (message: string) => {
         if (Platform.OS === "android") {
@@ -88,8 +82,6 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
             Alert.alert(message);
         }
     };
-
-    const [localToast, setLocalToast] = React.useState<ActiveToast | null>(null);
 
     const showLocalToast = (title: string, type: 'success' | 'warning' | 'error' = 'success') => {
         setLocalToast({
@@ -130,13 +122,36 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
             <View style={[styles.modalOverlay, { backgroundColor: colors.background }]}>
                 {/* Header Background */}
                 <View style={[styles.headerBackground, { backgroundColor: colors.primary }]}>
-                    <RecipeImage
-                        image={recipe.image}
-                        size={80}
-                        emojiSize={100}
-                        iconSize={100}
-                        style={recipe.image.startsWith('http') || recipe.image.startsWith('file:') || recipe.image.startsWith('content:') ? StyleSheet.absoluteFill : undefined}
-                    />
+                    {(() => {
+                        const heroImage =
+                            recipeType === 'image'
+                                ? typeof recipe.image === 'string' && recipe.image.trim()
+                                    ? recipe.image
+                                    : undefined
+                                : recipeType === 'audio'
+                                    ? 'AUDIO_ICON'
+                                    : recipeType === 'url'
+                                        ? 'LINK_ICON'
+                                        : undefined;
+
+                        if (!heroImage) return null;
+
+                        const hasUriScheme =
+                            typeof heroImage === 'string' &&
+                            (heroImage.startsWith('http') ||
+                                heroImage.startsWith('file:') ||
+                                heroImage.startsWith('content:'));
+                        return (
+                            <RecipeImage
+                                image={heroImage}
+                                size={80}
+                                emojiSize={100}
+                                iconSize={100}
+                                style={hasUriScheme ? StyleSheet.absoluteFill : undefined}
+                            />
+                        );
+                    })()}
+                    <UploadStatusIndicator uploadStatus={recipe.uploadStatus} />
                     <Pressable
                         style={styles.bookmarkButton}
                         onPress={() => {
@@ -179,7 +194,7 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
                                         <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.time}</Text>
                                     </View>
                                 ) : null}
-                                {recipe.image !== "AUDIO_ICON" && recipe.image !== "mic" && (
+                                {!isAudioRecipe && (
                                     <>
                                         <View style={styles.metaItem}>
                                             <AppIcon name="users" size={14} color={colors.mutedForeground} />
@@ -193,6 +208,12 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
                                 )}
                             </View>
 
+                            {recipe.description ? (
+                                <Text style={[styles.description, { color: colors.foreground }]}>
+                                    {recipe.description}
+                                </Text>
+                            ) : null}
+
                             <View style={styles.tagsRow}>
                                 {recipe.tags.map((tag) => (
                                     <View key={tag} style={[styles.tag, { backgroundColor: colors.muted }]}>
@@ -200,92 +221,118 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
                                     </View>
                                 ))}
                             </View>
+                            {showSyncButton && (
+                                <Pressable
+                                    style={[styles.syncNowButton, { borderColor: colors.border }]}
+                                    onPress={handleSyncNow}
+                                    disabled={isSyncing}
+                                >
+                                    {isSyncing ? (
+                                        <ActivityIndicator size="small" color={colors.foreground} />
+                                    ) : (
+                                        <Text style={[styles.syncNowText, { color: colors.primary }]}>Sync Now</Text>
+                                    )}
+                                </Pressable>
+                            )}
                         </View>
 
-                        {recipe.image !== "AUDIO_ICON" && recipe.image !== "mic" && (
-                            <>
-                                {/* Nutrition Cards */}
-                                <View style={styles.section}>
-                                    <View style={styles.sectionHeader}>
-                                        <AppIcon name="zap" size={16} color={colors.warning} style={{ marginRight: 6 }} />
-                                        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Nutrition (per serving)</Text>
-                                    </View>
 
-                                    <View style={styles.nutritionGrid}>
-                                        <View style={[styles.nutritionCard, { backgroundColor: `${colors.warning}20` }]}>
-                                            <AppIcon name="zap" size={20} color={colors.warning} style={{ marginBottom: 4 }} />
-                                            <Text style={[styles.nutritionValue, { color: colors.foreground }]}>{nutrition.calories}</Text>
-                                            <Text style={[styles.nutritionLabel, { color: colors.mutedForeground }]}>kcal</Text>
-                                        </View>
-                                        <View style={[styles.nutritionCard, { backgroundColor: `${colors.danger}20` }]}>
-                                            <AppIcon name="biceps" size={20} color={colors.danger} style={{ marginBottom: 4 }} />
-                                            <Text style={[styles.nutritionValue, { color: colors.foreground }]}>{nutrition.protein}g</Text>
-                                            <Text style={[styles.nutritionLabel, { color: colors.mutedForeground }]}>Protein</Text>
-                                        </View>
-                                        <View style={[styles.nutritionCard, { backgroundColor: `${colors.info}20` }]}>
-                                            <AppIcon name="leaf" size={20} color={colors.info} style={{ marginBottom: 4 }} />
-                                            <Text style={[styles.nutritionValue, { color: colors.foreground }]}>{nutrition.carbs}g</Text>
-                                            <Text style={[styles.nutritionLabel, { color: colors.mutedForeground }]}>Carbs</Text>
-                                        </View>
-                                        <View style={[styles.nutritionCard, { backgroundColor: `${colors.primary}20` }]}>
-                                            <Text style={{ fontSize: 20, marginBottom: 4 }}>🥑</Text>
-                                            <Text style={[styles.nutritionValue, { color: colors.foreground }]}>{nutrition.fat}g</Text>
-                                            <Text style={[styles.nutritionLabel, { color: colors.mutedForeground }]}>Fat</Text>
-                                        </View>
-                                    </View>
+
+                        {/* Nutrition Cards - Only show if data exists */}
+                        {recipe.nutrition && (recipe.nutrition.kcal !== '-' || recipe.nutrition.protein !== '-') && (
+                            <View style={styles.section}>
+                                <View style={styles.sectionHeader}>
+                                    <AppIcon name="zap" size={16} color={colors.warning} style={{ marginRight: 6 }} />
+                                    <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Nutrition (per serving)</Text>
                                 </View>
 
-                                {/* Ingredients */}
-                                <View style={[styles.section, styles.cardSoft, { backgroundColor: colors.muted }]}>
-                                    <View style={styles.ingredientsHeader}>
-                                        <Text style={[styles.cardTitle, { color: colors.foreground }]}>Ingredients</Text>
-                                        <Pressable
-                                            style={[
-                                                styles.addOutlineButton,
-                                                { backgroundColor: colors.card, borderColor: colors.border }
-                                            ]}
-                                            onPress={handleAddToGrocery}
-                                        >
-                                            <AppIcon name="shoppingCart" size={14} color={colors.foreground} style={{ marginRight: 6 }} />
-                                            <Text style={[styles.addOutlineText, { color: colors.foreground }]}>Add to List</Text>
-                                        </Pressable>
+                                <View style={styles.nutritionGrid}>
+                                    <View style={[styles.nutritionCard, { backgroundColor: `${colors.warning}20` }]}>
+                                        <AppIcon name="zap" size={20} color={colors.warning} style={{ marginBottom: 4 }} />
+                                        <Text style={[styles.nutritionValue, { color: colors.foreground }]}>{recipe.nutrition.kcal}</Text>
+                                        <Text style={[styles.nutritionLabel, { color: colors.mutedForeground }]}>kcal</Text>
                                     </View>
-
-                                    <View style={styles.ingredientsList}>
-                                        {recipe.ingredients.map((ingredient, i) => (
-                                            <View key={i} style={styles.ingredientRow}>
-                                                <View style={[styles.numberCircle, { backgroundColor: `${colors.primary}20` }]}>
-                                                    <Text style={[styles.numberText, { color: colors.primary }]}>{i + 1}</Text>
-                                                </View>
-                                                <Text style={[styles.ingredientName, { color: colors.foreground }]}>{ingredient.name}</Text>
-                                                <Text style={[styles.ingredientQty, { color: colors.mutedForeground }]}>
-                                                    {ingredient.quantity} {ingredient.unit}
-                                                </Text>
-                                            </View>
-                                        ))}
+                                    <View style={[styles.nutritionCard, { backgroundColor: `${colors.danger}20` }]}>
+                                        <AppIcon name="biceps" size={20} color={colors.danger} style={{ marginBottom: 4 }} />
+                                        <Text style={[styles.nutritionValue, { color: colors.foreground }]}>{recipe.nutrition.protein}</Text>
+                                        <Text style={[styles.nutritionLabel, { color: colors.mutedForeground }]}>Protein</Text>
+                                    </View>
+                                    <View style={[styles.nutritionCard, { backgroundColor: `${colors.info}20` }]}>
+                                        <AppIcon name="leaf" size={20} color={colors.info} style={{ marginBottom: 4 }} />
+                                        <Text style={[styles.nutritionValue, { color: colors.foreground }]}>{recipe.nutrition.carbs}</Text>
+                                        <Text style={[styles.nutritionLabel, { color: colors.mutedForeground }]}>Carbs</Text>
+                                    </View>
+                                    <View style={[styles.nutritionCard, { backgroundColor: `${colors.primary}20` }]}>
+                                        <Text style={{ fontSize: 20, marginBottom: 4 }}>🥑</Text>
+                                        <Text style={[styles.nutritionValue, { color: colors.foreground }]}>{recipe.nutrition.fats}</Text>
+                                        <Text style={[styles.nutritionLabel, { color: colors.mutedForeground }]}>Fat</Text>
                                     </View>
                                 </View>
-
-                                {/* Cooking Instructions */}
-                                <View style={[styles.section, styles.cardSoft, { backgroundColor: colors.muted }]}>
-                                    <View style={styles.sectionHeader}>
-                                        <AppIcon name="chefHat" size={16} color={colors.primary} style={{ marginRight: 6 }} />
-                                        <Text style={[styles.cardTitle, { color: colors.foreground }]}>Cooking Instructions</Text>
-                                    </View>
-
-                                    <View style={styles.stepsList}>
-                                        {instructions.map((step, i) => (
-                                            <View key={i} style={styles.stepRow}>
-                                                <View style={[styles.stepCircle, { backgroundColor: colors.primary }]}>
-                                                    <Text style={styles.stepNumber}>{i + 1}</Text>
-                                                </View>
-                                                <Text style={[styles.stepText, { color: colors.foreground }]}>{step}</Text>
-                                            </View>
-                                        ))}
-                                    </View>
-                                </View>
-                            </>
+                            </View>
                         )}
+
+
+                        {/* Ingredients */}
+                        {(recipe.ingredients && recipe.ingredients.length > 0) ? (
+                            <View style={[styles.section, styles.cardSoft, { backgroundColor: colors.muted }]}>
+                                <View style={styles.ingredientsHeader}>
+                                    <Text style={[styles.cardTitle, { color: colors.foreground }]}>Ingredients</Text>
+                                    <Pressable
+                                        style={[
+                                            styles.addOutlineButton,
+                                            { backgroundColor: colors.card, borderColor: colors.border }
+                                        ]}
+                                        onPress={handleAddToGrocery}
+                                    >
+                                        <AppIcon name="shoppingCart" size={14} color={colors.foreground} style={{ marginRight: 6 }} />
+                                        <Text style={[styles.addOutlineText, { color: colors.foreground }]}>Add to List</Text>
+                                    </Pressable>
+                                </View>
+
+                                <View style={styles.ingredientsList}>
+                                    {recipe.ingredients.map((ingredient, i) => (
+                                        <View key={i} style={styles.ingredientRow}>
+                                            <View style={[styles.numberCircle, { backgroundColor: `${colors.primary}20` }]}>
+                                                <Text style={[styles.numberText, { color: colors.primary }]}>{i + 1}</Text>
+                                            </View>
+                                            <Text style={[styles.ingredientName, { color: colors.foreground }]}>{ingredient.name}</Text>
+                                            <Text style={[styles.ingredientQty, { color: colors.mutedForeground }]}>
+                                                {ingredient.quantity} {ingredient.unit}
+                                            </Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            </View>
+                        ) : (
+                            <View style={[styles.section, styles.cardSoft, { backgroundColor: colors.muted }]}>
+                                <Text style={{ color: colors.mutedForeground, fontStyle: 'italic' }}>No ingredients listed.</Text>
+                            </View>
+                        )}
+
+                        {/* Cooking Instructions */}
+                        <View style={[styles.section, styles.cardSoft, { backgroundColor: colors.muted }]}>
+                            <View style={styles.sectionHeader}>
+                                <AppIcon name="chefHat" size={16} color={colors.primary} style={{ marginRight: 6 }} />
+                                <Text style={[styles.cardTitle, { color: colors.foreground }]}>Cooking Instructions</Text>
+                            </View>
+
+                            {instructions.length > 0 ? (
+                                <View style={styles.stepsList}>
+                                    {instructions.map((step, i) => (
+                                        <View key={i} style={styles.stepRow}>
+                                            <View style={[styles.stepCircle, { backgroundColor: colors.primary }]}>
+                                                <Text style={styles.stepNumber}>{i + 1}</Text>
+                                            </View>
+                                            <Text style={[styles.stepText, { color: colors.foreground }]}>{step}</Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            ) : (
+                                <Text style={{ color: colors.mutedForeground, fontStyle: 'italic', marginTop: 8 }}>
+                                    No instructions added yet.
+                                </Text>
+                            )}
+                        </View>
 
                         {/* Footer Action */}
                         <Pressable
@@ -300,13 +347,15 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
                 </View>
 
                 {/* Local Toast Overlay */}
-                {localToast && (
-                    <View style={styles.toastOverlay} pointerEvents="box-none">
-                        <ToastItem toast={localToast} onDismiss={() => setLocalToast(null)} />
-                    </View>
-                )}
-            </View>
-        </Modal>
+                {
+                    localToast && (
+                        <View style={styles.toastOverlay} pointerEvents="box-none">
+                            <ToastItem toast={localToast} onDismiss={() => setLocalToast(null)} />
+                        </View>
+                    )
+                }
+            </View >
+        </Modal >
     );
 };
 
@@ -319,6 +368,7 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
         zIndex: 1,
+        position: "relative",
     },
     headerActions: {
         flexDirection: "row",
@@ -361,6 +411,18 @@ const styles = StyleSheet.create({
         borderColor: "rgba(255,255,255,0.6)",
         alignItems: "center",
         justifyContent: "center",
+    },
+    syncNowButton: {
+        marginTop: 12,
+        alignSelf: 'flex-end',
+        paddingHorizontal: 14,
+        paddingVertical: 6,
+        borderWidth: 1,
+        borderRadius: 16,
+    },
+    syncNowText: {
+        fontSize: 12,
+        fontWeight: '600',
     },
     deleteButton: {
         borderColor: "transparent",
@@ -542,5 +604,10 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         zIndex: 9999,
         elevation: 9999,
+    },
+    description: {
+        fontSize: 16,
+        lineHeight: 24,
+        marginBottom: 24,
     },
 });

@@ -24,10 +24,11 @@ import { ImageViewerModal } from "../components/modals/ImageViewerModal";
 import { DocumentDetailsModal } from "../components/modals/DocumentDetailsModal";
 import { FilterModal, FilterOptions } from "../components/modals/FilterModal";
 import { NotificationPanel } from "../components/notifications/NotificationPanel";
-import { calculateTotalStorage, formatStorageSize } from "../utils/StorageUtils";
+import { calculateAppStorageUsage, calculateStorageDetails, formatStorageSize } from "../utils/StorageUtils";
 import { generateAlerts, getCategoryCounts } from "../utils/VaultUtils";
 import { formatReminderRulesSummary, getPrimaryReminderField } from "../utils/VaultReminderUtils";
-import { SavedDocument } from "../utils/DocumentUtils";
+import { saveFileToStorage, SavedDocument } from "../utils/DocumentUtils";
+import RNFS from "react-native-fs";
 import { DocumentUploadScheduler } from "../services/sync/DocumentUploadScheduler";
 import { VaultService } from "../services/VaultService";
 import NetInfo from "@react-native-community/netinfo";
@@ -77,18 +78,22 @@ export const VaultScreen: React.FC = () => {
     expiryStatus: [],
   });
   const [storageUsed, setStorageUsed] = useState('0 B');
+  const [appStorageUsed, setAppStorageUsed] = useState('0 B');
   const [currentView, setCurrentView] = useState<'main' | 'category' | 'all'>('main');
   const [viewCategory, setViewCategory] = useState<string | null>(null);
+  const [docStorageLabels, setDocStorageLabels] = useState<Record<string, string>>({});
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [isNetworkReachable, setNetworkReachable] = useState(true);
   const { formatDateTime } = useCountry();
   const nowDate = new Date(currentTime);
 
   const userId = user?.id || "";
+
   const normalizeDocument = (doc: any): VaultDocument => {
     const meta = doc.meta || {};
     const cachedUri = VaultService.getCachedLocalUri(doc.id);
-    const docUri = cachedUri ?? doc.filePath ?? doc.localUri;
+    const localUri = doc.localUri ?? undefined;
+    const docUri = cachedUri ?? localUri ?? doc.filePath ?? undefined;
     return {
       id: doc.id,
       name: doc.name,
@@ -97,6 +102,7 @@ export const VaultScreen: React.FC = () => {
       date: doc.date,
       memberId: doc.memberId,
       filePath: doc.filePath,
+      localUri,
       uri: docUri,
       uploadStatus: doc.uploadStatus,
       remotePath: doc.remotePath,
@@ -177,13 +183,19 @@ export const VaultScreen: React.FC = () => {
   const renderDocMeta = (doc: VaultDocument) => {
     const statusText = getDocumentStatus(doc);
     const reminderText = getReminderSummaryText(doc);
-    if (!statusText && !reminderText) return null;
+    const storageText = docStorageLabels[doc.id];
+    if (!statusText && !reminderText && !storageText) return null;
     return (
       <View style={{ marginTop: 4 }}>
         {statusText ? <Text style={[styles.docMetaText, { color: colors.mutedForeground }]}>{statusText}</Text> : null}
         {reminderText ? (
           <Text style={[styles.docMetaText, { color: colors.primary }]} numberOfLines={2}>
             {reminderText}
+          </Text>
+        ) : null}
+        {storageText ? (
+          <Text style={[styles.docMetaText, { color: colors.success }]}>
+            Stored locally • {storageText}
           </Text>
         ) : null}
       </View>
@@ -377,37 +389,74 @@ export const VaultScreen: React.FC = () => {
     { id: 'warranty', name: 'Warranties', icon: '🛡️', count: categoryCounts.warranty, color: colors.info + '30' },
     { id: 'bill', name: 'Bills', icon: '🧾', count: categoryCounts.bill, color: colors.warning + '30' },
     { id: 'insurance', name: 'Insurance', icon: '📋', count: categoryCounts.insurance, color: colors.success + '30' },
-      { id: 'service', name: 'Service', icon: '🔧', count: categoryCounts.service, color: colors.muted + '50' },
-      { id: 'certificate', name: 'Certificates', icon: '📜', count: categoryCounts.certificate, color: colors.border },
-      { id: 'receipt', name: 'Receipts', icon: '🧾', count: categoryCounts.receipt, color: colors.primary + '30' },
-      { id: 'other', name: 'Other', icon: '📄', count: categoryCounts.other, color: colors.muted + '30' },
-    ];
+    { id: 'service', name: 'Service', icon: '🔧', count: categoryCounts.service, color: colors.muted + '50' },
+    { id: 'certificate', name: 'Certificates', icon: '📜', count: categoryCounts.certificate, color: colors.border },
+    { id: 'receipt', name: 'Receipts', icon: '🧾', count: categoryCounts.receipt, color: colors.primary + '30' },
+    { id: 'other', name: 'Other', icon: '📄', count: categoryCounts.other, color: colors.muted + '30' },
+  ];
 
   // Calculate storage on mount and when docs change
-    const docFingerprint = useMemo(
-        () =>
-            allDocs
-                .map(doc =>
-                  [
-                    doc.id,
-                    doc.filePath || doc.uri || '',
-                    doc.date,
-                    doc.warrantyTillDate || '',
-                    doc.billDate || '',
-                    doc.nextServiceDate || '',
-                    doc.expiryDate || '',
-                  ].join(':')
-                )
-                .join('|'),
-        [allDocs]
-    );
+  const docFingerprint = useMemo(
+    () =>
+      allDocs
+        .map(doc =>
+          [
+            doc.id,
+            doc.filePath || '',
+            doc.remotePath || '',
+            doc.localUri || doc.uri || '',
+            doc.date,
+            doc.warrantyTillDate || '',
+            doc.billDate || '',
+            doc.nextServiceDate || '',
+            doc.expiryDate || '',
+          ].join(':')
+        )
+        .join('|'),
+    [allDocs]
+  );
 
   useEffect(() => {
-    const calcStorage = async () => {
-      const totalBytes = await calculateTotalStorage(allDocs);
-      setStorageUsed(formatStorageSize(totalBytes));
+    let active = true;
+    const computeStorage = async () => {
+      try {
+        const { totalBytes, detailMap } = await calculateStorageDetails(allDocs);
+        if (!active) {
+          return;
+        }
+        setStorageUsed(formatStorageSize(totalBytes));
+        const formatted: Record<string, string> = {};
+        Object.entries(detailMap).forEach(([docId, bytes]) => {
+          formatted[docId] = formatStorageSize(bytes);
+        });
+        setDocStorageLabels(formatted);
+      } catch (error) {
+        console.warn('VaultScreen: failed to recalc storage details', error);
+      }
     };
-    calcStorage();
+    computeStorage();
+    return () => {
+      active = false;
+    };
+  }, [docFingerprint]);
+
+  useEffect(() => {
+    let active = true;
+    const measureAppStorage = async () => {
+      try {
+        const bytes = await calculateAppStorageUsage();
+        if (!active) {
+          return;
+        }
+        setAppStorageUsed(formatStorageSize(bytes));
+      } catch (error) {
+        console.warn('VaultScreen: failed to measure RNFS storage', error);
+      }
+    };
+    measureAppStorage();
+    return () => {
+      active = false;
+    };
   }, [docFingerprint]);
 
   // Apply all filters
@@ -505,7 +554,28 @@ export const VaultScreen: React.FC = () => {
     setViewCategory(null);
   };
 
-  const handleDocumentSaved = (doc: SavedDocument & {
+  const createSafeFileName = (name: string | undefined, sourceUri: string): string => {
+    const sanitized = (name || `vault_${Date.now()}`).replace(/[^a-zA-Z0-9._-]/g, '_');
+    const extensionMatch = sourceUri.match(/(\.[^.#?]+)(?:[?#]|$)/);
+    return `${sanitized}${extensionMatch?.[1] ?? ''}`;
+  };
+
+  const ensurePermanentLocalUri = async (sourceUri: string, preferredName?: string): Promise<string> => {
+    if (!sourceUri) {
+      throw new Error('Document URI missing');
+    }
+    const normalized = sourceUri.replace(/^file:\/\//i, '');
+    if (normalized.startsWith(RNFS.DocumentDirectoryPath)) {
+      const exists = await RNFS.exists(normalized);
+      if (exists) {
+        return normalized;
+      }
+    }
+    const fileName = createSafeFileName(preferredName, sourceUri);
+    return await saveFileToStorage(sourceUri, fileName);
+  };
+
+  const handleDocumentSaved = async (doc: SavedDocument & {
     documentName: string;
     category: string;
     purchaseDate?: string;
@@ -529,6 +599,16 @@ export const VaultScreen: React.FC = () => {
       other: '📄',
     };
 
+    const sourceUri = doc.uri ?? doc.originalUri ?? '';
+    let permanentPath: string;
+    try {
+      permanentPath = await ensurePermanentLocalUri(sourceUri, doc.documentName);
+    } catch (error) {
+      console.error('VaultScreen: failed to persist document locally', error);
+      showToast({ title: "Error", description: "Unable to save document locally.", type: "warning" });
+      return;
+    }
+
     addDocument({
       name: doc.documentName,
       type: doc.category as any,
@@ -536,8 +616,9 @@ export const VaultScreen: React.FC = () => {
       date: new Date().toISOString().split('T')[0],
       memberId: activeMember?.id || 'global',
       sharedWith: [],
-      filePath: doc.uri,
-      uri: doc.uri,
+      filePath: permanentPath,
+      uri: permanentPath,
+      localUri: permanentPath,
       // Warranty fields
       purchaseDate: doc.purchaseDate,
       warrantyTillDate: doc.warrantyTillDate,
@@ -707,6 +788,9 @@ export const VaultScreen: React.FC = () => {
           <View style={{ flex: 1 }}>
             <Text style={[styles.storageTitle, { color: colors.primaryForeground }]}>Secure Storage</Text>
             <Text style={[styles.storageDesc, { color: colors.primaryForeground, opacity: 0.8 }]}>{allDocs.length} documents • {storageUsed}</Text>
+            <Text style={[styles.storageDesc, { color: colors.primaryForeground, opacity: 0.6 }]}>
+              Local Data Footprint: {appStorageUsed} (documents + metadata)
+            </Text>
           </View>
           <View style={{ alignItems: 'flex-end' }}>
             <Text style={[styles.alertCount, { color: colors.primaryForeground }]}>{liveAlerts.length}</Text>

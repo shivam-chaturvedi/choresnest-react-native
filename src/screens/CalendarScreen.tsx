@@ -432,18 +432,18 @@ export const CalendarScreen: React.FC = () => {
   const rawEvents = useObservableValue(
     observeEvents,
     [],
-    [] as TaskServiceEventRecord[]
+    [] as TaskServiceEventRecord
   );
   const observeTasks = useCallback(() => TaskService.observeTasks(), []);
   const rawTasks = useObservableValue(
     observeTasks,
     [],
-    [] as TaskServiceTaskRecord[]
+    [] as TaskServiceTaskRecord
   );
   const events = useMemo<CalendarEvent[]>(() => {
     const fallbackZone = timeZone;
     return rawEvents.reduce<CalendarEvent[]>((acc, record) => {
-      const date = (record as any).dateString || record.date || "";
+      const date = record.dateString || "";
       if (!date) return acc;
       const sanitizedTimeZone = safeTimeZone((record as any).timeZone, fallbackZone);
       const sanitizedTime = normalizeTimeString((record as any).time);

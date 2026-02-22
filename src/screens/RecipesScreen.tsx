@@ -32,6 +32,7 @@ import { Linking } from "react-native";
 import { ImageGalleryModal } from "../components/modals/ImageGalleryModal";
 import { AudioPlayerModal } from "../components/modals/AudioPlayerModal";
 import { getRecipeType } from "../utils/recipeUtils";
+import UploadStatusIndicator from "../components/ui/UploadStatusIndicator";
 
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
@@ -255,7 +256,7 @@ export const RecipesScreen: React.FC = () => {
     }
   };
 
-  const renderRecipeImage = (imageString: string) => {
+  const renderRecipeImage = (imageString?: string | null) => {
     return <RecipeImage image={imageString} size={48} />;
   };
 
@@ -418,94 +419,98 @@ export const RecipesScreen: React.FC = () => {
   // ... (renderAllRecipes and renderCollections same)
   const renderAllRecipes = () => (
     <View style={styles.listContainer}>
-      {filteredRecipes.map((recipe) => (
-        <View key={recipe.id} style={{ marginBottom: 16 }}>
-          {/* Main Card */}
-          <Pressable
-            style={[styles.recipeCard, { backgroundColor: colors.card, borderRadius: radius.lg }]}
-            onPress={() => handleRecipePress(recipe)}
-          >
-            <View style={[styles.recipeImage, { backgroundColor: colors.muted, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }]}>
-              {renderRecipeImage(recipe.image)}
-            </View>
-            <View style={styles.recipeInfo}>
-              <View style={styles.recipeHeader}>
-                <Text style={[styles.recipeName, { color: colors.foreground }]}>{recipe.name}</Text>
-                <Pressable onPress={() => toggleBookmark(recipe.id)}>
-                  <AppIcon
-                    name="bookmark"
-                    size={20}
-                    color={recipe.saved ? colors.primary : colors.mutedForeground}
-                    style={recipe.saved ? { opacity: 1 } : { opacity: 0.5 }}
-                  />
-                </Pressable>
+      {filteredRecipes.map((recipe) => {
+        const isAudioRecipe = getRecipeType(recipe) === 'audio';
+        return (
+          <View key={recipe.id} style={{ marginBottom: 16 }}>
+            {/* Main Card */}
+            <Pressable
+              style={[styles.recipeCard, { backgroundColor: colors.card, borderRadius: radius.lg }]}
+              onPress={() => handleRecipePress(recipe)}
+            >
+              <UploadStatusIndicator uploadStatus={recipe.uploadStatus} />
+              <View style={[styles.recipeImage, { backgroundColor: colors.muted, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }]}>
+                {renderRecipeImage(recipe.image)}
               </View>
+              <View style={styles.recipeInfo}>
+                <View style={styles.recipeHeader}>
+                  <Text style={[styles.recipeName, { color: colors.foreground }]}>{recipe.name}</Text>
+                  <Pressable onPress={() => toggleBookmark(recipe.id)}>
+                    <AppIcon
+                      name="bookmark"
+                      size={20}
+                      color={recipe.saved ? colors.primary : colors.mutedForeground}
+                      style={recipe.saved ? { opacity: 1 } : { opacity: 0.5 }}
+                    />
+                  </Pressable>
+                </View>
 
-              <View style={styles.recipeMetaRow}>
-                {recipe.time ? (
-                  <View style={styles.metaItem}>
-                    <AppIcon name="clock" size={14} color={colors.mutedForeground} />
-                    <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.time}</Text>
-                  </View>
-                ) : null}
-                {recipe.image !== "AUDIO_ICON" && recipe.image !== "mic" && (
-                  <>
+                <View style={styles.recipeMetaRow}>
+                  {recipe.time ? (
                     <View style={styles.metaItem}>
-                      <AppIcon name="users" size={14} color={colors.mutedForeground} />
-                      <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.servings}</Text>
+                      <AppIcon name="clock" size={14} color={colors.mutedForeground} />
+                      <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.time}</Text>
                     </View>
-                    <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.ingredients.length} items</Text>
-                  </>
-                )}
-              </View>
+                  ) : null}
+                  {!isAudioRecipe && (
+                    <>
+                      <View style={styles.metaItem}>
+                        <AppIcon name="users" size={14} color={colors.mutedForeground} />
+                        <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.servings}</Text>
+                      </View>
+                      <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{recipe.ingredients.length} items</Text>
+                    </>
+                  )}
+                </View>
 
-              <View style={styles.tagsRow}>
-                {recipe.tags.map((tag) => (
-                  <View key={tag} style={[styles.smallTag, { backgroundColor: 'rgba(46, 94, 153, 0.1)', borderRadius: radius.xs }]}>
-                    <Text style={[styles.smallTagText, { color: colors.primary }]}>{tag}</Text>
-                  </View>
-                ))}
+                <View style={styles.tagsRow}>
+                  {recipe.tags.map((tag) => (
+                    <View key={tag} style={[styles.smallTag, { backgroundColor: 'rgba(46, 94, 153, 0.1)', borderRadius: radius.xs }]}>
+                      <Text style={[styles.smallTagText, { color: colors.primary }]}>{tag}</Text>
+                    </View>
+                  ))}
+                </View>
               </View>
+            </Pressable>
+
+            {/* Action Buttons - Outside the Card */}
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8, gap: 12, paddingHorizontal: 4 }}>
+              <Pressable
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                  borderWidth: 1,
+                  borderColor: 'black',
+                  borderRadius: radius.md,
+                  paddingVertical: 8,
+                  paddingHorizontal: 16,
+                }}
+                onPress={() => handleEditRecipe(recipe)}
+              >
+                <AppIcon name="edit" size={16} color="black" />
+                <Text style={{ fontSize: 13, color: "black", fontWeight: '600' }}>Edit</Text>
+              </Pressable>
+              <Pressable
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                  borderWidth: 1,
+                  borderColor: 'black',
+                  borderRadius: radius.md,
+                  paddingVertical: 8,
+                  paddingHorizontal: 16,
+                }}
+                onPress={() => handleDeleteRecipe(recipe)}
+              >
+                <AppIcon name="trash" size={16} color="black" />
+                <Text style={{ fontSize: 13, color: "black", fontWeight: '600' }}>Delete</Text>
+              </Pressable>
             </View>
-          </Pressable>
-
-          {/* Action Buttons - Outside the Card */}
-          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8, gap: 12, paddingHorizontal: 4 }}>
-            <Pressable
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 6,
-                borderWidth: 1,
-                borderColor: 'black',
-                borderRadius: radius.md,
-                paddingVertical: 8,
-                paddingHorizontal: 16,
-              }}
-              onPress={() => handleEditRecipe(recipe)}
-            >
-              <AppIcon name="edit" size={16} color="black" />
-              <Text style={{ fontSize: 13, color: "black", fontWeight: '600' }}>Edit</Text>
-            </Pressable>
-            <Pressable
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 6,
-                borderWidth: 1,
-                borderColor: 'black',
-                borderRadius: radius.md,
-                paddingVertical: 8,
-                paddingHorizontal: 16,
-              }}
-              onPress={() => handleDeleteRecipe(recipe)}
-            >
-              <AppIcon name="trash" size={16} color="black" />
-              <Text style={{ fontSize: 13, color: "black", fontWeight: '600' }}>Delete</Text>
-            </Pressable>
           </View>
-        </View>
-      ))}
+        )
+      })}
       {filteredRecipes.length === 0 && (
         <View style={styles.emptyState}>
           <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No recipes found</Text>
@@ -1043,6 +1048,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
     alignItems: 'flex-start',
+    position: 'relative',
   },
   recipeImage: {
     width: 72,

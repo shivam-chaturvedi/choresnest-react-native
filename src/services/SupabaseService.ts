@@ -1,13 +1,13 @@
 import { supabase } from '../config/supabase';
-import { PostgrestError, User, Session } from '@supabase/supabase-js';
+import { AuthError, PostgrestError, User, Session } from '@supabase/supabase-js';
 
 export interface SupabaseResponse<T = any> {
     data: T | null;
-    error: PostgrestError | null;
+    error: PostgrestError | AuthError | null;
 }
 
 export class SupabaseService {
-    private static logError(error: PostgrestError | null, context: string) {
+    private static logError(error: PostgrestError | AuthError | null, context: string) {
         if (error) {
             console.error(`Supabase error [${context}]`, error.message ?? error.toString(), error);
         }

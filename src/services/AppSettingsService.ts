@@ -13,14 +13,14 @@ const syncAfterWrite = () => {
 
 const fetchActiveProfileId = async (): Promise<string | null> => {
   try {
-    const { data: { user }, error } = await supabase.auth.getUser();
+    const { data: { session }, error } = await supabase.auth.getSession();
     if (error) {
       console.warn('AppSettingsService: Unable to resolve profile for settings write', error);
     }
-    if (!user) {
+    if (!session?.user) {
       return null;
     }
-    return user.id;
+    return session.user.id;
   } catch (error) {
     console.error('AppSettingsService: Failed to resolve profile for settings write', error);
     return null;

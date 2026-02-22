@@ -17,13 +17,25 @@ import {
   CollectionRecipe as CollectionRecipeModel,
 } from '../database/models/Recipe';
 import { SyncService } from '../services/SyncService';
-import {
-  uploadMultipleRecipeImages,
-  uploadRecipeAudio,
-} from '../services/StorageService';
 import { supabase } from '../config/supabase';
+import {
+  IMAGE_BUCKET,
+  AUDIO_BUCKET,
+  getBucketPublicUrl,
+} from '../services/StorageService';
+import { DocumentUploadScheduler } from '../services/sync/DocumentUploadScheduler';
 
-const OBSERVE_COLUMNS: string[] = ['updated_at', 'deleted'];
+const OBSERVE_COLUMNS: string[] = [
+  'updated_at',
+  'deleted',
+  'upload_status',
+  'remote_image_paths',
+  'remote_audio_path',
+  'local_image_uris',
+  'local_audio_uri',
+  'upload_attempts',
+  'last_upload_error',
+];
 const syncAfterWrite = () => {
   void SyncService.requestSyncSoon();
 };
@@ -40,10 +52,6 @@ const logError = (context: string, error: unknown) => {
   console.error(`RecipeContext: ${context}`, error);
 };
 
-const isRemoteUrl = (value?: string | null): boolean => {
-  return typeof value === 'string' && /^https?:\/\//i.test(value.trim());
-};
-
 const sanitizeImageInputs = (images?: string[] | null): string[] => {
   if (!images) {
     return [];
@@ -53,59 +61,28 @@ const sanitizeImageInputs = (images?: string[] | null): string[] => {
     .filter((uri): uri is string => !!uri);
 };
 
-const getFileNameFromUri = (uri: string): string => {
-  const cleaned = uri.split(/[?#]/)[0];
-  const segments = cleaned.split('/');
-  const candidate = segments.pop() ?? '';
-  if (!candidate) {
-    return `${Date.now()}`;
-  }
-  return candidate;
-};
-
-const createImageAsset = (uri: string) => ({
-  uri,
-  name: getFileNameFromUri(uri),
-});
-
-const resolveImageUrls = async (profileId: string, recipeId: string, images?: string[] | null): Promise<string[]> => {
-  const sanitizedImages = sanitizeImageInputs(images);
-  if (sanitizedImages.length === 0) {
+const toStringArray = (value?: unknown): string[] => {
+  if (!Array.isArray(value)) {
     return [];
   }
-
-  const localUris = sanitizedImages.filter((uri) => !isRemoteUrl(uri));
-  const uploadedLocalUrls = localUris.length
-    ? await uploadMultipleRecipeImages(profileId, recipeId, localUris.map(createImageAsset))
-    : [];
-
-  const finalUrls: string[] = [];
-  let uploadIndex = 0;
-
-  for (const uri of sanitizedImages) {
-    if (isRemoteUrl(uri)) {
-      finalUrls.push(uri);
-      continue;
-    }
-    const uploaded = uploadedLocalUrls[uploadIndex];
-    if (!uploaded) {
-      throw new Error('RecipeContext: Failed to upload recipe image before saving');
-    }
-    finalUrls.push(uploaded);
-    uploadIndex += 1;
-  }
-
-  return finalUrls;
+  return value
+    .map((item) => (typeof item === 'string' ? item.trim() : undefined))
+    .filter((item): item is string => Boolean(item));
 };
 
-const resolveAudioUrl = async (profileId: string, recipeId: string, audio?: string | null): Promise<string | undefined> => {
-  if (!audio) {
-    return undefined;
+const normalizeOptionalString = (value?: string | null): string | undefined => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+const hasLocalMedia = (localImageUris?: string[] | null, localAudioUri?: string | null): boolean => {
+  if (localImageUris && localImageUris.length > 0) {
+    return true;
   }
-  if (isRemoteUrl(audio)) {
-    return audio;
+  if (localAudioUri) {
+    return true;
   }
-  return uploadRecipeAudio(profileId, recipeId, { uri: audio });
+  return false;
 };
 
 interface RecipeContextType {
@@ -130,10 +107,10 @@ const useSupabaseProfileId = () => {
     const resolveProfile = async () => {
       try {
         const {
-          data: { user },
-        } = await supabase.auth.getUser();
+          data: { session },
+        } = await supabase.auth.getSession();
         if (mounted) {
-          setProfileId(user?.id ?? null);
+          setProfileId(session?.user?.id ?? null);
         }
       } catch (error) {
         if (mounted) {
@@ -280,54 +257,93 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     return map;
   }, [rawCollectionLinks]);
 
-  const recipes = useMemo<RecipeType[]>(
-    () =>
-      rawRecipes.map((record) => {
-        const data = record._raw;
-        const numericId = getRecipeNumericId(record.id);
-        const nutrition = record.nutrition ?? { kcal: '-', protein: '-', carbs: '-', fats: '-' };
-        return {
-          id: numericId,
-          name: data.name,
-          image: data.image_path ?? record.imagePath,
-          time: data.prep_time || record.prepTime || record.cookTime || '',
-          servings: data.servings ?? record.servings,
-          tags: data.tags_json ?? record.tags ?? [],
-          saved: data.is_saved ?? record.isSaved,
-          ingredients: data.ingredients_json ?? record.ingredients ?? [],
-          nutrition: {
-            kcal: nutrition.kcal ?? '-',
-            protein: nutrition.protein ?? '-',
-            carbs: nutrition.carbs ?? '-',
-            fats: nutrition.fats ?? '-',
-          },
-          audio: data.audio_path ?? record.audioPath || undefined,
-          duration: data.duration ?? record.duration ?? undefined,
-          url: data.url ?? record.url || undefined,
-          images: data.images_json ?? record.images ?? undefined,
-          countryCode: undefined,
-        };
-      }),
+  const recipes = useMemo(() =>
+    rawRecipes.map((record) => {
+      const numericId = getRecipeNumericId(record.id);
+      const nutrition = record.nutrition ?? { kcal: '-', protein: '-', carbs: '-', fats: '-' };
+
+      const remoteImagePaths = toStringArray(record.remoteImagePaths ?? []);
+      const localImageUris = toStringArray(record.localImageUris ?? []);
+      const remoteImageUrls = remoteImagePaths
+        .map((path) => getBucketPublicUrl(IMAGE_BUCKET, path))
+        .filter((url): url is string => Boolean(url));
+
+      const hasRemoteImages = remoteImageUrls.length > 0;
+      const hasLocalImages = localImageUris.length > 0;
+      const displayImage = hasRemoteImages
+        ? remoteImageUrls[0]
+        : hasLocalImages
+          ? localImageUris[0]
+          : undefined;
+
+      const derivedImages = hasRemoteImages
+        ? remoteImageUrls
+        : hasLocalImages
+          ? localImageUris
+          : undefined;
+
+      const image = displayImage;
+
+      const remoteAudioPath = normalizeOptionalString(record.remoteAudioPath ?? null);
+      const localAudioUri = normalizeOptionalString(record.localAudioUri ?? null);
+      const remoteAudioUrl =
+        remoteAudioPath !== undefined ? getBucketPublicUrl(AUDIO_BUCKET, remoteAudioPath) ?? undefined : undefined;
+      const audio =
+        remoteAudioUrl ?? localAudioUri ?? normalizeOptionalString(record.audioPath ?? null);
+
+      const uploadStatus = normalizeOptionalString(record.uploadStatus ?? null);
+      const uploadAttempts = record.uploadAttempts ?? undefined;
+      const lastUploadError = normalizeOptionalString(record.lastUploadError ?? null);
+
+      return {
+        id: numericId,
+        name: record.name,
+        image,
+        time: record.prepTime || record.cookTime || '',
+        servings: record.servings,
+        tags: record.tags ?? [],
+        saved: record.isSaved,
+        ingredients: record.ingredients ?? [],
+        nutrition: {
+          kcal: nutrition.kcal ?? '-',
+          protein: nutrition.protein ?? '-',
+          carbs: nutrition.carbs ?? '-',
+          fats: nutrition.fats ?? '-',
+        },
+        audio,
+        duration: record.duration ?? undefined,
+        url: record.url ?? undefined,
+        images: derivedImages,
+        uploadStatus,
+        localImageUris: localImageUris.length > 0 ? localImageUris : undefined,
+        localAudioUri: localAudioUri ?? undefined,
+        remoteImagePaths: remoteImagePaths.length > 0 ? remoteImagePaths : undefined,
+        remoteAudioPath,
+        uploadAttempts,
+        lastUploadError,
+        countryCode: undefined,
+        description: record.description,
+        instructions: record.instructions ?? [],
+      };
+    }) as RecipeType[],
     [rawRecipes]
   );
 
-  const collections = useMemo<RecipeCollection[]>(
-    () =>
-      rawCollections.map((record) => {
-        const data = record._raw;
-        const numericId = getCollectionNumericId(record.id);
-        const linkedRecipes = Array.from(
-          new Set(collectionRecipeMap.get(record.id) ?? [])
-        ).map((recipeRecordId) => getRecipeNumericId(recipeRecordId));
-        return {
-          id: numericId,
-          name: data.name,
-          description: data.description,
-          color: data.color,
-          count: linkedRecipes.length,
-          recipeIds: linkedRecipes,
-        };
-      }),
+  const collections = useMemo(() =>
+    rawCollections.map((record) => {
+      const numericId = getCollectionNumericId(record.id);
+      const linkedRecipes = Array.from(
+        new Set(collectionRecipeMap.get(record.id) ?? [])
+      ).map((recipeRecordId) => getRecipeNumericId(recipeRecordId));
+      return {
+        id: numericId,
+        name: record.name,
+        description: record.description,
+        color: record.color,
+        count: linkedRecipes.length,
+        recipeIds: linkedRecipes,
+      };
+    }) as RecipeCollection[],
     [rawCollections, collectionRecipeMap]
   );
 
@@ -339,17 +355,12 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const recipeId = String(uuidv4());
 
     void (async () => {
-      let finalImages: string[] = [];
-      let finalAudio: string | undefined;
-      try {
-        finalImages = await resolveImageUrls(effectiveProfileId, recipeId, newRecipeData.images);
-        finalAudio = await resolveAudioUrl(effectiveProfileId, recipeId, newRecipeData.audio ?? null);
-      } catch (uploadError) {
-        logError('addRecipe', uploadError);
-        return;
-      }
-
       const now = Date.now();
+      const sanitizedImages = sanitizeImageInputs(newRecipeData.images);
+      const sanitizedLocalImageUris = sanitizeImageInputs(newRecipeData.localImageUris);
+      const sanitizedLocalAudioUri = normalizeOptionalString(newRecipeData.localAudioUri ?? null);
+      const heroImage = sanitizedImages[0] ?? normalizeOptionalString(newRecipeData.image ?? null);
+      const pendingMedia = hasLocalMedia(sanitizedLocalImageUris, sanitizedLocalAudioUri ?? null);
 
       try {
         await database.write(async () => {
@@ -358,7 +369,7 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             record._raw.id = recipeId;
             record.profileId = effectiveProfileId;
             record.name = newRecipeData.name;
-            record.imagePath = finalImages[0] ?? '';
+            record.imagePath = heroImage ?? null;
             record.prepTime = newRecipeData.time || '';
             record.cookTime = '';
             record.servings = newRecipeData.servings;
@@ -370,11 +381,20 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
               carbs: newRecipeData.nutrition?.carbs ?? '-',
               fats: newRecipeData.nutrition?.fats ?? '-',
             };
+            record.description = newRecipeData.description ?? '';
+            record.instructions = newRecipeData.instructions ?? [];
             record.isSaved = false;
-            record.audioPath = finalAudio ?? '';
+            record.audioPath = newRecipeData.audio ?? '';
             record.duration = newRecipeData.duration ?? undefined;
             record.url = newRecipeData.url ?? '';
-            record.images = finalImages;
+            record.images = sanitizedImages;
+            record.localImageUris = sanitizedLocalImageUris;
+            record.localAudioUri = sanitizedLocalAudioUri;
+            record.remoteImagePaths = [];
+            record.remoteAudioPath = undefined;
+            record.uploadStatus = pendingMedia ? 'pending_upload' : 'uploaded';
+            record.uploadAttempts = 0;
+            record.lastUploadError = undefined;
             record.createdAt = now;
             record.updatedAt = now;
             record.deleted = false;
@@ -382,6 +402,9 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           });
         });
         syncAfterWrite();
+        if (pendingMedia) {
+          void DocumentUploadScheduler.requestRecipeUploadNow(effectiveProfileId);
+        }
       } catch (error) {
         logError('addRecipe', error);
       }
@@ -400,19 +423,14 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
 
     void (async () => {
-      let resolvedImages: string[] | undefined;
-      let resolvedAudio: string | undefined;
-      try {
-        if (updates.images !== undefined) {
-          resolvedImages = await resolveImageUrls(effectiveProfileId, recordId, updates.images);
-        }
-        if (updates.audio !== undefined) {
-          resolvedAudio = await resolveAudioUrl(effectiveProfileId, recordId, updates.audio ?? null);
-        }
-      } catch (uploadError) {
-        logError('updateRecipe', uploadError);
-        return;
-      }
+      const sanitizedImages = updates.images !== undefined ? sanitizeImageInputs(updates.images) : undefined;
+      const sanitizedLocalImageUris =
+        updates.localImageUris !== undefined ? sanitizeImageInputs(updates.localImageUris) : undefined;
+      const sanitizedLocalAudioUri =
+        updates.localAudioUri !== undefined ? normalizeOptionalString(updates.localAudioUri ?? null) : undefined;
+      const hasNewLocalImages = sanitizedLocalImageUris !== undefined && sanitizedLocalImageUris.length > 0;
+      const hasNewLocalAudio = Boolean(sanitizedLocalAudioUri);
+      const shouldTriggerUpload = hasNewLocalImages || hasNewLocalAudio;
 
       const now = Date.now();
       try {
@@ -426,7 +444,8 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
               draft.name = updates.name;
             }
             if (updates.image !== undefined) {
-              draft.imagePath = updates.image;
+              const normalizedImage = normalizeOptionalString(updates.image ?? null);
+              draft.imagePath = normalizedImage ?? null;
             }
             if (updates.time !== undefined) {
               draft.prepTime = updates.time;
@@ -449,10 +468,14 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                 fats: updates.nutrition?.fats ?? '-',
               };
             }
-            if (resolvedAudio !== undefined) {
-              draft.audioPath = resolvedAudio ?? '';
-            } else if (updates.audio !== undefined) {
-              draft.audioPath = '';
+            if (updates.description !== undefined) {
+              draft.description = updates.description;
+            }
+            if (updates.instructions !== undefined) {
+              draft.instructions = updates.instructions;
+            }
+            if (updates.audio !== undefined) {
+              draft.audioPath = updates.audio ?? '';
             }
             if (updates.duration !== undefined) {
               draft.duration = updates.duration;
@@ -460,17 +483,32 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             if (updates.url !== undefined) {
               draft.url = updates.url;
             }
-            if (resolvedImages !== undefined) {
-              draft.images = resolvedImages;
-              if (resolvedImages.length > 0) {
-                draft.imagePath = resolvedImages[0];
+            if (sanitizedImages !== undefined) {
+              draft.images = sanitizedImages;
+              draft.imagePath = sanitizedImages[0] ?? null;
+              if (sanitizedImages.length === 0) {
+                draft.remoteImagePaths = [];
               }
+            }
+            if (sanitizedLocalImageUris !== undefined) {
+              draft.localImageUris = sanitizedLocalImageUris;
+            }
+            if (sanitizedLocalAudioUri !== undefined) {
+              draft.localAudioUri = sanitizedLocalAudioUri ?? null;
+            }
+            if (shouldTriggerUpload) {
+              draft.uploadStatus = 'pending_upload';
+              draft.uploadAttempts = 0;
+              draft.lastUploadError = undefined;
             }
             draft.updatedAt = now;
             draft.version = (draft.version ?? 0) + 1;
           });
         });
         syncAfterWrite();
+        if (shouldTriggerUpload) {
+          void DocumentUploadScheduler.requestRecipeUploadNow(effectiveProfileId);
+        }
       } catch (error) {
         logError('updateRecipe', error);
       }
@@ -480,7 +518,7 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const toggleBookmark = (id: number) => {
     const effectiveProfileId = requireProfileId(profileId);
     if (!effectiveProfileId) {
-      console.warn('RecipeContext: Profile missing while toggling bookmark');
+      console.warn('RecipeContext: profile_id missing for toggleBookmark');
       return false;
     }
     const recordId = resolveRecipeRecordId(id);
@@ -533,11 +571,13 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           }),
         ];
         const linkCollection = database.get<CollectionRecipeModel>('collection_recipes');
-        const links = await linkCollection.query(
-          Q.where('profile_id', effectiveProfileId),
-          Q.where('recipe_id', recordId),
-          Q.where('deleted', false)
-        ).fetch();
+        const links = await linkCollection
+          .query(
+            Q.where('profile_id', effectiveProfileId),
+            Q.where('recipe_id', recordId),
+            Q.where('deleted', false)
+          )
+          .fetch();
         links.forEach((link) => {
           operations.push(
             link.prepareUpdate((draft) => {
@@ -633,11 +673,13 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           return;
         }
         const linkCollection = database.get<CollectionRecipeModel>('collection_recipes');
-        const existingLinks = await linkCollection.query(
-          Q.where('profile_id', effectiveProfileId),
-          Q.where('collection_id', recordId),
-          Q.where('deleted', false)
-        ).fetch();
+        const existingLinks = await linkCollection
+          .query(
+            Q.where('profile_id', effectiveProfileId),
+            Q.where('collection_id', recordId),
+            Q.where('deleted', false)
+          )
+          .fetch();
         const desiredRecipeRecordIds = Array.from(new Set(updates.recipeIds))
           .map(resolveRecipeRecordId)
           .filter((recipeId): recipeId is string => Boolean(recipeId));

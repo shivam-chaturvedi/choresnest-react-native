@@ -143,7 +143,14 @@ const AppNavigatorInner = () => {
       }
     };
 
-      const runInitialSync = async () => {
+    // Defer all initial network heavy operations by 8 seconds
+    // to ensure Splash Screen and UI have fully rendered
+    const INITIAL_SYNC_DELAY = 8000;
+    let appHasStarted = false;
+    setTimeout(() => { appHasStarted = true; }, INITIAL_SYNC_DELAY);
+
+    const runInitialSync = async () => {
+      setTimeout(async () => {
         try {
           const shouldDoWriteSync = await SyncService.shouldDoWriteSync();
           if (shouldDoWriteSync) {
@@ -157,19 +164,20 @@ const AppNavigatorInner = () => {
           console.error('Failed to check write sync requirement, doing read-only sync:', err);
           void triggerSync(true);
         }
-      };
+      }, INITIAL_SYNC_DELAY);
+    };
 
     runInitialSync();
 
     appStateSubscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
-      if (nextAppState === 'active') {
+      if (nextAppState === 'active' && appHasStarted) {
         console.log('App foreground: Doing read-only sync');
         void triggerSync(true);
       }
     });
 
     netInfoUnsubscribe = NetInfo.addEventListener(state => {
-      if (state.isConnected) {
+      if (state.isConnected && appHasStarted) {
         console.log('Network connected: Doing read-only sync');
         void triggerSync(true);
       }

@@ -76,7 +76,7 @@ const defaultFetchDocuments = async (profileId: string): Promise<DocumentRecord[
         localUri: record.localUri,
         filePath: record.filePath,
         remotePath: record.remotePath,
-        uploadStatus: record.uploadStatus,
+        uploadStatus: record.uploadStatus as DocumentUploadStatus,
         uploadAttempts: record.uploadAttempts,
         model: record,
     }));
@@ -90,15 +90,15 @@ const defaultPersist = async (record: DocumentRecord, updates: PersistUpdates): 
         await record.model!.update(doc => {
             if (updates.uploadStatus !== undefined) doc.uploadStatus = updates.uploadStatus ?? 'pending_upload';
             if (updates.uploadAttempts !== undefined) doc.uploadAttempts = updates.uploadAttempts ?? 0;
-            if (updates.lastUploadError !== undefined) doc.lastUploadError = updates.lastUploadError ?? null;
-            if (updates.remotePath !== undefined) doc.remotePath = updates.remotePath ?? null;
-            if (updates.filePath !== undefined) doc.filePath = updates.filePath ?? null;
-            if (updates.contentType !== undefined) doc.contentType = updates.contentType ?? null;
-            if (updates.fileSize !== undefined) doc.fileSize = updates.fileSize ?? null;
-            if (updates.checksum !== undefined) doc.checksum = updates.checksum ?? null;
+            if (updates.lastUploadError !== undefined) doc.lastUploadError = updates.lastUploadError ?? undefined;
+            if (updates.remotePath !== undefined) doc.remotePath = updates.remotePath ?? undefined;
+            if (updates.filePath !== undefined) doc.filePath = updates.filePath ?? undefined;
+            if (updates.contentType !== undefined) doc.contentType = updates.contentType ?? undefined;
+            if (updates.fileSize !== undefined) doc.fileSize = updates.fileSize ?? undefined;
+            if (updates.checksum !== undefined) doc.checksum = updates.checksum ?? undefined;
         });
     });
-};
+}; 
 
 export class DocumentUploadWorker {
     private dependencies: DocumentUploadWorkerDependencies;
@@ -263,7 +263,6 @@ export class DocumentUploadWorker {
                 uploadAttempts: attempts,
                 lastUploadError: null,
                 remotePath: metadata.remotePath,
-                filePath: metadata.remotePath,
                 contentType: metadata.contentType ?? null,
                 fileSize: metadata.fileSize ?? null,
                 checksum: metadata.checksum ?? null,

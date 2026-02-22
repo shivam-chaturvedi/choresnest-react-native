@@ -17,8 +17,9 @@ import { AppIcon, AppIconName } from "../components/ui/AppIcon";
 import { useFamily, FamilyMember } from "../contexts/FamilyContext";
 import { PROFILE_COLORS } from "../constants/profileColors";
 import { useAuth } from "../contexts/AuthContext";
-import { SyncService } from "../services/SyncService";
 import Config from "react-native-config";
+
+const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 
 interface MenuItem {
   label: string;
@@ -43,69 +44,27 @@ export const MoreScreen: React.FC = () => {
   const { logout, isGuest } = useAuth();
   const { activeMember, members, setActiveMember } = useFamily();
   const [showProfileSwitcher, setShowProfileSwitcher] = useState(false);
-  
-  const [syncSummary, setSyncSummary] = useState(() => SyncService.getLastSyncSummary());
-  const [manualMessage, setManualMessage] = useState<string | null>(null);
-  const [isManualSyncing, setIsManualSyncing] = useState(false);
-  const syncButtonDisabled = isGuest || isManualSyncing;
-  const statusLabel = isManualSyncing ? 'Syncing…' : 'Idle';
-  const formatTimestamp = (value: number | null) =>
-    value ? new Date(value).toLocaleString() : 'Never';
-  const nextAllowedText = syncSummary.nextAllowedAt && syncSummary.nextAllowedAt > Date.now()
-    ? new Date(syncSummary.nextAllowedAt).toLocaleTimeString()
-    : 'Now';
 
-  const handleManualSync = async () => {
-    if (syncButtonDisabled) {
-      if (isGuest) {
-        setManualMessage('Sync not available for guest mode');
-      }
-      return;
-    }
-    setManualMessage(null);
-    setIsManualSyncing(true);
-    try {
-      await SyncService.manualSyncNow();
-      setSyncSummary(SyncService.getLastSyncSummary());
-    } catch (error) {
-      console.error('Manual sync failed', error);
-      setManualMessage('Sync failed. Try again soon.');
-    } finally {
-      setIsManualSyncing(false);
-    }
-  };
-
-  useEffect(() => {
-    const unsubscribe = SyncService.onSyncStatusChange((syncing) => {
-      if (!syncing) {
-        setSyncSummary(SyncService.getLastSyncSummary());
-      }
-    });
-    return unsubscribe;
-  }, []);
+  const debugToolsEnabled = (Config.ENABLE_DEBUG_TOOLS ?? '').trim().toLowerCase() === 'true';
 
   // Safe access to profile color
   const activeProfileColor = activeMember?.color
     ? (PROFILE_COLORS.find(c => c.value === activeMember.color)?.hex || colors.primary)
     : colors.primary;
 
-  // Debug: Log Config.ENABLE_DEBUG_TOOLS value
-  console.log('Config.ENABLE_DEBUG_TOOLS value:', Config.ENABLE_DEBUG_TOOLS);
-  console.log('Config.ENABLE_DEBUG_TOOLS type:', typeof Config.ENABLE_DEBUG_TOOLS);
-  console.log('Config.ENABLE_DEBUG_TOOLS === "true":', Config.ENABLE_DEBUG_TOOLS === "true");
 
   const sections: MenuSection[] = [
     {
       title: "FEATURES",
       items: [
-        {
+        ...(ENABLE_RECIPE_AND_MEALS ? [{
           label: "Recipes & Meals",
           description: "Meal planning & recipes",
-          icon: "utensils",
+          icon: "utensils" as AppIconName,
           color: colors.primary + '25',
           iconColor: colors.primary,
           route: "Recipes"
-        },
+        }] : []),
         {
           label: "Nutrition & Health",
           description: "Track health & diet",
@@ -146,6 +105,14 @@ export const MoreScreen: React.FC = () => {
           iconColor: colors.primary,
           route: "Vault"
         },
+        {
+          label: "Data Export",
+          description: "Backup your data",
+          icon: "download",
+          color: colors.muted,
+          iconColor: colors.foreground,
+          route: "DataExport"
+        },
       ],
     },
 
@@ -185,14 +152,6 @@ export const MoreScreen: React.FC = () => {
           route: "Settings"
         },
         {
-          label: "Data Export",
-          description: "Backup your data",
-          icon: "download",
-          color: colors.muted,
-          iconColor: colors.foreground,
-          route: "DataExport"
-        },
-        {
           label: "Help & Support",
           description: "FAQ & contact us",
           icon: "help",
@@ -202,7 +161,7 @@ export const MoreScreen: React.FC = () => {
         },
       ],
     },
-    ...(Config.ENABLE_DEBUG_TOOLS === "true" ? [{
+    ...(debugToolsEnabled ? [{
       title: "DEVELOPER",
       items: [
         {
@@ -338,11 +297,11 @@ export const MoreScreen: React.FC = () => {
             <AppIcon name="rotateCw" size={20} color={colors.mutedForeground} />
           </Pressable>
 
-      {sections.map((section) => (
-        <View key={section.title} style={styles.sectionContainer}>
-          <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>{section.title}</Text>
-          <View style={[styles.sectionCard, { backgroundColor: colors.card, shadowColor: colors.foreground, borderRadius: radius.card }]}>
-            {section.items.map((item, index) => {
+          {sections.map((section) => (
+            <View key={section.title} style={styles.sectionContainer}>
+              <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>{section.title}</Text>
+              <View style={[styles.sectionCard, { backgroundColor: colors.card, shadowColor: colors.foreground, borderRadius: radius.card }]}>
+                {section.items.map((item, index) => {
                   if (item.label === "Nutrition & Health") return null;
 
                   return (
@@ -373,48 +332,9 @@ export const MoreScreen: React.FC = () => {
                     </Pressable>
                   );
                 })}
-          </View>
-        </View>
-      ))}
-
-      <View
-        style={[
-          styles.syncPanel,
-          { backgroundColor: colors.card, shadowColor: colors.foreground, borderRadius: radius.card },
-        ]}
-      >
-        <Text style={[styles.syncTitle, { color: colors.foreground }]}>Sync Status</Text>
-        <Pressable
-          style={({ pressed }) => [
-            styles.syncButton,
-            { borderColor: colors.border, backgroundColor: syncButtonDisabled ? colors.muted : colors.primary },
-            pressed && !syncButtonDisabled && { opacity: 0.7 },
-          ]}
-          onPress={handleManualSync}
-          disabled={syncButtonDisabled}
-          accessibilityRole="button"
-          accessibilityLabel="Manual sync"
-        >
-          <View style={styles.syncButtonContent}>
-            {isManualSyncing ? (
-              <ActivityIndicator size="small" color={colors.primaryForeground} />
-            ) : (
-              <AppIcon name="rotateCw" size={18} color={colors.primaryForeground} />
-            )}
-            <Text style={[styles.syncButtonText, { color: colors.primaryForeground }]}> 
-              {isManualSyncing ? 'Syncing…' : 'Sync Now'}
-            </Text>
-          </View>
-        </Pressable>
-        <Text style={[styles.syncStatusText, { color: colors.mutedForeground }]}>Status: {statusLabel}</Text>
-        <Text style={[styles.syncMetaText, { color: colors.mutedForeground }]}>Last synced: {formatTimestamp(syncSummary.lastSuccessAt)}</Text>
-        <Text style={[styles.syncMetaText, { color: colors.mutedForeground }]}>Next allowed: {nextAllowedText}</Text>
-        {(manualMessage || (isGuest && syncButtonDisabled)) && (
-          <Text style={[styles.syncMetaText, { color: colors.danger }]}> 
-            {manualMessage ?? 'Sync not available for guest mode'}
-          </Text>
-        )}
-      </View>
+              </View>
+            </View>
+          ))}
 
           <Pressable style={[styles.logoutButton, { backgroundColor: colors.card, shadowColor: colors.foreground, borderColor: colors.border, borderRadius: radius.card }]} onPress={handleLogout}>
             <AppIcon name="logOut" size={20} color={colors.danger} />
@@ -656,44 +576,5 @@ const styles = StyleSheet.create({
   },
   optionName: {
     fontSize: 16
-  },
-  syncPanel: {
-    marginVertical: 16,
-    padding: 16,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  syncTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  syncButton: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  syncButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  syncButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  syncStatusText: {
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  syncMetaText: {
-    fontSize: 12,
-    marginBottom: 2,
-  },
+  }
 });

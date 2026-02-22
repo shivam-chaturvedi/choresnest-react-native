@@ -328,12 +328,12 @@ export const SyncService = {
     },
 
     async sync(readOnly = false, options: { finalPull?: boolean; mode?: SyncMode } = {}): Promise<void> {
-    if (!SYNC_ENABLED_FLAG) {
-        if (!hasLoggedSyncDisabledWarning) {
-            logSyncDisabledWarning();
+        if (!SYNC_ENABLED_FLAG) {
+            if (!hasLoggedSyncDisabledWarning) {
+                logSyncDisabledWarning();
+            }
+            return;
         }
-        return;
-    }
 
         if (syncPromise) {
             console.log('Sync already in progress, returning existing promise to avoid overlap');
@@ -350,21 +350,21 @@ export const SyncService = {
             console.error('Invariant violation: isSyncing true but no syncPromise active');
         }
 
-    if (syncSoonTimer) {
-        clearTimeout(syncSoonTimer);
-        syncSoonTimer = null;
-    }
+        if (syncSoonTimer) {
+            clearTimeout(syncSoonTimer);
+            syncSoonTimer = null;
+        }
 
-    if (!canPerformBackoff()) {
-        const nextAttempt = new Date(getBackoffNextAttempt()).toISOString();
-        console.log(`Sync deferred until ${nextAttempt} due to recent failures/backoff.`);
-        return;
-    }
+        if (!canPerformBackoff()) {
+            const nextAttempt = new Date(getBackoffNextAttempt()).toISOString();
+            console.log(`Sync deferred until ${nextAttempt} due to recent failures/backoff.`);
+            return;
+        }
 
-    const mode = options.mode ?? 'unknown';
-    lastSyncMode = mode;
-    lastSyncAttemptAt = Date.now();
-    lastSyncErrorMessage = null;
+        const mode = options.mode ?? 'unknown';
+        lastSyncMode = mode;
+        lastSyncAttemptAt = Date.now();
+        lastSyncErrorMessage = null;
 
         try {
             const guest = await isGuestMode();
@@ -377,9 +377,10 @@ export const SyncService = {
         }
 
         const {
-            data: { user },
+            data: { session },
             error: authError,
-        } = await supabase.auth.getUser();
+        } = await supabase.auth.getSession();
+        const user = session?.user;
         if (authError || !user) {
             console.log('No user logged in or auth error, skipping sync', authError);
             return;
@@ -489,22 +490,22 @@ export const SyncService = {
                     console.warn(`Sync paused after ${MAX_CONSECUTIVE_FAILURES} consecutive failures. Will retry on next trigger.`);
                 }
             } finally {
-            if (syncTimeout) {
-                clearTimeout(syncTimeout);
-            }
-            if (didTimeout) {
-                console.warn('Sync completed after timing out; review logs if progress stalled.');
-            }
-            isSyncing = false;
-            syncPromise = null;
-            lastSyncFinishedAt = Date.now();
-            this._notifySyncStatus(false);
-            if (pendingSyncRequest) {
-                pendingSyncRequest = false;
-                setTimeout(() => {
-                    void this.requestSyncSoon();
-                }, MIN_SYNC_GAP_MS);
-            }
+                if (syncTimeout) {
+                    clearTimeout(syncTimeout);
+                }
+                if (didTimeout) {
+                    console.warn('Sync completed after timing out; review logs if progress stalled.');
+                }
+                isSyncing = false;
+                syncPromise = null;
+                lastSyncFinishedAt = Date.now();
+                this._notifySyncStatus(false);
+                if (pendingSyncRequest) {
+                    pendingSyncRequest = false;
+                    setTimeout(() => {
+                        void this.requestSyncSoon();
+                    }, MIN_SYNC_GAP_MS);
+                }
             }
         })();
 

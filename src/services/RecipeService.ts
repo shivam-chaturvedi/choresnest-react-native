@@ -48,7 +48,7 @@ export const RecipeService = {
     addRecipe: async (data: Partial<Recipe>) => {
         try {
             // Persist image if provided
-            let finalImagePath = data.imagePath || '';
+            let finalImagePath = data.imagePath;
             if (finalImagePath && !finalImagePath.includes(RNFS.DocumentDirectoryPath)) {
                 finalImagePath = await saveImageToStorage(finalImagePath);
             }
@@ -60,7 +60,7 @@ export const RecipeService = {
                     r.prepTime = data.prepTime || '0 mins';
                     r.cookTime = data.cookTime || '0 mins';
                     r.servings = data.servings || 1;
-                    r.imagePath = finalImagePath;
+                    r.imagePath = finalImagePath ?? null;
                     r.isSaved = data.isSaved || false;
                     r.ingredients = data.ingredients || [];
                     r.instructions = data.instructions || [];

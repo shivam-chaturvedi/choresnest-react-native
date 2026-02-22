@@ -15,7 +15,7 @@ export class Recipe extends Model {
     @field('servings') servings!: number;
     @text('difficulty') difficulty?: string;
     @text('calories') calories?: string;
-    @text('image_path') imagePath!: string;
+    @text('image_path') imagePath?: string | null;
     @field('is_saved') isSaved!: boolean;
     @field('rating') rating?: number;
     @text('author') author?: string;
@@ -25,8 +25,14 @@ export class Recipe extends Model {
     @json('tags_json', (json: any) => json) tags!: string[];
     @json('nutrition_json', (json: any) => json) nutrition?: any;
     @json('images_json', (json: any) => json) images?: string[];
-
+    @json('local_image_uris', (json: any) => json ?? []) localImageUris!: any[];
+    @json('remote_image_paths', (json: any) => json ?? []) remoteImagePaths?: string[];
+    @text('remote_audio_path') remoteAudioPath?: string;
     @text('audio_path') audioPath?: string;
+    @text('local_audio_uri') localAudioUri?: string;
+    @text('upload_status') uploadStatus!: string;
+    @field('upload_attempts') uploadAttempts!: number;
+    @text('last_upload_error') lastUploadError?: string;
     @field('duration') duration?: number;
     @text('url') url?: string;
     @field('created_at') createdAt!: number;

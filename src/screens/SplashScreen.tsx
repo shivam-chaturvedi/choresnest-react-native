@@ -52,10 +52,10 @@ export const SplashScreen = ({ onContinue, isLoading }: SplashScreenProps) => {
           })
         ]).start();
 
-        // 3. Wait for minimum duration (800ms for animation to finish nicely)
-        await new Promise<void>(resolve => {
-          setTimeout(() => resolve(), 800);
-        });
+        // 3. Wait for minimum duration removed to load homescreen directly
+        // await new Promise<void>(resolve => {
+        //   setTimeout(() => resolve(), 800);
+        // });
 
         // 4. Navigate
         if (hasSeen === "true") {

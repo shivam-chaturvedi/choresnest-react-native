@@ -27,7 +27,6 @@ import { AddTaskModal } from "../components/modals/AddTaskModal";
 import { AddShoppingItemModal } from "../components/modals/AddShoppingItemModal";
 import { AddMemberModal } from "../components/modals/AddMemberModal";
 import { FamilyOnboarding } from "../components/family/FamilyOnboarding";
-import { FamilyDashboard } from "../components/dashboard/FamilyDashboard";
 import { NotificationPanel } from "../components/notifications/NotificationPanel";
 import { AppNotification, NotificationCenter, NotificationRoute } from "../services/NotificationCenter";
 import { useAuth } from "../contexts/AuthContext";
@@ -37,6 +36,9 @@ import { useSidebar } from "../contexts/SidebarContext";
 import { AppIcon, AppIconName } from "../components/ui/AppIcon";
 import { PROFILE_COLORS } from "../constants/profileColors";
 import { parseDateTimeInZone } from "../utils/SafeDateUtils";
+import Config from "react-native-config";
+
+const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 import ReactNativeHapticFeedback from "react-native-haptic-feedback";
 
 const hapticOptions = {
@@ -77,8 +79,6 @@ export const HomeScreen: React.FC = () => {
   const [showFamilyOnboarding, setShowFamilyOnboarding] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
 
-  // Dashboard Toggle
-  const [showDashboard, setShowDashboard] = useState(false);
   const navTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const NAV_MARK_DELAY = 3000;
 
@@ -406,7 +406,11 @@ export const HomeScreen: React.FC = () => {
     { label: "Event", iconName: "calendar", action: () => setShowAddEvent(true), color: colors.info, bg: colors.info + '25' },
     { label: "Task", iconName: "checkSquare", action: () => setShowAddTask(true), color: colors.success, bg: colors.success + '25' },
     { label: "Item", iconName: "shoppingCart", action: () => setShowAddItem(true), color: colors.warning, bg: colors.warning + '25' },
-    { label: "Recipe", iconName: "utensils", action: () => (navigation as any).navigate("home", { screen: "Recipes" }), color: colors.primary, bg: colors.muted },
+    ...(ENABLE_RECIPE_AND_MEALS ? [
+      { label: "Recipe", iconName: "utensils" as AppIconName, action: () => (navigation as any).navigate("home", { screen: "Recipes" }), color: colors.primary, bg: colors.muted }
+    ] : [
+      { label: "Vault", iconName: "lock" as AppIconName, action: () => (navigation as any).navigate("home", { screen: "Vault" }), color: colors.primary, bg: colors.muted }
+    ])
   ];
 
   const todayKey = new Date().toISOString().split("T")[0];
@@ -579,11 +583,6 @@ export const HomeScreen: React.FC = () => {
                 <AppIcon name="sparkles" size={20} color={colors.primaryForeground} style={{ marginRight: 8 }} />
                 <Text style={{ fontSize: 18, fontWeight: "700", color: colors.primaryForeground }}>Today at a Glance</Text>
               </View>
-              <Pressable onPress={() => setShowDashboard(!showDashboard)}>
-                <Text style={{ color: colors.primaryForeground + 'E6', fontWeight: "500" }}>
-                  {showDashboard ? "Hide" : "View"} Dashboard
-                </Text>
-              </Pressable>
             </View>
             <View style={styles.glanceStats}>
               {glanceMetrics.map((metric, index) => (
@@ -604,8 +603,6 @@ export const HomeScreen: React.FC = () => {
               ))}
             </View>
           </View>
-
-          {showDashboard && <FamilyDashboard activeMemberId={activeMember?.id} />}
 
           {/* Quick Actions */}
           <View style={{ marginTop: 8, marginBottom: 24 }}>
@@ -685,35 +682,37 @@ export const HomeScreen: React.FC = () => {
           </View>
 
           {/* Meals Today */}
-          <View style={[styles.card, styles.cardSpacing, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.foreground, borderRadius: radius.card }]}>
-            <View style={styles.cardHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <AppIcon name="utensils" size={18} color={colors.primary} style={{ marginRight: 8 }} />
-                <Text style={{ fontSize: 18, fontWeight: "700", color: colors.foreground }}>Meals Today</Text>
+          {ENABLE_RECIPE_AND_MEALS && (
+            <View style={[styles.card, styles.cardSpacing, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.foreground, borderRadius: radius.card }]}>
+              <View style={styles.cardHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <AppIcon name="utensils" size={18} color={colors.primary} style={{ marginRight: 8 }} />
+                  <Text style={{ fontSize: 18, fontWeight: "700", color: colors.foreground }}>Meals Today</Text>
+                </View>
+                <Pressable onPress={() => (navigation as any).navigate("MealPlan")}>
+                  <Text style={{ color: colors.primary, fontWeight: "600", fontSize: 14 }}>Meal Plan ›</Text>
+                </Pressable>
               </View>
-              <Pressable onPress={() => (navigation as any).navigate("MealPlan")}>
-                <Text style={{ color: colors.primary, fontWeight: "600", fontSize: 14 }}>Meal Plan ›</Text>
-              </Pressable>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 16 }}>
+                <View style={{ flexDirection: 'row', gap: 12 }}>
+                  {mealSummary.map((meal) => (
+                    <Pressable
+                      key={meal.label}
+                      onPress={() => (navigation as any).navigate("MealPlan")}
+                      style={[styles.mealItem, { backgroundColor: meal.hasMeal ? colors.success + '20' : colors.muted, borderRadius: radius.md }]}
+                    >
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                        <Text style={{ fontSize: 20 }}>{meal.icon}</Text>
+                        {meal.hasMeal && <AppIcon name="check" size={14} color={colors.success} />}
+                      </View>
+                      <Text style={{ fontSize: 16, fontWeight: "700", color: colors.foreground, marginTop: "auto" }}>{meal.label}</Text>
+                      <Text style={{ fontSize: 12, color: colors.mutedForeground }} numberOfLines={2}>{meal.detail}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </ScrollView>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 16 }}>
-              <View style={{ flexDirection: 'row', gap: 12 }}>
-                {mealSummary.map((meal) => (
-                  <Pressable
-                    key={meal.label}
-                    onPress={() => (navigation as any).navigate("MealPlan")}
-                    style={[styles.mealItem, { backgroundColor: meal.hasMeal ? colors.success + '20' : colors.muted, borderRadius: radius.md }]}
-                  >
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-                      <Text style={{ fontSize: 20 }}>{meal.icon}</Text>
-                      {meal.hasMeal && <AppIcon name="check" size={14} color={colors.success} />}
-                    </View>
-                    <Text style={{ fontSize: 16, fontWeight: "700", color: colors.foreground, marginTop: "auto" }}>{meal.label}</Text>
-                    <Text style={{ fontSize: 12, color: colors.mutedForeground }} numberOfLines={2}>{meal.detail}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            </ScrollView>
-          </View>
+          )}
 
           {/* Alerts */}
           <View style={{ marginBottom: 24 }}>
