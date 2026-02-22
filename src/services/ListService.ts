@@ -12,16 +12,17 @@ const syncAfterWrite = () => {
 const fetchActiveProfileId = async (): Promise<string | null> => {
   try {
     const {
-      data: { user },
+      data: { session },
       error,
-    } = await supabase.auth.getUser();
+    } = await supabase.auth.getSession();
     if (error) {
       console.warn('ListService: Unable to resolve profile for list item write', error);
-    }
-    if (!user) {
       return null;
     }
-    return user.id;
+    if (!session?.user) {
+      return null;
+    }
+    return session.user.id;
   } catch (error) {
     console.error('ListService: Failed to read profile for list item write', error);
     return null;

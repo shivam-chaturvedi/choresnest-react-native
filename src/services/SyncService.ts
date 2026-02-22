@@ -40,10 +40,18 @@ const MIN_SYNC_GAP_MS = 300;
 let lastSyncFinishedAt = 0;
 
 let realtimeChannel: RealtimeChannel | null = null;
+let lastRealtimeAttempt = 0;
+
 const ensureRealtimeSubscription = (triggerSync: () => void) => {
     if (realtimeChannel) {
         return;
     }
+    const now = Date.now();
+    if (now - lastRealtimeAttempt < 5000) {
+        return; // Prevent recursive or frequent websocket handshake spam
+    }
+    lastRealtimeAttempt = now;
+
     realtimeChannel = supabase.channel('realtime_sync');
     const watchTables = REALTIME_WATCH_TABLES;
     watchTables.forEach((table) => {
@@ -67,7 +75,7 @@ const teardownRealtimeSubscription = () => {
     realtimeChannel = null;
 };
 
-type SyncMode = 'manual' | 'periodic' | 'debounced' | 'unknown';
+type SyncMode = 'manual' | 'periodic' | 'debounced' | 'force_full' | 'unknown';
 type SyncOptions = {
     mode?: SyncMode;
     bypassBackoff?: boolean;
@@ -258,6 +266,11 @@ const applySyncTimeout = (callback: () => void): ReturnType<typeof setTimeout> =
     setTimeout(callback, 120000);
 
 const handleSyncError = (error: any): void => {
+    // Silently ignore concurrent sync errors as they are expected when multiple triggers fire
+    if (error?.message?.includes('Concurrent synchronization is not allowed')) {
+        return;
+    }
+
     console.error('✗ Sync failed:', error);
     if (error?.message) {
         console.error('Sync error details:', error.message);
@@ -551,6 +564,22 @@ export const SyncService = {
         lastSyncSuccessAt = null;
         lastSyncErrorMessage = null;
         lastSyncMode = 'unknown';
+    },
+
+    async forceFullSync(): Promise<void> {
+        console.log('🔁 Force full sync requested — resetting cursor and re-syncing all data from Supabase');
+        consecutiveFailures = 0;
+        lastSyncError = null;
+        resetBackoff();
+        clearConflictHistory();
+        // Reset the persisted cursor so ALL rows are re-fetched, even those with old updated_at
+        await resetSyncCursorState();
+        lastSyncAttemptAt = null;
+        lastSyncSuccessAt = null;
+        lastSyncErrorMessage = null;
+        lastSyncMode = 'unknown';
+        // Immediately trigger a full sync
+        await this.sync(false, { mode: 'force_full' });
     },
 
     getLastSuccessfulSyncAt(): number | null {

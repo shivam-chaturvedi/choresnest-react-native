@@ -93,6 +93,7 @@ export interface VaultDocument {
   serviceDate?: string;
   nextServiceDate?: string;
   cost?: string;
+  fileSize?: number;
   reminderRules?: VaultReminderRule[];
 }
 

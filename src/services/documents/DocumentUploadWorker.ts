@@ -2,6 +2,10 @@ import { Q } from '@nozbe/watermelondb';
 import { database } from '../../database';
 import Document from '../../database/models/Document';
 import { DocumentStorageClient, DocumentUploadResult } from './DocumentStorageClient';
+import { SyncService } from '../SyncService';
+import RNFS from 'react-native-fs';
+import { VaultService } from '../VaultService';
+import { buildLocalCachePath, ensureCacheDir } from './DocumentDownloadWorker';
 
 export type DocumentUploadStatus = 'pending_upload' | 'uploading' | 'uploaded' | 'failed';
 
@@ -96,9 +100,15 @@ const defaultPersist = async (record: DocumentRecord, updates: PersistUpdates): 
             if (updates.contentType !== undefined) doc.contentType = updates.contentType ?? undefined;
             if (updates.fileSize !== undefined) doc.fileSize = updates.fileSize ?? undefined;
             if (updates.checksum !== undefined) doc.checksum = updates.checksum ?? undefined;
+            doc.updatedAt = Date.now();
+            doc.version = (doc.version ?? 0) + 1;
         });
     });
-}; 
+
+    // We updated metadata (like uploadStatus/remotePath). We must trigger a sync 
+    // to push this changed document record to Supabase.
+    void SyncService.requestSyncSoon();
+};
 
 export class DocumentUploadWorker {
     private dependencies: DocumentUploadWorkerDependencies;
@@ -244,20 +254,65 @@ export class DocumentUploadWorker {
         const attempts = (doc.uploadAttempts ?? 0) + 1;
         try {
             console.log('DocumentUploadWorker: starting upload', doc.id, localUri);
+
+            if (!localUri) {
+                throw new Error('DocumentUploadWorker: local path missing');
+            }
+
+            // Verify the file actually exists on this device
+            // It might be a document synced from another device that just lacks the local image
+            const fileExists = await RNFS.exists(localUri);
+            if (!fileExists) {
+                console.warn(`DocumentUploadWorker: File missing on device: ${localUri}`);
+
+                // If it's not marked as locally changed/created, it must have synced from another device
+                // so we can safely mark the upload as resolved locally
+                const isLocallyModified = doc.model?.syncStatus === 'created' || doc.model?.syncStatus === 'updated';
+
+                if (!isLocallyModified) {
+                    console.log('DocumentUploadWorker: Record is not dirty/pending sync, marking as uploaded');
+                    await this.dependencies.persist!(doc, {
+                        uploadStatus: 'uploaded',
+                        uploadAttempts: attempts,
+                        lastUploadError: 'File missing locally but record is synced'
+                    });
+                    this.nextAttemptAt.delete(doc.id);
+                    return;
+                } else {
+                    // It's locally created/modified but the file is gone - permanent failure
+                    throw new Error('DocumentUploadWorker: Local file missing and record is pending sync');
+                }
+            }
+
             await this.dependencies.persist!(doc, {
                 uploadStatus: 'uploading',
                 uploadAttempts: attempts,
                 lastUploadError: null,
             });
-            if (!localUri) {
-                throw new Error('DocumentUploadWorker: local path missing');
-            }
+
             const metadata = await this.dependencies.upload!(this.profileId, doc.id, localUri);
             console.log('DocumentUploadWorker: upload succeeded', {
                 documentId: doc.id,
                 localUri,
                 sizeDetails: metadata.sizeDetails,
             });
+
+            // 🚀 Persist the file permanently into this device's local vault cache
+            try {
+                await ensureCacheDir();
+                const cachePath = buildLocalCachePath(doc.id, metadata.remotePath);
+
+                // Copy the temporary picker file to the permanent vault cache
+                const alreadyCached = await RNFS.exists(cachePath).catch(() => false);
+                if (!alreadyCached) {
+                    await RNFS.copyFile(localUri, cachePath);
+                    console.log(`DocumentUploadWorker: ✓ cached own upload → ${cachePath}`);
+                }
+                VaultService.setCachedLocalUri(doc.id, cachePath);
+            } catch (cacheErr) {
+                console.warn('DocumentUploadWorker: failed to copy uploaded file to cache', cacheErr);
+            }
+
             await this.dependencies.persist!(doc, {
                 uploadStatus: 'uploaded',
                 uploadAttempts: attempts,

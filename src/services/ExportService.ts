@@ -476,7 +476,7 @@ export const exportService = {
                 {
                     header: 'Title',
                     key: 'title',
-                    render: (e) => `${e.icon || '📅'} ${e.title || '-'}`
+                    render: (e) => `${e.icon || 'calendar-star'} ${e.title || '-'}`
                 },
                 {
                     header: 'Date',
@@ -502,7 +502,7 @@ export const exportService = {
                 {
                     header: 'Task',
                     key: 'name',
-                    render: (t) => `${t.icon || '📝'} ${t.name || '-'}`
+                    render: (t) => `${t.icon || 'format-list-checks'} ${t.name || '-'}`
                 },
                 {
                     header: 'Status',
@@ -531,7 +531,7 @@ export const exportService = {
                 {
                     header: 'Name',
                     key: 'name',
-                    render: (m) => `${m.symbol || '👤'} ${m.name}`
+                    render: (m) => `${m.symbol || 'account'} ${m.name}`
                 },
                 {
                     header: 'Color',
@@ -718,7 +718,7 @@ export const exportService = {
                 {
                     header: 'Title',
                     key: 'title',
-                    render: (f) => `${f.icon || '📁'} ${f.title || '-'}`
+                    render: (f) => `${f.icon || 'folder'} ${f.title || '-'}`
                 },
                 {
                     header: 'Notes Count',

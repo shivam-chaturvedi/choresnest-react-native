@@ -7,6 +7,7 @@ import {
     Pressable,
     ScrollView,
     Alert,
+    TouchableOpacity,
 } from "react-native";
 import { theme } from "../theme";
 import { useThemeColors } from "../contexts/ThemeContext";
@@ -14,6 +15,7 @@ import { useFamily } from "../contexts/FamilyContext";
 import { PROFILE_COLORS } from "../constants/profileColors";
 import { AppIcon } from "../components/ui/AppIcon";
 import { AppSettingsService } from "../services/AppSettingsService";
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 interface InitialSetupScreenProps {
     onComplete: () => void;
@@ -27,7 +29,7 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
     const [familyNameInput, setFamilyNameInput] = useState("Family");
     const [memberName, setMemberName] = useState("Admin");
     const [selectedColor, setSelectedColor] = useState(PROFILE_COLORS[0]);
-    const [selectedEmoji, setSelectedEmoji] = useState("👤");
+    const [selectedEmoji, setSelectedEmoji] = useState("account");
     const [familyNameTouched, setFamilyNameTouched] = useState(false);
 
     useEffect(() => {
@@ -58,7 +60,7 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
         }
     };
 
-    const emojis = ["👤", "👨", "👩", "👦", "👧", "🧑", "👶", "👴", "👵", "🧔", "👨‍🦱", "👩‍🦱"];
+    const icons = ["account", "face-woman", "face-man-profile", "baby-face-outline", "human-child", "human-male", "human-female", "face-man-shimmer", "glasses", "head-lightbulb", "ninja", "robot-outline"];
 
     const handleComplete = async () => {
         try {
@@ -129,7 +131,7 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
                     <Text style={[styles.sectionLabel, { color: colors.foreground }]}>
                         Family Name
                     </Text>
-                <TextInput
+                    <TextInput
                         style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderColor: colors.border, borderRadius: radius.md }]}
                         placeholder="e.g., The Smiths, Our Family"
                         placeholderTextColor={colors.mutedForeground}
@@ -158,22 +160,20 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
                         autoCapitalize="words"
                     />
 
-                    {/* Emoji Selection */}
-                    <Text style={[styles.label, { color: colors.foreground }]}>
-                        Choose Icon
-                    </Text>
+                    {/* Icon Selection */}
+                    <Text style={[styles.label, { color: colors.foreground }]}>Choose a Profile Icon</Text>
                     <View style={styles.emojiGrid}>
-                        {emojis.map((emoji) => (
-                            <Pressable
-                                key={emoji}
+                        {icons.map((icon) => (
+                            <TouchableOpacity
+                                key={icon}
                                 style={[
                                     styles.emojiButton,
-                                    { backgroundColor: selectedEmoji === emoji ? colors.primary + '20' : colors.muted, borderColor: selectedEmoji === emoji ? colors.primary : colors.border, borderRadius: radius.md }
+                                    { backgroundColor: selectedEmoji === icon ? colors.primary + '20' : colors.muted, borderColor: selectedEmoji === icon ? colors.primary : colors.border, borderRadius: radius.md }
                                 ]}
-                                onPress={() => setSelectedEmoji(emoji)}
+                                onPress={() => setSelectedEmoji(icon)}
                             >
-                                <Text style={styles.emojiText}>{emoji}</Text>
-                            </Pressable>
+                                <MaterialCommunityIcons name={icon} size={28} color={selectedEmoji === icon ? colors.primary : colors.foreground} />
+                            </TouchableOpacity>
                         ))}
                     </View>
 
@@ -202,7 +202,7 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
                     {/* Preview */}
                     <View style={[styles.preview, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
                         <View style={[styles.previewAvatar, { backgroundColor: selectedColor.hex, borderRadius: radius.md }]}>
-                            <Text style={styles.previewEmoji}>{selectedEmoji}</Text>
+                            <MaterialCommunityIcons name={selectedEmoji} size={50} color={colors.primary} style={styles.previewEmoji} />
                         </View>
                         <Text style={[styles.previewName, { color: colors.foreground }]}>
                             {memberName || "Your Name"}

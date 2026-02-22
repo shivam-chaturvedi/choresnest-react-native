@@ -16,6 +16,7 @@ import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { VaultDocument } from "../../contexts/FamilyContext";
 import { NotificationCenter } from "../../services/NotificationCenter";
 import { VaultStorageService } from "../../services/VaultStorageService";
+import { VaultService } from "../../services/VaultService";
 import { DateTimePicker } from "../ui/SimpleDatePicker";
 import {
     formatReminderRuleSummary,
@@ -27,6 +28,7 @@ import {
 } from "../../utils/VaultReminderUtils";
 import FileViewer from 'react-native-file-viewer';
 import { useDocumentModalSnapshot } from "../documents/DocumentModalSnapshot";
+import RNFS from "react-native-fs";
 
 interface DocumentDetailsModalProps {
     visible: boolean;
@@ -78,9 +80,14 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
     const [isEditMode, setIsEditMode] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [signedUrl, setSignedUrl] = useState<string | null>(null);
+    const [isDownloading, setIsDownloading] = useState(false);
     const { snapshot: documentSnapshot } = useDocumentModalSnapshot(document);
 
-    const viewUri = signedUrl ?? document?.localUri ?? undefined;
+    // On Device B, localUri is synced from Device A (its local path), so it's usually invalid there.
+    // However, on the uploading device, localUri is perfectly valid and should be used instantly!
+    // Priority: 1. RNFS local cache -> 2. The uploading device's own local file -> 3. Signed URL
+    const cachedUri = document ? VaultService.getCachedLocalUri(document.id) : undefined;
+    const viewUri = cachedUri ?? document?.localUri ?? signedUrl ?? undefined;
 
     // Form fields
     const [documentName, setDocumentName] = useState('');
@@ -140,11 +147,16 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
             setSignedUrl(null);
             return;
         }
-        if (document.localUri) {
+
+        // 🚀 Prioritize the verified local cache or the uploading device's original local file.
+        // If we already have the file perfectly viewable on this device, NO network needed!
+        if (VaultService.getCachedLocalUri(document.id) || document.localUri) {
             setSignedUrl(null);
             return;
         }
-        if (document.uploadStatus !== 'uploaded' || !document.remotePath) {
+
+        // If it's a new draft with no remote path yet, we can't fetch a signed URL anyway.
+        if (!document.remotePath) {
             setSignedUrl(null);
             return;
         }
@@ -290,6 +302,7 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
 
     const handleViewFile = async () => {
         if (!document) return;
+
         let uriToOpen = viewUri;
         if (!uriToOpen && document.remotePath) {
             try {
@@ -305,6 +318,32 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
         if (!uriToOpen) {
             pushNotification("Error", "No file available to show.", "warning");
             return;
+        }
+
+        // react-native-file-viewer requires local file paths.
+        // If the URL is remote (like a Supabase signed URL), we must download it to the cache first.
+        if (uriToOpen.startsWith('http')) {
+            setIsDownloading(true);
+            try {
+                const isImage = isImageUri(uriToOpen);
+                const extensionMatch = uriToOpen.match(/\.([a-zA-Z0-9]+)(\?|$)/);
+                let ext = extensionMatch ? extensionMatch[1] : (isImage ? 'jpg' : 'pdf');
+
+                const localPath = `${RNFS.CachesDirectoryPath}/vault_temp_${document.id}_${Date.now()}.${ext}`;
+
+                await RNFS.downloadFile({
+                    fromUrl: uriToOpen,
+                    toFile: localPath,
+                }).promise;
+
+                uriToOpen = `file://${localPath}`;
+            } catch (e) {
+                console.error('Error downloading remote file to view:', e);
+                pushNotification("Error", "Could not download file for viewing.", "warning");
+                setIsDownloading(false);
+                return;
+            }
+            setIsDownloading(false);
         }
 
         if (!isImageUri(uriToOpen)) {
@@ -637,11 +676,21 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
 
                                 {viewUri && (
                                     <Pressable
-                                        style={[styles.viewFileButton, { backgroundColor: colors.primary, borderRadius: radius.md }]}
+                                        disabled={isDownloading}
+                                        style={[
+                                            styles.viewFileButton,
+                                            {
+                                                backgroundColor: isDownloading ? colors.muted : colors.primary,
+                                                borderRadius: radius.md
+                                            }
+                                        ]}
                                         onPress={handleViewFile}
                                     >
-                                        <Text style={[styles.viewFileButtonText, { color: colors.primaryForeground }]}>
-                                            {getViewButtonLabel()}
+                                        <Text style={[
+                                            styles.viewFileButtonText,
+                                            { color: isDownloading ? colors.mutedForeground : colors.primaryForeground }
+                                        ]}>
+                                            {isDownloading ? 'Downloading...' : getViewButtonLabel()}
                                         </Text>
                                     </Pressable>
                                 )}

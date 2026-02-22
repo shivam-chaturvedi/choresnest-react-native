@@ -4,30 +4,57 @@ import Task from '../database/models/Task';
 import Event from '../database/models/Event';
 import { Recipe } from '../database/models/Recipe';
 import Document from '../database/models/Document';
+import { ListItem } from '../database/models/List';
 
 export const SearchService = {
-    search: async (query: string) => {
-        if (!query || query.length < 2) return { tasks: [], events: [], recipes: [], documents: [] };
+    search: async (query: string, activeFilter?: string | null) => {
+        if (!query) return { tasks: [], events: [], recipes: [], documents: [], groceries: [] };
 
         try {
             const sanitizer = Q.sanitizeLikeString(query);
+            // Search dynamically to find matches containing or starting with the query
+            // Q.like is case-insensitive in SQLite by default.
             const searchCondition = Q.where('name', Q.like(`%${sanitizer}%`));
             const titleCondition = Q.where('title', Q.like(`%${sanitizer}%`));
+            const notDeleted = Q.where('deleted', Q.notEq(true));
 
-            const tasks = await database.get<Task>('tasks').query(searchCondition).fetch();
-            const events = await database.get<Event>('events').query(titleCondition).fetch();
-            const recipes = await database.get<Recipe>('recipes').query(searchCondition).fetch();
-            const documents = await database.get<Document>('documents').query(searchCondition).fetch();
+            let tasks: Task[] = [];
+            let events: Event[] = [];
+            let recipes: Recipe[] = [];
+            let documents: Document[] = [];
+            let groceries: ListItem[] = [];
+
+            if (!activeFilter || activeFilter === 'task') {
+                tasks = await database.get<Task>('tasks').query(searchCondition, notDeleted).fetch();
+            }
+            if (!activeFilter || activeFilter === 'event') {
+                events = await database.get<Event>('events').query(titleCondition, notDeleted).fetch();
+            }
+            if (!activeFilter || activeFilter === 'recipe') {
+                recipes = await database.get<Recipe>('recipes').query(searchCondition, notDeleted).fetch();
+            }
+            if (!activeFilter || activeFilter === 'document') {
+                documents = await database.get<Document>('documents').query(searchCondition, notDeleted).fetch();
+            }
+            if (!activeFilter || activeFilter === 'grocery') {
+                groceries = await database.get<ListItem>('list_items').query(
+                    searchCondition,
+                    Q.where('is_completed', false),
+                    notDeleted,
+                    Q.on('lists', 'type', 'grocery') // Only grocery items
+                ).fetch();
+            }
 
             return {
                 tasks,
                 events,
                 recipes,
-                documents
+                documents,
+                groceries
             };
         } catch (error) {
             console.error('Error searching:', error);
-            return { tasks: [], events: [], recipes: [], documents: [] };
+            return { tasks: [], events: [], recipes: [], documents: [], groceries: [] };
         }
     }
 };

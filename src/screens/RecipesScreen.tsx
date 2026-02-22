@@ -36,6 +36,7 @@ import UploadStatusIndicator from "../components/ui/UploadStatusIndicator";
 
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const preferences = [
   "Vegetarian",
@@ -536,8 +537,13 @@ export const RecipesScreen: React.FC = () => {
               style={[styles.collectionCard, { backgroundColor: collection.color, borderRadius: radius.card }]}
               onPress={() => setSelectedCollection(collection)}
             >
-              <Text style={styles.collectionEmoji}>{collection.name.split(' ')[0]}</Text>
-              <Text style={styles.collectionTitle}>{collection.name.substring(2)}</Text>
+              <MaterialCommunityIcons
+                name={collection.name.split(' ')[0] || 'folder'}
+                size={32}
+                color={colors.foreground}
+                style={styles.collectionEmoji}
+              />
+              <Text style={styles.collectionTitle}>{collection.name.substring(collection.name.indexOf(' ') + 1)}</Text>
               <Text style={styles.collectionCount}>{collection.count} recipes</Text>
 
               <View style={styles.collectionFooter}>

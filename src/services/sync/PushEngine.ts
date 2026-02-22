@@ -150,12 +150,15 @@ export const pushTableChanges = async ({
     tableChanges,
     userId,
     addProfileId = true,
+    conflictKey = 'id',
 }: {
     table: string;
     remoteTable?: string;
     tableChanges: TableChangeSet | undefined;
     userId: string;
     addProfileId?: boolean;
+    /** Column(s) to use for ON CONFLICT in upsert. Defaults to 'id'. */
+    conflictKey?: string;
 }): Promise<{ success: boolean; errors: number }> => {
     if (!tableChanges) {
         return { success: true, errors: 0 };
@@ -239,7 +242,7 @@ export const pushTableChanges = async ({
     const upsertChunks = chunkArray(recordsToUpsert, SYNC_UPSERT_BATCH_SIZE);
     for (const chunk of upsertChunks) {
         try {
-            const { error } = await supabase.from(targetTable).upsert(chunk, { onConflict: 'id' });
+            const { error } = await supabase.from(targetTable).upsert(chunk, { onConflict: conflictKey });
             if (error) {
                 console.error(`Failed to upsert ${targetTable} (${chunk.length} records):`, error);
                 errors += chunk.length;

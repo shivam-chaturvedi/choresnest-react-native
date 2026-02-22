@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, useMemo } from "react";
 import { Pressable, Text, View, StyleSheet, Platform, ViewStyle, TextStyle } from "react-native";
 import RNDateTimePicker from "@react-native-community/datetimepicker";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
@@ -28,15 +28,28 @@ export const DateTimePicker: React.FC<SimpleDatePickerProps> = ({
         setShow(true);
     }, []);
 
-    const dateValue = value ? new Date(value) : new Date();
+    const dateValue = useMemo(() => value ? new Date(value) : new Date(), [value]);
 
     const handleChange = (event: any, selectedDate?: Date) => {
         if (Platform.OS === "android") {
-            setShow(false);
-        }
-        if (selectedDate) {
-            const isoDate = selectedDate.toISOString().split('T')[0];
-            onChange(isoDate);
+            // Only hide the picker and fire onChange if the user actually pressed OK
+            // event.type is 'set' for OK, 'dismissed' for Cancel.
+            // When navigating months/years, it doesn't trigger these types in the same way.
+            if (event.type === "set") {
+                setShow(false);
+                if (selectedDate) {
+                    const isoDate = selectedDate.toISOString().split('T')[0];
+                    onChange(isoDate);
+                }
+            } else if (event.type === "dismissed") {
+                setShow(false);
+            }
+        } else {
+            // iOS handles it differently (usually spinner mode)
+            if (selectedDate) {
+                const isoDate = selectedDate.toISOString().split('T')[0];
+                onChange(isoDate);
+            }
         }
     };
 

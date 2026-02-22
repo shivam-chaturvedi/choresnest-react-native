@@ -2,6 +2,7 @@ import { database } from '../database';
 import UserPreference from '../database/models/UserPreference';
 import { COUNTRY_CONFIG, DEFAULT_COUNTRY_CODE, CountryConfiguration, getCountryConfig, isSupportedCountry } from '../config/countries';
 import * as RNLocalize from 'react-native-localize';
+import { SyncService } from './SyncService';
 
 type CountryChangeListener = (config: CountryConfiguration) => void;
 
@@ -133,10 +134,12 @@ export const CountryPreferenceService = {
                 await record.update(pref => {
                     pref.countryCode = normalized;
                     pref.updatedAt = Date.now();
+                    pref.version = (pref.version ?? 0) + 1;
                 });
             });
             cachedCountryCode = normalized;
             notifyListeners();
+            void SyncService.requestSyncSoon();
         } catch (error) {
             console.error('Failed to update country preference:', error);
         }

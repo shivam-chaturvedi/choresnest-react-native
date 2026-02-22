@@ -4,12 +4,15 @@ export type TableSyncConfig = {
     hasProfileId?: boolean;
     addProfileId?: boolean;
     phase: 1 | 2 | 3;
+    /** Override the Supabase `onConflict` target column(s) for upsert. Defaults to 'id'. */
+    conflictKey?: string;
 };
 
 export const SYNC_TABLES: TableSyncConfig[] = [
     { key: 'users', remoteTable: 'profiles', hasProfileId: false, addProfileId: false, phase: 1 },
     { key: 'members', phase: 1 },
-    { key: 'settings', phase: 1 },
+    // settings uses (profile_id, key) as its natural unique key — not just id
+    { key: 'settings', phase: 1, conflictKey: 'profile_id,key' },
     { key: 'user_preferences', phase: 1 },
     { key: 'notification_preferences', phase: 1 },
     { key: 'quiet_hours', phase: 1 },

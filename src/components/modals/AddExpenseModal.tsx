@@ -5,6 +5,7 @@ import { Calendar as CalendarIcon, DollarSign, Tag, FileText, AlertTriangle, X }
 import { Button } from '../ui/Button';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useCountry } from '../../contexts/CountryContext';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 export interface ExpenseData {
     name: string;
@@ -24,15 +25,15 @@ interface AddExpenseModalProps {
 }
 
 const categories = [
-    { id: 'groceries', name: 'Groceries', icon: '🛒' },
-    { id: 'utilities', name: 'Utilities', icon: '⚡' },
-    { id: 'transport', name: 'Transport', icon: '🚗' },
-    { id: 'food', name: 'Food & Dining', icon: '🍽️' },
-    { id: 'shopping', name: 'Shopping', icon: '🛍️' },
-    { id: 'healthcare', name: 'Healthcare', icon: '🏥' },
-    { id: 'entertainment', name: 'Entertainment', icon: '🎬' },
-    { id: 'education', name: 'Education', icon: '📚' },
-    { id: 'other', name: 'Other', icon: '📦' },
+    { id: 'groceries', name: 'Groceries', icon: 'cart' },
+    { id: 'utilities', name: 'Utilities', icon: 'lightning-bolt' },
+    { id: 'transport', name: 'Transport', icon: 'car' },
+    { id: 'food', name: 'Food & Dining', icon: 'silverware' },
+    { id: 'shopping', name: 'Shopping', icon: 'shopping' },
+    { id: 'healthcare', name: 'Healthcare', icon: 'hospital-building' },
+    { id: 'entertainment', name: 'Entertainment', icon: 'movie-open' },
+    { id: 'education', name: 'Education', icon: 'book' },
+    { id: 'other', name: 'Other', icon: 'package-variant' },
 ];
 
 export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
@@ -274,7 +275,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                                             ]}
                                             onPress={() => setCategory(cat.id)}
                                         >
-                                            <Text style={styles.categoryIcon}>{cat.icon}</Text>
+                                            <MaterialCommunityIcons name={cat.icon} size={28} color={category === cat.id ? colors.primary : colors.foreground} style={{ marginBottom: 4 }} />
                                             <Text
                                                 style={[
                                                     styles.categoryName,
@@ -493,10 +494,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         borderWidth: 2,
         borderColor: 'transparent',
-    },
-    categoryIcon: {
-        fontSize: 24,
-        marginBottom: 4,
     },
     categoryName: {
         fontSize: 11,

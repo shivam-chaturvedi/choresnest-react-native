@@ -1,5 +1,6 @@
 import { database } from '../database';
 import Document from '../database/models/Document';
+import AppSettings from '../database/models/AppSettings';
 import { Q } from '@nozbe/watermelondb';
 import { NotificationScheduler } from './NotificationScheduler';
 import { DocumentInput } from './DocumentInput';
@@ -8,12 +9,17 @@ import { SupabaseService } from './SupabaseService';
 import { uuidv4 } from '../utils/uuid';
 
 const localUriCache = new Map<string, string>();
+const localVersionCache = new Map<string, number>();
 
-const cacheLocalUri = (documentId: string, uri?: string) => {
+const cacheLocalUri = (documentId: string, uri?: string, version?: number) => {
     if (uri) {
         localUriCache.set(documentId, uri);
+        if (version !== undefined) {
+            localVersionCache.set(documentId, version);
+        }
     } else {
         localUriCache.delete(documentId);
+        localVersionCache.delete(documentId);
     }
 };
 
@@ -55,12 +61,19 @@ const buildMetaFromInput = (data: DocumentInput, baseMeta: Record<string, any> =
 
 const resolveProfileId = async (): Promise<string | null> => {
     try {
+        // Priority 1: Instant local offline resolution via WatermelonDB AppSettings
+        const settings = await database.get<AppSettings>('app_settings').query().fetch();
+        if (settings && settings.length > 0 && settings[0].profileId) {
+            return settings[0].profileId;
+        }
+
+        // Priority 2: Fallback to Supabase auth session if local DB is completely empty somehow
         const {
             data: { user },
             error,
         } = await SupabaseService.getUser();
         if (error) {
-            console.warn('VaultService: failed to resolve profile id', error.message);
+            console.warn('VaultService: failed to resolve profile id from Supabase', error.message);
             return null;
         }
         if (!user) {
@@ -118,6 +131,14 @@ export const VaultService = {
         return localUriCache.get(documentId);
     },
 
+    getCachedVersion: (documentId: string): number | undefined => {
+        return localVersionCache.get(documentId);
+    },
+
+    setCachedLocalUri: (documentId: string, uri?: string, version?: number) => {
+        cacheLocalUri(documentId, uri, version);
+    },
+
     addDocument: async (data: DocumentInput) => {
         const localUri = data.localUri ?? data.filePath;
         if (!localUri) {
@@ -146,14 +167,14 @@ export const VaultService = {
                     d.memberId = data.memberId || 'global';
                     d.sharedWithIds = data.sharedWithIds || [];
                     d.localUri = localUri;
-                    d.remotePath = null;
-                    d.filePath = null;
+                    d.remotePath = undefined;
+                    d.filePath = undefined;
                     d.uploadStatus = 'pending_upload';
                     d.uploadAttempts = 0;
-                    d.lastUploadError = null;
-                    d.contentType = null;
-                    d.fileSize = null;
-                    d.checksum = null;
+                    d.lastUploadError = undefined;
+                    d.contentType = undefined;
+                    d.fileSize = undefined;
+                    d.checksum = undefined;
                     d.createdAt = now;
                     d.updatedAt = now;
                     d.deleted = false;
@@ -205,14 +226,14 @@ export const VaultService = {
                     const updatedLocalUri = updates.localUri ?? updates.filePath;
                     if (updatedLocalUri) {
                         d.localUri = updatedLocalUri;
-                        d.remotePath = null;
-                        d.filePath = null;
+                        d.remotePath = undefined;
+                        d.filePath = undefined;
                         d.uploadStatus = 'pending_upload';
                         d.uploadAttempts = 0;
-                        d.lastUploadError = null;
-                        d.contentType = null;
-                        d.fileSize = null;
-                        d.checksum = null;
+                        d.lastUploadError = undefined;
+                        d.contentType = undefined;
+                        d.fileSize = undefined;
+                        d.checksum = undefined;
                         cacheLocalUri(id, updatedLocalUri);
                     }
                     d.meta = buildMetaFromInput(updates, d.meta || {});

@@ -20,6 +20,7 @@ import { AppIcon, AppIconName, CustomDateTimePicker } from "../ui";
 import { PROFILE_COLORS } from "../../constants/profileColors";
 import { NotificationPreferencesService } from "../../services/NotificationPreferencesService";
 import { SyncService } from "../../services/SyncService";
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 interface AddEventModalProps {
   open: boolean;
@@ -31,7 +32,7 @@ interface AddEventModalProps {
 }
 
 const eventIcons: string[] = [
-  "📅", "🎂", "🏫", "💼", "🏥", "🛒", "🎉", "🏋️", "🎬", "✈️", "🍽️", "👨‍👩‍👧", "💻", "📞", "🎵", "🏠"
+  "calendar-star", "cake-variant", "school", "briefcase", "hospital-building", "cart", "party-popper", "weight-lifter", "movie", "airplane", "silverware", "home-group", "laptop", "phone", "music", "home"
 ];
 
 const eventColors = [
@@ -91,7 +92,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   const [startTime, setStartTime] = useState(() => new Date());
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [endTime, setEndTime] = useState<Date | null>(null);
-  const [selectedIcon, setSelectedIcon] = useState("📅");
+  const [selectedIcon, setSelectedIcon] = useState("calendar-star");
   const [allDay, setAllDay] = useState(false);
   const [location, setLocation] = useState("");
   const [memberId, setMemberId] = useState("");
@@ -103,7 +104,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
   /* Task State */
   const [taskPriority, setTaskPriority] = useState("medium");
-  const [taskIcon, setTaskIcon] = useState("📝");
+  const [taskIcon, setTaskIcon] = useState("format-list-checks");
 
 
   const [reminder, setReminder] = useState(true);
@@ -194,10 +195,10 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       if (anyEvent.type === 'task') {
         setActiveTab('task');
         setTaskPriority(anyEvent.priority || "medium");
-        setTaskIcon(anyEvent.icon || "📝");
+        setTaskIcon(anyEvent.icon || "format-list-checks");
       } else {
         setActiveTab('event');
-        setSelectedIcon(eventToEdit.icon || "📅");
+        setSelectedIcon(eventToEdit.icon || "calendar-star");
       }
 
       const member = findMember(eventToEdit.memberId);
@@ -259,7 +260,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       defaultEndTime.setHours(defaultEndTime.getHours() + 1);
       setEndTime(defaultEndTime);
 
-      setSelectedIcon("📅");
+      setSelectedIcon("calendar-star");
       setAllDay(false);
       setLocation("");
 
@@ -584,7 +585,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                           alignItems: 'center',
                           justifyContent: 'center'
                         }}>
-                          <Text style={{ fontSize: 18 }}>{item.icon}</Text>
+                          <MaterialCommunityIcons name={item.icon || 'calendar'} size={24} color={item.type === 'task' ? colors.danger : profileColor} />
                         </View>
 
                         <View style={{ flex: 1 }}>
@@ -649,7 +650,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                         <Text style={[styles.label, { color: colors.mutedForeground }]}>Icon</Text>
                       </View>
                       <View style={styles.iconGrid}>
-                        {["📝", "📞", "💊", "📧", "🏫", "🔧", "📦", "🧹", "🧺", "🍽️", "🛏️", "🐕"].map((icon) => (
+                        {["format-list-checks", "phone", "pill", "email", "school", "wrench", "package-variant", "broom", "basket", "silverware", "bed", "dog"].map((icon) => (
                           <Pressable
                             key={icon}
                             onPress={() => setTaskIcon(icon)}
@@ -659,7 +660,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                               taskIcon === icon && { backgroundColor: colors.success, transform: [{ scale: 1.1 }] },
                             ]}
                           >
-                            <Text style={styles.iconText}>{icon}</Text>
+                            <MaterialCommunityIcons name={icon} size={24} color={taskIcon === icon ? colors.background : colors.foreground} />
                           </Pressable>
                         ))}
                       </View>
@@ -712,7 +713,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                               !isOwner && { opacity: 0.6 }
                             ]}
                           >
-                            <Text style={styles.iconText}>{icon}</Text>
+                            <MaterialCommunityIcons name={icon} size={24} color={selectedIcon === icon ? colors.background : colors.foreground} />
                           </Pressable>
                         ))}
                       </View>
@@ -1004,7 +1005,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                             !isOwner && { opacity: 0.6 }
                           ]}
                         >
-                          <Text style={styles.memberEmoji}>{member.symbol}</Text>
+                          <MaterialCommunityIcons name={member.symbol || 'account'} size={20} color={memberId === member.id ? '#fff' : colors.mutedForeground} style={{ marginRight: 6 }} />
                           <Text style={[
                             styles.memberChipText,
                             { color: colors.mutedForeground },

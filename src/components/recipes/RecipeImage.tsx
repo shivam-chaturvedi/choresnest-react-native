@@ -2,6 +2,7 @@ import React from 'react';
 import { Image, Text, View, StyleSheet } from 'react-native';
 import { AppIcon } from '../ui/AppIcon';
 import { useThemeColors } from '../../contexts/ThemeContext';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 interface RecipeImageProps {
     image?: string | null;
@@ -61,10 +62,10 @@ export const RecipeImage: React.FC<RecipeImageProps> = ({
         );
     }
 
-    // Render string (emoji/text) if provided
+    // Render string (icon) if provided
     return (
         <View style={[styles.container, { width: size, height: size, borderRadius, backgroundColor: colors.muted }, style]}>
-            <Text style={{ fontSize: finalEmojiSize }}>{normalizedImage}</Text>
+            <MaterialCommunityIcons name={normalizedImage} size={finalEmojiSize} color={colors.primary} />
         </View>
     );
 };

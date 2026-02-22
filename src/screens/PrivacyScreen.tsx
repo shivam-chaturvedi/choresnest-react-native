@@ -38,7 +38,7 @@ const securitySettings = [
 
 export const PrivacyScreen: React.FC = () => {
     const navigation = useNavigation();
-    const { deleteAccount, isGuest, user } = useAuth();
+    const { deleteAccount, isGuest, user, logout } = useAuth();
     const { activeMember } = useFamily();
     const {
         isAppLockEnabled,
@@ -156,9 +156,14 @@ export const PrivacyScreen: React.FC = () => {
         return parent;
     };
 
-    const handleNavigateToAuth = () => {
-        const rootNav = getRootNavigator() ?? navigation;
-        rootNav.navigate("Auth" as never);
+    const handleNavigateToAuth = async () => {
+        // Calling logout() clears the guest session flag and sets isAuthenticated=false.
+        // The AppNavigator then automatically switches to the Auth branch — no navigation dispatch needed.
+        try {
+            await logout();
+        } catch (error) {
+            console.error('Failed to sign out guest:', error);
+        }
     };
 
     useEffect(() => {
@@ -251,7 +256,7 @@ export const PrivacyScreen: React.FC = () => {
                     const ReactNativeBiometrics = require('react-native-biometrics');
                     const rnBiometrics = new ReactNativeBiometrics.default();
                     const { available } = await rnBiometrics.isSensorAvailable();
-                    
+
                     if (!available) {
                         Alert.alert(
                             "Biometric Not Available",
@@ -260,7 +265,7 @@ export const PrivacyScreen: React.FC = () => {
                         setPendingBiometricRequest(false);
                         return;
                     }
-                    
+
                     await enableBiometric();
                     Alert.alert("Success", "Biometric lock is now enabled.");
                 } catch (error) {
@@ -471,258 +476,258 @@ export const PrivacyScreen: React.FC = () => {
                     </View>
                 </View>
 
-                        {/* Change Password Modal */}
-                        <Modal
-                            visible={showPasswordModal}
-                            transparent
-                            animationType="slide"
-                            onRequestClose={() => setShowPasswordModal(false)}
-                        >
-                            <View style={styles.modalOverlay}>
-                                <View style={[styles.modalContent, { backgroundColor: colors.card, borderRadius: radius.card }]}>
-                                    <View style={styles.modalHeader}>
-                                        <Text style={[styles.modalTitle, { color: colors.foreground }]}>Change Password</Text>
-                                        <Pressable onPress={() => setShowPasswordModal(false)}>
-                                            <Text style={{ color: colors.mutedForeground, padding: 4 }}>✕</Text>
-                                        </Pressable>
-                                    </View>
-
-                                    <View style={{ gap: 16 }}>
-                                        <View>
-                                            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Current Password</Text>
-                                            <TextInput
-                                                style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.sm }]}
-                                                secureTextEntry
-                                                value={currentPassword}
-                                                onChangeText={setCurrentPassword}
-                                                placeholder="Enter current password"
-                                                placeholderTextColor={colors.mutedForeground}
-                                            />
-                                        </View>
-                                        <View>
-                                            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>New Password</Text>
-                                            <TextInput
-                                                style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.sm }]}
-                                                secureTextEntry
-                                                value={newPassword}
-                                                onChangeText={setNewPassword}
-                                                placeholder="Enter new password"
-                                                placeholderTextColor={colors.mutedForeground}
-                                            />
-                                        </View>
-                                        <View>
-                                            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Confirm New Password</Text>
-                                            <TextInput
-                                                style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.sm }]}
-                                                secureTextEntry
-                                                value={confirmPassword}
-                                                onChangeText={setConfirmPassword}
-                                                placeholder="Confirm new password"
-                                                placeholderTextColor={colors.mutedForeground}
-                                            />
-                                        </View>
-
-                                        <Pressable
-                                            onPress={handleSavePassword}
-                                            style={[styles.saveButton, { backgroundColor: colors.primary, borderRadius: radius.sm }]}
-                                        >
-                                            <Text style={{ color: colors.primaryForeground, fontWeight: '600' }}>Update Password</Text>
-                                        </Pressable>
-                                    </View>
-                                </View>
+                {/* Change Password Modal */}
+                <Modal
+                    visible={showPasswordModal}
+                    transparent
+                    animationType="slide"
+                    onRequestClose={() => setShowPasswordModal(false)}
+                >
+                    <View style={styles.modalOverlay}>
+                        <View style={[styles.modalContent, { backgroundColor: colors.card, borderRadius: radius.card }]}>
+                            <View style={styles.modalHeader}>
+                                <Text style={[styles.modalTitle, { color: colors.foreground }]}>Change Password</Text>
+                                <Pressable onPress={() => setShowPasswordModal(false)}>
+                                    <Text style={{ color: colors.mutedForeground, padding: 4 }}>✕</Text>
+                                </Pressable>
                             </View>
-                        </Modal>
 
-                        {/* Set PIN Modal */}
-                        <Modal
-                            visible={showPinModal}
-                            transparent
-                            animationType="slide"
-                            onRequestClose={() => setShowPinModal(false)}
-                        >
-                            <View style={styles.modalOverlay}>
-                                <View style={[styles.modalContent, { backgroundColor: colors.card, borderRadius: radius.card }]}>
-                                    <View style={styles.modalHeader}>
-                                        <Text style={[styles.modalTitle, { color: colors.foreground }]}>Set PIN Code</Text>
-                                        <Pressable onPress={() => setShowPinModal(false)}>
-                                            <Text style={{ color: colors.mutedForeground, padding: 4 }}>✕</Text>
-                                        </Pressable>
-                                    </View>
-
-                                    <View style={{ gap: 16 }}>
-                                        <View>
-                                            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Enter 4-digit PIN</Text>
-                                            <TextInput
-                                                style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.sm, letterSpacing: 8, fontSize: 20, textAlign: 'center' }]}
-                                                secureTextEntry
-                                                keyboardType="numeric"
-                                                maxLength={4}
-                                                value={pin}
-                                                onChangeText={setPin}
-                                                placeholder="••••"
-                                                placeholderTextColor={colors.mutedForeground}
-                                            />
-                                        </View>
-                                        <View>
-                                            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Confirm PIN</Text>
-                                            <TextInput
-                                                style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.sm, letterSpacing: 8, fontSize: 20, textAlign: 'center' }]}
-                                                secureTextEntry
-                                                keyboardType="numeric"
-                                                maxLength={4}
-                                                value={confirmPin}
-                                                onChangeText={setConfirmPin}
-                                                placeholder="••••"
-                                                placeholderTextColor={colors.mutedForeground}
-                                            />
-                                        </View>
-
-                                        <Pressable
-                                            onPress={handleSavePin}
-                                            style={[styles.saveButton, { backgroundColor: colors.primary, borderRadius: radius.sm }]}
-                                        >
-                                            <Text style={{ color: colors.primaryForeground, fontWeight: '600' }}>Set PIN</Text>
-                                        </Pressable>
-                                    </View>
+                            <View style={{ gap: 16 }}>
+                                <View>
+                                    <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Current Password</Text>
+                                    <TextInput
+                                        style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.sm }]}
+                                        secureTextEntry
+                                        value={currentPassword}
+                                        onChangeText={setCurrentPassword}
+                                        placeholder="Enter current password"
+                                        placeholderTextColor={colors.mutedForeground}
+                                    />
                                 </View>
-                            </View>
-                        </Modal>
-
-                        {/* Guest Mode Modal */}
-                        <Modal
-                            visible={showGuestModal}
-                            transparent
-                            animationType="fade"
-                            onRequestClose={() => setShowGuestModal(false)}
-                        >
-                            <View style={styles.modalOverlay}>
-                                <View style={[styles.guestModalContent, { backgroundColor: colors.card, borderRadius: radius.card }]}>
-                                    <Text style={[styles.guestModalTitle, { color: colors.foreground }]}>Guest Mode</Text>
-                                    <Text style={[styles.guestModalText, { color: colors.mutedForeground }]}>
-                                        You are currently using the app as a guest.
-                                    </Text>
-                                    <View style={styles.guestModalButtons}>
-                                        <Pressable
-                                            style={[styles.guestModalButton, { borderRadius: radius.sm }]}
-                                            onPress={() => setShowGuestModal(false)}
-                                        >
-                                            <Text style={[styles.guestModalButtonText, { color: colors.mutedForeground }]}>CANCEL</Text>
-                                        </Pressable>
-                                        <Pressable
-                                            style={[styles.guestModalButton, { borderRadius: radius.sm }]}
-                                            onPress={() => {
-                                                setShowGuestModal(false);
-                                                // Navigate to login/signup screen
-                                                handleNavigateToAuth();
-                                            }}
-                                        >
-                                            <Text style={[styles.guestModalButtonText, { color: colors.primary }]}>LOGIN / SIGN UP</Text>
-                                        </Pressable>
-                                    </View>
+                                <View>
+                                    <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>New Password</Text>
+                                    <TextInput
+                                        style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.sm }]}
+                                        secureTextEntry
+                                        value={newPassword}
+                                        onChangeText={setNewPassword}
+                                        placeholder="Enter new password"
+                                        placeholderTextColor={colors.mutedForeground}
+                                    />
                                 </View>
+                                <View>
+                                    <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Confirm New Password</Text>
+                                    <TextInput
+                                        style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.sm }]}
+                                        secureTextEntry
+                                        value={confirmPassword}
+                                        onChangeText={setConfirmPassword}
+                                        placeholder="Confirm new password"
+                                        placeholderTextColor={colors.mutedForeground}
+                                    />
+                                </View>
+
+                                <Pressable
+                                    onPress={handleSavePassword}
+                                    style={[styles.saveButton, { backgroundColor: colors.primary, borderRadius: radius.sm }]}
+                                >
+                                    <Text style={{ color: colors.primaryForeground, fontWeight: '600' }}>Update Password</Text>
+                                </Pressable>
                             </View>
-                        </Modal>
+                        </View>
+                    </View>
+                </Modal>
 
-                        {/* Confirm PIN Before Enabling App Lock */}
-                        <Modal
-                            visible={showConfirmModal}
-                            transparent
-                            animationType="slide"
-                            onRequestClose={handleConfirmCancel}
-                        >
-                            <View style={styles.modalOverlay}>
-                                <View style={[styles.modalContent, { backgroundColor: colors.card, borderRadius: radius.card }]}>
-                                    <View style={styles.modalHeader}>
-                                        <Text style={[styles.modalTitle, { color: colors.foreground }]}>Secure Access</Text>
-                                        <Pressable onPress={handleConfirmCancel}>
-                                            <Text style={{ color: colors.mutedForeground, padding: 4 }}>Cancel</Text>
-                                        </Pressable>
-                                    </View>
+                {/* Set PIN Modal */}
+                <Modal
+                    visible={showPinModal}
+                    transparent
+                    animationType="slide"
+                    onRequestClose={() => setShowPinModal(false)}
+                >
+                    <View style={styles.modalOverlay}>
+                        <View style={[styles.modalContent, { backgroundColor: colors.card, borderRadius: radius.card }]}>
+                            <View style={styles.modalHeader}>
+                                <Text style={[styles.modalTitle, { color: colors.foreground }]}>Set PIN Code</Text>
+                                <Pressable onPress={() => setShowPinModal(false)}>
+                                    <Text style={{ color: colors.mutedForeground, padding: 4 }}>✕</Text>
+                                </Pressable>
+                            </View>
 
-                                    <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>
-                                        Enter your existing PIN to enable App Lock
-                                    </Text>
+                            <View style={{ gap: 16 }}>
+                                <View>
+                                    <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Enter 4-digit PIN</Text>
                                     <TextInput
                                         style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.sm, letterSpacing: 8, fontSize: 20, textAlign: 'center' }]}
                                         secureTextEntry
                                         keyboardType="numeric"
                                         maxLength={4}
-                                        value={confirmValue}
-                                        onChangeText={value => setConfirmValue(value.replace(/[^0-9]/g, ''))}
+                                        value={pin}
+                                        onChangeText={setPin}
                                         placeholder="••••"
                                         placeholderTextColor={colors.mutedForeground}
                                     />
-                                    {confirmError ? <Text style={[styles.error, { color: colors.danger }]}>{confirmError}</Text> : null}
-                                    <Pressable
-                                        onPress={handleConfirmSubmit}
-                                        disabled={confirmBusy}
-                                        style={({ pressed }) => [
-                                            styles.saveButton,
-                                            {
-                                                backgroundColor: pressed ? `${colors.primary}cc` : colors.primary,
-                                                borderRadius: radius.sm,
-                                                opacity: confirmBusy ? 0.6 : 1,
-                                            },
-                                        ]}
-                                    >
-                                        <Text style={{ color: colors.primaryForeground, fontWeight: '600' }}>
-                                            {confirmBusy ? 'Verifying…' : 'Confirm PIN'}
-                                        </Text>
-                                    </Pressable>
                                 </View>
-                            </View>
-                        </Modal>
+                                <View>
+                                    <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Confirm PIN</Text>
+                                    <TextInput
+                                        style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.sm, letterSpacing: 8, fontSize: 20, textAlign: 'center' }]}
+                                        secureTextEntry
+                                        keyboardType="numeric"
+                                        maxLength={4}
+                                        value={confirmPin}
+                                        onChangeText={setConfirmPin}
+                                        placeholder="••••"
+                                        placeholderTextColor={colors.mutedForeground}
+                                    />
+                                </View>
 
-                        {/* Data Privacy */}
-                        <View>
-                            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Data Privacy</Text>
-                            <View style={[styles.softCard, { backgroundColor: colors.muted, borderRadius: radius.card }]}>
-                                <Text style={[styles.privacyText, { color: colors.mutedForeground }]}>
-                                    Your data is encrypted and stored securely. We never share your personal information with third parties.
-                                </Text>
-                                <View style={styles.tagsRow}>
-                                    <View style={[styles.tag, { backgroundColor: '#dcfce7', borderRadius: radius.full }]}>
-                                        <Text style={[styles.tagText, { color: '#166534' }]}>🔐 End-to-end encrypted</Text>
-                                    </View>
-                                </View>
+                                <Pressable
+                                    onPress={handleSavePin}
+                                    style={[styles.saveButton, { backgroundColor: colors.primary, borderRadius: radius.sm }]}
+                                >
+                                    <Text style={{ color: colors.primaryForeground, fontWeight: '600' }}>Set PIN</Text>
+                                </Pressable>
                             </View>
                         </View>
+                    </View>
+                </Modal>
 
-                        {/* Danger Zone */}
-                        <View style={[styles.dangerCard, { backgroundColor: colors.card, borderColor: '#fee2e2', borderRadius: radius.card }]}>
-                            <Text style={[styles.dangerTitle, { color: '#ef4444' }]}>Danger Zone</Text>
+                {/* Guest Mode Modal */}
+                <Modal
+                    visible={showGuestModal}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setShowGuestModal(false)}
+                >
+                    <View style={styles.modalOverlay}>
+                        <View style={[styles.guestModalContent, { backgroundColor: colors.card, borderRadius: radius.card }]}>
+                            <Text style={[styles.guestModalTitle, { color: colors.foreground }]}>Guest Mode</Text>
+                            <Text style={[styles.guestModalText, { color: colors.mutedForeground }]}>
+                                You are currently using the app as a guest.
+                            </Text>
+                            <View style={styles.guestModalButtons}>
+                                <Pressable
+                                    style={[styles.guestModalButton, { borderRadius: radius.sm }]}
+                                    onPress={() => setShowGuestModal(false)}
+                                >
+                                    <Text style={[styles.guestModalButtonText, { color: colors.mutedForeground }]}>CANCEL</Text>
+                                </Pressable>
+                                <Pressable
+                                    style={[styles.guestModalButton, { borderRadius: radius.sm }]}
+                                    onPress={() => {
+                                        setShowGuestModal(false);
+                                        // Navigate to login/signup screen
+                                        handleNavigateToAuth();
+                                    }}
+                                >
+                                    <Text style={[styles.guestModalButtonText, { color: colors.primary }]}>LOGIN / SIGN UP</Text>
+                                </Pressable>
+                            </View>
+                        </View>
+                    </View>
+                </Modal>
+
+                {/* Confirm PIN Before Enabling App Lock */}
+                <Modal
+                    visible={showConfirmModal}
+                    transparent
+                    animationType="slide"
+                    onRequestClose={handleConfirmCancel}
+                >
+                    <View style={styles.modalOverlay}>
+                        <View style={[styles.modalContent, { backgroundColor: colors.card, borderRadius: radius.card }]}>
+                            <View style={styles.modalHeader}>
+                                <Text style={[styles.modalTitle, { color: colors.foreground }]}>Secure Access</Text>
+                                <Pressable onPress={handleConfirmCancel}>
+                                    <Text style={{ color: colors.mutedForeground, padding: 4 }}>Cancel</Text>
+                                </Pressable>
+                            </View>
+
+                            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>
+                                Enter your existing PIN to enable App Lock
+                            </Text>
+                            <TextInput
+                                style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.sm, letterSpacing: 8, fontSize: 20, textAlign: 'center' }]}
+                                secureTextEntry
+                                keyboardType="numeric"
+                                maxLength={4}
+                                value={confirmValue}
+                                onChangeText={value => setConfirmValue(value.replace(/[^0-9]/g, ''))}
+                                placeholder="••••"
+                                placeholderTextColor={colors.mutedForeground}
+                            />
+                            {confirmError ? <Text style={[styles.error, { color: colors.danger }]}>{confirmError}</Text> : null}
                             <Pressable
-                                style={[styles.deleteButton, { borderColor: '#fca5a5', backgroundColor: '#fff', borderRadius: radius.sm }]}
-                                onPress={() => {
-                                    Alert.alert(
-                                        "Delete Account",
-                                        "Are you sure you want to delete your account? This action cannot be undone and all your family data will be permanently lost.",
-                                        [
-                                            {
-                                                text: "Cancel",
-                                                style: "cancel"
-                                            },
-                                            {
-                                                text: "Delete",
-                                                style: "destructive",
-                                                onPress: async () => {
-                                                    try {
-                                                        setClearNotifications(true);
-                                                        await deleteAccount();
-                                                    } catch (error) {
-                                                        console.error("Delete account failed", error);
-                                                        Alert.alert("Error", "Failed to delete account. Please try again.");
-                                                    }
-                                                }
-                                            }
-                                        ]
-                                    );
-                                }}
+                                onPress={handleConfirmSubmit}
+                                disabled={confirmBusy}
+                                style={({ pressed }) => [
+                                    styles.saveButton,
+                                    {
+                                        backgroundColor: pressed ? `${colors.primary}cc` : colors.primary,
+                                        borderRadius: radius.sm,
+                                        opacity: confirmBusy ? 0.6 : 1,
+                                    },
+                                ]}
                             >
-                                <Trash2 size={16} color="#ef4444" />
-                                <Text style={[styles.deleteText, { color: "#ef4444" }]}>Delete Account</Text>
+                                <Text style={{ color: colors.primaryForeground, fontWeight: '600' }}>
+                                    {confirmBusy ? 'Verifying…' : 'Confirm PIN'}
+                                </Text>
                             </Pressable>
                         </View>
+                    </View>
+                </Modal>
+
+                {/* Data Privacy */}
+                <View>
+                    <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Data Privacy</Text>
+                    <View style={[styles.softCard, { backgroundColor: colors.muted, borderRadius: radius.card }]}>
+                        <Text style={[styles.privacyText, { color: colors.mutedForeground }]}>
+                            Your data is encrypted and stored securely. We never share your personal information with third parties.
+                        </Text>
+                        <View style={styles.tagsRow}>
+                            <View style={[styles.tag, { backgroundColor: '#dcfce7', borderRadius: radius.full }]}>
+                                <Text style={[styles.tagText, { color: '#166534' }]}>🔐 End-to-end encrypted</Text>
+                            </View>
+                        </View>
+                    </View>
+                </View>
+
+                {/* Danger Zone */}
+                <View style={[styles.dangerCard, { backgroundColor: colors.card, borderColor: '#fee2e2', borderRadius: radius.card }]}>
+                    <Text style={[styles.dangerTitle, { color: '#ef4444' }]}>Danger Zone</Text>
+                    <Pressable
+                        style={[styles.deleteButton, { borderColor: '#fca5a5', backgroundColor: '#fff', borderRadius: radius.sm }]}
+                        onPress={() => {
+                            Alert.alert(
+                                "Delete Account",
+                                "Are you sure you want to delete your account? This action cannot be undone and all your family data will be permanently lost.",
+                                [
+                                    {
+                                        text: "Cancel",
+                                        style: "cancel"
+                                    },
+                                    {
+                                        text: "Delete",
+                                        style: "destructive",
+                                        onPress: async () => {
+                                            try {
+                                                setClearNotifications(true);
+                                                await deleteAccount();
+                                            } catch (error) {
+                                                console.error("Delete account failed", error);
+                                                Alert.alert("Error", "Failed to delete account. Please try again.");
+                                            }
+                                        }
+                                    }
+                                ]
+                            );
+                        }}
+                    >
+                        <Trash2 size={16} color="#ef4444" />
+                        <Text style={[styles.deleteText, { color: "#ef4444" }]}>Delete Account</Text>
+                    </Pressable>
+                </View>
 
                 <View style={{ height: 40 }} />
             </ScrollView>

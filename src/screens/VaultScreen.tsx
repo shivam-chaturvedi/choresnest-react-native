@@ -32,17 +32,8 @@ import RNFS from "react-native-fs";
 import { DocumentUploadScheduler } from "../services/sync/DocumentUploadScheduler";
 import { VaultService } from "../services/VaultService";
 import NetInfo from "@react-native-community/netinfo";
-import {
-  Menu,
-  Upload,
-  Search,
-  Filter,
-  Shield,
-  Bell,
-  ChevronRight,
-  ArrowLeft,
-  FileText,
-} from "lucide-react-native";
+import { Menu, Upload, Search, Plus, Filter, Calendar as CalendarIcon, FileText, ChevronRight, Shield, Bell, AlertTriangle, UploadCloud, X, Check, Lock, Settings, ArrowLeft } from "lucide-react-native";
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 import { useObservableValue } from "../hooks/useObservableValue";
 import { of } from "rxjs";
@@ -106,6 +97,7 @@ export const VaultScreen: React.FC = () => {
       uri: docUri,
       uploadStatus: doc.uploadStatus,
       remotePath: doc.remotePath,
+      fileSize: doc.fileSize,
       ...meta,
     };
   };
@@ -221,7 +213,7 @@ export const VaultScreen: React.FC = () => {
           { backgroundColor: colors.muted, borderRadius: radius.md },
         ]}
       >
-        <Text style={{ fontSize: 20 }}>{doc.icon}</Text>
+        <MaterialCommunityIcons name={doc.icon || 'file-document'} size={24} color={colors.foreground} />
         {dotColor ? (
           <View
             style={[
@@ -260,6 +252,8 @@ export const VaultScreen: React.FC = () => {
           styles.syncButton,
           {
             borderColor: colors.border,
+            backgroundColor: colors.background,
+            zIndex: 10,
             opacity: pressed ? 0.7 : 1,
           },
         ]}
@@ -386,13 +380,13 @@ export const VaultScreen: React.FC = () => {
   };
 
   const categories = [
-    { id: 'warranty', name: 'Warranties', icon: '🛡️', count: categoryCounts.warranty, color: colors.info + '30' },
-    { id: 'bill', name: 'Bills', icon: '🧾', count: categoryCounts.bill, color: colors.warning + '30' },
-    { id: 'insurance', name: 'Insurance', icon: '📋', count: categoryCounts.insurance, color: colors.success + '30' },
-    { id: 'service', name: 'Service', icon: '🔧', count: categoryCounts.service, color: colors.muted + '50' },
-    { id: 'certificate', name: 'Certificates', icon: '📜', count: categoryCounts.certificate, color: colors.border },
-    { id: 'receipt', name: 'Receipts', icon: '🧾', count: categoryCounts.receipt, color: colors.primary + '30' },
-    { id: 'other', name: 'Other', icon: '📄', count: categoryCounts.other, color: colors.muted + '30' },
+    { id: 'warranty', name: 'Warranties', icon: 'shield-check', count: categoryCounts.warranty, color: colors.info + '30' },
+    { id: 'bill', name: 'Bills', icon: 'receipt', count: categoryCounts.bill, color: colors.warning + '30' },
+    { id: 'insurance', name: 'Insurance', icon: 'clipboard-text', count: categoryCounts.insurance, color: colors.success + '30' },
+    { id: 'service', name: 'Service', icon: 'wrench', count: categoryCounts.service, color: colors.muted + '50' },
+    { id: 'certificate', name: 'Certificates', icon: 'certificate', count: categoryCounts.certificate, color: colors.border },
+    { id: 'receipt', name: 'Receipts', icon: 'receipt', count: categoryCounts.receipt, color: colors.primary + '30' },
+    { id: 'other', name: 'Other', icon: 'file-document', count: categoryCounts.other, color: colors.muted + '30' },
   ];
 
   // Calculate storage on mount and when docs change
@@ -590,13 +584,13 @@ export const VaultScreen: React.FC = () => {
     cost?: string;
   }) => {
     const categoryIcons: Record<string, string> = {
-      warranty: '🛡️',
-      bill: '🧾',
-      insurance: '📋',
-      service: '🔧',
-      certificate: '📜',
-      receipt: '🧾',
-      other: '📄',
+      warranty: 'shield-check',
+      bill: 'receipt',
+      insurance: 'clipboard-text',
+      service: 'wrench',
+      certificate: 'certificate',
+      receipt: 'receipt',
+      other: 'file-document',
     };
 
     const sourceUri = doc.uri ?? doc.originalUri ?? '';
@@ -612,7 +606,7 @@ export const VaultScreen: React.FC = () => {
     addDocument({
       name: doc.documentName,
       type: doc.category as any,
-      icon: categoryIcons[doc.category] || '📄',
+      icon: categoryIcons[doc.category] || 'file-document',
       date: new Date().toISOString().split('T')[0],
       memberId: activeMember?.id || 'global',
       sharedWith: [],
@@ -664,7 +658,7 @@ export const VaultScreen: React.FC = () => {
         date: expenseDate,
         type: 'expense',
         category: expenseCategory,
-        icon: categoryIcons[doc.category] || '🧾'
+        icon: categoryIcons[doc.category] || 'receipt'
       });
 
       // Optional: Notify user
@@ -694,11 +688,20 @@ export const VaultScreen: React.FC = () => {
                 >
                   {renderDocumentIcon(doc)}
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.docName, { color: colors.foreground }]}>{doc.name}</Text>
+                    <Text style={[styles.docName, { color: colors.foreground }]} numberOfLines={1} ellipsizeMode="tail">
+                      {doc.name}
+                    </Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
                       {docDateLabel ? (
                         <Text style={[styles.docDate, { color: colors.mutedForeground }]}>{docDateLabel}</Text>
                       ) : null}
+                      {VaultService.getCachedLocalUri(doc.id) && (
+                        <View style={{ backgroundColor: colors.success + '20', paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.sm }}>
+                          <Text style={{ fontSize: 10, color: colors.success, fontWeight: '600' }}>
+                            Saved locally {doc.fileSize ? `- ${formatStorageSize(doc.fileSize)}` : ''}
+                          </Text>
+                        </View>
+                      )}
                     </View>
                     {renderDocMeta(doc)}
                   </View>
@@ -747,11 +750,20 @@ export const VaultScreen: React.FC = () => {
                   >
                     {renderDocumentIcon(doc)}
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.docName, { color: colors.foreground }]}>{doc.name}</Text>
+                      <Text style={[styles.docName, { color: colors.foreground }]} numberOfLines={1} ellipsizeMode="tail">
+                        {doc.name}
+                      </Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
                         {docDateLabel ? (
                           <Text style={[styles.docDate, { color: colors.mutedForeground }]}>{docDateLabel}</Text>
                         ) : null}
+                        {VaultService.getCachedLocalUri(doc.id) && (
+                          <View style={{ backgroundColor: colors.success + '20', paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.sm }}>
+                            <Text style={{ fontSize: 10, color: colors.success, fontWeight: '600' }}>
+                              Saved locally {doc.fileSize ? `- ${formatStorageSize(doc.fileSize)}` : ''}
+                            </Text>
+                          </View>
+                        )}
                       </View>
                       {renderDocMeta(doc)}
                     </View>
@@ -821,7 +833,7 @@ export const VaultScreen: React.FC = () => {
                 alert.type === 'warning' ? { borderLeftColor: colors.warning, borderLeftWidth: 4 } : { borderLeftColor: colors.info, borderLeftWidth: 4 }
               ]}
             >
-              <Text style={{ fontSize: 24, marginRight: 12 }}>{alert.icon}</Text>
+              <MaterialCommunityIcons name={alert.icon || 'file-document'} size={24} color={alert.type === 'danger' ? colors.danger : colors.foreground} style={{ marginRight: 12 }} />
               <View style={{ flex: 1 }}>
                 <Text style={[styles.alertName, { color: colors.foreground }]}>{alert.name}</Text>
                 <Text style={[styles.alertMsg, { color: colors.mutedForeground }]}>{alert.message}</Text>
@@ -845,7 +857,7 @@ export const VaultScreen: React.FC = () => {
               onPress={() => handleCategoryClick(cat.id)}
             >
               <View style={[styles.catIconBox, { backgroundColor: cat.color, borderRadius: radius.md }]}>
-                <Text style={{ fontSize: 20 }}>{cat.icon}</Text>
+                <MaterialCommunityIcons name={cat.icon || 'file-document'} size={24} color={colors.foreground} />
               </View>
               <Text style={[styles.catName, { color: colors.foreground }]}>{cat.name}</Text>
               <Text style={[styles.catCount, { color: colors.mutedForeground }]}>{cat.count}</Text>

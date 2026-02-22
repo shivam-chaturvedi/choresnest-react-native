@@ -171,15 +171,15 @@ const AppNavigatorInner = () => {
 
     appStateSubscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active' && appHasStarted) {
-        console.log('App foreground: Doing read-only sync');
-        void triggerSync(true);
+        console.log('App foreground: Doing full rewrite sync to catch up on offline items');
+        void triggerSync(false);
       }
     });
 
     netInfoUnsubscribe = NetInfo.addEventListener(state => {
       if (state.isConnected && appHasStarted) {
-        console.log('Network connected: Doing read-only sync');
-        void triggerSync(true);
+        console.log('Network connected: Doing full rewrite sync to push offline items');
+        void triggerSync(false);
       }
     });
 

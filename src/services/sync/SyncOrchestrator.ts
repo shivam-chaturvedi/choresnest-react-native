@@ -57,9 +57,9 @@ export class SyncOrchestrator {
             pushChanges: readOnly
                 ? undefined
                 : async ({ changes }) => {
-                      console.log(`PUSH_START for user ${this.userId}`);
-                      await this.pushToServer(changes as Record<string, TableChangeSet | undefined>);
-                  },
+                    console.log(`PUSH_START for user ${this.userId}`);
+                    await this.pushToServer(changes as Record<string, TableChangeSet | undefined>);
+                },
             migrationsEnabledAtVersion: 5,
         });
     }
@@ -142,6 +142,7 @@ export class SyncOrchestrator {
                     tableChanges: changes[config.key],
                     userId: this.userId,
                     addProfileId: config.addProfileId ?? true,
+                    conflictKey: config.conflictKey ?? 'id',
                 })
             );
             if (tasks.length > 0) {
