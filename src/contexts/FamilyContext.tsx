@@ -267,9 +267,9 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     let mounted = true;
     const refreshProfile = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { session } } = await supabase.auth.getSession();
         if (mounted) {
-          setProfileId(user?.id ?? null);
+          setProfileId(session?.user?.id ?? null);
         }
       } catch (error) {
         console.warn("FamilyContext: Failed to resolve profile id", error);
@@ -500,7 +500,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
               };
               if (d.memberId === 'global') {
                 g.push(docObj);
-              } else {
+              } else if (d.memberId) {
                 if (!m[d.memberId]) m[d.memberId] = [];
                 m[d.memberId].push(docObj);
               }

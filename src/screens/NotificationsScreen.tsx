@@ -37,13 +37,16 @@ import {
   ChevronDown,
   X
 } from "lucide-react-native";
+import Config from "react-native-config";
+
+const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 
 // --- Data & Helpers ---
 
 const notificationSettings = [
   { id: 'tasks', icon: CheckSquare, label: 'Task Reminders', description: 'Due dates and assignments', enabled: true },
   { id: 'vault', icon: Bell, label: 'Document Alerts', description: 'Warranty and expiry reminders', enabled: true },
-  { id: 'mealprep', icon: ChefHat, label: 'Meal Prep Reminders', description: 'Time to start cooking', enabled: true },
+  ...(ENABLE_RECIPE_AND_MEALS ? [{ id: 'mealprep', icon: ChefHat, label: 'Meal Prep Reminders', description: 'Time to start cooking', enabled: true }] : []),
 ];
 
 const DELIVERY_CATEGORIES: NotificationCategory[] = ['events', 'tasks', 'documents', 'meals', 'budgets'];
@@ -214,10 +217,10 @@ export const NotificationsScreen: React.FC = () => {
   useEffect(() => {
     const saveEventPrefs = async () => {
       try {
-      await NotificationPreferencesService.toggleCategory('events', eventReminders);
-      if (eventReminders) {
-        await NotificationPreferencesService.saveReminderTime('events', eventReminderTime);
-      }
+        await NotificationPreferencesService.toggleCategory('events', eventReminders);
+        if (eventReminders) {
+          await NotificationPreferencesService.saveReminderTime('events', eventReminderTime);
+        }
       } catch (error) {
         console.error('Error saving event preferences:', error);
       }
@@ -229,10 +232,10 @@ export const NotificationsScreen: React.FC = () => {
   useEffect(() => {
     const saveMealPrefs = async () => {
       try {
-      await NotificationPreferencesService.toggleCategory('meals', mealPrepReminders);
-      if (mealPrepReminders) {
-        await NotificationPreferencesService.saveReminderTime('meals', mealPrepTime);
-      }
+        await NotificationPreferencesService.toggleCategory('meals', mealPrepReminders);
+        if (mealPrepReminders) {
+          await NotificationPreferencesService.saveReminderTime('meals', mealPrepTime);
+        }
       } catch (error) {
         console.error('Error saving meal preferences:', error);
       }
@@ -394,39 +397,41 @@ export const NotificationsScreen: React.FC = () => {
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
           {/* Meal Prep Reminders */}
-          <View style={styles.settingSection}>
-            <View style={styles.settingHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <ChefHat size={20} color={colors.primary} />
-                <View>
-                  <Text style={[styles.labelTitle, { color: colors.foreground }]}>Meal Prep Reminders</Text>
-                  <Text style={[styles.labelDesc, { color: colors.mutedForeground }]}>Start cooking on time</Text>
+          {ENABLE_RECIPE_AND_MEALS && (
+            <View style={styles.settingSection}>
+              <View style={styles.settingHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <ChefHat size={20} color={colors.primary} />
+                  <View>
+                    <Text style={[styles.labelTitle, { color: colors.foreground }]}>Meal Prep Reminders</Text>
+                    <Text style={[styles.labelDesc, { color: colors.mutedForeground }]}>Start cooking on time</Text>
+                  </View>
                 </View>
-              </View>
-              <Switch
-                value={mealPrepReminders}
-                onValueChange={setMealPrepReminders}
-                trackColor={{ false: colors.muted, true: colors.primary }}
-              />
-            </View>
-            {mealPrepReminders && (
-              <View style={styles.subSetting}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Clock size={16} color={colors.mutedForeground} />
-                  <Text style={[styles.subLabel, { color: colors.mutedForeground }]}>Start prep</Text>
-                </View>
-                <TimeSelector
-                  label="Meal Prep Time"
-                  value={mealPrepTime}
-                  options={mealPrepOptions}
-                  onSelect={setMealPrepTime}
-                  visible={showMealPicker}
-                  onOpen={() => setShowMealPicker(true)}
-                  onClose={() => setShowMealPicker(false)}
+                <Switch
+                  value={mealPrepReminders}
+                  onValueChange={setMealPrepReminders}
+                  trackColor={{ false: colors.muted, true: colors.primary }}
                 />
               </View>
-            )}
-          </View>
+              {mealPrepReminders && (
+                <View style={styles.subSetting}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Clock size={16} color={colors.mutedForeground} />
+                    <Text style={[styles.subLabel, { color: colors.mutedForeground }]}>Start prep</Text>
+                  </View>
+                  <TimeSelector
+                    label="Meal Prep Time"
+                    value={mealPrepTime}
+                    options={mealPrepOptions}
+                    onSelect={setMealPrepTime}
+                    visible={showMealPicker}
+                    onOpen={() => setShowMealPicker(true)}
+                    onClose={() => setShowMealPicker(false)}
+                  />
+                </View>
+              )}
+            </View>
+          )}
         </View>
 
         {/* Notification Types */}

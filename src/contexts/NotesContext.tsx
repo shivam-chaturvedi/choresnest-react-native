@@ -63,9 +63,9 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         let mounted = true;
         const refreshProfile = async () => {
             try {
-                const { data: { user } } = await supabase.auth.getUser();
+                const { data: { session } } = await supabase.auth.getSession();
                 if (mounted) {
-                    setProfileId(user?.id ?? null);
+                    setProfileId(session?.user?.id ?? null);
                 }
             } catch (error) {
                 console.warn('NotesContext: Failed to read profile id', error);

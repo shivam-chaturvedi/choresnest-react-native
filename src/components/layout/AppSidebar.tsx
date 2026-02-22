@@ -16,6 +16,9 @@ import { theme } from "../../theme";
 import { useFamily, FamilyMember } from "../../contexts/FamilyContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { PROFILE_COLORS, ProfileColor } from "../../constants/profileColors";
+import Config from "react-native-config";
+
+const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 import {
   Settings,
   FileText,
@@ -219,8 +222,10 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   }
 
   const shortcuts = [
-    { icon: Utensils, label: 'Recipes', route: 'Recipes' },
-    { icon: Calendar, label: 'Meal Plan', route: 'MealPlan' },
+    ...(ENABLE_RECIPE_AND_MEALS ? [
+      { icon: Utensils, label: 'Recipes', route: 'Recipes' },
+      { icon: Calendar, label: 'Meal Plan', route: 'MealPlan' },
+    ] : []),
     { icon: ClipboardList, label: 'Shopping Lists', route: 'lists' }, // Fixed route name to lowercase 'lists' tab
     { icon: FileText, label: 'Vault', route: 'Vault' },
     { icon: DollarSign, label: 'Expenses', route: 'Expenses' },

@@ -91,9 +91,9 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
         let isMounted = true;
         const refreshProfile = async () => {
             try {
-                const { data: { user } } = await supabase.auth.getUser();
+                const { data: { session } } = await supabase.auth.getSession();
                 if (isMounted) {
-                    setProfileId(user?.id ?? null);
+                    setProfileId(session?.user?.id ?? null);
                 }
             } catch (error) {
                 console.warn('Failed to fetch profile id for finance context', error);

@@ -107,10 +107,10 @@ const useSupabaseProfileId = () => {
     const resolveProfile = async () => {
       try {
         const {
-          data: { user },
-        } = await supabase.auth.getUser();
+          data: { session },
+        } = await supabase.auth.getSession();
         if (mounted) {
-          setProfileId(user?.id ?? null);
+          setProfileId(session?.user?.id ?? null);
         }
       } catch (error) {
         if (mounted) {

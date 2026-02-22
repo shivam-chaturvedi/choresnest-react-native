@@ -94,24 +94,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
                 AsyncStorage.removeItem("IS_GUEST");
                 DocumentUploadScheduler.startForUser(session.user.id);
                 // Trigger Sync dynamically to avoid circular dependency - run in background, don't block
-                // SyncService handles concurrent calls internally, so this is safe
-                (async () => {
-                    try {
-                        const { SyncService } = await import("../services/SyncService");
-                        // Check if sync is already in progress before triggering
-                        if (!SyncService.getSyncStatus()) {
-                            // Don't await - let sync run in background
-                            SyncService.sync().catch(err => {
-                                // Don't log concurrent sync errors - they're expected
-                                if (!err?.message?.includes('Concurrent synchronization')) {
-                                    console.error("Background sync failed:", err);
-                                }
-                            });
+                // AppNavigator handles the INITIAL_SESSION sync with an 8 second delay to prevent splash screen blocking
+                if (_event !== 'INITIAL_SESSION') {
+                    (async () => {
+                        try {
+                            const { SyncService } = await import("../services/SyncService");
+                            // Check if sync is already in progress before triggering
+                            if (!SyncService.getSyncStatus()) {
+                                // Don't await - let sync run in background
+                                SyncService.sync().catch(err => {
+                                    // Don't log concurrent sync errors - they're expected
+                                    if (!err?.message?.includes('Concurrent synchronization')) {
+                                        console.error("Background sync failed:", err);
+                                    }
+                                });
+                            }
+                        } catch (err) {
+                            console.error("Failed to load SyncService", err);
                         }
-                    } catch (err) {
-                        console.error("Failed to load SyncService", err);
-                    }
-                })();
+                    })();
+                }
             } else {
                 setUser(null);
                 DocumentUploadScheduler.stop();
@@ -178,13 +180,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
             await AsyncStorage.setItem("IS_GUEST", "true");
             await AsyncStorage.removeItem("AUTH_USER");
             await AsyncStorage.setItem("HAS_COMPLETED_ONBOARDING", "true");
-    } catch (error) {
-        console.error("Guest login failed:", error);
-        // Re-throw with user-friendly message
-        throw new Error("Failed to continue as guest. Please try again.");
-    } finally {
-        setIsLoading(false);
-    }
+        } catch (error) {
+            console.error("Guest login failed:", error);
+            // Re-throw with user-friendly message
+            throw new Error("Failed to continue as guest. Please try again.");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const logout = async () => {

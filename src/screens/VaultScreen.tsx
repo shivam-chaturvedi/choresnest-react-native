@@ -389,11 +389,11 @@ export const VaultScreen: React.FC = () => {
     { id: 'warranty', name: 'Warranties', icon: '🛡️', count: categoryCounts.warranty, color: colors.info + '30' },
     { id: 'bill', name: 'Bills', icon: '🧾', count: categoryCounts.bill, color: colors.warning + '30' },
     { id: 'insurance', name: 'Insurance', icon: '📋', count: categoryCounts.insurance, color: colors.success + '30' },
-      { id: 'service', name: 'Service', icon: '🔧', count: categoryCounts.service, color: colors.muted + '50' },
-      { id: 'certificate', name: 'Certificates', icon: '📜', count: categoryCounts.certificate, color: colors.border },
-      { id: 'receipt', name: 'Receipts', icon: '🧾', count: categoryCounts.receipt, color: colors.primary + '30' },
-      { id: 'other', name: 'Other', icon: '📄', count: categoryCounts.other, color: colors.muted + '30' },
-    ];
+    { id: 'service', name: 'Service', icon: '🔧', count: categoryCounts.service, color: colors.muted + '50' },
+    { id: 'certificate', name: 'Certificates', icon: '📜', count: categoryCounts.certificate, color: colors.border },
+    { id: 'receipt', name: 'Receipts', icon: '🧾', count: categoryCounts.receipt, color: colors.primary + '30' },
+    { id: 'other', name: 'Other', icon: '📄', count: categoryCounts.other, color: colors.muted + '30' },
+  ];
 
   // Calculate storage on mount and when docs change
   const docFingerprint = useMemo(
@@ -789,7 +789,7 @@ export const VaultScreen: React.FC = () => {
             <Text style={[styles.storageTitle, { color: colors.primaryForeground }]}>Secure Storage</Text>
             <Text style={[styles.storageDesc, { color: colors.primaryForeground, opacity: 0.8 }]}>{allDocs.length} documents • {storageUsed}</Text>
             <Text style={[styles.storageDesc, { color: colors.primaryForeground, opacity: 0.6 }]}>
-              Live RNFS footprint: {appStorageUsed} (documents + metadata)
+              Local Data Footprint: {appStorageUsed} (documents + metadata)
             </Text>
           </View>
           <View style={{ alignItems: 'flex-end' }}>

@@ -33,6 +33,9 @@ import {
   Download,
 } from "lucide-react-native";
 import { GettingStartedTutorial } from "../components/tutorial/GettingStartedTutorial";
+import Config from "react-native-config";
+
+const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 
 // --- Data ---
 const featureGuides = [
@@ -129,7 +132,7 @@ const featureGuides = [
       "Vault alerts now appear in the Notification Center",
     ],
   },
-  {
+  ...(ENABLE_RECIPE_AND_MEALS ? [{
     id: "recipes",
     icon: Utensils,
     title: "Recipes & Collections",
@@ -146,7 +149,7 @@ const featureGuides = [
       "Import recipes from supported websites (coming soon)",
       "Tag recipes by cuisine or dietary restriction",
     ],
-  },
+  }] : []),
   {
     id: "finance",
     icon: DollarSign,

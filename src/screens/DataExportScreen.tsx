@@ -14,12 +14,15 @@ import {
   Share2
 } from "lucide-react-native";
 import { exportService, ExportFormat, ExportStats } from "../services/ExportService";
+import Config from "react-native-config";
+
+const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 
 const initialDataOptions = [
   { id: 'events', label: "Calendar Events", items: 0, selected: true },
   { id: 'tasks', label: "Tasks & Chores", items: 0, selected: true },
   { id: 'lists', label: "Shopping Lists", items: 0, selected: true },
-  { id: 'recipes', label: "Recipes", items: 0, selected: true },
+  ...(ENABLE_RECIPE_AND_MEALS ? [{ id: 'recipes', label: "Recipes", items: 0, selected: true }] : []),
   { id: 'documents', label: "Documents", items: 0, selected: false },
   { id: 'notes', label: "Notes", items: 0, selected: true },
   { id: 'expenses', label: "Expenses", items: 0, selected: true },
