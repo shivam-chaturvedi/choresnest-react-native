@@ -10,6 +10,7 @@ import {
     Image,
     TouchableWithoutFeedback,
     TouchableOpacity,
+    Linking,
 } from "react-native";
 import { X, Edit2, Save } from "lucide-react-native";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
@@ -28,6 +29,7 @@ import {
 } from "../../utils/VaultReminderUtils";
 import FileViewer from 'react-native-file-viewer';
 import RNFS from "react-native-fs";
+import { AppIcon } from "../ui/AppIcon";
 
 interface DocumentDetailsModalProps {
     visible: boolean;
@@ -81,6 +83,8 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
     const [signedUrl, setSignedUrl] = useState<string | null>(null);
     const [resolvedLocalUri, setResolvedLocalUri] = useState<string | null>(null);
     const [isDownloading, setIsDownloading] = useState(false);
+    const [showViewerModal, setShowViewerModal] = useState(false);
+    const [viewerErrorMessage, setViewerErrorMessage] = useState<string | null>(null);
     // Priority: resolved+verified local file > Supabase signed URL
     const viewUri = resolvedLocalUri ?? signedUrl ?? undefined;
 
@@ -362,6 +366,7 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                 await FileViewer.open(uriToOpen, { showOpenWithDialog: true });
             } catch (e) {
                 console.log('Error opening file:', e);
+                handleViewerError(e);
                 pushNotification("Error", "Could not open this file.", "warning");
             }
         } else {
@@ -372,9 +377,42 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                     await FileViewer.open(uriToOpen);
                 } catch (e) {
                     console.log('Error opening image:', e);
+                    handleViewerError(e);
                 }
             }
         }
+    };
+
+    const extractErrorMessage = (error: unknown): string => {
+        if (!error) return '';
+        if (typeof error === 'string') return error;
+        if (error instanceof Error) return error.message;
+        if (typeof error === 'object') {
+            return JSON.stringify(error);
+        }
+        return String(error);
+    };
+
+    const handleViewerError = (error: unknown) => {
+        const message = extractErrorMessage(error).toLowerCase();
+        if (message.includes('no app associated')) {
+            setViewerErrorMessage(
+                "Looks like your device doesn't have an app that can open this file type."
+            );
+            setShowViewerModal(true);
+        }
+    };
+
+    const handleOpenPlayStore = () => {
+        const url = 'https://play.google.com/store/search?q=file+viewer';
+        Linking.openURL(url).catch(() => {
+            pushNotification("Error", "Unable to open the Play Store.", "warning");
+        });
+        setShowViewerModal(false);
+    };
+
+    const handleDismissViewerModal = () => {
+        setShowViewerModal(false);
     };
 
     const getViewButtonLabel = () => {
@@ -553,12 +591,13 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
     };
 
     return (
-        <Modal
-            visible={visible}
-            transparent
-            animationType="fade"
-            onRequestClose={onClose}
-        >
+        <>
+            <Modal
+                visible={visible}
+                transparent
+                animationType="fade"
+                onRequestClose={onClose}
+            >
             <View style={styles.modalContainer}>
                 <TouchableWithoutFeedback onPress={onClose}>
                     <View style={styles.overlay} />
@@ -669,14 +708,19 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                             </>
                         ) : (
                             <>
-                                <View style={styles.detailSection}>
-                                    <Text style={[styles.documentTitle, { color: colors.foreground }]}>{document.icon} {document.name}</Text>
-                                    <View style={[styles.categoryBadge, { backgroundColor: colors.primary + '20', borderRadius: radius.sm }]}>
-                                        <Text style={[styles.categoryBadgeText, { color: colors.primary }]}>
-                                            {CATEGORIES.find(c => c.id === document.type)?.name || document.type}
-                                        </Text>
-                                    </View>
-                                </View>
+                    <View style={styles.detailSection}>
+                        <View style={styles.documentTitleRow}>
+                            <View style={[styles.documentIcon, { backgroundColor: colors.muted + '20', borderRadius: radius.md }]}>
+                                <AppIcon source={document.icon || 'file'} size={28} color={colors.primary} />
+                            </View>
+                            <View>
+                                <Text style={[styles.documentTitle, { color: colors.foreground }]}>{document.name}</Text>
+                                <Text style={[styles.documentType, { color: colors.mutedForeground }]}>
+                                    {CATEGORIES.find(c => c.id === document.type)?.name || document.type}
+                                </Text>
+                            </View>
+                        </View>
+                    </View>
 
                                 <View style={styles.detailRow}>
                                     <Text style={[styles.detailLabel, { color: colors.mutedForeground }]}>Added On</Text>
@@ -685,10 +729,10 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
 
                                 {renderCategoryFields()}
 
-                                {viewUri && (
-                                    <Pressable
-                                        disabled={isDownloading}
-                                        style={[
+                    {viewUri && (
+                        <Pressable
+                            disabled={isDownloading}
+                            style={[
                                             styles.viewFileButton,
                                             {
                                                 backgroundColor: isDownloading ? colors.muted : colors.primary,
@@ -699,18 +743,72 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                                     >
                                         <Text style={[
                                             styles.viewFileButtonText,
-                                            { color: isDownloading ? colors.mutedForeground : colors.primaryForeground }
-                                        ]}>
-                                            {isDownloading ? 'Downloading...' : getViewButtonLabel()}
-                                        </Text>
-                                    </Pressable>
-                                )}
+                                { color: isDownloading ? colors.mutedForeground : colors.primaryForeground }
+                            ]}>
+                                {isDownloading ? 'Downloading...' : getViewButtonLabel()}
+                            </Text>
+                        </Pressable>
+                    )}
+                    {!viewUri && (
+                        <View style={[styles.viewUnavailableBox, { borderColor: colors.border, backgroundColor: colors.background }]}>
+                            <Text style={[styles.viewUnavailableText, { color: colors.mutedForeground }]}>
+                                {(() => {
+                                    if (document.uploadStatus && ['pending_upload', 'uploading'].includes(document.uploadStatus)) {
+                                        return 'Document is still uploading. Please try again after the upload finishes.';
+                                    }
+                                    if (document.uploadStatus === 'failed') {
+                                        return 'Upload failed. Please retry the document upload before viewing.';
+                                    }
+                                    if (!document.remotePath && !document.localUri) {
+                                        return 'No file has been attached to this document yet.';
+                                    }
+                                    return 'Unable to load this file at the moment.';
+                                })()}
+                            </Text>
+                        </View>
+                    )}
                             </>
                         )}
                     </ScrollView>
                 </View>
             </View>
         </Modal>
+            <Modal
+                visible={showViewerModal}
+                transparent
+                animationType="fade"
+                onRequestClose={handleDismissViewerModal}
+            >
+                <View style={styles.viewerModalOverlay}>
+                    <View style={[styles.viewerModal, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        <Text style={[styles.viewerModalTitle, { color: colors.foreground }]}>No viewer installed</Text>
+                        <Text style={[styles.viewerModalBody, { color: colors.mutedForeground }]}>
+                            {viewerErrorMessage || "Install a document viewer from the Play Store to open this attachment."}
+                        </Text>
+                        <View style={styles.viewerModalActions}>
+                            <Pressable
+                                onPress={handleDismissViewerModal}
+                                style={[
+                                    styles.viewerModalAction,
+                                    { borderColor: colors.primary, backgroundColor: colors.background },
+                                ]}
+                            >
+                                <Text style={[styles.viewerModalActionText, { color: colors.primary }]}>Dismiss</Text>
+                            </Pressable>
+                            <Pressable
+                                onPress={handleOpenPlayStore}
+                                style={[
+                                    styles.viewerModalAction,
+                                    { borderColor: colors.primary, backgroundColor: colors.primary },
+                                ]}
+                            >
+                                <Text style={[styles.viewerModalActionText, { color: colors.primaryForeground }]}>Open Play Store</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+        </>
     );
 };
 
@@ -775,14 +873,20 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         marginBottom: 8,
     },
-    categoryBadge: {
-        alignSelf: 'flex-start',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-    },
-    categoryBadgeText: {
+    documentType: {
         fontSize: 13,
-        fontWeight: '600',
+        fontWeight: '500',
+    },
+    documentTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    documentIcon: {
+        width: 48,
+        height: 48,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12,
     },
     detailRow: {
         flexDirection: 'row',
@@ -806,6 +910,56 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     viewFileButtonText: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    viewUnavailableBox: {
+        borderWidth: 1,
+        borderRadius: 10,
+        padding: 12,
+        marginTop: 12,
+    },
+    viewUnavailableText: {
+        fontSize: 13,
+        lineHeight: 18,
+    },
+    viewerModalOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: "rgba(0,0,0,0.45)",
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
+        zIndex: 10,
+    },
+    viewerModal: {
+        width: '100%',
+        maxWidth: 360,
+        borderWidth: 1,
+        borderRadius: 16,
+        padding: 20,
+    },
+    viewerModalTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        marginBottom: 8,
+    },
+    viewerModalBody: {
+        fontSize: 14,
+        lineHeight: 20,
+        marginBottom: 16,
+    },
+    viewerModalActions: {
+        width: '100%',
+        flexDirection: 'column',
+    },
+    viewerModalAction: {
+        borderWidth: 1,
+        borderRadius: 10,
+        paddingVertical: 12,
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    viewerModalActionText: {
         fontSize: 14,
         fontWeight: '600',
     },

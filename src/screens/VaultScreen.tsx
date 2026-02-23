@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect, useMemo } from "react";
+import React, { useCallback, useState, useEffect, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -34,6 +34,7 @@ import { VaultService } from "../services/VaultService";
 import NetInfo from "@react-native-community/netinfo";
 import { Menu, Upload, Search, Plus, Filter, Calendar as CalendarIcon, FileText, ChevronRight, Shield, Bell, AlertTriangle, UploadCloud, X, Check, Lock, Settings, ArrowLeft } from "lucide-react-native";
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { AppIcon } from "../components/ui/AppIcon";
 
 import { useObservableValue } from "../hooks/useObservableValue";
 import { of } from "rxjs";
@@ -232,8 +233,8 @@ export const VaultScreen: React.FC = () => {
     (documentId: string) => {
       void DocumentUploadScheduler.requestUploadNow(user?.id);
       showToast({
-        title: "Sync queued",
-        description: "Document will upload as soon as connectivity is restored.",
+        title: "Document queued",
+        description: "Document is in queue.",
         type: "default",
       });
     },
@@ -257,13 +258,13 @@ export const VaultScreen: React.FC = () => {
         ]}
         onPress={(event: GestureResponderEvent) => {
           event.stopPropagation();
-          handleSyncNow(doc.id);
-        }}
-      >
-        <Text style={[styles.syncButtonText, { color: colors.foreground }]}>Sync now</Text>
-      </Pressable>
-    );
-  };
+        handleSyncNow(doc.id);
+      }}
+    >
+      <Text style={[styles.syncButtonText, { color: colors.foreground }]}>Sync now</Text>
+    </Pressable>
+  );
+};
 
   useEffect(() => {
     if (!showDetailsModal) {
@@ -465,6 +466,15 @@ export const VaultScreen: React.FC = () => {
     setCurrentView('all');
   };
 
+  const clearFilters = useCallback(() => {
+    setFilters({
+      categories: [],
+      dateFrom: '',
+      dateTo: '',
+      expiryStatus: [],
+    });
+  }, []);
+
   const handleSearchChange = (text: string) => {
     setSearchQuery(text);
     if (text.length > 0 && currentView !== 'main') {
@@ -476,13 +486,23 @@ export const VaultScreen: React.FC = () => {
     }
   };
 
+  const hasActiveFilters = useMemo(() => {
+    return Boolean(
+      filters.dateFrom ||
+      filters.dateTo ||
+      filters.categories.length > 0 ||
+      filters.expiryStatus.length > 0
+    );
+  }, [filters]);
+
+  const prevFiltersActiveRef = useRef(false);
+
   useEffect(() => {
-    // If filters are active, switch to all view to show results
-    const isFiltered = filters.dateFrom || filters.dateTo || filters.categories.length > 0 || filters.expiryStatus.length > 0;
-    if (isFiltered && currentView !== 'all') {
+    if (hasActiveFilters && !prevFiltersActiveRef.current && currentView !== 'all') {
       setCurrentView('all');
     }
-  }, [filters]);
+    prevFiltersActiveRef.current = hasActiveFilters;
+  }, [hasActiveFilters, currentView]);
 
   useEffect(() => {
     const backAction = () => {
@@ -635,6 +655,7 @@ export const VaultScreen: React.FC = () => {
           {categoryDocs.length > 0 ? (
             categoryDocs.map(doc => {
               const docDateLabel = getDocumentDateLabel(doc);
+              const syncButton = renderDocumentActions(doc);
               return (
                 <Pressable
                   key={doc.id}
@@ -664,7 +685,11 @@ export const VaultScreen: React.FC = () => {
                     {renderDocMeta(doc)}
                   </View>
                   <View style={styles.docRowControls}>
-                    {renderDocumentActions(doc)}
+                    {syncButton && (
+                      <View style={styles.syncButtonWrapper}>
+                        {syncButton}
+                      </View>
+                    )}
                     <ChevronRight size={16} color={colors.mutedForeground} />
                   </View>
                 </Pressable>
@@ -688,6 +713,16 @@ export const VaultScreen: React.FC = () => {
   const renderAllView = () => (
     <View style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {hasActiveFilters && (
+          <View style={styles.clearFiltersRow}>
+            <Pressable
+              style={[styles.clearFiltersButton, { borderColor: colors.border, backgroundColor: colors.background }]}
+              onPress={clearFilters}
+            >
+              <Text style={[styles.clearFiltersButtonText, { color: colors.primary }]}>Clear all filters</Text>
+            </Pressable>
+          </View>
+        )}
         {categories.map(cat => {
           const docsInCat = filteredDocs.filter(d => d.type === cat.id);
           if (docsInCat.length === 0) return null;
@@ -697,6 +732,7 @@ export const VaultScreen: React.FC = () => {
               <Text style={[styles.sectionTitle, { color: colors.foreground, marginBottom: 8 }]}>{cat.name}</Text>
               {docsInCat.map(doc => {
                 const docDateLabel = getDocumentDateLabel(doc);
+                const syncButton = renderDocumentActions(doc);
                 return (
                   <Pressable
                     key={doc.id}
@@ -719,7 +755,11 @@ export const VaultScreen: React.FC = () => {
                       {renderDocMeta(doc)}
                     </View>
                     <View style={styles.docRowControls}>
-                      {renderDocumentActions(doc)}
+                      {syncButton && (
+                        <View style={styles.syncButtonWrapper}>
+                          {syncButton}
+                        </View>
+                      )}
                       <ChevronRight size={16} color={colors.mutedForeground} />
                     </View>
                   </Pressable>
@@ -823,14 +863,26 @@ export const VaultScreen: React.FC = () => {
           <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
             Recent Vault Items
           </Text>
-          <Pressable onPress={handleSeeAll}>
-            <Text style={[styles.viewAll, { color: colors.primary }]}>See All</Text>
+          <Pressable
+            onPress={handleSeeAll}
+            style={({ pressed }) => [
+              styles.seeAllButton,
+              {
+                backgroundColor: colors.muted + '15',
+                borderColor: colors.border,
+                opacity: pressed ? 0.8 : 1,
+              },
+            ]}
+          >
+            <Text style={[styles.seeAllText, { color: colors.primary }]}>See All</Text>
+            <AppIcon name="arrowRight" size={14} color={colors.primary} style={{ marginLeft: 6 }} />
           </Pressable>
         </View>
 
         {recentDocs.length > 0 ? (
           recentDocs.map(doc => {
             const docDateLabel = getDocumentDateLabel(doc);
+            const syncButton = renderDocumentActions(doc);
             return (
               <Pressable
                 key={doc.id}
@@ -854,7 +906,11 @@ export const VaultScreen: React.FC = () => {
                   {renderDocMeta(doc)}
                 </View>
                 <View style={styles.docRowControls}>
-                  {renderDocumentActions(doc)}
+                  {syncButton && (
+                    <View style={styles.syncButtonWrapper}>
+                      {syncButton}
+                    </View>
+                  )}
                   <ChevronRight size={16} color={colors.mutedForeground} />
                 </View>
               </Pressable>
@@ -963,14 +1019,17 @@ export const VaultScreen: React.FC = () => {
               value={searchQuery}
               onChangeText={handleSearchChange}
             />
-            <TouchableOpacity
-              style={[styles.filterBtn, { padding: 8, zIndex: 10 }]}
-              onPress={() => setShowFilterModal(true)}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              activeOpacity={0.7}
-            >
-              <Filter size={20} color={colors.primary} />
-            </TouchableOpacity>
+            <View style={styles.filterBtnWrapper}>
+              <TouchableOpacity
+                style={[styles.filterBtn, { padding: 8, zIndex: 10 }]}
+                onPress={() => setShowFilterModal(true)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                activeOpacity={0.7}
+              >
+                <Filter size={20} color={colors.primary} />
+                {hasActiveFilters && <View style={[styles.filterDot, { backgroundColor: colors.success }]} />}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
@@ -1095,6 +1154,19 @@ const styles = StyleSheet.create({
   filterBtn: {
     padding: 4,
   },
+  filterBtnWrapper: {
+    position: 'relative',
+  },
+  filterDot: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
   storageCard: {
     padding: 16,
     marginBottom: 20,
@@ -1191,16 +1263,47 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: 20,
   },
+  clearFiltersRow: {
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    alignItems: 'flex-end',
+  },
+  clearFiltersButton: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+  },
+  clearFiltersButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  seeAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  seeAllText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
   docRow: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
     marginBottom: 8,
+    position: 'relative',
   },
   docRowControls: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  syncButtonWrapper: {
+    marginRight: 8,
   },
   docIconBox: {
     width: 48,
@@ -1221,10 +1324,12 @@ const styles = StyleSheet.create({
     right: 2,
   },
   syncButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    width: 56,
+    height: 36,
     borderWidth: 1,
-    borderRadius: 999,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   syncButtonText: {
     fontSize: 11,

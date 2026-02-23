@@ -536,7 +536,7 @@ export const NotificationsScreen: React.FC = () => {
             <View style={styles.deliveryRow}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                 <Smartphone size={20} color={colors.mutedForeground} />
-                <Text style={[styles.labelTitle, { color: colors.foreground, fontSize: 14 }]}>Push Notifications</Text>
+                <Text style={[styles.labelTitle, { color: colors.foreground, fontSize: 14 }]}>Notifications</Text>
               </View>
               <Switch
                 value={pushEnabled}

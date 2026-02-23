@@ -537,7 +537,7 @@ export const HomeScreen: React.FC = () => {
             </View>
             <View style={[styles.profileInfoBox, { borderRadius: radius.sm, backgroundColor: colors.background, borderColor: colors.border }]}>
               <Text style={[styles.profileInfoText, { color: colors.mutedForeground }]}>
-                Every profile tracks its own plans. Tap an avatar to switch to that person or use the + button to add a new member so everyone stays in sync.
+                Profiles keep each member's tasks and reminders separate. Tap any avatar to switch to their view or hit the + button to invite someone new so the whole family stays tracked together.
               </Text>
             </View>
             <Text style={{ fontSize: 11, color: colors.mutedForeground, marginBottom: 12, marginLeft: 4, fontStyle: 'italic' }}>
