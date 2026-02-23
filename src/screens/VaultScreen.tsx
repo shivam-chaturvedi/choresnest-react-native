@@ -36,6 +36,8 @@ import { Menu, Upload, Search, Plus, Filter, Calendar as CalendarIcon, FileText,
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppIcon } from "../components/ui/AppIcon";
 
+import { GUEST_PROFILE_ID } from "../services/ProfileService";
+
 import { useObservableValue } from "../hooks/useObservableValue";
 import { of } from "rxjs";
 import { map } from "rxjs/operators";
@@ -43,7 +45,7 @@ const PENDING_UPLOAD_STATUSES = new Set(['pending_upload', 'uploading', 'failed'
 
 
 export const VaultScreen: React.FC = () => {
-  const { activeMember, addDocument, updateDocument } = useFamily();
+  const { activeMember, addDocument, updateDocument, profileId } = useFamily();
   const { user } = useAuth();
   const { openSidebar } = useSidebar();
   const { showToast } = useToast();
@@ -77,8 +79,6 @@ export const VaultScreen: React.FC = () => {
   const { formatDateTime } = useCountry();
   const nowDate = new Date(currentTime);
 
-  const userId = user?.id || "";
-
   const normalizeDocument = (doc: any): VaultDocument => {
     const meta = doc.meta || {};
     const cachedUri = VaultService.getCachedLocalUri(doc.id);
@@ -103,14 +103,14 @@ export const VaultScreen: React.FC = () => {
 
   const documents = useObservableValue(
     () => {
-      if (!userId) {
+      if (!profileId) {
         return of<VaultDocument[]>([]);
       }
-      return VaultService.observeAllDocuments(userId).pipe(
+      return VaultService.observeAllDocuments(profileId).pipe(
         map(records => records.map(normalizeDocument))
       );
     },
-    [userId],
+    [profileId],
     []
   );
   const allDocs = documents;
@@ -226,19 +226,22 @@ export const VaultScreen: React.FC = () => {
   };
 
   const shouldShowSyncButton = (doc: VaultDocument): boolean => {
+    if (!profileId || profileId === GUEST_PROFILE_ID) {
+      return false;
+    }
     return Boolean(doc.uploadStatus && PENDING_UPLOAD_STATUSES.has(doc.uploadStatus) && isNetworkReachable);
   };
 
   const handleSyncNow = useCallback(
     (documentId: string) => {
-      void DocumentUploadScheduler.requestUploadNow(user?.id);
+      void DocumentUploadScheduler.requestUploadNow(profileId || user?.id);
       showToast({
         title: "Document queued",
         description: "Document is in queue.",
         type: "default",
       });
     },
-    [showToast]
+    [showToast, profileId, user?.id]
   );
 
   const renderDocumentActions = (doc: VaultDocument) => {
@@ -305,7 +308,6 @@ export const VaultScreen: React.FC = () => {
 
   // Calculate dynamic values
   const categoryCounts = getCategoryCounts(allDocs);
-  const [vaultAlerts, setVaultAlerts] = useState<any[]>([]);
   const alertFingerprint = useMemo(
     () =>
       allDocs
@@ -322,21 +324,57 @@ export const VaultScreen: React.FC = () => {
         .join('|'),
     [allDocs]
   );
+  const baseAlerts = useMemo(() => generateAlerts(allDocs), [alertFingerprint, currentTime]);
+  const [hiddenAlertIds, setHiddenAlertIds] = useState<Set<string>>(new Set());
+  const [readState, setReadState] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    setVaultAlerts(generateAlerts(allDocs));
-  }, [alertFingerprint, currentTime]);
+    setHiddenAlertIds(prev => {
+      const ids = new Set(baseAlerts.map(alert => alert.id));
+      const next = new Set([...prev].filter(id => ids.has(id)));
+      const isSame = next.size === prev.size && [...next].every(id => prev.has(id));
+      return isSame ? prev : next;
+    });
+  }, [baseAlerts]);
 
-  const liveAlerts = vaultAlerts;
+  useEffect(() => {
+    setReadState(prev => {
+      const ids = new Set(baseAlerts.map(alert => alert.id));
+      const next = { ...prev };
+      let changed = false;
+      Object.keys(next).forEach(id => {
+        if (!ids.has(id)) {
+          delete next[id];
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [baseAlerts]);
 
-  const handleClearAllNotifications = () => {
-    setVaultAlerts([]);
+  const liveAlerts = useMemo(() => {
+    return baseAlerts
+      .filter(alert => !hiddenAlertIds.has(alert.id))
+      .map(alert => ({
+        ...alert,
+        read: readState[alert.id] ?? alert.read ?? false,
+      }));
+  }, [baseAlerts, hiddenAlertIds, readState]);
+
+  const handleClearAllNotifications = useCallback(() => {
+    setHiddenAlertIds(new Set(baseAlerts.map(alert => alert.id)));
     setShowNotifications(false);
-  };
+  }, [baseAlerts]);
 
-  const handleMarkAllAsRead = () => {
-    setVaultAlerts(prev => prev.map(alert => ({ ...alert, read: true })));
-  };
+  const handleMarkAllAsRead = useCallback(() => {
+    setReadState(prev => {
+      const next = { ...prev };
+      baseAlerts.forEach(alert => {
+        next[alert.id] = true;
+      });
+      return next;
+    });
+  }, [baseAlerts]);
 
   const categories = [
     { id: 'warranty', name: 'Warranties', icon: 'shield-check', count: categoryCounts.warranty, color: colors.info + '30' },

@@ -11,6 +11,7 @@ import { parseReminderDateTime } from '../utils/ReminderDateTimeUtils';
 import { checkPermission, requestPermission } from '../utils/permissions';
 import { NotificationCenter, NotificationRoute } from './NotificationCenter';
 import { AppIconName } from '../components/ui/AppIcon';
+import { ProfileService } from './ProfileService';
 
 /**
  * NotificationScheduler
@@ -470,7 +471,15 @@ let alarmPermissionGranted = false;
  */
 export const getActiveMemberId = async (): Promise<string | null> => {
     try {
-        const members = await database.get<Member>('members').query(Q.where('is_active', true)).fetch();
+        const profileId = await ProfileService.getActiveProfileId();
+        if (!profileId) {
+            console.warn('NotificationScheduler: Cannot resolve active member without profile id');
+            return null;
+        }
+        const members = await database.get<Member>('members').query(
+            Q.where('profile_id', profileId),
+            Q.where('is_active', true)
+        ).fetch();
         return members.length > 0 ? members[0].id : null;
     } catch (error) {
         console.error('Failed to get active member:', error);
@@ -1221,6 +1230,12 @@ export const NotificationScheduler = {
         try {
             console.log('Running notification safety check...');
 
+            const profileId = await ProfileService.getActiveProfileId();
+            if (!profileId) {
+                console.log('NotificationScheduler: Active profile unknown, skipping safety check');
+                return;
+            }
+
             // 1. Get ALL currently scheduled notifications from Notifee (Source of Truth)
             const existingTriggers = await notifee.getTriggerNotifications();
             console.log(`Found ${existingTriggers.length} active triggers`);
@@ -1231,8 +1246,20 @@ export const NotificationScheduler = {
             ]);
 
             // Fetch all Events and Tasks for comparison
-            const events = await database.collections.get<Event>('events').query().fetch();
-            const tasks = await database.collections.get<Task>('tasks').query().fetch();
+            const events = await database.collections
+                .get<Event>('events')
+                .query(
+                    Q.where('profile_id', profileId),
+                    Q.where('deleted', false)
+                )
+                .fetch();
+            const tasks = await database.collections
+                .get<Task>('tasks')
+                .query(
+                    Q.where('profile_id', profileId),
+                    Q.where('deleted', false)
+                )
+                .fetch();
 
             const eventIdMap = new Set(events.map(e => e.id));
             const taskIdMap = new Set(tasks.map(t => t.id));
@@ -1433,7 +1460,13 @@ export const NotificationScheduler = {
             }
 
             // 4. Reschedule Document Reminders
-            const documents = await database.collections.get<Document>('documents').query().fetch();
+            const documents = await database.collections
+                .get<Document>('documents')
+                .query(
+                    Q.where('profile_id', profileId),
+                    Q.where('deleted', false)
+                )
+                .fetch();
             // Allow lookup of valid notification IDs (for self-healing DB check)
             // This set is needed for syncDocumentReminders's checkExisting optimization
             const activeNotificationIds = new Set(existingTriggers.map(t => t.notification.id).filter(Boolean) as string[]);
@@ -1459,7 +1492,12 @@ export const NotificationScheduler = {
     async rescheduleNotificationsForActiveProfile(): Promise<void> {
         try {
             console.log('Rescheduling notifications for active profile...');
-            
+            const profileId = await ProfileService.getActiveProfileId();
+            if (!profileId) {
+                console.log('NotificationScheduler: No active profile, skipping reschedule');
+                return;
+            }
+
             // Cancel all existing trigger notifications
             const existingTriggers = await notifee.getTriggerNotifications();
             for (const trigger of existingTriggers) {
@@ -1472,8 +1510,20 @@ export const NotificationScheduler = {
             resetNotificationSchedulerState();
 
             // Clear notification IDs from database
-            const events = await database.collections.get<Event>('events').query().fetch();
-            const tasks = await database.collections.get<Task>('tasks').query().fetch();
+            const events = await database.collections
+                .get<Event>('events')
+                .query(
+                    Q.where('profile_id', profileId),
+                    Q.where('deleted', false)
+                )
+                .fetch();
+            const tasks = await database.collections
+                .get<Task>('tasks')
+                .query(
+                    Q.where('profile_id', profileId),
+                    Q.where('deleted', false)
+                )
+                .fetch();
 
             await database.write(async () => {
                 for (const event of events) {

@@ -17,7 +17,7 @@ import {
   CollectionRecipe as CollectionRecipeModel,
 } from '../database/models/Recipe';
 import { SyncService } from '../services/SyncService';
-import { supabase } from '../config/supabase';
+import { useActiveProfileId } from '../hooks/useActiveProfileId';
 import {
   IMAGE_BUCKET,
   AUDIO_BUCKET,
@@ -99,45 +99,8 @@ interface RecipeContextType {
 
 const RecipeContext = createContext<RecipeContextType | undefined>(undefined);
 
-const useSupabaseProfileId = () => {
-  const [profileId, setProfileId] = useState<string | null>(null);
-
-  useEffect(() => {
-    let mounted = true;
-    const resolveProfile = async () => {
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        if (mounted) {
-          setProfileId(session?.user?.id ?? null);
-        }
-      } catch (error) {
-        if (mounted) {
-          setProfileId(null);
-        }
-        console.warn('RecipeContext: Failed to resolve profile id', error);
-      }
-    };
-
-    resolveProfile();
-    const { data: { subscription } = {} } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (mounted) {
-        setProfileId(session?.user?.id ?? null);
-      }
-    });
-
-    return () => {
-      mounted = false;
-      subscription?.unsubscribe();
-    };
-  }, []);
-
-  return profileId;
-};
-
 export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const profileId = useSupabaseProfileId();
+  const profileId = useActiveProfileId();
   const [rawRecipes, setRawRecipes] = useState<RecipeModel[]>([]);
   const [rawCollections, setRawCollections] = useState<CollectionModel[]>([]);
   const [rawCollectionLinks, setRawCollectionLinks] = useState<CollectionRecipeModel[]>([]);

@@ -10,10 +10,8 @@ export const useObservableValue = <T>(
     const [value, setValue] = useState(initialValue);
 
     useEffect(() => {
-        let active = true;
-        const subscription: Subscription = createObservable().subscribe({
+    const subscription: Subscription = createObservable().subscribe({
             next: (nextValue) => {
-                if (!active) return;
                 setValue(nextValue);
             },
             error: (error) => {
@@ -24,11 +22,10 @@ export const useObservableValue = <T>(
             },
         });
 
-        return () => {
-            active = false;
+    return () => {
             subscription.unsubscribe();
         };
-    }, [createObservable, ...dependencies]);
+    }, dependencies);
 
     return value;
 };

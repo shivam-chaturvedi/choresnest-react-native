@@ -308,7 +308,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   }, [isGuest, user?.id]);
 
   useEffect(() => {
-    if (!profileId) {
+    if (!profileId || isGuest) {
       DocumentUploadScheduler.stop();
       return;
     }
@@ -316,7 +316,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     return () => {
       DocumentUploadScheduler.stop();
     };
-  }, [profileId]);
+  }, [profileId, isGuest]);
 
   const setFamilyName = async (name: string): Promise<void> => {
     const effectiveProfileId = profileId || await ProfileService.getActiveProfileId();
@@ -361,7 +361,10 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   }, [profileId]);
 
   // --- Active Member Helper ---
-  const activeMember = members.find((m) => m.isActive) || null;
+  const activeMember = useMemo(() => {
+    const explicit = members.find((m) => m.isActive);
+    return explicit || (members.length > 0 ? members[0] : null);
+  }, [members]);
 
   const setActiveMember = async (member: FamilyMember) => {
     try {

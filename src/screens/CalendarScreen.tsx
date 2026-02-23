@@ -42,6 +42,10 @@ type ObservableValue<T> = T extends Observable<infer U> ? U : never;
 type TaskServiceEventRecord = ObservableValue<ReturnType<typeof TaskService.observeEvents>>;
 type TaskServiceTaskRecord = ObservableValue<ReturnType<typeof TaskService.observeTasks>>;
 
+const resolveEntryTitle = (entry: CalendarListEntry | UpcomingEntry) => {
+  return entry.title || (entry as any).name || "";
+};
+
 const parseTimeToDate = (date: Date, time?: string): Date => {
   const result = new Date(date.getTime());
   result.setHours(0, 0, 0, 0);
@@ -147,6 +151,18 @@ const getNextCandidateForEntry = (entry: CalendarListEntry, reference: Date, fal
   return null;
 };
 
+const getCalendarPriorityMeta = (priority: string = "medium") => {
+  const normalized = priority.toLowerCase();
+  switch (normalized) {
+    case "high":
+      return { label: "High", color: "#dc2626", background: "#fee2e2", borderColor: "#dc2626" };
+    case "medium":
+      return { label: "Medium", color: "#b45309", background: "#fef3c7", borderColor: "#b45309" };
+    default:
+      return { label: "Low", color: "#0369a1", background: "#dbeafe", borderColor: "#0369a1" };
+  }
+};
+
 const views = ["Day", "Week", "Month"];
 const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DAY_VIEW_OFFSET = 84;
@@ -174,6 +190,7 @@ const DraggableEvent: React.FC<{
   const profileColor = PROFILE_COLORS.find((c: any) => c.value === member?.color);
   const bgColor = profileColor ? profileColor.hex + "40" : colors.primary + "40";
   const borderColor = profileColor ? profileColor.hex : colors.primary;
+  const priorityMeta = event.type === 'task' ? getCalendarPriorityMeta(event.priority) : null;
 
   const eventWidth = dayColumnWidth / event.totalCols;
   const eventLeft = (dayIndex * dayColumnWidth) + (event.colIndex * eventWidth);
@@ -349,6 +366,7 @@ const DraggableEvent: React.FC<{
       >
         <Animated.View
           style={{
+            position: 'relative',
             flex: 1,
             backgroundColor: bgColor,
             borderLeftWidth: 4,
@@ -378,16 +396,23 @@ const DraggableEvent: React.FC<{
                 {event.type === 'task' ? 'TASK' : 'EVENT'}
               </Text>
               <MemberIcon symbol={event.icon} size={12} color={colors.foreground} />
-              <Text numberOfLines={1} style={{ fontSize: 10, fontWeight: '700', color: colors.foreground, flex: 1 }}>
-                {event.title}
-              </Text>
+                <Text numberOfLines={1} style={{ fontSize: 10, fontWeight: '700', color: colors.foreground, flex: 1 }}>
+                  {resolveEntryTitle(event)}
+                </Text>
             </View>
-            {event.totalCols < 3 && (
-              <Text numberOfLines={1} style={{ fontSize: 9, color: colors.mutedForeground, marginTop: 2 }}>
-                {member?.name}
-              </Text>
+              {event.totalCols < 3 && (
+                <Text numberOfLines={1} style={{ fontSize: 9, color: colors.mutedForeground, marginTop: 2 }}>
+                  {member?.name}
+                </Text>
+              )}
+            </Pressable>
+            {event.type === 'task' && priorityMeta && (
+              <View style={[styles.calendarPriorityBadge, { backgroundColor: priorityMeta.background, borderColor: priorityMeta.borderColor }]}>
+                <Text style={[styles.calendarPriorityBadgeText, { color: priorityMeta.color }]}>
+                  Priority: {priorityMeta.label}
+                </Text>
+              </View>
             )}
-          </Pressable>
         </Animated.View>
       </PanGestureHandler>
 
@@ -496,6 +521,8 @@ export const CalendarScreen: React.FC = () => {
         ...record,
         date,
         due: sanitizedTime,
+        memberId: (record as any).assigneeId || (record as any).memberId || undefined,
+        assignee: (record as any).assigneeId || (record as any).memberId || undefined,
       });
       return acc;
     }, []);
@@ -1414,7 +1441,7 @@ export const CalendarScreen: React.FC = () => {
                     <View style={styles.upcomingLeft}>
                       <AppIcon source={event.icon || ''} size={24} color={colors.foreground} />
                       <View>
-                        <Text style={[styles.upcomingTitle, { color: colors.foreground }]}>{event.title}</Text>
+                        <Text style={[styles.upcomingTitle, { color: colors.foreground }]}>{resolveEntryTitle(event)}</Text>
                         <Text style={[styles.upcomingMeta, { color: colors.mutedForeground }]}>{displayTime}</Text>
                       </View>
                     </View>
@@ -1441,7 +1468,7 @@ export const CalendarScreen: React.FC = () => {
                   <View style={styles.upcomingLeft}>
                     <AppIcon source={event.icon || ''} size={24} color={colors.foreground} />
                     <View>
-                      <Text style={[styles.upcomingTitle, { color: colors.foreground }]}>{event.title}</Text>
+                      <Text style={[styles.upcomingTitle, { color: colors.foreground }]}>{resolveEntryTitle(event)}</Text>
                       <Text style={[styles.upcomingMeta, { color: colors.mutedForeground }]}>{displayDate} · {displayTime}</Text>
                     </View>
                   </View>
@@ -1769,5 +1796,18 @@ const styles = StyleSheet.create({
   },
   upcomingMeta: {
     fontSize: 12,
+  },
+  calendarPriorityBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  calendarPriorityBadgeText: {
+    fontSize: 9,
+    fontWeight: "700",
   },
 });

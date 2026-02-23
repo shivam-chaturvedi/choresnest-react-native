@@ -74,6 +74,7 @@ export const getEventsForDate = (
             result.push({
                 ...task,
                 type: 'task', // explicit type for UI
+                title: task.name,
                 time: task.due && task.due.match(/\d+:\d+\s*(AM|PM)/i) ? task.due : "All Day",
                 memberId: task.assignee,
                 // Adapt task fields to match CalendarEvent structure where needed

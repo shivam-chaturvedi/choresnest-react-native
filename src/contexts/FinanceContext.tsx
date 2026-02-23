@@ -3,7 +3,7 @@ import { database } from '../database';
 import { Transaction as DbTransaction, Budget as DbBudget } from '../database/models/Finance';
 import { Q } from '@nozbe/watermelondb';
 import { SyncService } from '../services/SyncService';
-import { supabase } from '../config/supabase';
+import { useActiveProfileId } from '../hooks/useActiveProfileId';
 
 export interface Transaction {
     id: string;
@@ -85,30 +85,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [budgets, setBudgets] = useState<Budget>(defaultBudgets);
     const [budgetMeta, setBudgetMeta] = useState<Record<string, BudgetMeta>>({});
-    const [profileId, setProfileId] = useState<string | null>(null);
-
-    useEffect(() => {
-        let isMounted = true;
-        const refreshProfile = async () => {
-            try {
-                const { data: { session } } = await supabase.auth.getSession();
-                if (isMounted) {
-                    setProfileId(session?.user?.id ?? null);
-                }
-            } catch (error) {
-                console.warn('Failed to fetch profile id for finance context', error);
-            }
-        };
-        refreshProfile();
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            if (!isMounted) return;
-            setProfileId(session?.user?.id ?? null);
-        });
-        return () => {
-            isMounted = false;
-            subscription?.unsubscribe();
-        };
-    }, []);
+    const profileId = useActiveProfileId();
 
     useEffect(() => {
         if (!profileId) {

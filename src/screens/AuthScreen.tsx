@@ -15,7 +15,6 @@ import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../components/ui/Toast";
 import { LoadingSpinner } from "../components/ui/LoadingSpinner";
 import { isValidEmail, isStrongPassword } from "../utils/validators";
-import { GuestProfileSelectModal } from "../components/modals/GuestProfileSelectModal";
 
 interface AuthScreenProps {
   onAuthenticated: () => void;
@@ -28,7 +27,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   onForgotPassword,
   onPrivacy,
 }) => {
-  const { login, signup, loginAsGuest, selectGuestProfile } = useAuth();
+  const { login, signup, loginAsGuest } = useAuth();
   const { showToast } = useToast();
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
@@ -43,9 +42,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     password: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [guestProfiles, setGuestProfiles] = useState<any[]>([]);
-  const [showGuestModal, setShowGuestModal] = useState(false);
-
   const radius = theme.radius;
 
   // ... existing imports
@@ -116,35 +112,19 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     try {
       console.log("AuthScreen: handleGuestLogin clicked");
       setIsSubmitting(true);
-      const result = await loginAsGuest();
-      console.log("AuthScreen: loginAsGuest result:", result);
-      setIsSubmitting(false);
-
-      if (result && Array.isArray(result) && result.length > 0) {
-        console.log(`AuthScreen: Showing guest modal with ${result.length} profiles`);
-        setGuestProfiles(result);
-        setShowGuestModal(true);
-      } else {
-        console.log("AuthScreen: No profiles to select, triggering onAuthenticated");
-        onAuthenticated();
-      }
+      await loginAsGuest();
+      console.log("AuthScreen: Guest login complete, triggering authentication");
+      onAuthenticated();
     } catch (error) {
       console.error("AuthScreen: Guest login error:", error);
-      setIsSubmitting(false);
       showToast({
         type: 'error',
         title: 'Guest Mode Failed',
         description: 'Could not start guest session. Please try again.'
       });
+    } finally {
+      setIsSubmitting(false);
     }
-  };
-
-  const handleProfileSelect = async (profileId: string) => {
-    console.log(`AuthScreen: Profile ${profileId || 'fresh'} selected in modal`);
-    setShowGuestModal(false);
-    await selectGuestProfile(profileId);
-    console.log("AuthScreen: selectGuestProfile finished, triggering onAuthenticated");
-    onAuthenticated();
   };
 
   return (
@@ -377,12 +357,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         </Text>
       </View>
       <LoadingSpinner overlay visible={isSubmitting} />
-      <GuestProfileSelectModal
-        visible={showGuestModal}
-        profiles={guestProfiles}
-        onSelect={handleProfileSelect}
-        onCancel={() => setShowGuestModal(false)}
-      />
     </ScrollView >
   );
 };

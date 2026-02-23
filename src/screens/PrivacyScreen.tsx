@@ -58,7 +58,7 @@ export const PrivacyScreen: React.FC = () => {
     const colors = useThemeColors();
     const radius = useThemeRadius();
     const activeMemberColor =
-        PROFILE_COLORS.find(color => color.value === activeMember?.color)?.hex || colors.primary;
+     PROFILE_COLORS.find(color => color.value === activeMember?.color)?.hex || colors.primary;
 
     const [clearNotifications, setClearNotifications] = useState(false);
 

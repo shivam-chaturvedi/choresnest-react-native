@@ -6,6 +6,8 @@ const ACTIVE_PROFILE_KEY = 'ACTIVE_PROFILE_ID';
 const GUEST_PROFILE_KEY = 'GUEST_PROFILE_ID';
 const IS_GUEST_KEY = 'IS_GUEST';
 
+export const GUEST_PROFILE_ID = 'guest';
+
 // In-memory fast cache — avoids any AsyncStorage or Supabase call on the hot path
 let cachedProfileId: string | null = null;
 
@@ -72,16 +74,9 @@ export const ProfileService = {
             // 3. Guest mode
             const isGuest = await AsyncStorage.getItem(IS_GUEST_KEY);
             if (isGuest === 'true') {
-                const guestProfile = await AsyncStorage.getItem(GUEST_PROFILE_KEY);
-                if (guestProfile) {
-                    await persistActiveProfile(guestProfile);
-                    return guestProfile;
-                } else {
-                    const defaultGuestId = 'local_guest_profile';
-                    await persistActiveProfile(defaultGuestId);
-                    await AsyncStorage.setItem(GUEST_PROFILE_KEY, defaultGuestId);
-                    return defaultGuestId;
-                }
+                await persistActiveProfile(GUEST_PROFILE_ID);
+                await AsyncStorage.setItem(GUEST_PROFILE_KEY, GUEST_PROFILE_ID);
+                return GUEST_PROFILE_ID;
             }
 
             // 4. Live Supabase auth session (with timeout)
@@ -119,14 +114,9 @@ export const ProfileService = {
     /**
      * Persists the selected profile ID for guest mode.
      */
-    async setGuestProfileId(profileId: string | null): Promise<void> {
-        if (profileId) {
-            await AsyncStorage.setItem(GUEST_PROFILE_KEY, profileId);
-            await persistActiveProfile(profileId);
-        } else {
-            await AsyncStorage.removeItem(GUEST_PROFILE_KEY);
-            await persistActiveProfile(null);
-        }
+    async setGuestProfileId(): Promise<void> {
+        await AsyncStorage.setItem(GUEST_PROFILE_KEY, GUEST_PROFILE_ID);
+        await persistActiveProfile(GUEST_PROFILE_ID);
     },
 
     /**
@@ -145,5 +135,3 @@ export const ProfileService = {
         }
     }
 };
-
-

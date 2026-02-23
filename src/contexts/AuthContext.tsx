@@ -26,8 +26,7 @@ interface AuthContextType {
     isLoading: boolean;
     login: (email: string, pass: string) => Promise<boolean>;
     signup: (email: string, pass: string, name: string) => Promise<boolean>;
-    loginAsGuest: () => Promise<User[] | void>;
-    selectGuestProfile: (profileId: string) => Promise<void>;
+    loginAsGuest: () => Promise<void>;
     logout: () => Promise<void>;
     completeOnboarding: () => Promise<void>;
     deleteAccount: () => Promise<void>;
@@ -223,31 +222,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
         }
     };
 
-    const loginAsGuest = async (): Promise<User[] | void> => {
+    const loginAsGuest = async (): Promise<void> => {
         try {
             console.log("AuthContext: loginAsGuest starting...");
             ProfileBootstrapService.resetCache();
-
-            // Check for local profiles
-            const localUsers = await database.get<UserRecord>('users').query().fetch();
-            console.log(`AuthContext: Found ${localUsers.length} local users`);
-
-            let guestProfiles: User[] | undefined;
-            if (localUsers.length > 1) {
-                guestProfiles = localUsers.map(u => ({
-                    id: u.id,
-                    email: u.email,
-                    name: u.name
-                }));
-            }
-
-            if (localUsers.length === 1) {
-                console.log(`AuthContext: Auto-selecting profile ${localUsers[0].id}`);
-                await ProfileService.setGuestProfileId(localUsers[0].id);
-            } else if (localUsers.length === 0) {
-                console.log("AuthContext: No local profiles, starting fresh guest session");
-                await ProfileService.setGuestProfileId(null);
-            }
+            await ProfileService.setGuestProfileId();
 
             setIsGuest(true);
             setUser(null);
@@ -258,33 +237,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
             await AsyncStorage.removeItem("AUTH_USER");
             await AsyncStorage.setItem("HAS_COMPLETED_ONBOARDING", "true");
             console.log("AuthContext: loginAsGuest state sequence completed");
-
-            if (guestProfiles && guestProfiles.length > 0) {
-                return guestProfiles;
-            }
         } catch (error) {
             console.error("Guest login failed:", error);
             throw new Error("Failed to continue as guest. Please try again.");
-        }
-    };
-
-    const selectGuestProfile = async (profileId: string) => {
-        try {
-            console.log(`AuthContext: selectGuestProfile starting for ${profileId || 'fresh session'}...`);
-            await ProfileService.setGuestProfileId(profileId || null);
-
-            // Set all dependent states BEFORE releasing isLoading
-            setIsGuest(true);
-            setUser(null);
-            setHasCompletedOnboarding(true);
-            DocumentUploadScheduler.stop();
-
-            await AsyncStorage.setItem("IS_GUEST", "true");
-            await AsyncStorage.setItem("HAS_COMPLETED_ONBOARDING", "true");
-
-            console.log("AuthContext: selectGuestProfile state sequence completed");
-        } catch (e) {
-            console.error("AuthContext: selectGuestProfile failed", e);
         }
     };
 
@@ -365,7 +320,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
             login,
             signup,
             loginAsGuest,
-            selectGuestProfile,
             logout,
             completeOnboarding,
             deleteAccount
