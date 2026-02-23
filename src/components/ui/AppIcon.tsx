@@ -112,6 +112,7 @@ import {
   MoreVertical,
 } from "lucide-react-native";
 import { theme } from "../../theme";
+import MaterialCommunityIcons from "react-native-vector-icons/MaterialCommunityIcons";
 
 const ICON_COMPONENTS = {
   alert: AlertTriangle,
@@ -227,6 +228,13 @@ const ICON_COMPONENTS = {
 
 export type AppIconName = keyof typeof ICON_COMPONENTS;
 
+export const isAppIconName = (value?: string): value is AppIconName => {
+  if (!value) {
+    return false;
+  }
+  return Object.prototype.hasOwnProperty.call(ICON_COMPONENTS, value as AppIconName);
+};
+
 const EMOJI_ICON_MAP: Record<string, AppIconName> = {
   "☰": "menu",
   "≡": "menu",
@@ -337,6 +345,13 @@ interface AppIconProps {
   style?: StyleProp<ViewStyle>;
 }
 
+const isEmojiString = (value?: string): boolean => {
+  if (!value) {
+    return false;
+  }
+  return /\p{Extended_Pictographic}/u.test(value);
+};
+
 export const AppIcon: React.FC<AppIconProps> = ({
   name,
   source,
@@ -345,7 +360,10 @@ export const AppIcon: React.FC<AppIconProps> = ({
   strokeWidth = 1.6,
   style,
 }) => {
-  const iconKey = name ?? (source ? EMOJI_ICON_MAP[source] : undefined);
+  // 1. Explicit name prop
+  // 2. Or, if 'source' is an exact key in our icon components (like "calendar")
+  // 3. Or, if 'source' is an emoji mapped in EMOJI_ICON_MAP
+  const iconKey = name ?? (source && source in ICON_COMPONENTS ? (source as AppIconName) : source ? EMOJI_ICON_MAP[source] : undefined);
   const IconComponent = iconKey ? ICON_COMPONENTS[iconKey] : undefined;
   if (IconComponent) {
     return (
@@ -357,6 +375,17 @@ export const AppIcon: React.FC<AppIconProps> = ({
       />
     );
   }
+  if (source && !isEmojiString(source)) {
+    return (
+      <MaterialCommunityIcons
+        name={source}
+        size={size}
+        color={color ?? theme.colors.foreground}
+        style={style}
+      />
+    );
+  }
+
   if (source) {
     return (
       <Text

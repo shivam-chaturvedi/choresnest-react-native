@@ -1412,7 +1412,7 @@ export const CalendarScreen: React.FC = () => {
                     style={[styles.upcomingItem, { backgroundColor: colors.card, borderRadius: radius.card }]}
                   >
                     <View style={styles.upcomingLeft}>
-                      <Text style={{ fontSize: 24 }}>{event.icon}</Text>
+                      <AppIcon source={event.icon || ''} size={24} color={colors.foreground} />
                       <View>
                         <Text style={[styles.upcomingTitle, { color: colors.foreground }]}>{event.title}</Text>
                         <Text style={[styles.upcomingMeta, { color: colors.mutedForeground }]}>{displayTime}</Text>
@@ -1439,7 +1439,7 @@ export const CalendarScreen: React.FC = () => {
                   style={[styles.upcomingItem, { backgroundColor: colors.card, borderRadius: radius.card }]}
                 >
                   <View style={styles.upcomingLeft}>
-                    <Text style={{ fontSize: 24 }}>{event.icon}</Text>
+                    <AppIcon source={event.icon || ''} size={24} color={colors.foreground} />
                     <View>
                       <Text style={[styles.upcomingTitle, { color: colors.foreground }]}>{event.title}</Text>
                       <Text style={[styles.upcomingMeta, { color: colors.mutedForeground }]}>{displayDate} · {displayTime}</Text>

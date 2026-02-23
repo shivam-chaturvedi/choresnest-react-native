@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import {
+    Alert,
     Modal,
     Pressable,
     ScrollView,
@@ -12,6 +13,7 @@ import {
 import { useFamily, FamilyMember } from "../../contexts/FamilyContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { AppIcon } from "../ui/AppIcon";
+import { MemberIcon } from "../ui/MemberIcon";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { PROFILE_COLORS } from "../../constants/profileColors";
 import { useCountry } from "../../contexts/CountryContext";
@@ -114,8 +116,31 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
         }
     }, [localMembers, editingIndex]);
 
+    const showDuplicateNameAlert = () => {
+        Alert.alert(
+            "Duplicate name",
+            "Another member with that name already exists. Please choose a different name."
+        );
+    };
+
     const handleAddOrUpdateMember = () => {
-        if (!currentMember.name.trim()) return;
+        const trimmedName = currentMember.name.trim();
+        if (!trimmedName) {
+            Alert.alert("Missing name", "Please enter a name before saving.");
+            return;
+        }
+
+        const hasDuplicate =
+            localMembers.some(
+                (member, index) =>
+                    index !== editingIndex &&
+                    member.name.trim().toLowerCase() === trimmedName.toLowerCase()
+            );
+
+        if (hasDuplicate) {
+            showDuplicateNameAlert();
+            return;
+        }
 
         if (editingIndex !== null) {
             const updated = [...localMembers];
@@ -129,7 +154,9 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
         setCurrentMember({
             name: "",
             avatar: "👤",
-            color: PROFILE_COLORS.find(c => !localMembers.some(lm => lm.color === c.value))?.value || PROFILE_COLORS[0].value,
+            color:
+                PROFILE_COLORS.find(c => !localMembers.some(lm => lm.color === c.value))?.value ||
+                PROFILE_COLORS[0].value,
         });
     };
 
@@ -139,11 +166,41 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
     };
 
     const handleDeleteMember = (index: number) => {
-        setLocalMembers(localMembers.filter((_, i) => i !== index));
-        if (editingIndex === index) {
-            setEditingIndex(null);
-            setCurrentMember({ name: "", avatar: "👤", color: PROFILE_COLORS[0].value });
+        const member = localMembers[index];
+        if (!member) {
+            return;
         }
+
+        if (localMembers.length <= 1) {
+            Alert.alert(
+                "Cannot delete",
+                "Every profile requires at least one member. Add another member before removing this one."
+            );
+            return;
+        }
+
+        Alert.alert(
+            "Delete Member",
+            `Are you sure you want to remove ${member.name}? This will discard any unsaved changes.`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: () => {
+                        setLocalMembers(localMembers.filter((_, i) => i !== index));
+                        if (editingIndex === index) {
+                            setEditingIndex(null);
+                            setCurrentMember({
+                                name: "",
+                                avatar: "👤",
+                                color: PROFILE_COLORS[0].value,
+                            });
+                        }
+                    },
+                },
+            ]
+        );
     };
 
     const handleComplete = () => {
@@ -313,7 +370,7 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
                                 {localMembers.map((member, index) => (
                                     <View key={index} style={[styles.memberItem, { backgroundColor: colors.card, borderColor: editingIndex === index ? colors.primary : colors.border, borderWidth: 1 }]}>
                                         <View style={[styles.memberAvatarSmall, { backgroundColor: PROFILE_COLORS.find(c => c.value === member.color)?.hex + "20" }]}>
-                                            <Text style={{ fontSize: 20 }}>{member.avatar}</Text>
+                                            <MemberIcon symbol={member.avatar} size={20} color={colors.foreground} />
                                         </View>
                                         <View style={{ flex: 1 }}>
                                             <Text style={[styles.memberName, { color: colors.foreground }]}>{member.name}</Text>
@@ -449,7 +506,7 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
                                 {localMembers.map((member, index) => (
                                     <View key={index} style={[styles.memberItem, { backgroundColor: colors.muted }]}>
                                         <View style={[styles.memberAvatarSmall, { backgroundColor: PROFILE_COLORS.find(c => c.value === member.color)?.hex || colors.muted }]}>
-                                            <Text style={{ fontSize: 16 }}>{member.avatar}</Text>
+                                            <MemberIcon symbol={member.avatar} size={16} color={colors.foreground} />
                                         </View>
                                         <View style={{ flex: 1 }}>
                                             <Text style={[styles.memberName, { color: colors.foreground }]}>{member.name}</Text>

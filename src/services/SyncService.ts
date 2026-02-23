@@ -35,7 +35,7 @@ let hasLoggedSyncDisabledWarning = false;
 const MAX_CONSECUTIVE_FAILURES = 3;
 
 const SYNC_REQUEST_DELAY_MS = 1500;
-const PERIODIC_SYNC_INTERVAL_MS = 1 * 60 * 100; // 1 minute
+const PERIODIC_SYNC_INTERVAL_MS = 1 * 60 * 1000; // 1 minute
 const LAST_SYNC_SUCCESS_KEY = 'LAST_SYNC_SUCCESS_AT';
 const MIN_SYNC_GAP_MS = 300;
 let lastSyncFinishedAt = 0;

@@ -59,6 +59,7 @@ export interface GroceryItem {
   addedBy?: string;
   categoryId?: string;
   purchasedAt?: number;
+  updatedAt?: number;
 }
 
 export interface GroceryCategory {
@@ -245,6 +246,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       categoryId: item.categoryId,
       addedBy: item.addedById,
       purchasedAt: item.purchasedAt,
+      updatedAt: item.updatedAt,
     }));
   }, [rawGroceryItems]);
 

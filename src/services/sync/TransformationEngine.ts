@@ -81,6 +81,16 @@ const safeWarn = (...args: any[]) => {
     console.warn(...args);
 };
 
+const stripActiveFlags = (row: any): void => {
+    delete row.is_active;
+    delete row.isActive;
+};
+
+const attachLocalActiveDefault = (row: any): void => {
+    row.isActive = false;
+    row.is_active = false;
+};
+
 export const classifyPullRows = async (table: string, rows: any[], lastPulledDate: Date): Promise<TableChangeSet> => {
     const created: any[] = [];
     const updated: any[] = [];
@@ -125,16 +135,22 @@ export const classifyPullRows = async (table: string, rows: any[], lastPulledDat
 
     validIncomingRows.forEach(row => {
         delete row.__parsedCreatedAt;
+        const isExisting = existingIds.has(row.id);
+        const sanitizedRow = { ...row };
+        stripActiveFlags(sanitizedRow);
+        if (!isExisting) {
+            attachLocalActiveDefault(sanitizedRow);
+        }
 
-        if (existingIds.has(row.id)) {
-            // Record ALREADY exists on this device → update it in place.
-            updated.push(row);
+        if (isExisting) {
+            // Record ALREADY exists on this device → update it in place without toggling active flag.
+            updated.push(sanitizedRow);
         } else {
             // Record is NOT on this device yet, regardless of its created_at.
             // It may have been written by another device before lastPulledAt
             // (e.g. settings written during initial onboarding on another phone).
             // Always put it in `created` so WatermelonDB can insert it.
-            created.push(row);
+            created.push(sanitizedRow);
         }
     });
 
@@ -260,6 +276,13 @@ export const transformRecordForSupabase = (
 
     const localVersion = coerceVersion(transformed.version ?? record.version ?? 0);
     transformed.version = localVersion;
+
+    if (table === 'members') {
+        delete transformed.is_active;
+        delete transformed.isActive;
+        const memberFieldsToRemove = ['is_active', 'isActive'];
+        changedFields = changedFields.filter(field => !memberFieldsToRemove.includes(field));
+    }
 
     if (table === 'users') {
         const {

@@ -535,6 +535,11 @@ export const HomeScreen: React.FC = () => {
                 </Pressable>
               </View>
             </View>
+            <View style={[styles.profileInfoBox, { borderRadius: radius.sm, backgroundColor: colors.background, borderColor: colors.border }]}>
+              <Text style={[styles.profileInfoText, { color: colors.mutedForeground }]}>
+                Every profile tracks its own plans. Tap an avatar to switch to that person or use the + button to add a new member so everyone stays in sync.
+              </Text>
+            </View>
             <Text style={{ fontSize: 11, color: colors.mutedForeground, marginBottom: 12, marginLeft: 4, fontStyle: 'italic' }}>
               Long press profile to edit
             </Text>
@@ -1012,6 +1017,15 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
     borderWidth: 1,
+  },
+  profileInfoBox: {
+    borderWidth: 1,
+    padding: 10,
+    marginBottom: 8,
+  },
+  profileInfoText: {
+    fontSize: 12,
+    lineHeight: 18,
   },
   cardSpacing: {
     marginBottom: 24,

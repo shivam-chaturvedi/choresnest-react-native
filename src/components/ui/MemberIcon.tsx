@@ -2,6 +2,7 @@ import React from 'react';
 import { Text, StyleSheet, TextStyle } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useThemeColors } from '../../contexts/ThemeContext';
+import { AppIcon, isAppIconName } from './AppIcon';
 
 export const predefinedIcons = [
     "account", "face-woman", "face-man-profile", "baby-face-outline",
@@ -25,6 +26,10 @@ export const MemberIcon: React.FC<MemberIconProps> = ({ symbol, size = 24, color
     }
 
     // If it looks like a material icon name (lowercase, numbers, hyphens), try rendering it
+    if (isAppIconName(symbol)) {
+        return <AppIcon name={symbol} size={size} color={finalColor} style={style} />;
+    }
+
     const isIconName = /^[a-z0-9-]+$/.test(symbol);
     if (isIconName) {
         return <MaterialCommunityIcons name={symbol} size={size} color={finalColor} style={style} />;

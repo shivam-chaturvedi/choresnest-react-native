@@ -18,7 +18,6 @@ interface SupabaseMemberRecord {
   symbol: string;
   color: string;
   role?: string | null;
-  is_active?: boolean | null;
   deleted?: boolean | null;
 }
 
@@ -74,45 +73,44 @@ const writeMembers = async (profileId: string, remoteMembers: SupabaseMemberReco
   }
   const now = Date.now();
   const membersCollection = database.collections.get<Member>('members');
-  const existing = await membersCollection.query(
-    Q.where('profile_id', profileId)
-  ).fetch();
-  const existingById = new Map(existing.map(record => [record.id, record]));
-  await database.write(async () => {
-    for (const remote of remoteMembers) {
-      const isDeleted = remote.deleted ?? false;
-      const local = existingById.get(remote.id);
-      if (local) {
-        await local.update(record => {
-          record.name = remote.name;
-          record.symbol = remote.symbol;
-          record.color = remote.color;
-          record.role = remote.role ?? '';
-          record.isActive = remote.is_active ?? false;
-          record.updatedAt = now;
-          record.version = (record.version ?? 0) + 1;
-          record.deleted = isDeleted;
-        });
-      } else if (!isDeleted) {
-        await membersCollection.create(member => {
-          const raw = member._raw as any;
-          raw.id = remote.id;
-          member.profileId = profileId;
-          member.name = remote.name;
-          member.symbol = remote.symbol;
-          member.color = remote.color;
-          member.role = remote.role ?? '';
-          member.isActive = remote.is_active ?? false;
-          member.createdAt = now;
-          member.updatedAt = now;
-          member.version = 1;
-          member.deleted = false;
-        });
-      }
-    }
-  });
-  return remoteMembers.filter(member => !member.deleted).length;
-};
+      const existing = await membersCollection.query(
+        Q.where('profile_id', profileId)
+      ).fetch();
+      const existingById = new Map(existing.map(record => [record.id, record]));
+      await database.write(async () => {
+        for (const remote of remoteMembers) {
+          const isDeleted = remote.deleted ?? false;
+          const local = existingById.get(remote.id);
+          if (local) {
+            await local.update(record => {
+              record.name = remote.name;
+              record.symbol = remote.symbol;
+              record.color = remote.color;
+              record.role = remote.role ?? '';
+              record.updatedAt = now;
+              record.version = (record.version ?? 0) + 1;
+              record.deleted = isDeleted;
+            });
+          } else if (!isDeleted) {
+            await membersCollection.create(member => {
+              const raw = member._raw as any;
+              raw.id = remote.id;
+              member.profileId = profileId;
+              member.name = remote.name;
+              member.symbol = remote.symbol;
+              member.color = remote.color;
+              member.role = remote.role ?? '';
+              member.isActive = false;
+              member.createdAt = now;
+              member.updatedAt = now;
+              member.version = 1;
+              member.deleted = false;
+            });
+          }
+        }
+      });
+    return remoteMembers.filter(member => !member.deleted).length;
+  };
 
 export const ProfileBootstrapService = {
   async bootstrap(profileId: string): Promise<ProfileBootstrapResult> {
@@ -159,7 +157,7 @@ export const ProfileBootstrapService = {
 
       try {
         const membersResponse = await SupabaseService.from('members')
-          .select('id, name, symbol, color, role, is_active, deleted')
+          .select('id, name, symbol, color, role, deleted')
           .eq('profile_id', profileId);
 
         if (membersResponse.error) {
