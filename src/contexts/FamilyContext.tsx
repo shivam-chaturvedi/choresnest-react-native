@@ -5,6 +5,8 @@ import { ListService } from "../services/ListService";
 import type { ListCategoryRecord, ListItemRecord } from "../services/ListService";
 import { VaultService } from "../services/VaultService";
 import { supabase } from "../config/supabase";
+import { ProfileService } from "../services/ProfileService";
+import { useAuth } from "./AuthContext";
 
 // Re-export interfaces (keeping compatibility or updating as needed)
 export interface FamilyMember {
@@ -100,7 +102,7 @@ export interface VaultDocument {
 // Define the FamilyContext value type
 export interface FamilyContextValue {
   familyName: string;
-  setFamilyName: (name: string) => void;
+  setFamilyName: (name: string) => Promise<void>;
   members: FamilyMember[];
   activeMember: FamilyMember | null;
   setActiveMember: (member: FamilyMember) => Promise<void>;
@@ -127,6 +129,7 @@ export interface FamilyContextValue {
   deleteTask: (id: string) => Promise<void>;
   categories: any[];
   addCategory: () => void;
+  profileId: string | null;
 }
 
 const mapEventModelToCalendarEvent = (eventModel: any, membersById: Map<string, FamilyMember>): CalendarEvent => ({
@@ -170,6 +173,7 @@ const normalizeVirtualId = (id: string): string => {
 export const FamilyContext = createContext<FamilyContextValue | undefined>(undefined);
 
 export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const { isGuest, user } = useAuth();
   const [familyName, setFamilyNameState] = useState("Family Chores");
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [rawEvents, setRawEvents] = useState<any[]>([]);
@@ -264,33 +268,42 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   }, [profileId]);
 
   // --- Track Profile ---
+  // *** IMPORTANT: This effect must run FIRST to clear stale cross-profile data ***
+  // When profileId changes (e.g. switching profiles or logging in/out), immediately
+  // wipe all data arrays so the UI never shows another profile's events/tasks/etc.
+  useEffect(() => {
+    setRawEvents([]);
+    setRawTasks([]);
+    setRawGroceryItems([]);
+    setRawCategories([]);
+    setGlobalVault([]);
+    setMemberVaults({});
+    setMembers([]);
+    setFamilyNameState('Family Chores');
+  }, [profileId]);
+
   useEffect(() => {
     let mounted = true;
     const refreshProfile = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (mounted) {
-          setProfileId(session?.user?.id ?? null);
-        }
-      } catch (error) {
-        console.warn("FamilyContext: Failed to resolve profile id", error);
-        if (mounted) {
-          setProfileId(null);
-        }
+      const pid = await ProfileService.getActiveProfileId();
+      if (mounted) {
+        setProfileId(pid);
       }
     };
     refreshProfile();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!mounted) {
-        return;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async () => {
+      const pid = await ProfileService.getActiveProfileId();
+      if (mounted) {
+        setProfileId(pid);
       }
-      setProfileId(session?.user?.id ?? null);
     });
+
     return () => {
       mounted = false;
       subscription?.unsubscribe();
     };
-  }, []);
+  }, [isGuest, user?.id]);
 
   useEffect(() => {
     if (!profileId) {
@@ -303,14 +316,13 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     };
   }, [profileId]);
 
-  const setFamilyName = (name: string) => {
-    if (!profileId) {
-      console.warn('FamilyContext: Profile ID unavailable while setting family name');
+  const setFamilyName = async (name: string): Promise<void> => {
+    const effectiveProfileId = profileId || await ProfileService.getActiveProfileId();
+    if (!effectiveProfileId) {
+      console.warn('FamilyContext: Profile ID unavailable while setting family name — write skipped');
       return;
     }
-    FamilyService.setFamilyName(profileId, name).catch((error) => {
-      console.error('Failed to save family name:', error);
-    });
+    await FamilyService.setFamilyName(effectiveProfileId, name);
   };
 
   // --- Observe Members ---
@@ -376,10 +388,16 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // --- Observe Events ---
   useEffect(() => {
+    if (!profileId) {
+      setRawEvents([]);
+      return;
+    }
+    // Clear immediately so no stale data shows while waiting for new subscription
+    setRawEvents([]);
     try {
-      const sub = TaskService.observeEvents().subscribe({
+      const sub = TaskService.observeEvents(profileId).subscribe({
         next: (rawEvents) => {
-          console.log(`FamilyContext: Received ${rawEvents.length} events from DB`);
+          console.log(`FamilyContext: Received ${rawEvents.length} events from DB for profile ${profileId}`);
           setRawEvents(rawEvents);
         },
         error: (error) => {
@@ -390,13 +408,19 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     } catch (error) {
       console.error('Error setting up events subscription:', error);
     }
-  }, []);
+  }, [profileId]);
 
   useEffect(() => {
+    if (!profileId) {
+      setRawTasks([]);
+      return;
+    }
+    // Clear immediately so no stale data shows while waiting for new subscription
+    setRawTasks([]);
     try {
-      const sub = TaskService.observeTasks().subscribe({
+      const sub = TaskService.observeTasks(profileId).subscribe({
         next: (rawTasks) => {
-          console.log(`FamilyContext: Received ${rawTasks.length} tasks from DB`);
+          console.log(`FamilyContext: Received ${rawTasks.length} tasks from DB for profile ${profileId}`);
           setRawTasks(rawTasks);
         },
         error: (error) => {
@@ -407,11 +431,13 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     } catch (error) {
       console.error('Error setting up tasks subscription:', error);
     }
-  }, []);
+  }, [profileId]);
 
   const addTask = async (t: any) => {
     try {
-      return await TaskService.addTask(t);
+      const pid = ensureProfileId();
+      if (!pid) return;
+      return await TaskService.addTask({ ...t, profileId: pid });
     } catch (error) {
       console.error('Failed to add task:', error);
       throw new Error('Failed to add task. Please try again.');
@@ -440,7 +466,9 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const addEvent = async (e: any) => {
     try {
-      await TaskService.addEvent(e);
+      const pid = ensureProfileId();
+      if (!pid) return;
+      await TaskService.addEvent({ ...e, profileId: pid });
     } catch (error) {
       console.error('Failed to add event:', error);
       throw new Error('Failed to add event. Please try again.');
@@ -624,6 +652,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
         categories,
         addCategory: () => { },
+        profileId,
       }}
     >
       {children}

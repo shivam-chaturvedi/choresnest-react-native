@@ -506,7 +506,7 @@ export const NotificationsScreen: React.FC = () => {
               />
               {Platform.OS === 'ios' && (
                 <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 }}>
-                  <Button size="sm" variant="ghost" onPress={() => setShowStartPicker(false)}>Done</Button>
+                  <Button size="sm" variant="ghost" onPress={() => setShowStartPicker(false)}><Text>Done</Text></Button>
                 </View>
               )}
             </>
@@ -522,7 +522,7 @@ export const NotificationsScreen: React.FC = () => {
               />
               {Platform.OS === 'ios' && (
                 <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 }}>
-                  <Button size="sm" variant="ghost" onPress={() => setShowEndPicker(false)}>Done</Button>
+                  <Button size="sm" variant="ghost" onPress={() => setShowEndPicker(false)}><Text>Done</Text></Button>
                 </View>
               )}
             </>

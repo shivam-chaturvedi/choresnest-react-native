@@ -57,9 +57,7 @@ export const VaultScreen: React.FC = () => {
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
-  const [documentSnapshot, setDocumentSnapshot] = useState<VaultDocument | null>(null);
-  const pendingDocumentIdRef = React.useRef<string | null>(null);
+  const [modalDocument, setModalDocument] = useState<VaultDocument | null>(null);
   const [scannerSession, setScannerSession] = useState<{ step: 'upload' | 'form'; file: SavedDocument | null } | null>(null);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [filters, setFilters] = useState<FilterOptions>({
@@ -267,55 +265,15 @@ export const VaultScreen: React.FC = () => {
     );
   };
 
-  const selectedDocument = useMemo(() => {
-    if (!selectedDocumentId) return null;
-    return allDocs.find(d => d.id === selectedDocumentId) || null;
-  }, [selectedDocumentId, allDocs]);
-
-  const documentForModal = selectedDocument || documentSnapshot;
-
   useEffect(() => {
     if (!showDetailsModal) {
       return;
     }
-
-    if (!selectedDocument) {
-      // Keep the modal open while syncs temporarily clear the query unless we explicitly
-      // cleared the selected ID (or the ID was dropped because the document was removed).
-      if (selectedDocumentId) {
-        console.log('[VaultScreen] Document temporarily missing during sync, keeping modal open for', selectedDocumentId);
-        return;
-      }
-
+    if (!modalDocument) {
+      console.warn('[VaultScreen] Document modal opened without snapshot');
       setShowDetailsModal(false);
     }
-  }, [selectedDocument, selectedDocumentId, showDetailsModal]);
-
-  useEffect(() => {
-    if (!showDetailsModal) {
-      setDocumentSnapshot(null);
-      pendingDocumentIdRef.current = null;
-      return;
-    }
-
-    if (selectedDocument) {
-      setDocumentSnapshot(selectedDocument);
-      pendingDocumentIdRef.current = selectedDocument.id;
-      return;
-    }
-
-    if (!selectedDocumentId) {
-      setDocumentSnapshot(null);
-      pendingDocumentIdRef.current = null;
-      return;
-    }
-
-    if (pendingDocumentIdRef.current === selectedDocumentId) {
-      return;
-    }
-
-    pendingDocumentIdRef.current = selectedDocumentId;
-  }, [selectedDocument, selectedDocumentId, showDetailsModal]);
+  }, [modalDocument, showDetailsModal]);
 
   useEffect(() => {
     const ticker = setInterval(() => {
@@ -682,7 +640,7 @@ export const VaultScreen: React.FC = () => {
                   key={doc.id}
                   style={[styles.docRow, { backgroundColor: colors.card, borderRadius: radius.md }]}
                   onPress={() => {
-                    setSelectedDocumentId(doc.id);
+                    setModalDocument(doc);
                     setShowDetailsModal(true);
                   }}
                 >
@@ -744,7 +702,7 @@ export const VaultScreen: React.FC = () => {
                     key={doc.id}
                     style={[styles.docRow, { backgroundColor: colors.card, borderRadius: radius.md }]}
                     onPress={() => {
-                      setSelectedDocumentId(doc.id);
+                      setModalDocument(doc);
                       setShowDetailsModal(true);
                     }}
                   >
@@ -757,13 +715,6 @@ export const VaultScreen: React.FC = () => {
                         {docDateLabel ? (
                           <Text style={[styles.docDate, { color: colors.mutedForeground }]}>{docDateLabel}</Text>
                         ) : null}
-                        {VaultService.getCachedLocalUri(doc.id) && (
-                          <View style={{ backgroundColor: colors.success + '20', paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.sm }}>
-                            <Text style={{ fontSize: 10, color: colors.success, fontWeight: '600' }}>
-                              Saved locally {doc.fileSize ? `- ${formatStorageSize(doc.fileSize)}` : ''}
-                            </Text>
-                          </View>
-                        )}
                       </View>
                       {renderDocMeta(doc)}
                     </View>
@@ -885,7 +836,7 @@ export const VaultScreen: React.FC = () => {
                 key={doc.id}
                 style={[styles.docRow, { backgroundColor: colors.card, borderRadius: radius.md }]}
                 onPress={() => {
-                  setSelectedDocumentId(doc.id);
+                  setModalDocument(doc);
                   setShowDetailsModal(true);
                 }}
               >
@@ -1046,9 +997,9 @@ export const VaultScreen: React.FC = () => {
           visible={showDetailsModal}
           onClose={() => {
             setShowDetailsModal(false);
-            setSelectedDocumentId(null);
+            setModalDocument(null);
           }}
-          document={documentForModal}
+          document={modalDocument}
           onUpdate={updateDocument}
           onViewImage={(uri) => {
             setSelectedImageUri(uri);

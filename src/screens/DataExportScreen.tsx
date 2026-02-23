@@ -15,6 +15,7 @@ import {
 } from "lucide-react-native";
 import { exportService, ExportFormat, ExportStats } from "../services/ExportService";
 import Config from "react-native-config";
+import { useFamily } from "../contexts/FamilyContext";
 
 const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 
@@ -35,19 +36,21 @@ export const DataExportScreen: React.FC = () => {
   const radius = useThemeRadius();
   // Format is always 'json' now
 
+  const { profileId } = useFamily();
+
   const [dataOptions, setDataOptions] = useState(initialDataOptions);
   const [stats, setStats] = useState<ExportStats | null>(null);
   const [estimatedSize, setEstimatedSize] = useState<string>("Calculating...");
 
   const [isExporting, setIsExporting] = useState(false);
 
-  // Load live stats on mount
+  // Load live stats on mount or when profileId changes
   useEffect(() => {
     loadStats();
-  }, []);
+  }, [profileId]);
 
   const loadStats = async () => {
-    const liveStats = await exportService.getStats();
+    const liveStats = await exportService.getStats(profileId);
     setStats(liveStats);
 
     // Update options with live counts
@@ -87,7 +90,7 @@ export const DataExportScreen: React.FC = () => {
 
     setIsExporting(true);
     try {
-      const filePath = await exportService.generateBackup(selectedIds);
+      const filePath = await exportService.generateBackup(profileId, selectedIds);
       await exportService.shareBackup(filePath);
     } catch (error: any) {
       const errorMessage = error?.message || "Could not generate or share backup file.";
@@ -163,7 +166,7 @@ export const DataExportScreen: React.FC = () => {
 
             setIsExporting(true);
             try {
-              const filePath = await exportService.exportAsPDF(selectedIds);
+              const filePath = await exportService.exportAsPDF(profileId, selectedIds);
               await exportService.shareBackup(filePath);
             } catch (error: any) {
               Alert.alert("Export Failed", error?.message || "Could not generate PDF.");

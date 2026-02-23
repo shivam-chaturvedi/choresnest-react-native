@@ -1,4 +1,5 @@
 import { synchronize } from '@nozbe/watermelondb/sync';
+import { Q } from '@nozbe/watermelondb';
 import { database } from '../../database';
 import Config from 'react-native-config';
 import { pullTableChangesWithCursor } from './PullCursorEngine';
@@ -24,11 +25,17 @@ const collectTableFetchResults = async (descriptors: TableFetchDescriptor[]): Pr
             output[key] = result.value;
         } else {
             console.error(`Error fetching ${key}:`, result.reason);
-            output[key] = { created: [], updated: [], deleted: [] };
+            output[key] = { created: [], updated: [], deleted: [], latestUpdatedAt: 0 };
         }
     });
     return output;
 };
+
+const getLatestPulledTimestamp = (tableChangesMap: Record<string, TableChangeSet>): number =>
+    Object.values(tableChangesMap).reduce((max, changeSet) => {
+        const timestamp = changeSet.latestUpdatedAt ?? 0;
+        return timestamp > max ? timestamp : max;
+    }, 0);
 
 type TableSyncConfig = {
     key: string;
@@ -80,7 +87,6 @@ export class SyncOrchestrator {
         if (migration) {
             console.log(`Sync migration: ${migration}`);
         }
-        const timestamp = Date.now();
         const lastPulled = lastPulledAt ? new Date(lastPulledAt).toISOString() : new Date(0).toISOString();
         console.log(`PULL_START${label ? ` (${label})` : ''} for user ${this.userId}; readOnly=${readOnly}; since=${lastPulled}`);
 
@@ -104,20 +110,20 @@ export class SyncOrchestrator {
 
         const tableChangesMap = await collectTableFetchResults(descriptors);
         Object.entries(tableChangesMap).forEach(([table, changeSet]) => logChangeSetSummary(table, changeSet));
+        const lastPulledMs = lastPulledAt ? new Date(lastPulledAt).getTime() : 0;
+        const aggregatedTimestamp = Math.max(lastPulledMs, getLatestPulledTimestamp(tableChangesMap));
         return {
             changes: SYNC_TABLES.reduce<Record<string, TableChangeSet>>((acc, config) => {
                 acc[config.key] = tableChangesMap[config.key] ?? { created: [], updated: [], deleted: [] };
                 return acc;
             }, {}),
-            timestamp,
+            timestamp: aggregatedTimestamp,
         };
     }
 
     private async pushToServer(changes: Record<string, TableChangeSet | undefined>): Promise<void> {
         const hasChanges = Object.values(changes).some(tableChanges => {
-            if (!tableChanges) {
-                return false;
-            }
+            if (!tableChanges) return false;
             const { created = [], updated = [], deleted = [] } = tableChanges;
             return created.length > 0 || updated.length > 0 || deleted.length > 0;
         });
@@ -132,19 +138,80 @@ export class SyncOrchestrator {
             return;
         }
 
+        // ---------------------------------------------------------
+        // CRITICAL: Account Isolation Filter
+        // ---------------------------------------------------------
+        // WatermelonDB tracks changes globally in its database. If a user logs out
+        // and another logs in on the same device, Watermelon will try to push
+        // Account A's pending changes using Account B's auth headers, causing
+        // RLS violations (42501).
+        // we must fetch ALL members belonging to this user to get the list of 
+        // allowed profile IDs.
+        const allowedProfiles = new Set<string>();
+        try {
+            const memberRecords = await database.get('members').query(
+                Q.where('deleted', Q.notEq(true))
+            ).fetch();
+            // In our system, members table records that exist locally for this 
+            // instance are assumed valid for the current account context if they 
+            // haven't been wiped. However, more accurately, we only filter for 
+            // tables that actually HAVE profile_id.
+            memberRecords.forEach((m: any) => allowedProfiles.add(m.profileId));
+        } catch (e) {
+            console.error('SyncOrchestrator: Failed to fetch allowed profile IDs:', e);
+        }
+
+        const filteredChanges: Record<string, TableChangeSet> = {};
+
+        for (const [tableName, changeSet] of Object.entries(changes)) {
+            if (!changeSet) continue;
+
+            const config = SYNC_TABLES.find(c => c.key === tableName);
+
+            // If the table doesn't use profile scoping (like Global items), push as-is
+            if (config && config.hasProfileId === false) {
+                filteredChanges[tableName] = changeSet;
+                continue;
+            }
+
+            // Otherwise, filter created/updated records to only include allowed profiles or the active profile itself
+            const filterByProfile = (record: any) => {
+                const pid = record.profile_id || record.profileId;
+                return pid === this.userId || (pid && allowedProfiles.has(pid));
+            };
+
+            filteredChanges[tableName] = {
+                created: changeSet.created.filter(filterByProfile),
+                updated: changeSet.updated.filter(filterByProfile),
+                // Note: Watermelon deleted array is just IDs, we can't easily 
+                // filter these without fetching them first. 
+                // However, since deletions also require profile_id in RLS, 
+                // PushEngine will handle any errors, or we can trust the userId 
+                // in the payload.
+                deleted: changeSet.deleted
+            };
+        }
+
         const phaseResults = [] as PromiseSettledResult<{ success: boolean; errors: number }>[][];
         for (const phase of syncPhases) {
             const tablesInPhase = SYNC_TABLES.filter(config => config.phase === phase);
-            const tasks = tablesInPhase.map(config =>
-                pushTableChanges({
+            const tasks = tablesInPhase.map(config => {
+                const changeSet = filteredChanges[config.key];
+                const hasWork = (changeSet?.created?.length ?? 0) > 0 ||
+                    (changeSet?.updated?.length ?? 0) > 0 ||
+                    (changeSet?.deleted?.length ?? 0) > 0;
+
+                if (!hasWork) return Promise.resolve({ success: true, errors: 0 });
+
+                return pushTableChanges({
                     table: config.key,
                     remoteTable: config.remoteTable,
-                    tableChanges: changes[config.key],
+                    tableChanges: changeSet,
                     userId: this.userId,
                     addProfileId: config.addProfileId ?? true,
                     conflictKey: config.conflictKey ?? 'id',
-                })
-            );
+                });
+            });
             if (tasks.length > 0) {
                 phaseResults.push(await Promise.allSettled(tasks));
             }
@@ -159,7 +226,7 @@ export class SyncOrchestrator {
         }, 0);
 
         if (totalErrors > 0) {
-            console.warn(`Sync completed with ${totalErrors} errors during push operations`);
+            throw new Error(`Sync push failed for ${this.userId}. Total errors: ${totalErrors}. Check device logs for RLS or Validation details.`);
         }
     }
 }

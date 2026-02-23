@@ -66,7 +66,6 @@ const writeFamilyName = async (profileId: string, familySetting: SupabaseSetting
       });
     }
   });
-  syncAfterWrite();
 };
 
 const writeMembers = async (profileId: string, remoteMembers: SupabaseMemberRecord[]) => {
@@ -112,7 +111,6 @@ const writeMembers = async (profileId: string, remoteMembers: SupabaseMemberReco
       }
     }
   });
-  syncAfterWrite();
   return remoteMembers.filter(member => !member.deleted).length;
 };
 

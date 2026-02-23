@@ -3,6 +3,48 @@ import { toZonedTime } from "date-fns-tz";
 import { safeFormatInTimeZone, safeTimeZone, parseDateTimeInZone } from "./SafeDateUtils";
 import { CalendarEvent, Task } from "../contexts/FamilyContext";
 
+export interface CalendarEventWithMeta extends CalendarEvent {
+    __cachedStart?: Date;
+    __cachedEnd?: Date;
+    __cachedRecurrenceEnd?: Date | null;
+}
+
+const getEventStartDate = (event: CalendarEventWithMeta, fallbackZone: string): Date | null => {
+    if (event.__cachedStart) return event.__cachedStart;
+    const zone = safeTimeZone(event.timeZone, fallbackZone);
+    const parsed = parseDateTimeInZone(event.date, zone, event.time && event.time !== "All Day" ? event.time : undefined);
+    if (parsed) {
+        event.__cachedStart = parsed;
+    }
+    return parsed;
+};
+
+const getEventTimeZone = (event: CalendarEventWithMeta, fallbackZone: string): string => {
+    return safeTimeZone(event.timeZone, fallbackZone);
+};
+
+const getEventEndDate = (event: CalendarEventWithMeta, eventTimeZone: string, fallback: Date): Date => {
+    if (event.__cachedEnd) return event.__cachedEnd;
+    const endTimeCandidate = event.endTime && event.endTime !== "All Day" ? event.endTime : event.time && event.time !== "All Day" ? event.time : undefined;
+    const parsedEnd = event.endDate
+        ? parseDateTimeInZone(event.endDate, eventTimeZone, endTimeCandidate)
+        : null;
+    const resolved = parsedEnd || fallback;
+    event.__cachedEnd = resolved;
+    return resolved;
+};
+
+const getRecurrenceEnd = (event: CalendarEventWithMeta, eventTimeZone: string): Date | null => {
+    if (event.__cachedRecurrenceEnd !== undefined) return event.__cachedRecurrenceEnd;
+    if (!event.recurrenceEndDate) {
+        event.__cachedRecurrenceEnd = null;
+        return null;
+    }
+    const parsed = parseDateTimeInZone(event.recurrenceEndDate, eventTimeZone);
+    event.__cachedRecurrenceEnd = parsed;
+    return parsed;
+};
+
 export type CalendarItem = (CalendarEvent | Task) & {
     isVirtual?: boolean; // True if this is a recurring instance
     originalDate?: string; // The original start date of the recurrence
@@ -14,7 +56,7 @@ export type CalendarItem = (CalendarEvent | Task) & {
  */
 export const getEventsForDate = (
     date: Date,
-    events: CalendarEvent[],
+    events: CalendarEventWithMeta[],
     tasks: Task[],
     timeZone: string
 ): CalendarItem[] => {
@@ -43,14 +85,12 @@ export const getEventsForDate = (
 
     // Process Events
     events.forEach(event => {
-        const eventTimeZone = safeTimeZone(event.timeZone, safeZone);
-        const eventStartDate = parseDateTimeInZone(event.date, eventTimeZone, event.time);
+        const eventTimeZone = getEventTimeZone(event, safeZone);
+        const eventStartDate = getEventStartDate(event, safeZone);
         if (!eventStartDate) return;
 
-        const eventEndDate = event.endDate
-            ? parseDateTimeInZone(event.endDate, eventTimeZone, event.endTime || event.time) || eventStartDate
-            : eventStartDate;
-        const recurrenceEnd = event.recurrenceEndDate ? parseDateTimeInZone(event.recurrenceEndDate, eventTimeZone) : null;
+        const eventEndDate = getEventEndDate(event, eventTimeZone, eventStartDate);
+        const recurrenceEnd = getRecurrenceEnd(event, eventTimeZone);
         const targetDateStr = safeFormatInTimeZone(date, eventTimeZone, "yyyy-MM-dd");
         const targetDate = startOfDay(toZonedTime(date, eventTimeZone));
         const eventStartZoned = eventStartDate;

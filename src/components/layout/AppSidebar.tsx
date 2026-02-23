@@ -16,6 +16,7 @@ import { theme } from "../../theme";
 import { useFamily, FamilyMember } from "../../contexts/FamilyContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { PROFILE_COLORS, ProfileColor } from "../../constants/profileColors";
+import { MemberIcon } from "../../components/ui/MemberIcon";
 import Config from "react-native-config";
 
 const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
@@ -271,7 +272,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                     }}
                   >
                     {activeMember ? (
-                      <Text style={styles.avatarIcon}>{activeMember.symbol}</Text>
+                      <MemberIcon symbol={activeMember.symbol} size={32} color="#f5f8ff" />
                     ) : (
                       <User size={32} color="#f5f8ff" />
                     )}
@@ -293,11 +294,11 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                   onPress={() => setIsProfilesOpen(!isProfilesOpen)}
                 >
                   <Text style={styles.familyName} numberOfLines={1}>
-                    {activeMember?.name || (isGuest ? 'Guest' : user?.email?.split('@')[0] || 'Select Profile')}
+                    {familyName || (isGuest ? 'Guest' : 'Select Profile')}
                   </Text>
                   {!isGuest && (
                     <Text style={[styles.memberName, { marginBottom: 0 }]} numberOfLines={1}>
-                      {user?.email || ''}
+                      {activeMember?.name || user?.email || ''}
                     </Text>
                   )}
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16, marginTop: 2 }}>
@@ -351,7 +352,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                           styles.profileAvatar,
                           { backgroundColor: member.isActive ? '#dbeafe' : '#f3f4f6' }
                         ]}>
-                          <Text style={{ fontSize: 20 }}>{member.symbol}</Text>
+                          <MemberIcon symbol={member.symbol} size={24} />
                         </View>
                         <Text style={[styles.profileText, member.isActive && styles.profileTextActive]}>
                           {member.name}

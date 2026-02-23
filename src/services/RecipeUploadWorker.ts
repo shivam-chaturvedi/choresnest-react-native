@@ -1,6 +1,6 @@
 import { Q } from '@nozbe/watermelondb';
 import { database } from '../database';
-import Recipe from '../database/models/Recipe';
+import { Recipe } from '../database/models/Recipe';
 import RNFS from 'react-native-fs';
 import { uploadRecipeAudio, uploadRecipeImage } from './StorageService';
 
@@ -69,7 +69,7 @@ const defaultFetchRecipes = async (profileId: string): Promise<RecipeRecord[]> =
             Q.where('upload_status', Q.oneOf(PENDING_STATUSES))
         );
     const records = await query.fetch();
-  return records.map(record => ({
+    return records.map(record => ({
         id: record.id,
         profileId: record.profileId,
         localImageUris: record.localImageUris,
@@ -85,17 +85,17 @@ const defaultFetchRecipes = async (profileId: string): Promise<RecipeRecord[]> =
 };
 
 const sanitizeLocalUris = (uris?: string[] | null): string[] => {
-  if (!uris) {
-    return [];
-  }
-  return uris
-    .map((uri) => uri?.trim())
-    .filter((uri): uri is string => Boolean(uri));
+    if (!uris) {
+        return [];
+    }
+    return uris
+        .map((uri) => uri?.trim())
+        .filter((uri): uri is string => Boolean(uri));
 };
 
 const normalizeLocalUri = (value?: string | null): string | undefined => {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : undefined;
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : undefined;
 };
 
 const defaultPersist = async (record: RecipeRecord, updates: PersistUpdates): Promise<void> => {
@@ -103,7 +103,7 @@ const defaultPersist = async (record: RecipeRecord, updates: PersistUpdates): Pr
         return;
     }
     await database.write(async () => {
-        await record.model!.update(recipe => {
+        await record.model!.update((recipe: Recipe) => {
             if (updates.uploadStatus !== undefined) {
                 recipe.uploadStatus = updates.uploadStatus ?? 'pending_upload';
             }
@@ -123,7 +123,7 @@ const defaultPersist = async (record: RecipeRecord, updates: PersistUpdates): Pr
                 recipe.localImageUris = updates.localImageUris ?? [];
             }
             if (updates.localAudioUri !== undefined) {
-                recipe.localAudioUri = updates.localAudioUri ?? null;
+                recipe.localAudioUri = updates.localAudioUri ?? undefined;
             }
             if (updates.imageChecksums !== undefined) {
                 recipe.imageChecksums = updates.imageChecksums ?? [];
@@ -150,10 +150,19 @@ const normalizeFsPath = (uri: string): string => {
 };
 
 const computeChecksum = async (uri: string): Promise<string> => {
-    const path = normalizeFsPath(uri);
-    const stats = await RNFS.stat(path);
-    const hash = await RNFS.hash(path, 'sha256');
-    return `${stats.size}-${hash}`;
+    try {
+        const path = normalizeFsPath(uri);
+        const exists = await RNFS.exists(path);
+        if (!exists) {
+            throw new Error(`File does not exist: ${path}`);
+        }
+        const stats = await RNFS.stat(path);
+        const hash = await RNFS.hash(path, 'sha256');
+        return `${stats.size}-${hash}`;
+    } catch (error: any) {
+        const message = error?.message || 'Unknown FS error';
+        throw new Error(`Checksum failed: ${message}`);
+    }
 };
 
 export class RecipeUploadWorker {

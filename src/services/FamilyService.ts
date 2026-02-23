@@ -10,7 +10,7 @@ import { EMPTY } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { SyncService } from './SyncService';
 
-const OBSERVE_COLUMNS: string[] = ['updated_at', 'deleted'];
+const OBSERVE_COLUMNS: string[] = ['updated_at', 'deleted', 'value'];
 
 const syncAfterWrite = () => {
   void SyncService.requestSyncSoon();
@@ -45,7 +45,10 @@ export const FamilyService = {
       .query(
         Q.where('profile_id', profileId),
         Q.where('key', 'family_name'),
-        Q.where('deleted', false),
+        // Use notEq(true) rather than where('deleted', false) so that SQLite
+        // integer 0 (the default for boolean false stored by WatermelonDB) is
+        // also accepted — avoids missing rows that came in via a sync pull.
+        Q.where('deleted', Q.notEq(true)),
         Q.sortBy('updated_at', Q.desc)
       )
       .observeWithColumns(OBSERVE_COLUMNS)

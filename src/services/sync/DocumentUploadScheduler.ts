@@ -1,7 +1,10 @@
 import NetInfo from '@react-native-community/netinfo';
+import Config from 'react-native-config';
 import { DocumentUploadWorker } from '../documents/DocumentUploadWorker';
 import { DocumentDownloadWorker } from '../documents/DocumentDownloadWorker';
 import { RecipeUploadWorker } from '../RecipeUploadWorker';
+
+const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 
 class DocumentUploadSchedulerService {
     private worker = new DocumentUploadWorker();
@@ -20,18 +23,24 @@ class DocumentUploadSchedulerService {
         this.stop();
         this.currentProfileId = profileId;
         this.worker.setProfileId(profileId);
-        this.recipeWorker.setProfileId(profileId);
+        if (ENABLE_RECIPE_AND_MEALS) {
+            this.recipeWorker.setProfileId(profileId);
+        }
         this.downloadWorker.setProfileId(profileId);
         await this.ensureNetInfoSubscription();
         this.worker.start();
-        this.recipeWorker.start();
+        if (ENABLE_RECIPE_AND_MEALS) {
+            this.recipeWorker.start();
+        }
         // Trigger download of any unresolved documents pulled from another device
         void this.downloadWorker.triggerDownloads();
     }
 
     stop() {
         this.worker.stop();
-        this.recipeWorker.stop();
+        if (ENABLE_RECIPE_AND_MEALS) {
+            this.recipeWorker.stop();
+        }
         this.currentProfileId = null;
         this.downloadWorker.setProfileId(null);
         this.sessionId += 1;
@@ -67,14 +76,18 @@ class DocumentUploadSchedulerService {
             this.isConnected = connected;
             if (!connected) {
                 this.worker.stop();
-                this.recipeWorker.stop();
+                if (ENABLE_RECIPE_AND_MEALS) {
+                    this.recipeWorker.stop();
+                }
                 return;
             }
             if (this.currentProfileId) {
                 this.worker.setProfileId(this.currentProfileId);
                 this.worker.start();
-                this.recipeWorker.setProfileId(this.currentProfileId);
-                this.recipeWorker.start();
+                if (ENABLE_RECIPE_AND_MEALS) {
+                    this.recipeWorker.setProfileId(this.currentProfileId);
+                    this.recipeWorker.start();
+                }
                 // On reconnect, also try downloading any docs we missed offline
                 this.downloadWorker.setProfileId(this.currentProfileId);
                 void this.downloadWorker.triggerDownloads();
@@ -96,8 +109,10 @@ class DocumentUploadSchedulerService {
         await this.ensureNetInfoSubscription();
         this.worker.start();
 
-        this.recipeWorker.setProfileId(id);
-        this.recipeWorker.start();
+        if (ENABLE_RECIPE_AND_MEALS) {
+            this.recipeWorker.setProfileId(id);
+            this.recipeWorker.start();
+        }
 
         void this.worker.triggerProcessing(0);
         // Also kick off downloads for any docs synced from another device
@@ -106,6 +121,9 @@ class DocumentUploadSchedulerService {
     }
 
     async requestRecipeUploadNow(profileId?: string) {
+        if (!ENABLE_RECIPE_AND_MEALS) {
+            return;
+        }
         const id = profileId ?? this.currentProfileId;
         if (!id) {
             return;

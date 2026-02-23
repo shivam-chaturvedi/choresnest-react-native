@@ -103,6 +103,17 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
     const [reminderOffsets, setReminderOffsets] = useState<number[]>([1]);
     const [reminderTime, setReminderTime] = useState('09:00');
 
+    const createDateSetter = (fieldName: string, setter: (value: string) => void) => (value: string) => {
+        console.log(`[DocumentScanner] ${fieldName} changed to`, value);
+        setter(value);
+    };
+
+    const handlePurchaseDateChange = createDateSetter('purchaseDate', setPurchaseDate);
+    const handleWarrantyTillDateChange = createDateSetter('warrantyTillDate', setWarrantyTillDate);
+    const handleBillDateChange = createDateSetter('billDate', setBillDate);
+    const handleServiceDateChange = createDateSetter('serviceDate', setServiceDate);
+    const handleNextServiceDateChange = createDateSetter('nextServiceDate', setNextServiceDate);
+
     const prevOpenRef = useRef(false);
 
     const resetForm = useCallback(() => {
@@ -322,7 +333,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
                             <Text style={[styles.label, { color: colors.foreground }]}>Purchase Date</Text>
                             <DateTimePicker
                                 value={purchaseDate}
-                                onChange={setPurchaseDate}
+                                onChange={handlePurchaseDateChange}
                                 placeholder="Select purchase date"
                             />
                         </View>
@@ -330,7 +341,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
                             <Text style={[styles.label, { color: colors.foreground }]}>Warranty Valid Till</Text>
                             <DateTimePicker
                                 value={warrantyTillDate}
-                                onChange={setWarrantyTillDate}
+                                onChange={handleWarrantyTillDateChange}
                                 placeholder="Select warranty expiry date"
                             />
                         </View>
@@ -343,7 +354,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
                             <Text style={[styles.label, { color: colors.foreground }]}>Bill Date</Text>
                             <DateTimePicker
                                 value={billDate}
-                                onChange={setBillDate}
+                                onChange={handleBillDateChange}
                                 placeholder="Select bill date"
                             />
                         </View>
@@ -403,7 +414,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
                             <Text style={[styles.label, { color: colors.foreground }]}>Service Date</Text>
                             <DateTimePicker
                                 value={serviceDate}
-                                onChange={setServiceDate}
+                                onChange={handleServiceDateChange}
                                 placeholder="Select service date"
                             />
                         </View>
@@ -411,7 +422,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
                             <Text style={[styles.label, { color: colors.foreground }]}>Next Service Date</Text>
                             <DateTimePicker
                                 value={nextServiceDate}
-                                onChange={setNextServiceDate}
+                                onChange={handleNextServiceDateChange}
                                 placeholder="Select next service date"
                             />
                         </View>

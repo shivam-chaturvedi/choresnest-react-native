@@ -27,7 +27,6 @@ import {
     VaultReminderRule,
 } from "../../utils/VaultReminderUtils";
 import FileViewer from 'react-native-file-viewer';
-import { useDocumentModalSnapshot } from "../documents/DocumentModalSnapshot";
 import RNFS from "react-native-fs";
 
 interface DocumentDetailsModalProps {
@@ -80,14 +79,10 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
     const [isEditMode, setIsEditMode] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [signedUrl, setSignedUrl] = useState<string | null>(null);
+    const [resolvedLocalUri, setResolvedLocalUri] = useState<string | null>(null);
     const [isDownloading, setIsDownloading] = useState(false);
-    const { snapshot: documentSnapshot } = useDocumentModalSnapshot(document);
-
-    // On Device B, localUri is synced from Device A (its local path), so it's usually invalid there.
-    // However, on the uploading device, localUri is perfectly valid and should be used instantly!
-    // Priority: 1. RNFS local cache -> 2. The uploading device's own local file -> 3. Signed URL
-    const cachedUri = document ? VaultService.getCachedLocalUri(document.id) : undefined;
-    const viewUri = cachedUri ?? document?.localUri ?? signedUrl ?? undefined;
+    // Priority: resolved+verified local file > Supabase signed URL
+    const viewUri = resolvedLocalUri ?? signedUrl ?? undefined;
 
     // Form fields
     const [documentName, setDocumentName] = useState('');
@@ -105,6 +100,17 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
     const [reminderOffsets, setReminderOffsets] = useState<number[]>([]);
     const [reminderTime, setReminderTime] = useState('09:00');
     const [nameError, setNameError] = useState('');
+
+    const createDateSetter = (fieldName: string, setter: (value: string) => void) => (value: string) => {
+        console.log(`[DocumentDetailsModal] ${fieldName} changed to`, value);
+        setter(value);
+    };
+
+    const handlePurchaseDateChange = createDateSetter('purchaseDate', setPurchaseDate);
+    const handleWarrantyTillDateChange = createDateSetter('warrantyTillDate', setWarrantyTillDate);
+    const handleBillDateChange = createDateSetter('billDate', setBillDate);
+    const handleServiceDateChange = createDateSetter('serviceDate', setServiceDate);
+    const handleNextServiceDateChange = createDateSetter('nextServiceDate', setNextServiceDate);
 
     const hydrateForm = (doc: VaultDocument) => {
         setDocumentName(doc.name || '');
@@ -125,15 +131,19 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
         setReminderTime(reminderRule?.timeOfDay || '09:00');
     };
 
+    const lastHydratedIdRef = useRef<string | null>(null);
+
     useEffect(() => {
-        if (!visible) {
+        if (!visible || !document) {
+            lastHydratedIdRef.current = null;
             return;
         }
-        if (!documentSnapshot || isEditMode) {
+        if (lastHydratedIdRef.current === document.id) {
             return;
         }
-        hydrateForm(documentSnapshot);
-    }, [documentSnapshot, visible, isEditMode]);
+        hydrateForm(document);
+        lastHydratedIdRef.current = document.id;
+    }, [visible, document?.id]);
 
     useEffect(() => {
         if (visible) {
@@ -143,40 +153,41 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
     }, [visible]);
 
     useEffect(() => {
-        if (!document) {
+        if (!visible || !document) {
+            setResolvedLocalUri(null);
             setSignedUrl(null);
             return;
         }
 
-        // 🚀 Prioritize the verified local cache or the uploading device's original local file.
-        // If we already have the file perfectly viewable on this device, NO network needed!
-        if (VaultService.getCachedLocalUri(document.id) || document.localUri) {
-            setSignedUrl(null);
-            return;
-        }
-
-        // If it's a new draft with no remote path yet, we can't fetch a signed URL anyway.
-        if (!document.remotePath) {
-            setSignedUrl(null);
-            return;
-        }
         let active = true;
-        VaultStorageService.getSignedUrl(document.remotePath, 60)
-            .then(url => {
-                if (active) {
-                    setSignedUrl(url);
-                }
-            })
-            .catch(error => {
-                console.error('Failed to fetch signed URL for document modal:', error);
-                if (active) {
-                    setSignedUrl(null);
-                }
-            });
-        return () => {
-            active = false;
+        const resolve = async () => {
+            // Try to resolve a valid local file URI (validates disk existence, downloads if needed)
+            const localUri = await VaultService.ensureLocalUri(document);
+            if (!active) return;
+
+            if (localUri) {
+                setResolvedLocalUri(localUri);
+                setSignedUrl(null);
+                return;
+            }
+
+            // No valid local file — fall back to a signed URL for streaming
+            if (!document.remotePath) {
+                setSignedUrl(null);
+                return;
+            }
+
+            VaultStorageService.getSignedUrl(document.remotePath, 3600)
+                .then(url => { if (active) { setSignedUrl(url); } })
+                .catch(err => {
+                    console.error('Failed to fetch signed URL for document modal:', err);
+                    if (active) setSignedUrl(null);
+                });
         };
-    }, [document?.localUri, document?.remotePath, document?.uploadStatus]);
+
+        resolve();
+        return () => { active = false; };
+    }, [visible, document?.id, document?.localUri, document?.remotePath, document?.uploadStatus]);
 
     if (!document) return null;
 
@@ -304,9 +315,11 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
         if (!document) return;
 
         let uriToOpen = viewUri;
+
+        // If we still have no URI, try fetching a signed URL on demand
         if (!uriToOpen && document.remotePath) {
             try {
-                uriToOpen = await VaultStorageService.getSignedUrl(document.remotePath, 60);
+                uriToOpen = await VaultStorageService.getSignedUrl(document.remotePath, 3600);
                 setSignedUrl(uriToOpen);
             } catch (error) {
                 console.error('Error fetching signed URL for document:', error);
@@ -321,14 +334,12 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
         }
 
         // react-native-file-viewer requires local file paths.
-        // If the URL is remote (like a Supabase signed URL), we must download it to the cache first.
+        // If the URL is remote (like a Supabase signed URL), download to cache first.
         if (uriToOpen.startsWith('http')) {
             setIsDownloading(true);
             try {
-                const isImage = isImageUri(uriToOpen);
                 const extensionMatch = uriToOpen.match(/\.([a-zA-Z0-9]+)(\?|$)/);
-                let ext = extensionMatch ? extensionMatch[1] : (isImage ? 'jpg' : 'pdf');
-
+                const ext = extensionMatch ? extensionMatch[1] : 'jpg';
                 const localPath = `${RNFS.CachesDirectoryPath}/vault_temp_${document.id}_${Date.now()}.${ext}`;
 
                 await RNFS.downloadFile({
@@ -386,7 +397,7 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                                 <Text style={[styles.label, { color: colors.foreground }]}>Purchase Date</Text>
                                 <DateTimePicker
                                     value={purchaseDate}
-                                    onChange={setPurchaseDate}
+                                    onChange={handlePurchaseDateChange}
                                     placeholder="Select purchase date"
                                 />
                             </View>
@@ -394,7 +405,7 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                                 <Text style={[styles.label, { color: colors.foreground }]}>Warranty Valid Till</Text>
                                 <DateTimePicker
                                     value={warrantyTillDate}
-                                    onChange={setWarrantyTillDate}
+                                    onChange={handleWarrantyTillDateChange}
                                     placeholder="Select warranty expiry date"
                                 />
                             </View>
@@ -408,7 +419,7 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                                 <Text style={[styles.label, { color: colors.foreground }]}>Bill Date</Text>
                                 <DateTimePicker
                                     value={billDate}
-                                    onChange={setBillDate}
+                                    onChange={handleBillDateChange}
                                     placeholder="Select bill date"
                                 />
                             </View>
@@ -470,7 +481,7 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                                 <Text style={[styles.label, { color: colors.foreground }]}>Service Date</Text>
                                 <DateTimePicker
                                     value={serviceDate}
-                                    onChange={setServiceDate}
+                                    onChange={handleServiceDateChange}
                                     placeholder="Select service date"
                                 />
                             </View>
@@ -478,7 +489,7 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                                 <Text style={[styles.label, { color: colors.foreground }]}>Next Service Date</Text>
                                 <DateTimePicker
                                     value={nextServiceDate}
-                                    onChange={setNextServiceDate}
+                                    onChange={handleNextServiceDateChange}
                                     placeholder="Select next service date"
                                 />
                             </View>

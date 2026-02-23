@@ -57,41 +57,9 @@ export const DataCleanupService = {
         try {
             console.log('Clearing WatermelonDB database...');
 
-            await database.write(async () => {
-                // Get all collections
-                const collections = [
-                    'members',
-                    'events',
-                    'tasks',
-                    'grocery_items',
-                    'grocery_categories',
-                    'vault_documents',
-                    'recipes',
-                    'collections',
-                    'collection_recipes',
-                    'meals',
-                    'notes'
-                ];
-
-                // Delete all records from each collection
-                for (const collectionName of collections) {
-                    try {
-                        const collection = database.get(collectionName);
-                        const allRecords = await collection.query().fetch();
-
-                        if (allRecords.length > 0) {
-                            console.log(`Deleting ${allRecords.length} records from ${collectionName}...`);
-                            const deletePromises = allRecords.map(record => record.markAsDeleted());
-                            await Promise.all(deletePromises);
-                        }
-                    } catch (collectionError) {
-                        console.warn(`Collection ${collectionName} might not exist:`, collectionError);
-                        // Continue with other collections even if one fails
-                    }
-                }
-            });
-
-            // Reset the database to initial state
+            // Directly reset the database to initial state.
+            // WARNING: DO NOT use markAsDeleted() here or background sync
+            // will try to propagate deletions to Supabase, deleting cloud data!
             await database.write(async () => {
                 await database.unsafeResetDatabase();
             });

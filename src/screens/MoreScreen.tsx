@@ -17,6 +17,7 @@ import { AppIcon, AppIconName } from "../components/ui/AppIcon";
 import { useFamily, FamilyMember } from "../contexts/FamilyContext";
 import { PROFILE_COLORS } from "../constants/profileColors";
 import { useAuth } from "../contexts/AuthContext";
+import { MemberIcon } from "../components/ui";
 import Config from "react-native-config";
 
 const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
@@ -268,7 +269,7 @@ export const MoreScreen: React.FC = () => {
               style={[styles.topProfileButton, { backgroundColor: activeProfileColor + '20', borderRadius: radius.full }]}
               onPress={() => setShowProfileSwitcher(true)}
             >
-              <Text style={{ fontSize: 18 }}>{activeMember?.symbol || "👤"}</Text>
+              <MemberIcon symbol={activeMember?.symbol} size={18} />
             </Pressable>
           </View>
 
@@ -279,7 +280,7 @@ export const MoreScreen: React.FC = () => {
           >
             <View style={styles.avatarContainer}>
               <View style={[styles.avatar, { backgroundColor: activeProfileColor + '20', borderRadius: radius.lg }]}>
-                <Text style={{ fontSize: 32 }}>{activeMember?.symbol || "👨"}</Text>
+                <MemberIcon symbol={activeMember?.symbol} size={32} />
               </View>
             </View>
             <View style={styles.profileInfo}>
@@ -379,7 +380,7 @@ export const MoreScreen: React.FC = () => {
                     onPress={() => handleSwitchProfile(member)}
                   >
                     <View style={[styles.optionAvatar, { backgroundColor: memColor + '20', borderRadius: radius.full }]}>
-                      <Text style={{ fontSize: 24 }}>{member.symbol}</Text>
+                      <MemberIcon symbol={member.symbol} size={24} />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.optionName, { color: colors.foreground, fontWeight: isActive ? '700' : '500' }]}>

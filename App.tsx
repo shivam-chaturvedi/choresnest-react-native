@@ -11,10 +11,11 @@ import { FinanceProvider } from "./src/contexts/FinanceContext";
 import { MealPlanProvider } from "./src/contexts/MealPlanContext";
 import { SidebarProvider } from "./src/contexts/SidebarContext";
 import { RecipeProvider } from "./src/contexts/RecipeContext";
-import { ToastProvider } from "./src/components/ui/Toast";
+import { ToastProvider, useToast } from "./src/components/ui/Toast";
 import { ErrorBoundary } from "./src/components/ErrorBoundary";
 import { AppNavigator } from "./src/navigation/AppNavigator";
 import { ThemeProvider } from "./src/contexts/ThemeContext";
+import { AuthProvider } from "./src/contexts/AuthContext";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { databaseService } from "./src/services/DBService";
 import { database } from "./src/database";
@@ -137,33 +138,50 @@ const App = () => {
       <CountryProvider>
         <SafeAreaProvider>
           <ThemeProvider>
-            <FamilyProvider>
-              <FinanceProvider>
-                <RecipeProvider>
-                  <MealPlanProvider>
-                    <SidebarProvider>
-                      <ToastProvider>
-                        <StatusBar
-                          barStyle="dark-content"
-                          backgroundColor={theme.colors.background}
-                          animated
-                        />
-                        <SafeAreaView style={styles.appWrapper} edges={["top", "bottom", "left", "right"]}>
-                          <ErrorBoundary>
-                            <AppNavigator />
-                          </ErrorBoundary>
-                        </SafeAreaView>
-                      </ToastProvider>
-                    </SidebarProvider>
-                  </MealPlanProvider>
-                </RecipeProvider>
-              </FinanceProvider>
-            </FamilyProvider>
+            <ToastProvider>
+              <AuthWrapper>
+                <FamilyProvider>
+                  <FinanceProvider>
+                    <RecipeProvider>
+                      <MealPlanProvider>
+                        <SidebarProvider>
+                          <StatusBar
+                            barStyle="dark-content"
+                            backgroundColor={theme.colors.background}
+                            animated
+                          />
+                          <SafeAreaView style={styles.appWrapper} edges={["top", "bottom", "left", "right"]}>
+                            <ErrorBoundary>
+                              <AppNavigator />
+                            </ErrorBoundary>
+                          </SafeAreaView>
+                        </SidebarProvider>
+                      </MealPlanProvider>
+                    </RecipeProvider>
+                  </FinanceProvider>
+                </FamilyProvider>
+              </AuthWrapper>
+            </ToastProvider>
           </ThemeProvider>
         </SafeAreaProvider>
       </CountryProvider>
     </GestureHandlerRootView>
   );
+};
+
+const AuthWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { showToast } = useToast();
+
+  const handleAuthError = (title: string, message: string) => {
+    showToast({
+      type: 'error',
+      title,
+      description: message,
+      duration: 4000,
+    });
+  };
+
+  return <AuthProvider onError={handleAuthError}>{children}</AuthProvider>;
 };
 
 const styles = StyleSheet.create({

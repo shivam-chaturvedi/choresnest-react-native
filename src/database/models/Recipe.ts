@@ -25,6 +25,8 @@ export class Recipe extends Model {
     @json('tags_json', (json: any) => json) tags!: string[];
     @json('nutrition_json', (json: any) => json) nutrition?: any;
     @json('images_json', (json: any) => json) images?: string[];
+    @json('image_checksums', (json: any) => json ?? []) imageChecksums!: string[];
+    @text('audio_checksum') audioChecksum?: string | null;
     @json('local_image_uris', (json: any) => json ?? []) localImageUris!: any[];
     @json('remote_image_paths', (json: any) => json ?? []) remoteImagePaths?: string[];
     @text('remote_audio_path') remoteAudioPath?: string;

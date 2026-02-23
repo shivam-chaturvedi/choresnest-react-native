@@ -1,3 +1,5 @@
+import { database } from '../../database';
+import { Q } from '@nozbe/watermelondb';
 import { TableChangeSet } from './types';
 
 const FIELD_MAPPINGS: Record<string, Record<string, string>> = {
@@ -79,37 +81,60 @@ const safeWarn = (...args: any[]) => {
     console.warn(...args);
 };
 
-export const classifyPullRows = (table: string, rows: any[], lastPulledDate: Date): TableChangeSet => {
+export const classifyPullRows = async (table: string, rows: any[], lastPulledDate: Date): Promise<TableChangeSet> => {
     const created: any[] = [];
     const updated: any[] = [];
     const deleted: string[] = [];
     const uniqueRows = dedupeById(rows);
 
-    uniqueRows.forEach(row => {
-        if (!row?.id) {
-            return;
-        }
+    const validIncomingRows = uniqueRows.filter((row) => {
+        if (!row?.id) return false;
         if (row.deleted === true) {
             deleted.push(row.id);
-            return;
+            return false;
         }
 
         const createdAtValue = row.created_at ?? row.createdAt;
         if (!createdAtValue) {
             safeWarn(`Record ${row.id} in ${table} missing created_at, skipping`);
-            return;
+            return false;
         }
-
         const createdAt = new Date(createdAtValue);
         if (Number.isNaN(createdAt.getTime())) {
             safeWarn(`Record ${row.id} in ${table} has invalid created_at format, skipping`);
-            return;
+            return false;
         }
+        row.__parsedCreatedAt = createdAt;
+        return true;
+    });
 
-        if (createdAt > lastPulledDate) {
-            created.push(row);
-        } else {
+    if (validIncomingRows.length === 0) {
+        return { created, updated, deleted };
+    }
+
+    const incomingIds = validIncomingRows.map(r => r.id);
+    const existingIds = new Set<string>();
+
+    try {
+        const watermelonTable = database.get(table);
+        const existingRecords = await watermelonTable.query(Q.where('id', Q.oneOf(incomingIds))).fetch();
+        existingRecords.forEach(r => existingIds.add(r.id));
+    } catch (e) {
+        safeWarn(`classifyPullRows: Failed to query existing records for table ${table}. Error:`, e);
+    }
+
+    validIncomingRows.forEach(row => {
+        delete row.__parsedCreatedAt;
+
+        if (existingIds.has(row.id)) {
+            // Record ALREADY exists on this device → update it in place.
             updated.push(row);
+        } else {
+            // Record is NOT on this device yet, regardless of its created_at.
+            // It may have been written by another device before lastPulledAt
+            // (e.g. settings written during initial onboarding on another phone).
+            // Always put it in `created` so WatermelonDB can insert it.
+            created.push(row);
         }
     });
 
@@ -176,7 +201,8 @@ export const transformRecordForSupabase = (
     changedFields: string[] = [],
     serverSnapshot?: Record<string, any>
 ): { payload: Record<string, any>; changedFields: string[]; localVersion: number } => {
-    const payload = addProfileId ? { ...record, profile_id: userId } : { ...record };
+    const existingPid = record.profile_id || record.profileId;
+    const payload = addProfileId ? { ...record, profile_id: existingPid || userId } : { ...record };
     const { _changed, _status, ...cleaned } = payload;
     const transformed: any = { ...cleaned };
 
@@ -234,6 +260,22 @@ export const transformRecordForSupabase = (
 
     const localVersion = coerceVersion(transformed.version ?? record.version ?? 0);
     transformed.version = localVersion;
+
+    if (table === 'users') {
+        const {
+            is_guest,
+            has_completed_onboarding,
+            active_profile_id,
+            isGuest,
+            activeProfileId,
+            ...profilesPayload
+        } = transformed;
+        return {
+            payload: profilesPayload,
+            changedFields,
+            localVersion,
+        };
+    }
 
     return {
         payload: transformed,

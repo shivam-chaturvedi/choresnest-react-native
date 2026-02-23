@@ -319,7 +319,6 @@ export const pushTableChanges = async ({
 
     if (conflictCount > 0) {
         console.warn(`Skipped ${conflictCount} conflicted records for ${table}`);
-        errors += conflictCount;
     }
 
     return { success: errors === 0, errors };

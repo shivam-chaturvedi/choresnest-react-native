@@ -346,7 +346,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                             {Platform.OS === 'ios' && showDatePicker && (
                                 <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 }}>
                                     <Button size="sm" variant="ghost" onPress={() => setShowDatePicker(false)}>
-                                        Done
+                                        <Text>Done</Text>
                                     </Button>
                                 </View>
                             )}

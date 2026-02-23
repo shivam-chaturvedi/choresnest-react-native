@@ -8,8 +8,8 @@ import {
   ScrollView,
   Pressable,
   Platform,
-  SafeAreaView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { AppIcon, AppIconName } from "../ui/AppIcon";
 import { useTheme, useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
