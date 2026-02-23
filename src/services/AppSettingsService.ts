@@ -4,6 +4,7 @@ import { Q } from '@nozbe/watermelondb';
 import { EMPTY } from 'rxjs';
 import { SyncService } from './SyncService';
 import { supabase } from '../config/supabase';
+import { ProfileService } from './ProfileService';
 
 const OBSERVE_COLUMNS: string[] = ['updated_at', 'deleted'];
 
@@ -11,27 +12,14 @@ const syncAfterWrite = () => {
   void SyncService.requestSyncSoon();
 };
 
-const fetchActiveProfileId = async (): Promise<string | null> => {
-  try {
-    const { data: { session }, error } = await supabase.auth.getSession();
-    if (error) {
-      console.warn('AppSettingsService: Unable to resolve profile for settings write', error);
-    }
-    if (!session?.user) {
-      return null;
-    }
-    return session.user.id;
-  } catch (error) {
-    console.error('AppSettingsService: Failed to resolve profile for settings write', error);
-    return null;
-  }
-};
+const fetchActiveProfileId = ProfileService.getActiveProfileId;
 
 const resolveProfileId = async (profileId?: string | null): Promise<string | null> => {
   return profileId ?? await fetchActiveProfileId();
 };
 
 export const AppSettingsService = {
+  getActiveProfileId: fetchActiveProfileId,
   observeSettings: (profileId?: string | null) => {
     if (!profileId) {
       return EMPTY;
@@ -60,6 +48,24 @@ export const AppSettingsService = {
   hasCompletedOnboarding: async (profileId?: string | null): Promise<boolean> => {
     const settings = await AppSettingsService.getSettings(profileId);
     return settings?.hasCompletedOnboarding ?? false;
+  },
+
+  hasAnyProfileCompletedOnboarding: async (): Promise<boolean> => {
+    try {
+      const records = await database.get<AppSettings>('app_settings').query(
+        Q.where('has_completed_onboarding', true),
+        Q.where('deleted', false)
+      ).fetch();
+      return records.length > 0;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      // Silently ignore errors that happen when the database is being reset (e.g. on logout).
+      if (errorMessage.includes('underlyingAdapter') || errorMessage.includes('database is being reset')) {
+        return false;
+      }
+      console.error('AppSettingsService: Error checking global onboarding status:', error);
+      return false;
+    }
   },
 
   completeOnboarding: async (profileId?: string | null): Promise<void> => {

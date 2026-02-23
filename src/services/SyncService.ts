@@ -13,6 +13,7 @@ import { clearConflictHistory, getConflictHistory } from './sync/ConflictEngine'
 import { BackoffFailureType, ConflictRecord, TableChangeSet } from './sync/types';
 import { resetSyncCursorState } from './sync/SyncCursorStore';
 import { REALTIME_WATCH_TABLES } from './sync/realtime/RealtimeWatchList';
+import { ProfileService } from './ProfileService';
 
 const parseBooleanFlag = (value: string | undefined, defaultValue: boolean): boolean => {
     if (value === undefined || value === null) {
@@ -34,29 +35,57 @@ let hasLoggedSyncDisabledWarning = false;
 const MAX_CONSECUTIVE_FAILURES = 3;
 
 const SYNC_REQUEST_DELAY_MS = 1500;
-const PERIODIC_SYNC_INTERVAL_MS = 5 * 60 * 1000;
+const PERIODIC_SYNC_INTERVAL_MS = 1 * 60 * 1000; // 1 minute
 const LAST_SYNC_SUCCESS_KEY = 'LAST_SYNC_SUCCESS_AT';
 const MIN_SYNC_GAP_MS = 300;
 let lastSyncFinishedAt = 0;
 
 let realtimeChannel: RealtimeChannel | null = null;
+let lastRealtimeAttempt = 0;
+let realtimeRetryCount = 0;
+
+const getRealtimeBackoff = () => {
+    const base = Math.min(5000 * Math.pow(2, realtimeRetryCount), 60000);
+    const jitter = base * 0.3 * Math.random();
+    return base + jitter;
+};
+
 const ensureRealtimeSubscription = (triggerSync: () => void) => {
     if (realtimeChannel) {
         return;
     }
-    realtimeChannel = supabase.channel('realtime_sync');
-    const watchTables = REALTIME_WATCH_TABLES;
-    watchTables.forEach((table) => {
-        realtimeChannel?.on('postgres_changes', { event: '*', schema: 'public', table }, () => {
-            triggerSync();
+    const now = Date.now();
+    const delay = getRealtimeBackoff();
+    if (now - lastRealtimeAttempt < delay) {
+        return; // Prevent recursive or frequent websocket handshake spam
+    }
+    lastRealtimeAttempt = now;
+
+    try {
+        realtimeChannel = supabase.channel('realtime_sync');
+        const watchTables = REALTIME_WATCH_TABLES;
+        watchTables.forEach((table) => {
+            realtimeChannel?.on('postgres_changes', { event: '*', schema: 'public', table }, () => {
+                triggerSync();
+            });
         });
-    });
-    const subscribeResult = realtimeChannel.subscribe((status) => {
-        if (status !== 'SUBSCRIBED') {
-            console.warn('Realtime sync subscription failed with status:', status);
-            teardownRealtimeSubscription();
-        }
-    });
+        realtimeChannel.subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+                realtimeRetryCount = 0;
+            } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+                console.warn(`Realtime sync subscription failed with status: ${status}. Attempting backoff retry...`);
+                realtimeRetryCount++;
+                teardownRealtimeSubscription();
+            } else if (status === 'TIMED_OUT') {
+                console.warn('Realtime sync subscription timed out.');
+                teardownRealtimeSubscription();
+            }
+        });
+    } catch (e) {
+        console.error('Failed to initialize realtime channel:', e);
+        realtimeChannel = null;
+        realtimeRetryCount++;
+    }
 };
 
 const teardownRealtimeSubscription = () => {
@@ -67,7 +96,7 @@ const teardownRealtimeSubscription = () => {
     realtimeChannel = null;
 };
 
-type SyncMode = 'manual' | 'periodic' | 'debounced' | 'unknown';
+type SyncMode = 'manual' | 'periodic' | 'debounced' | 'force_full' | 'unknown';
 type SyncOptions = {
     mode?: SyncMode;
     bypassBackoff?: boolean;
@@ -87,7 +116,7 @@ let consecutiveFailures = 0;
 let syncSoonTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingSyncRequest = false;
 let periodicSyncTimer: ReturnType<typeof setInterval> | null = null;
-let lastSyncedUserId: string | null = null;
+let lastSyncedProfileId: string | null = null;
 
 const logSyncDisabledWarning = () => {
     if (hasLoggedSyncDisabledWarning) {
@@ -258,6 +287,11 @@ const applySyncTimeout = (callback: () => void): ReturnType<typeof setTimeout> =
     setTimeout(callback, 120000);
 
 const handleSyncError = (error: any): void => {
+    // Silently ignore concurrent sync errors as they are expected when multiple triggers fire
+    if (error?.message?.includes('Concurrent synchronization is not allowed')) {
+        return;
+    }
+
     console.error('✗ Sync failed:', error);
     if (error?.message) {
         console.error('Sync error details:', error.message);
@@ -317,6 +351,11 @@ export const SyncService = {
             syncSoonTimer = null;
             if (isSyncing) {
                 pendingSyncRequest = true;
+                return;
+            }
+            // Verify we aren't backing off before starting the debounced sync
+            if (!canPerformBackoff()) {
+                pendingSyncRequest = true; // Queue it for after backoff
                 return;
             }
             void this.sync(false, { mode: 'debounced' }).catch(err => {
@@ -385,12 +424,19 @@ export const SyncService = {
             console.log('No user logged in or auth error, skipping sync', authError);
             return;
         }
-        const userId = user.id;
+
+        const activeProfileId = await ProfileService.getActiveProfileId();
+        if (!activeProfileId) {
+            console.log('No active profile ID resolved via ProfileService, skipping sync');
+            return;
+        }
+
         ensureRealtimeSubscription(() => {
             void this.requestSyncSoon();
         });
-        if (lastSyncedUserId && lastSyncedUserId !== userId) {
-            console.log('User changed since last sync, resetting sync state and cursors.');
+
+        if (lastSyncedProfileId && lastSyncedProfileId !== activeProfileId) {
+            console.log('Active Profile changed since last sync, resetting sync state and cursors.');
             this.resetSyncState();
             pendingSyncRequest = false;
             if (syncSoonTimer) {
@@ -399,7 +445,7 @@ export const SyncService = {
             }
             await resetSyncCursors();
         }
-        lastSyncedUserId = userId;
+        lastSyncedProfileId = activeProfileId;
         if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
             console.log(`Sync paused due to ${consecutiveFailures} consecutive failures. Reset sync state to retry.`);
             return;
@@ -423,8 +469,8 @@ export const SyncService = {
                     return;
                 }
 
-                console.log(`🔄 Starting ${readOnly ? 'READ-ONLY' : 'FULL'} sync for user:`, user.id);
-                const orchestrator = new SyncOrchestrator(user.id);
+                console.log(`🔄 Starting ${readOnly ? 'READ-ONLY' : 'FULL'} sync for profile:`, activeProfileId);
+                const orchestrator = new SyncOrchestrator(activeProfileId);
                 await orchestrator.run(readOnly);
 
                 console.log(`✓ ${readOnly ? 'Read-only' : 'Full'} sync completed successfully`);
@@ -471,7 +517,7 @@ export const SyncService = {
                     console.warn('Duplicate create warning during sync; record already exists locally.');
                 }
                 if (context.isRlsError) {
-                    console.error('Row-level security prevented sync write; check profile scope and permissions.');
+                    console.warn('Row-level security prevented sync write (often expected during profile transitions).');
                     if (!readOnly) {
                         consecutiveFailures = Math.max(0, consecutiveFailures - 1);
                     }
@@ -502,9 +548,10 @@ export const SyncService = {
                 this._notifySyncStatus(false);
                 if (pendingSyncRequest) {
                     pendingSyncRequest = false;
+                    const nextSyncDelay = Math.max(MIN_SYNC_GAP_MS, getBackoffNextAttempt() - Date.now());
                     setTimeout(() => {
                         void this.requestSyncSoon();
-                    }, MIN_SYNC_GAP_MS);
+                    }, nextSyncDelay);
                 }
             }
         })();
@@ -545,12 +592,28 @@ export const SyncService = {
         lastSyncError = null;
         resetBackoff();
         clearConflictHistory();
-        lastSyncedUserId = null;
+        lastSyncedProfileId = null;
         void resetSyncCursorState();
         lastSyncAttemptAt = null;
         lastSyncSuccessAt = null;
         lastSyncErrorMessage = null;
         lastSyncMode = 'unknown';
+    },
+
+    async forceFullSync(): Promise<void> {
+        console.log('🔁 Force full sync requested — resetting cursor and re-syncing all data from Supabase');
+        consecutiveFailures = 0;
+        lastSyncError = null;
+        resetBackoff();
+        clearConflictHistory();
+        // Reset the persisted cursor so ALL rows are re-fetched, even those with old updated_at
+        await resetSyncCursorState();
+        lastSyncAttemptAt = null;
+        lastSyncSuccessAt = null;
+        lastSyncErrorMessage = null;
+        lastSyncMode = 'unknown';
+        // Immediately trigger a full sync
+        await this.sync(false, { mode: 'force_full' });
     },
 
     getLastSuccessfulSyncAt(): number | null {

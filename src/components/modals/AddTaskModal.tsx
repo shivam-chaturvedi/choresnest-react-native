@@ -15,6 +15,7 @@ import { PROFILE_COLORS } from "../../constants/profileColors";
 import { AppIcon, CustomDateTimePicker } from "../ui";
 import { useCountry } from "../../contexts/CountryContext";
 import { toZonedTime } from "date-fns-tz";
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 interface AddTaskModalProps {
   open: boolean;
@@ -31,7 +32,7 @@ interface TaskData {
   person: string;
 }
 
-const taskIcons = ["📝", "📞", "💊", "📧", "🏫", "🔧", "📦", "🧹", "🧺", "🍽️", "🛏️", "🐕"];
+const taskIcons = ["format-list-checks", "phone", "pill", "email", "school", "wrench", "package-variant", "broom", "basket", "silverware", "bed", "dog"];
 
 export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSave, taskToEdit }) => {
   const colors = useThemeColors();
@@ -50,7 +51,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
 
   const createDefaultTaskData = useCallback((): TaskData => ({
     name: "",
-    icon: "📝",
+    icon: "format-list-checks",
     priority: "medium",
     dueDate: buildLocalizedNow(),
     person: activeMember?.id || defaultMemberId || "1",
@@ -88,7 +89,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
 
       setFormData({
         name: taskToEdit.name || '',
-        icon: taskToEdit.icon || '📝',
+        icon: taskToEdit.icon || 'format-list-checks',
         priority: taskToEdit.priority || 'medium',
         dueDate: dueDate,
         person: taskToEdit.assignee || activeMember?.id || defaultMemberId || '1',
@@ -153,7 +154,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
                       formData.icon === icon && { backgroundColor: colors.success, transform: [{ scale: 1.1 }] },
                     ]}
                   >
-                    <Text style={styles.iconText}>{icon}</Text>
+                    <MaterialCommunityIcons name={icon} size={24} color={formData.icon === icon ? colors.background : colors.foreground} />
                   </Pressable>
                 ))}
               </View>
@@ -235,7 +236,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
                         isSelected && { backgroundColor: profileColor },
                       ]}
                     >
-                      <Text style={styles.assigneeEmoji}>{member.symbol}</Text>
+                      <MaterialCommunityIcons name={member.symbol || 'account'} size={20} color={isSelected ? '#fff' : colors.mutedForeground} style={{ marginRight: 6 }} />
                       <Text style={[
                         styles.assigneeText,
                         { color: colors.mutedForeground },

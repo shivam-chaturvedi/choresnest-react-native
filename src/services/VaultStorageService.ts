@@ -132,7 +132,6 @@ export const VaultStorageService = {
                 path: objectPath,
                 message: error.message ?? error.toString(),
                 status: error?.status,
-                hint: error?.hint,
                 error,
             });
             const uploadError = new Error(`Failed to upload vault document: ${error.message ?? error.toString()}`);
@@ -154,6 +153,51 @@ export const VaultStorageService = {
             throw new Error(`VaultStorageService: signed URL missing for ${filePath}`);
         }
         return data.signedUrl;
+    },
+
+    async downloadToLocalCache(remotePath: string, documentId: string): Promise<string> {
+        if (!remotePath || !documentId) {
+            throw new Error('VaultStorageService: remotePath and documentId are required for download');
+        }
+
+        // Get a signed URL (valid for 1 hour — enough time for the download)
+        const signedUrl = await this.getSignedUrl(remotePath, 3600);
+
+        // Infer file extension from the remote path
+        const pathSegments = remotePath.split('/');
+        const remoteFileName = pathSegments[pathSegments.length - 1] ?? 'file';
+
+        // Store in permanent DocumentDirectory (survives OS cache clears)
+        const dirPath = `${RNFS.DocumentDirectoryPath}/vault/${documentId}`;
+        const localFilePath = `${dirPath}/${remoteFileName}`;
+
+        // Ensure directory exists
+        const dirExists = await RNFS.exists(dirPath);
+        if (!dirExists) {
+            await RNFS.mkdir(dirPath);
+        }
+
+        // Check if we've already downloaded this file
+        const fileExists = await RNFS.exists(localFilePath);
+        if (fileExists) {
+            console.log(`VaultStorageService: File already cached at ${localFilePath}`);
+            return `file://${localFilePath}`;
+        }
+
+        console.log(`VaultStorageService: Downloading ${remotePath} -> ${localFilePath}`);
+        const result = await RNFS.downloadFile({
+            fromUrl: signedUrl,
+            toFile: localFilePath,
+        }).promise;
+
+        if (result.statusCode !== 200) {
+            // Clean up failed download
+            try { await RNFS.unlink(localFilePath); } catch (_) { }
+            throw new Error(`VaultStorageService: Download failed with status ${result.statusCode}`);
+        }
+
+        console.log(`VaultStorageService: Download complete (${result.bytesWritten} bytes)`);
+        return `file://${localFilePath}`;
     },
 
     async deleteObject(filePath: string): Promise<void> {

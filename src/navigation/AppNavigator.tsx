@@ -28,6 +28,10 @@ import { AppState, AppStateStatus } from "react-native";
 import { SyncIndicator } from "../components/SyncIndicator";
 import { AppSettingsService } from "../services/AppSettingsService";
 import Member from "../database/models/Member";
+import { ProfileBootstrapService } from "../services/ProfileBootstrapService";
+import { ProfileService } from "../services/ProfileService";
+import { supabase } from "../config/supabase";
+import { LocalCacheService } from "../services/LocalCacheService";
 
 
 
@@ -37,16 +41,6 @@ const Stack = createNativeStackNavigator();
 export const AppNavigator = () => {
   const { isDark } = useTheme();
   const [navState, setNavState] = React.useState<any>();
-  const { showToast } = useToast();
-
-  const handleAuthError = React.useCallback((title: string, message: string) => {
-    showToast({
-      type: 'error',
-      title,
-      description: message,
-      duration: 4000,
-    });
-  }, [showToast]);
 
   // Construct React Navigation compatible theme
   const navigationTheme = {
@@ -63,19 +57,17 @@ export const AppNavigator = () => {
   };
 
   return (
-    <AuthProvider onError={handleAuthError}>
-      <AppLockProvider>
-        <NotesProvider>
-          <NavigationContainer
-            theme={navigationTheme}
-            initialState={navState}
-            onStateChange={(state) => setNavState(state)}
-          >
-            <AppNavigatorInner />
-          </NavigationContainer>
-        </NotesProvider>
-      </AppLockProvider>
-    </AuthProvider>
+    <AppLockProvider>
+      <NotesProvider>
+        <NavigationContainer
+          theme={navigationTheme}
+          initialState={navState}
+          onStateChange={(state) => setNavState(state)}
+        >
+          <AppNavigatorInner />
+        </NavigationContainer>
+      </NotesProvider>
+    </AppLockProvider>
   );
 };
 
@@ -86,6 +78,8 @@ const AppNavigatorInner = () => {
   const [hasMembersInDB, setHasMembersInDB] = React.useState<boolean | null>(null);
   const [hasLocalOnboarding, setHasLocalOnboarding] = React.useState<boolean | null>(null);
   const [localOnboardingLoaded, setLocalOnboardingLoaded] = React.useState(false);
+  const [isBootChecking, setIsBootChecking] = React.useState(true);
+  const [isCacheReady, setIsCacheReady] = React.useState(false);
 
   // Auto-sync hook - triggers sync on data changes (runs in background)
   // Hook checks isGuest internally, so it's safe to call always
@@ -93,19 +87,53 @@ const AppNavigatorInner = () => {
 
   // Timeout to hide splash screen after maximum wait time (don't wait forever)
   React.useEffect(() => {
-    const splashTimeout = setTimeout(() => {
-      if (showSplash) {
-        console.log('Splash screen timeout - hiding splash');
+    console.log('AppNavigator: Render State:', {
+      isLoading,
+      isAuthenticated,
+      isGuest,
+      hasMembersInDB,
+      localOnboardingLoaded,
+      hasLocalOnboarding,
+      showSplash
+    });
+
+    const rescueTimeout = setTimeout(() => {
+      const needsRescue = showSplash || !localOnboardingLoaded || isBootChecking || !isCacheReady || (isAuthenticated && hasMembersInDB === null);
+      if (needsRescue) {
+        console.warn('AppNavigator: RESCUE TIMEOUT TRIGGERED - Forcing boot sequence', {
+          showSplash, localOnboardingLoaded, isBootChecking, isCacheReady, hasMembersInDB
+        });
         setShowSplash(false);
-        // If members check hasn't completed, assume false
+        setLocalOnboardingLoaded(true);
+        setIsBootChecking(false);
+        setIsCacheReady(true);
         if (hasMembersInDB === null) {
           setHasMembersInDB(false);
         }
       }
-    }, 3000); // Maximum 3 seconds for splash
+    }, 6000); // 6 seconds hard limit for splash/init
 
-    return () => clearTimeout(splashTimeout);
-  }, [showSplash, hasMembersInDB]);
+    return () => clearTimeout(rescueTimeout);
+  }, [showSplash, isLoading, isAuthenticated, isGuest, hasMembersInDB, localOnboardingLoaded, hasLocalOnboarding, isBootChecking, isCacheReady]);
+
+  // Sync isBootChecking with isLoading, but keep it true until checks settle
+  React.useEffect(() => {
+    if (isLoading) {
+      console.log("AppNavigator: Auth loading detected, locking boot sequence");
+      setIsBootChecking(true);
+    }
+  }, [isLoading]);
+
+  // Ensure LocalCache is ready
+  React.useEffect(() => {
+    const prepareCache = async () => {
+      console.log("AppNavigator: LocalCacheService preparation starting...");
+      await LocalCacheService.ensureReady();
+      console.log("AppNavigator: LocalCacheService is now ready");
+      setIsCacheReady(true);
+    };
+    prepareCache();
+  }, []);
 
   // Comprehensive sync setup: app restart, foreground, network changes
   React.useEffect(() => {
@@ -171,15 +199,15 @@ const AppNavigatorInner = () => {
 
     appStateSubscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active' && appHasStarted) {
-        console.log('App foreground: Doing read-only sync');
-        void triggerSync(true);
+        console.log('App foreground: Doing full rewrite sync to catch up on offline items');
+        void triggerSync(false);
       }
     });
 
     netInfoUnsubscribe = NetInfo.addEventListener(state => {
       if (state.isConnected && appHasStarted) {
-        console.log('Network connected: Doing read-only sync');
-        void triggerSync(true);
+        console.log('Network connected: Doing full rewrite sync to push offline items');
+        void triggerSync(false);
       }
     });
 
@@ -214,12 +242,56 @@ const AppNavigatorInner = () => {
     let cancelled = false;
 
     const loadLocalOnboarding = async () => {
+      if (isLoading) return; // Wait for auth to settle
+
       try {
-        const localComplete = await AppSettingsService.hasCompletedOnboarding();
+        console.log("AppNavigator: loadLocalOnboarding starting...");
+        const globalOnboardingComplete = await AppSettingsService.hasAnyProfileCompletedOnboarding();
         if (cancelled) return;
-        setHasLocalOnboarding(localComplete);
-        if (localComplete) {
-          setHasMembersInDB(true);
+
+        if (globalOnboardingComplete) {
+          // Local DB already has onboarding flag — fast path
+          setHasLocalOnboarding(true);
+          console.log('AppNavigator: Onboarding check result: true (local)');
+        } else if (isAuthenticated && !isGuest && user?.id) {
+          // Local DB says no onboarding, but maybe it was just wiped after logout.
+          // Check Supabase directly: if a family_name setting exists for this profile,
+          // the user has already been through setup.
+          console.log('AppNavigator: Local onboarding not found. Checking Supabase for returning user...');
+          try {
+            const remoteCheckPromise = supabase
+              .from('settings')
+              .select('id')
+              .eq('profile_id', user.id)
+              .eq('key', 'family_name')
+              .eq('deleted', false)
+              .maybeSingle();
+
+            const timeoutPromise = new Promise<null>((resolve) =>
+              setTimeout(() => resolve(null), 4000)
+            );
+
+            const result = await Promise.race([remoteCheckPromise, timeoutPromise]);
+            if (cancelled) return;
+
+            const hasRemoteFamilyName = result && 'data' in result && result.data !== null;
+            if (hasRemoteFamilyName) {
+              console.log('AppNavigator: Remote family_name found — returning user, skipping setup screen.');
+              setHasLocalOnboarding(true);
+              // Silently persist the flag locally so next boot is instant
+              void AppSettingsService.completeOnboarding(user.id);
+            } else {
+              console.log('AppNavigator: No remote family_name found — new user, showing setup screen.');
+              setHasLocalOnboarding(false);
+            }
+          } catch (remoteErr) {
+            console.warn('AppNavigator: Remote onboarding check failed, defaulting to show setup:', remoteErr);
+            if (!cancelled) setHasLocalOnboarding(false);
+          }
+        } else {
+          // Guest or unauthenticated — rely solely on local data
+          setHasLocalOnboarding(false);
+          console.log('AppNavigator: Onboarding check result: false (guest/unauth, no remote check)');
         }
       } catch (error) {
         console.error('Failed to read local onboarding flag:', error);
@@ -238,28 +310,63 @@ const AppNavigatorInner = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isAuthenticated, isGuest, isLoading, user?.id]);
 
   React.useEffect(() => {
     let cancelled = false;
 
     const loadLocalMembers = async () => {
-      if (!isAuthenticated || isGuest || isLoading) {
-        if (!cancelled) {
-          setHasMembersInDB(false);
-        }
+      if (!isAuthenticated || isLoading) {
+        if (!cancelled) setHasMembersInDB(false);
         return;
       }
 
       try {
+        console.log("AppNavigator: loadLocalMembers starting (Fast Path)...");
+
+        // 1. FAST PATH: Check if we already have members locally
+        // If we do, we can proceed to the app screens immediately without waiting for remote sync
         const membersCollection = database.collections.get<Member>('members');
         const localMembers = await membersCollection.query().fetch();
-        if (!cancelled) {
-          setHasMembersInDB(localMembers.length > 0);
+        const existsLocally = localMembers.length > 0;
+
+        if (existsLocally && !cancelled) {
+          console.log(`AppNavigator: Found ${localMembers.length} members locally. Proceding...`);
+          setHasMembersInDB(true);
+          // We don't return here! We still want to try bootstrapping in the background
+          // to catch any remote changes, but we've already satisfied the boot condition.
+        }
+
+        // 2. REMOTE CHECK (with timeout)
+        const pid = await ProfileService.getActiveProfileId();
+        if (pid && !isGuest) {
+          try {
+            console.log("AppNavigator: Attempting profile bootstrap with timeout...");
+            const bootstrapPromise = ProfileBootstrapService.bootstrap(pid);
+            const timeoutPromise = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Bootstrap Timeout')), 4000)
+            );
+
+            const bootstrapResult = await Promise.race([bootstrapPromise, timeoutPromise]) as any;
+
+            if (!cancelled && bootstrapResult.memberCount > 0) {
+              console.log(`AppNavigator: Bootstrap succeeded with ${bootstrapResult.memberCount} members`);
+              setHasMembersInDB(true);
+              return;
+            }
+          } catch (e) {
+            console.warn('AppNavigator: Bootstrap skipped or timed out', e);
+          }
+        }
+
+        // 3. FINAL DECISION: If we still haven't set it, use the local exists check
+        if (!cancelled && hasMembersInDB === null) {
+          console.log(`AppNavigator: Setting final members state from local check: ${existsLocally}`);
+          setHasMembersInDB(existsLocally);
         }
       } catch (error) {
-        console.error('Failed to read local members:', error);
-        if (!cancelled) {
+        console.error('AppNavigator: Error loading global members:', error);
+        if (!cancelled && hasMembersInDB === null) {
           setHasMembersInDB(false);
         }
       }
@@ -272,6 +379,28 @@ const AppNavigatorInner = () => {
     };
   }, [isAuthenticated, isGuest, isLoading]);
 
+  // Release isBootChecking once all checks are settled and auth is not loading
+  React.useEffect(() => {
+    const allChecksDone = !isLoading && localOnboardingLoaded && hasMembersInDB !== null && isCacheReady;
+    if (allChecksDone && isBootChecking) {
+      console.log("AppNavigator: All boot checks settled, releasing lock", {
+        isAuthenticated,
+        isGuest,
+        hasMembersInDB,
+        hasLocalOnboarding
+      });
+      setIsBootChecking(false);
+      setShowSplash(false);
+    } else if (isBootChecking) {
+      console.log("AppNavigator: Still waiting for checks:", {
+        isLoading,
+        localOnboardingLoaded,
+        hasMembersInDB_is_null: hasMembersInDB === null,
+        isCacheReady
+      });
+    }
+  }, [isLoading, localOnboardingLoaded, hasMembersInDB, isCacheReady, isBootChecking, isAuthenticated, isGuest, hasLocalOnboarding]);
+
   const shouldShowInitialSetup = !hasMembersInDB && hasLocalOnboarding !== true;
 
   // Only show splash on initial load, not during auth operations
@@ -280,11 +409,19 @@ const AppNavigatorInner = () => {
     showSplash ||
     !localOnboardingLoaded ||
     isLoading ||
-    (isAuthenticated && !isLoading && hasMembersInDB === null)
+    isBootChecking ||
+    !isCacheReady ||
+    (isAuthenticated && hasMembersInDB === null)
   ) {
+    if (!showSplash && !isLoading && isBootChecking) {
+      // Optional: Add a transition spinner if it takes too long between splash and app
+    }
     return (
       <SplashScreen
-        onContinue={() => setShowSplash(false)}
+        onContinue={() => {
+          console.log("AppNavigator: Splash onContinue pressed - manual override");
+          setShowSplash(false);
+        }}
       />
     );
   }

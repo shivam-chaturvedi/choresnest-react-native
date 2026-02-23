@@ -35,6 +35,25 @@ const normalizeUpdatedAtValue = (value: any): string => {
   return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString();
 };
 
+const parseUpdatedAtMs = (value: any): number => {
+  if (value === undefined || value === null) {
+    return 0;
+  }
+  if (typeof value === 'number') {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+  }
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  if (value instanceof Date) {
+    const time = value.getTime();
+    return Number.isNaN(time) ? 0 : time;
+  }
+  return 0;
+};
+
 const getRecordId = (row: unknown): string | undefined => {
   if (!row || typeof row !== 'object') {
     return undefined;
@@ -85,6 +104,7 @@ export const pullTableChangesWithCursor = async (opts: PullCursorEngineOptions):
   const defaultCursorId = `${targetTable}-init`;
   let cursor: PullCursor = opts.lastCursor ?? { updatedAt: normalizedLastPulled, id: defaultCursorId };
   let totalFetched = 0;
+  let latestUpdatedAtMs = 0;
 
   while (totalFetched < maxRecords) {
     let query: any = supabase.from(targetTable).select(selectFields);
@@ -105,6 +125,14 @@ export const pullTableChangesWithCursor = async (opts: PullCursorEngineOptions):
 
     rows.push(...data);
     totalFetched += data.length;
+
+    data.forEach(row => {
+      const rawUpdatedAt = row.updated_at ?? row.updatedAt;
+      const updatedAtMs = parseUpdatedAtMs(rawUpdatedAt);
+      if (updatedAtMs > latestUpdatedAtMs) {
+        latestUpdatedAtMs = updatedAtMs;
+      }
+    });
 
     const lastRow = data[data.length - 1];
     const lastUpdatedAt = normalizeUpdatedAtValue(lastRow.updated_at ?? lastRow.updatedAt);
@@ -134,5 +162,9 @@ export const pullTableChangesWithCursor = async (opts: PullCursorEngineOptions):
   }
 
   const lastPulledDate = new Date(normalizedLastPulled);
-  return classifyPullRows(table, rows, lastPulledDate);
+  const changeSet = await classifyPullRows(table, rows, lastPulledDate);
+  return {
+    ...changeSet,
+    latestUpdatedAt: latestUpdatedAtMs,
+  };
 };

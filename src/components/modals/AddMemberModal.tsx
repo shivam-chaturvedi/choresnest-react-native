@@ -13,6 +13,7 @@ import { Check } from "lucide-react-native";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { useFamily } from "../../contexts/FamilyContext";
 import { PROFILE_COLORS } from "../../constants/profileColors";
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 interface AddMemberModalProps {
   open: boolean;
@@ -20,7 +21,7 @@ interface AddMemberModalProps {
   memberToEdit?: any; // FamilyMember
 }
 
-const AVATARS = ["👤", "👩", "👨", "👶", "👧", "👦", "🧒", "👴", "👵", "👱", "👱‍♀️", "🧔", "👩‍🦰", "👨‍🦱", "👨‍🦳", "👩‍🦲"];
+const AVATARS = ["account", "face-woman", "face-man-profile", "baby-face-outline", "human-child", "human-male", "human-female", "face-man-shimmer", "glasses", "head-lightbulb", "ninja", "robot-outline", "cat", "dog", "alien"];
 
 export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, memberToEdit }) => {
   const colors = useThemeColors();
@@ -60,6 +61,17 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, m
         return;
       }
 
+      const normalizedName = name.trim().toLowerCase();
+      const duplicate = members.some((m: any) =>
+        m.name.trim().toLowerCase() === normalizedName &&
+        m.id !== memberToEdit?.id
+      );
+
+      if (duplicate) {
+        setError("A member with this name already exists.");
+        return;
+      }
+
       if (memberToEdit) {
         await updateMember(memberToEdit.id, {
           name: name.trim(),
@@ -84,6 +96,17 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, m
 
   const handleDelete = () => {
     if (!memberToEdit) return;
+
+    // Prevent removing the last member — every profile must have at least one.
+    if (members.length <= 1) {
+      Alert.alert(
+        "Cannot Remove Member",
+        "At least one member is required. You cannot delete the only remaining member of this profile.",
+        [{ text: "OK" }]
+      );
+      return;
+    }
+
     Alert.alert(
       "Delete Member",
       `Are you sure you want to remove ${memberToEdit.name}? This will remove their tasks, events, documents, and list items.`,
@@ -97,9 +120,21 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, m
               setIsDeleting(true);
               await deleteMemberCascade(memberToEdit.id);
               onClose();
-            } catch (error) {
-              console.error("Failed to delete member:", error);
-              Alert.alert("Error", "Unable to delete member right now.");
+            } catch (error: any) {
+              // WatermelonDB throws "Record not found" when the member was
+              // already deleted (e.g. DB was reset during guest mode). In that
+              // case the member is already gone, so just close the modal.
+              const isStaleRecord =
+                error?.message?.includes('not found') ||
+                error?.message?.includes('Record') ||
+                error?.name === 'DiagnosticError';
+              if (isStaleRecord) {
+                console.warn('AddMemberModal: Member record was already deleted, closing modal cleanly.');
+                onClose();
+              } else {
+                console.error("Failed to delete member:", error);
+                Alert.alert("Error", "Unable to delete member right now.");
+              }
             } finally {
               setIsDeleting(false);
             }
@@ -159,7 +194,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, m
                     }
                   ]}
                 >
-                  <Text style={{ fontSize: 24 }}>{avatar}</Text>
+                  <MaterialCommunityIcons name={avatar} size={28} color={isSelected ? colors.background : colors.foreground} />
                 </Pressable>
               )
             })}

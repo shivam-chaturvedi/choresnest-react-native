@@ -7,6 +7,7 @@ import {
     Pressable,
     ScrollView,
     Alert,
+    TouchableOpacity,
 } from "react-native";
 import { theme } from "../theme";
 import { useThemeColors } from "../contexts/ThemeContext";
@@ -14,6 +15,8 @@ import { useFamily } from "../contexts/FamilyContext";
 import { PROFILE_COLORS } from "../constants/profileColors";
 import { AppIcon } from "../components/ui/AppIcon";
 import { AppSettingsService } from "../services/AppSettingsService";
+import { MemberIcon } from "../components/ui";
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 interface InitialSetupScreenProps {
     onComplete: () => void;
@@ -22,12 +25,12 @@ interface InitialSetupScreenProps {
 export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComplete }) => {
     const colors = useThemeColors();
     const radius = theme.radius;
-    const { setFamilyName, addMember, setActiveMember, members, familyName } = useFamily();
+    const { setFamilyName, addMember, updateMember, setActiveMember, members, familyName } = useFamily();
 
     const [familyNameInput, setFamilyNameInput] = useState("Family");
     const [memberName, setMemberName] = useState("Admin");
     const [selectedColor, setSelectedColor] = useState(PROFILE_COLORS[0]);
-    const [selectedEmoji, setSelectedEmoji] = useState("👤");
+    const [selectedEmoji, setSelectedEmoji] = useState("account");
     const [familyNameTouched, setFamilyNameTouched] = useState(false);
 
     useEffect(() => {
@@ -58,7 +61,7 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
         }
     };
 
-    const emojis = ["👤", "👨", "👩", "👦", "👧", "🧑", "👶", "👴", "👵", "🧔", "👨‍🦱", "👩‍🦱"];
+    const icons = ["account", "face-woman", "face-man-profile", "baby-face-outline", "human-child", "human-male", "human-female", "face-man-shimmer", "glasses", "head-lightbulb", "ninja", "robot-outline"];
 
     const handleComplete = async () => {
         try {
@@ -73,31 +76,33 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
                 return;
             }
 
-            // Set family name
+            // Set family name first — this is now async and will resolve the
+            // auth session internally even if profileId state hasn't landed yet.
             await setFamilyName(familyNameInput.trim());
 
-            // Add first member (main user)
-            await addMember({
-                name: memberName.trim(),
-                symbol: selectedEmoji,
-                color: selectedColor.value,
-                isActive: true, // Set as active by default
-            });
+            // Add or Update first member (main user) — prevents duplicate profiles
+            // when the setup screen is visited more than once (e.g. in guest mode).
+            if (members.length > 0) {
+                const primaryMember = members[0];
+                await updateMember(primaryMember.id, {
+                    name: memberName.trim(),
+                    symbol: selectedEmoji,
+                    color: selectedColor.value,
+                    isActive: true,
+                });
+                await setActiveMember({ ...primaryMember, isActive: true });
+            } else {
+                await addMember({
+                    name: memberName.trim(),
+                    symbol: selectedEmoji,
+                    color: selectedColor.value,
+                    isActive: true,
+                });
+            }
 
-            // Wait a bit for the member to be created
-            setTimeout(async () => {
-                // Get the newly created member and set as active
-                const newMembers = members;
-                if (newMembers && newMembers.length > 0) {
-                    const firstMember = newMembers[0];
-                    await setActiveMember(firstMember);
-                }
-
-                await AppSettingsService.completeOnboarding();
-
-                // Complete setup
-                onComplete();
-            }, 500);
+            // Mark onboarding complete and navigate away
+            await AppSettingsService.completeOnboarding();
+            onComplete();
 
         } catch (error) {
             console.error("Error completing setup:", error);
@@ -129,7 +134,7 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
                     <Text style={[styles.sectionLabel, { color: colors.foreground }]}>
                         Family Name
                     </Text>
-                <TextInput
+                    <TextInput
                         style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderColor: colors.border, borderRadius: radius.md }]}
                         placeholder="e.g., The Smiths, Our Family"
                         placeholderTextColor={colors.mutedForeground}
@@ -158,22 +163,20 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
                         autoCapitalize="words"
                     />
 
-                    {/* Emoji Selection */}
-                    <Text style={[styles.label, { color: colors.foreground }]}>
-                        Choose Icon
-                    </Text>
+                    {/* Icon Selection */}
+                    <Text style={[styles.label, { color: colors.foreground }]}>Choose a Profile Icon</Text>
                     <View style={styles.emojiGrid}>
-                        {emojis.map((emoji) => (
-                            <Pressable
-                                key={emoji}
+                        {icons.map((icon) => (
+                            <TouchableOpacity
+                                key={icon}
                                 style={[
                                     styles.emojiButton,
-                                    { backgroundColor: selectedEmoji === emoji ? colors.primary + '20' : colors.muted, borderColor: selectedEmoji === emoji ? colors.primary : colors.border, borderRadius: radius.md }
+                                    { backgroundColor: selectedEmoji === icon ? colors.primary + '20' : colors.muted, borderColor: selectedEmoji === icon ? colors.primary : colors.border, borderRadius: radius.md }
                                 ]}
-                                onPress={() => setSelectedEmoji(emoji)}
+                                onPress={() => setSelectedEmoji(icon)}
                             >
-                                <Text style={styles.emojiText}>{emoji}</Text>
-                            </Pressable>
+                                <MaterialCommunityIcons name={icon} size={28} color={selectedEmoji === icon ? colors.primary : colors.foreground} />
+                            </TouchableOpacity>
                         ))}
                     </View>
 
@@ -202,7 +205,7 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
                     {/* Preview */}
                     <View style={[styles.preview, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
                         <View style={[styles.previewAvatar, { backgroundColor: selectedColor.hex, borderRadius: radius.md }]}>
-                            <Text style={styles.previewEmoji}>{selectedEmoji}</Text>
+                            <MemberIcon symbol={selectedEmoji} size={32} color={colors.primary} />
                         </View>
                         <Text style={[styles.previewName, { color: colors.foreground }]}>
                             {memberName || "Your Name"}

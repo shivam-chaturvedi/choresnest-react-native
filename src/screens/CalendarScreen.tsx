@@ -8,6 +8,7 @@ import {
   Platform,
   Animated,
   TextInput,
+  InteractionManager,
 } from "react-native";
 import { PanGestureHandler, State, PanGestureHandlerStateChangeEvent, ScrollView } from "react-native-gesture-handler";
 import { AppLayout } from "../components/layout/AppLayout";
@@ -16,6 +17,7 @@ import { GlobalSearch } from "../components/search/GlobalSearch";
 import { useFamily, CalendarEvent, Task } from "../contexts/FamilyContext";
 import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { AppIcon } from "../components/ui/AppIcon";
+import { MemberIcon } from "../components/ui/MemberIcon";
 import { PROFILE_COLORS } from "../constants/profileColors";
 import { useSidebar } from "../contexts/SidebarContext";
 import { useCountry } from "../contexts/CountryContext";
@@ -27,7 +29,7 @@ const hapticOptions = {
 };
 import { addMonths, subMonths, addDays, subDays, startOfWeek, endOfWeek, isSameMonth, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval, addYears, startOfDay, isAfter, isWithinInterval } from "date-fns";
 import { Day } from "date-fns";
-import { getEventsForDate } from "../utils/EventUtils";
+import { getEventsForDate, CalendarEventWithMeta } from "../utils/EventUtils";
 import { parseDateTimeInZone, safeFormatInTimeZone, safeTimeZone } from "../utils/SafeDateUtils";
 import { toZonedTime } from "date-fns-tz";
 import { useObservableValue } from "../hooks/useObservableValue";
@@ -226,16 +228,16 @@ const DraggableEvent: React.FC<{
         // In the new Week view (Single Day with Header), we disable dragging between days
         // because only one day is rendered at a time in the body.
 
-          if (activeView === "Week") {
-            // Allow easier dragging between days (threshold: 1/3 screen width)
-            const colShift = Math.round(deltaX / (Dimensions.get('window').width / 3));
-            if (colShift !== 0) {
-              const eventTimeZone = event.timeZone || timeZone;
-              const currentZoned = parseDateTimeInZone(event.date, eventTimeZone, event.time) || new Date();
-              currentZoned.setDate(currentZoned.getDate() + colShift);
-              newDate = safeFormatInTimeZone(currentZoned, eventTimeZone, "yyyy-MM-dd");
-            }
+        if (activeView === "Week") {
+          // Allow easier dragging between days (threshold: 1/3 screen width)
+          const colShift = Math.round(deltaX / (Dimensions.get('window').width / 3));
+          if (colShift !== 0) {
+            const eventTimeZone = event.timeZone || timeZone;
+            const currentZoned = parseDateTimeInZone(event.date, eventTimeZone, event.time) || new Date();
+            currentZoned.setDate(currentZoned.getDate() + colShift);
+            newDate = safeFormatInTimeZone(currentZoned, eventTimeZone, "yyyy-MM-dd");
           }
+        }
 
         // Calculate new start time in minutes
         const totalMinutes = (totalY / HOUR_HEIGHT) * 60;
@@ -375,7 +377,7 @@ const DraggableEvent: React.FC<{
               <Text style={{ fontSize: 10, fontWeight: '900', color: event.type === 'task' ? '#ef4444' : '#8b5cf6' }}>
                 {event.type === 'task' ? 'TASK' : 'EVENT'}
               </Text>
-              <Text style={{ fontSize: 10 }}>{event.icon}</Text>
+              <MemberIcon symbol={event.icon} size={12} color={colors.foreground} />
               <Text numberOfLines={1} style={{ fontSize: 10, fontWeight: '700', color: colors.foreground, flex: 1 }}>
                 {event.title}
               </Text>
@@ -417,7 +419,7 @@ const DraggableEvent: React.FC<{
 
 export const CalendarScreen: React.FC = () => {
   const {
-    members, activeMember, addEvent, updateEvent, updateTask,
+    members, activeMember, addEvent, updateEvent, updateTask, profileId,
   } = useFamily();
   const { openSidebar } = useSidebar();
   const colors = useThemeColors();
@@ -428,36 +430,57 @@ export const CalendarScreen: React.FC = () => {
     () => ({ weekStartsOn: (currentCountry.code === 'US' ? 0 : 1) as Day }),
     [currentCountry.code]
   );
-  const observeEvents = useCallback(() => TaskService.observeEvents(), []);
+  const observeEvents = useCallback(() => TaskService.observeEvents(profileId), [profileId]);
   const rawEvents = useObservableValue(
     observeEvents,
     [],
     [] as TaskServiceEventRecord
   );
-  const observeTasks = useCallback(() => TaskService.observeTasks(), []);
+  const observeTasks = useCallback(() => TaskService.observeTasks(profileId), [profileId]);
   const rawTasks = useObservableValue(
     observeTasks,
     [],
     [] as TaskServiceTaskRecord
   );
-  const events = useMemo<CalendarEvent[]>(() => {
+  const events = useMemo<CalendarEventWithMeta[]>(() => {
     const fallbackZone = timeZone;
-    return rawEvents.reduce<CalendarEvent[]>((acc, record) => {
+    return rawEvents.reduce<CalendarEventWithMeta[]>((acc, record) => {
       const date = record.dateString || "";
       if (!date) return acc;
       const sanitizedTimeZone = safeTimeZone((record as any).timeZone, fallbackZone);
       const sanitizedTime = normalizeTimeString((record as any).time);
-      const parsed = parseDateTimeInZone(
+      const parsedStart = parseDateTimeInZone(
         date,
         sanitizedTimeZone,
         sanitizedTime === "All Day" ? undefined : sanitizedTime
       );
-      if (!parsed) return acc;
+      if (!parsedStart) return acc;
+
+      const rawEndDate = (record as any).endDate;
+      const rawEndTime = (record as any).endTime;
+      const sanitizedEndTime = rawEndTime ? normalizeTimeString(rawEndTime) : undefined;
+      const endTimeArg =
+        sanitizedEndTime && sanitizedEndTime !== "All Day"
+          ? sanitizedEndTime
+          : sanitizedTime !== "All Day"
+            ? sanitizedTime
+            : undefined;
+      const parsedEnd = rawEndDate
+        ? parseDateTimeInZone(rawEndDate, sanitizedTimeZone, endTimeArg) || parsedStart
+        : parsedStart;
+      const parsedRecurrenceEnd = (record as any).recurrenceEndDate
+        ? parseDateTimeInZone((record as any).recurrenceEndDate, sanitizedTimeZone)
+        : null;
+
       acc.push({
         ...record,
         date,
         time: sanitizedTime,
+        endTime: sanitizedEndTime ?? (record as any).endTime,
         timeZone: sanitizedTimeZone,
+        __cachedStart: parsedStart,
+        __cachedEnd: parsedEnd,
+        __cachedRecurrenceEnd: parsedRecurrenceEnd,
       });
       return acc;
     }, []);
@@ -465,7 +488,7 @@ export const CalendarScreen: React.FC = () => {
   const tasks = useMemo<Task[]>(() => {
     const fallbackZone = timeZone;
     return rawTasks.reduce<Task[]>((acc, record) => {
-      const date = (record as any).dateString || record.date || "";
+      const date = (record as any).dateString || "";
       if (!date) return acc;
       if (!parseDateTimeInZone(date, fallbackZone)) return acc;
       const sanitizedTime = normalizeTimeString((record as any).due || (record as any).dueDisplay);
@@ -492,10 +515,10 @@ export const CalendarScreen: React.FC = () => {
     setSelectedDate(toZonedTime(new Date(), timeZone));
   }, [timeZone]);
 
-  const formatZoned = (value: Date | undefined, pattern: string) => {
+  const formatZoned = useCallback((value: Date | undefined, pattern: string): string => {
     if (!value) return "";
     return safeFormatInTimeZone(value, timeZone, pattern);
-  };
+  }, [timeZone]);
 
   const showPermissionToast = (type: 'event' | 'task') => {
     ReactNativeHapticFeedback.trigger("notificationError", hapticOptions);
@@ -623,9 +646,9 @@ export const CalendarScreen: React.FC = () => {
   const today = toZonedTime(new Date(), timeZone);
 
   // Unified items (Events + Tasks)
-  const filteredEvents = useMemo(() => {
+  const filteredEvents = useMemo<CalendarEventWithMeta[]>(() => {
     if (!filterMember) return events;
-    return events.filter((e: CalendarEvent) => e.memberId === filterMember);
+    return events.filter((e: CalendarEventWithMeta) => e.memberId === filterMember);
   }, [events, filterMember]);
 
   const filteredTasks = useMemo(() => {
@@ -639,7 +662,7 @@ export const CalendarScreen: React.FC = () => {
   const currentTimeTop = (currentTimeHours * HOUR_HEIGHT) + (currentTimeMinutes * (HOUR_HEIGHT / 60));
 
   const calendarItems = useMemo<CalendarListEntry[]>(() => {
-    const eventItems = filteredEvents.map((e: CalendarEvent) => ({
+    const eventItems = filteredEvents.map((e: CalendarEventWithMeta) => ({
       ...e,
       type: 'event' as const,
       timeZone: e.timeZone || timeZone,
@@ -663,39 +686,47 @@ export const CalendarScreen: React.FC = () => {
 
   const upcomingItems = useMemo<UpcomingEntry[]>(() => {
     const entries: UpcomingEntry[] = [];
-    calendarItems.forEach(item => {
-      const nextDate = getNextCandidateForEntry(item, zonedNow, timeZone);
-      if (nextDate) {
-        entries.push({ ...item, nextDate });
-      }
-    });
+    if (!selectedDate) return entries;
+    const nowMinutes = currentTimeHours * 60 + currentTimeMinutes;
+    // Look ahead up to 14 days to collect future events
+    for (let i = 0; i < 14; i++) {
+      const targetDay = addDays(zonedNow, i);
+      const dayEvents = getEventsForDate(targetDay, filteredEvents, filteredTasks, timeZone) as CalendarListEntry[];
+
+      dayEvents.forEach(item => {
+        // For today, only include events that are in the future
+        if (i === 0) {
+          const itemStartMins = item.time && item.time !== "All Day"
+            ? (() => { const m = item.time.match(/(\d+):(\d+)\s*(AM|PM)/i); if (!m) return -1; let h = parseInt(m[1]); if (m[3].toUpperCase() === "PM" && h !== 12) h += 12; if (m[3].toUpperCase() === "AM" && h === 12) h = 0; return h * 60 + parseInt(m[2]); })()
+            : -1;
+
+          // If it's an all-day event or happened in the past, skip it for the "upcoming" list
+          if (itemStartMins < nowMinutes) return;
+        }
+
+        // Generate a valid 'nextDate' for sorting using the target day and the item's time
+        const itemTime = item.time && item.time !== "All Day" ? item.time : "12:00 AM";
+        const pseudoDate = parseTimeToDate(targetDay, itemTime);
+
+        // Avoid duplicate IDs in the unified list (since getEventsForDate generates virtual IDs for recurrences, this is safe)
+        if (!entries.find(e => e.id === item.id && isSameDay(e.nextDate, pseudoDate))) {
+          entries.push({ ...item, nextDate: pseudoDate });
+        }
+      });
+
+      // Break early if we have enough items
+      if (entries.length > 10) break;
+    }
+
     return entries.sort((a, b) => a.nextDate.getTime() - b.nextDate.getTime());
-  }, [calendarItems, zonedNow, timeZone]);
+  }, [filteredEvents, filteredTasks, timeZone, zonedNow, currentTimeHours, currentTimeMinutes, selectedDate]);
 
   const todayUpcomingItems = useMemo<UpcomingEntry[]>(() => {
     if (!selectedDate) return [];
-    const nowMinutes = currentTimeHours * 60 + currentTimeMinutes;
     const targetDateStr = safeFormatInTimeZone(zonedNow, timeZone, "yyyy-MM-dd");
     if (!targetDateStr) return [];
-    return calendarItems
-      .map(item => {
-        const entryTimeZone = item.timeZone || timeZone;
-        const entryDate = parseDateTimeInZone(item.date, entryTimeZone, item.time);
-        if (!entryDate) return null;
-        return { entry: item, date: entryDate, timeZone: entryTimeZone };
-      })
-      .filter(
-        (value): value is { entry: CalendarListEntry; date: Date; timeZone: string } =>
-          value !== null
-      )
-      .filter(({ date, timeZone: entryTZ }) => safeFormatInTimeZone(date, entryTZ, "yyyy-MM-dd") === targetDateStr)
-      .map(({ entry, date }) => ({ ...entry, nextDate: date }))
-      .filter(entry => {
-        const minutes = entry.nextDate.getHours() * 60 + entry.nextDate.getMinutes();
-        return minutes >= nowMinutes;
-      })
-      .sort((a, b) => a.nextDate.getTime() - b.nextDate.getTime());
-  }, [calendarItems, zonedNow, currentTimeHours, currentTimeMinutes, timeZone, selectedDate]);
+    return upcomingItems.filter(item => safeFormatInTimeZone(item.nextDate, timeZone, "yyyy-MM-dd") === targetDateStr);
+  }, [upcomingItems, zonedNow, timeZone, selectedDate]);
 
   const navigateDate = (direction: number) => {
     if (activeView === "Month") {
@@ -710,21 +741,98 @@ export const CalendarScreen: React.FC = () => {
     }
   };
 
-  const generateMonthDays = () => {
+  const monthDays = useMemo(() => {
     const start = startOfWeek(startOfMonth(selectedDate), weekOptions);
     const end = endOfWeek(endOfMonth(selectedDate), weekOptions);
     return eachDayOfInterval({ start, end });
-  };
+  }, [selectedDate, weekOptions]);
 
-  const generateWeekDays = () => {
+  const weekDays = useMemo(() => {
     const start = startOfWeek(selectedDate, weekOptions);
     return Array.from({ length: 7 }).map((_, i) => addDays(start, i));
-  };
+  }, [selectedDate, weekOptions]);
 
-  const monthDays = useMemo(() => generateMonthDays(), [selectedDate]);
-  const weekDays = useMemo(() => generateWeekDays(), [selectedDate]);
+  // ---------------------------------------------------------
+  // Pre-process month events ONLY for the current month view
+  // ---------------------------------------------------------
+  // Pre-build member colour map once so month-grid event-dot rendering is O(1)
+  const memberColorMap = useMemo<Map<string, string>>(() => {
+    const map = new Map<string, string>();
+    members.forEach((m: any) => {
+      const pc = PROFILE_COLORS.find((c: any) => c.value === m.color);
+      map.set(m.id, pc ? pc.hex : '');
+    });
+    return map;
+  }, [members]);
 
-  const renderMonthView = () => (
+  // ---------------------------------------------------------
+  // Two-phase month event loading:
+  //   Phase 1: instantly show the empty grid (no event dots)
+  //   Phase 2: after the tab-switch animation settles, compute
+  //            event dots in the background and setState
+  // ---------------------------------------------------------
+  const [groupedEventsForMonth, setGroupedEventsForMonth] = useState<Map<string, any[]>>(
+    () => new Map()
+  );
+
+  useEffect(() => {
+    if (activeView !== 'Month') {
+      setGroupedEventsForMonth(new Map());
+      return;
+    }
+
+    // Phase 1: Clear and render instant grid
+    setGroupedEventsForMonth(new Map());
+
+    const computeHandle = InteractionManager.runAfterInteractions(() => {
+      const fullMap = new Map<string, any[]>();
+
+      // Phase 2: Show today immediately as top priority
+      const todayDate = new Date();
+      const todayKey = safeFormatInTimeZone(todayDate, timeZone, 'yyyy-MM-dd') || '';
+      const todayInMonth = monthDays.find(d => isSameDay(d, todayDate));
+
+      if (todayInMonth) {
+        const todayEvents = getEventsForDate(todayInMonth, filteredEvents, filteredTasks, timeZone) as any[];
+        fullMap.set(todayKey, todayEvents);
+        setGroupedEventsForMonth(new Map(fullMap));
+      }
+
+      // Phase 3: Background load everything else in small batches
+      const otherDays = monthDays.filter(d => !todayInMonth || !isSameDay(d, todayInMonth));
+      let index = 0;
+      const CHUNK = 6; // Process one row at a time
+
+      const backgroundProcess = () => {
+        if (index >= otherDays.length) return;
+
+        const end = Math.min(index + CHUNK, otherDays.length);
+        for (let i = index; i < end; i++) {
+          const day = otherDays[i];
+          const key = safeFormatInTimeZone(day, timeZone, 'yyyy-MM-dd') || '';
+          const events = getEventsForDate(day, filteredEvents, filteredTasks, timeZone) as any[];
+          fullMap.set(key, events);
+        }
+
+        index = end;
+        setGroupedEventsForMonth(new Map(fullMap));
+
+        if (index < otherDays.length) {
+          // Use setTimeout 0 to give the JS thread a breather between chunks
+          setTimeout(backgroundProcess, 0);
+        }
+      };
+
+      if (otherDays.length > 0) {
+        setTimeout(backgroundProcess, 0);
+      }
+    });
+
+    return () => computeHandle.cancel();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeView, monthDays, filteredEvents, filteredTasks, timeZone]);
+
+  const monthViewJsx = useMemo(() => (
     <View style={[styles.card, { backgroundColor: colors.card, borderRadius: radius.card }]}>
       <View style={styles.gridHeader}>
         {daysOfWeek.map((day, i) => (
@@ -740,8 +848,10 @@ export const CalendarScreen: React.FC = () => {
           const isSelected = isSameDay(day, selectedDate);
           const isToday = isSameDay(day, today);
 
-          // Use helper to get proper events including recurring and multi-day
-          const dayEvents = getEventsForDate(day, filteredEvents as CalendarEvent[], filteredTasks as Task[], timeZone) as any[];
+          const dateKey = safeFormatInTimeZone(day, timeZone, "yyyy-MM-dd") || '';
+          const dayEvents = groupedEventsForMonth.get(dateKey) || [];
+          // Day number label: just use getDate() — no timezone conversion needed for display
+          const dayLabel = String(day.getDate());
 
           return (
             <Pressable
@@ -765,14 +875,13 @@ export const CalendarScreen: React.FC = () => {
                 isSelected && { color: "#fff", fontWeight: "700" },
                 isToday && !isSelected && { color: colors.primary, fontWeight: "700" }
               ]}>
-                {formatZoned(day, "d")}
+                {dayLabel}
               </Text>
 
               <View style={styles.eventDotRx}>
                 {dayEvents.slice(0, 3).map((e, idx) => {
-                  const member = members.find((m: any) => m.id === e.memberId);
-                  const profileColor = PROFILE_COLORS.find((c: any) => c.value === member?.color);
-                  const dotColor = profileColor ? profileColor.hex : colors.primary;
+                  // O(1) look-up using the pre-built map instead of two nested Array.find() calls
+                  const dotColor = memberColorMap.get(e.memberId) || colors.primary;
 
                   return (
                     <Pressable
@@ -795,7 +904,11 @@ export const CalendarScreen: React.FC = () => {
         })}
       </View>
     </View>
-  );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ), [monthDays, selectedDate, today, groupedEventsForMonth, memberColorMap, colors, radius, timeZone]);
+
+  // Keep a stable function reference so consumers can call renderMonthView()
+  const renderMonthView = useCallback(() => monthViewJsx, [monthViewJsx]);
 
   const [quickAddText, setQuickAddText] = useState("");
 
@@ -928,7 +1041,7 @@ export const CalendarScreen: React.FC = () => {
                   {daysToRender.map((day, dayIndex) => {
                     const dateStr = formatZoned(day, "yyyy-MM-dd");
                     // Use helper to get proper events including recurring and multi-day
-                    const dayEvents = getEventsForDate(day, filteredEvents as CalendarEvent[], filteredTasks as Task[], timeZone) as any[];
+                    const dayEvents = getEventsForDate(day, filteredEvents, filteredTasks, timeZone) as any[];
 
                     const parseTimeToMinutes = (timeStr: string | undefined): number | null => {
                       if (!timeStr || timeStr === "All Day") return null;
@@ -1255,7 +1368,7 @@ export const CalendarScreen: React.FC = () => {
                   filterMember === member.id && { backgroundColor: colors.primary, borderColor: colors.primary }
                 ]}
               >
-                <Text style={styles.filterEmoji}>{member.symbol}</Text>
+                <MemberIcon symbol={member.symbol} size={16} color={filterMember === member.id ? "#fff" : colors.foreground} />
                 <Text style={[
                   styles.filterText,
                   { color: colors.foreground },
@@ -1299,7 +1412,7 @@ export const CalendarScreen: React.FC = () => {
                     style={[styles.upcomingItem, { backgroundColor: colors.card, borderRadius: radius.card }]}
                   >
                     <View style={styles.upcomingLeft}>
-                      <Text style={{ fontSize: 24 }}>{event.icon}</Text>
+                      <AppIcon source={event.icon || ''} size={24} color={colors.foreground} />
                       <View>
                         <Text style={[styles.upcomingTitle, { color: colors.foreground }]}>{event.title}</Text>
                         <Text style={[styles.upcomingMeta, { color: colors.mutedForeground }]}>{displayTime}</Text>
@@ -1326,7 +1439,7 @@ export const CalendarScreen: React.FC = () => {
                   style={[styles.upcomingItem, { backgroundColor: colors.card, borderRadius: radius.card }]}
                 >
                   <View style={styles.upcomingLeft}>
-                    <Text style={{ fontSize: 24 }}>{event.icon}</Text>
+                    <AppIcon source={event.icon || ''} size={24} color={colors.foreground} />
                     <View>
                       <Text style={[styles.upcomingTitle, { color: colors.foreground }]}>{event.title}</Text>
                       <Text style={[styles.upcomingMeta, { color: colors.mutedForeground }]}>{displayDate} · {displayTime}</Text>
@@ -1422,6 +1535,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    paddingRight: 4,
   },
   iconButton: {
     width: 40,

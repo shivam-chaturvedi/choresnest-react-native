@@ -23,6 +23,7 @@ import {
 import { PROFILE_COLORS } from "../constants/profileColors";
 import { FamilyOnboarding } from "../components/family/FamilyOnboarding";
 import { AddMemberModal } from "../components/modals/AddMemberModal";
+import { MemberIcon } from "../components/ui/MemberIcon";
 
 // No explicit roles as per new requirement
 
@@ -71,7 +72,7 @@ export const FamilyScreen: React.FC = () => {
 
         {/* Members List */}
         <Text style={[styles.sectionHeader, { color: colors.foreground }]}>Members</Text>
-                <View style={{ gap: 8 }}>
+        <View style={{ gap: 8 }}>
           {members.map((member) => {
             const handleLongPress = () => {
               setSelectedMember(member);
@@ -84,7 +85,7 @@ export const FamilyScreen: React.FC = () => {
                 style={[styles.memberCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}
               >
                 <View style={[styles.avatar, { backgroundColor: member.color || colors.muted, borderRadius: radius.card }]}>
-                  <Text style={{ fontSize: 24 }}>{member.symbol}</Text>
+                  <MemberIcon symbol={member.symbol} size={28} color="#fff" />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.memberName, { color: colors.foreground }]}>{member.name}</Text>

@@ -21,6 +21,7 @@ import UploadStatusIndicator from "../ui/UploadStatusIndicator";
 import NetInfo from "@react-native-community/netinfo";
 import { DocumentUploadScheduler } from "../../services/sync/DocumentUploadScheduler";
 import { getRecipeType } from "../../utils/recipeUtils";
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 interface RecipeDetailModalProps {
     recipe: Recipe | null;
@@ -263,7 +264,7 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
                                         <Text style={[styles.nutritionLabel, { color: colors.mutedForeground }]}>Carbs</Text>
                                     </View>
                                     <View style={[styles.nutritionCard, { backgroundColor: `${colors.primary}20` }]}>
-                                        <Text style={{ fontSize: 20, marginBottom: 4 }}>🥑</Text>
+                                        <MaterialCommunityIcons name="avocado" size={24} color={colors.primary} style={{ marginBottom: 4 }} />
                                         <Text style={[styles.nutritionValue, { color: colors.foreground }]}>{recipe.nutrition.fats}</Text>
                                         <Text style={[styles.nutritionLabel, { color: colors.mutedForeground }]}>Fat</Text>
                                     </View>

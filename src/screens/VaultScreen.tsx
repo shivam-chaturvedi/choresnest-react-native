@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect, useMemo } from "react";
+import React, { useCallback, useState, useEffect, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -32,17 +32,9 @@ import RNFS from "react-native-fs";
 import { DocumentUploadScheduler } from "../services/sync/DocumentUploadScheduler";
 import { VaultService } from "../services/VaultService";
 import NetInfo from "@react-native-community/netinfo";
-import {
-  Menu,
-  Upload,
-  Search,
-  Filter,
-  Shield,
-  Bell,
-  ChevronRight,
-  ArrowLeft,
-  FileText,
-} from "lucide-react-native";
+import { Menu, Upload, Search, Plus, Filter, Calendar as CalendarIcon, FileText, ChevronRight, Shield, Bell, AlertTriangle, UploadCloud, X, Check, Lock, Settings, ArrowLeft } from "lucide-react-native";
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { AppIcon } from "../components/ui/AppIcon";
 
 import { useObservableValue } from "../hooks/useObservableValue";
 import { of } from "rxjs";
@@ -66,9 +58,7 @@ export const VaultScreen: React.FC = () => {
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
-  const [documentSnapshot, setDocumentSnapshot] = useState<VaultDocument | null>(null);
-  const pendingDocumentIdRef = React.useRef<string | null>(null);
+  const [modalDocument, setModalDocument] = useState<VaultDocument | null>(null);
   const [scannerSession, setScannerSession] = useState<{ step: 'upload' | 'form'; file: SavedDocument | null } | null>(null);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [filters, setFilters] = useState<FilterOptions>({
@@ -106,6 +96,7 @@ export const VaultScreen: React.FC = () => {
       uri: docUri,
       uploadStatus: doc.uploadStatus,
       remotePath: doc.remotePath,
+      fileSize: doc.fileSize,
       ...meta,
     };
   };
@@ -221,7 +212,7 @@ export const VaultScreen: React.FC = () => {
           { backgroundColor: colors.muted, borderRadius: radius.md },
         ]}
       >
-        <Text style={{ fontSize: 20 }}>{doc.icon}</Text>
+        <MaterialCommunityIcons name={doc.icon || 'file-document'} size={24} color={colors.foreground} />
         {dotColor ? (
           <View
             style={[
@@ -242,8 +233,8 @@ export const VaultScreen: React.FC = () => {
     (documentId: string) => {
       void DocumentUploadScheduler.requestUploadNow(user?.id);
       showToast({
-        title: "Sync queued",
-        description: "Document will upload as soon as connectivity is restored.",
+        title: "Document queued",
+        description: "Document is in queue.",
         type: "default",
       });
     },
@@ -260,68 +251,30 @@ export const VaultScreen: React.FC = () => {
           styles.syncButton,
           {
             borderColor: colors.border,
+            backgroundColor: colors.background,
+            zIndex: 10,
             opacity: pressed ? 0.7 : 1,
           },
         ]}
         onPress={(event: GestureResponderEvent) => {
           event.stopPropagation();
-          handleSyncNow(doc.id);
-        }}
-      >
-        <Text style={[styles.syncButtonText, { color: colors.foreground }]}>Sync now</Text>
-      </Pressable>
-    );
-  };
-
-  const selectedDocument = useMemo(() => {
-    if (!selectedDocumentId) return null;
-    return allDocs.find(d => d.id === selectedDocumentId) || null;
-  }, [selectedDocumentId, allDocs]);
-
-  const documentForModal = selectedDocument || documentSnapshot;
+        handleSyncNow(doc.id);
+      }}
+    >
+      <Text style={[styles.syncButtonText, { color: colors.foreground }]}>Sync now</Text>
+    </Pressable>
+  );
+};
 
   useEffect(() => {
     if (!showDetailsModal) {
       return;
     }
-
-    if (!selectedDocument) {
-      // Keep the modal open while syncs temporarily clear the query unless we explicitly
-      // cleared the selected ID (or the ID was dropped because the document was removed).
-      if (selectedDocumentId) {
-        console.log('[VaultScreen] Document temporarily missing during sync, keeping modal open for', selectedDocumentId);
-        return;
-      }
-
+    if (!modalDocument) {
+      console.warn('[VaultScreen] Document modal opened without snapshot');
       setShowDetailsModal(false);
     }
-  }, [selectedDocument, selectedDocumentId, showDetailsModal]);
-
-  useEffect(() => {
-    if (!showDetailsModal) {
-      setDocumentSnapshot(null);
-      pendingDocumentIdRef.current = null;
-      return;
-    }
-
-    if (selectedDocument) {
-      setDocumentSnapshot(selectedDocument);
-      pendingDocumentIdRef.current = selectedDocument.id;
-      return;
-    }
-
-    if (!selectedDocumentId) {
-      setDocumentSnapshot(null);
-      pendingDocumentIdRef.current = null;
-      return;
-    }
-
-    if (pendingDocumentIdRef.current === selectedDocumentId) {
-      return;
-    }
-
-    pendingDocumentIdRef.current = selectedDocumentId;
-  }, [selectedDocument, selectedDocumentId, showDetailsModal]);
+  }, [modalDocument, showDetailsModal]);
 
   useEffect(() => {
     const ticker = setInterval(() => {
@@ -386,13 +339,13 @@ export const VaultScreen: React.FC = () => {
   };
 
   const categories = [
-    { id: 'warranty', name: 'Warranties', icon: '🛡️', count: categoryCounts.warranty, color: colors.info + '30' },
-    { id: 'bill', name: 'Bills', icon: '🧾', count: categoryCounts.bill, color: colors.warning + '30' },
-    { id: 'insurance', name: 'Insurance', icon: '📋', count: categoryCounts.insurance, color: colors.success + '30' },
-    { id: 'service', name: 'Service', icon: '🔧', count: categoryCounts.service, color: colors.muted + '50' },
-    { id: 'certificate', name: 'Certificates', icon: '📜', count: categoryCounts.certificate, color: colors.border },
-    { id: 'receipt', name: 'Receipts', icon: '🧾', count: categoryCounts.receipt, color: colors.primary + '30' },
-    { id: 'other', name: 'Other', icon: '📄', count: categoryCounts.other, color: colors.muted + '30' },
+    { id: 'warranty', name: 'Warranties', icon: 'shield-check', count: categoryCounts.warranty, color: colors.info + '30' },
+    { id: 'bill', name: 'Bills', icon: 'receipt', count: categoryCounts.bill, color: colors.warning + '30' },
+    { id: 'insurance', name: 'Insurance', icon: 'clipboard-text', count: categoryCounts.insurance, color: colors.success + '30' },
+    { id: 'service', name: 'Service', icon: 'wrench', count: categoryCounts.service, color: colors.muted + '50' },
+    { id: 'certificate', name: 'Certificates', icon: 'certificate', count: categoryCounts.certificate, color: colors.border },
+    { id: 'receipt', name: 'Receipts', icon: 'receipt', count: categoryCounts.receipt, color: colors.primary + '30' },
+    { id: 'other', name: 'Other', icon: 'file-document', count: categoryCounts.other, color: colors.muted + '30' },
   ];
 
   // Calculate storage on mount and when docs change
@@ -513,6 +466,15 @@ export const VaultScreen: React.FC = () => {
     setCurrentView('all');
   };
 
+  const clearFilters = useCallback(() => {
+    setFilters({
+      categories: [],
+      dateFrom: '',
+      dateTo: '',
+      expiryStatus: [],
+    });
+  }, []);
+
   const handleSearchChange = (text: string) => {
     setSearchQuery(text);
     if (text.length > 0 && currentView !== 'main') {
@@ -524,13 +486,23 @@ export const VaultScreen: React.FC = () => {
     }
   };
 
+  const hasActiveFilters = useMemo(() => {
+    return Boolean(
+      filters.dateFrom ||
+      filters.dateTo ||
+      filters.categories.length > 0 ||
+      filters.expiryStatus.length > 0
+    );
+  }, [filters]);
+
+  const prevFiltersActiveRef = useRef(false);
+
   useEffect(() => {
-    // If filters are active, switch to all view to show results
-    const isFiltered = filters.dateFrom || filters.dateTo || filters.categories.length > 0 || filters.expiryStatus.length > 0;
-    if (isFiltered && currentView !== 'all') {
+    if (hasActiveFilters && !prevFiltersActiveRef.current && currentView !== 'all') {
       setCurrentView('all');
     }
-  }, [filters]);
+    prevFiltersActiveRef.current = hasActiveFilters;
+  }, [hasActiveFilters, currentView]);
 
   useEffect(() => {
     const backAction = () => {
@@ -590,13 +562,13 @@ export const VaultScreen: React.FC = () => {
     cost?: string;
   }) => {
     const categoryIcons: Record<string, string> = {
-      warranty: '🛡️',
-      bill: '🧾',
-      insurance: '📋',
-      service: '🔧',
-      certificate: '📜',
-      receipt: '🧾',
-      other: '📄',
+      warranty: 'shield-check',
+      bill: 'receipt',
+      insurance: 'clipboard-text',
+      service: 'wrench',
+      certificate: 'certificate',
+      receipt: 'receipt',
+      other: 'file-document',
     };
 
     const sourceUri = doc.uri ?? doc.originalUri ?? '';
@@ -612,7 +584,7 @@ export const VaultScreen: React.FC = () => {
     addDocument({
       name: doc.documentName,
       type: doc.category as any,
-      icon: categoryIcons[doc.category] || '📄',
+      icon: categoryIcons[doc.category] || 'file-document',
       date: new Date().toISOString().split('T')[0],
       memberId: activeMember?.id || 'global',
       sharedWith: [],
@@ -664,7 +636,7 @@ export const VaultScreen: React.FC = () => {
         date: expenseDate,
         type: 'expense',
         category: expenseCategory,
-        icon: categoryIcons[doc.category] || '🧾'
+        icon: categoryIcons[doc.category] || 'receipt'
       });
 
       // Optional: Notify user
@@ -683,27 +655,41 @@ export const VaultScreen: React.FC = () => {
           {categoryDocs.length > 0 ? (
             categoryDocs.map(doc => {
               const docDateLabel = getDocumentDateLabel(doc);
+              const syncButton = renderDocumentActions(doc);
               return (
                 <Pressable
                   key={doc.id}
                   style={[styles.docRow, { backgroundColor: colors.card, borderRadius: radius.md }]}
                   onPress={() => {
-                    setSelectedDocumentId(doc.id);
+                    setModalDocument(doc);
                     setShowDetailsModal(true);
                   }}
                 >
                   {renderDocumentIcon(doc)}
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.docName, { color: colors.foreground }]}>{doc.name}</Text>
+                    <Text style={[styles.docName, { color: colors.foreground }]} numberOfLines={1} ellipsizeMode="tail">
+                      {doc.name}
+                    </Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
                       {docDateLabel ? (
                         <Text style={[styles.docDate, { color: colors.mutedForeground }]}>{docDateLabel}</Text>
                       ) : null}
+                      {VaultService.getCachedLocalUri(doc.id) && (
+                        <View style={{ backgroundColor: colors.success + '20', paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.sm }}>
+                          <Text style={{ fontSize: 10, color: colors.success, fontWeight: '600' }}>
+                            Saved locally {doc.fileSize ? `- ${formatStorageSize(doc.fileSize)}` : ''}
+                          </Text>
+                        </View>
+                      )}
                     </View>
                     {renderDocMeta(doc)}
                   </View>
                   <View style={styles.docRowControls}>
-                    {renderDocumentActions(doc)}
+                    {syncButton && (
+                      <View style={styles.syncButtonWrapper}>
+                        {syncButton}
+                      </View>
+                    )}
                     <ChevronRight size={16} color={colors.mutedForeground} />
                   </View>
                 </Pressable>
@@ -727,6 +713,16 @@ export const VaultScreen: React.FC = () => {
   const renderAllView = () => (
     <View style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {hasActiveFilters && (
+          <View style={styles.clearFiltersRow}>
+            <Pressable
+              style={[styles.clearFiltersButton, { borderColor: colors.border, backgroundColor: colors.background }]}
+              onPress={clearFilters}
+            >
+              <Text style={[styles.clearFiltersButtonText, { color: colors.primary }]}>Clear all filters</Text>
+            </Pressable>
+          </View>
+        )}
         {categories.map(cat => {
           const docsInCat = filteredDocs.filter(d => d.type === cat.id);
           if (docsInCat.length === 0) return null;
@@ -736,18 +732,21 @@ export const VaultScreen: React.FC = () => {
               <Text style={[styles.sectionTitle, { color: colors.foreground, marginBottom: 8 }]}>{cat.name}</Text>
               {docsInCat.map(doc => {
                 const docDateLabel = getDocumentDateLabel(doc);
+                const syncButton = renderDocumentActions(doc);
                 return (
                   <Pressable
                     key={doc.id}
                     style={[styles.docRow, { backgroundColor: colors.card, borderRadius: radius.md }]}
                     onPress={() => {
-                      setSelectedDocumentId(doc.id);
+                      setModalDocument(doc);
                       setShowDetailsModal(true);
                     }}
                   >
                     {renderDocumentIcon(doc)}
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.docName, { color: colors.foreground }]}>{doc.name}</Text>
+                      <Text style={[styles.docName, { color: colors.foreground }]} numberOfLines={1} ellipsizeMode="tail">
+                        {doc.name}
+                      </Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
                         {docDateLabel ? (
                           <Text style={[styles.docDate, { color: colors.mutedForeground }]}>{docDateLabel}</Text>
@@ -756,7 +755,11 @@ export const VaultScreen: React.FC = () => {
                       {renderDocMeta(doc)}
                     </View>
                     <View style={styles.docRowControls}>
-                      {renderDocumentActions(doc)}
+                      {syncButton && (
+                        <View style={styles.syncButtonWrapper}>
+                          {syncButton}
+                        </View>
+                      )}
                       <ChevronRight size={16} color={colors.mutedForeground} />
                     </View>
                   </Pressable>
@@ -821,7 +824,7 @@ export const VaultScreen: React.FC = () => {
                 alert.type === 'warning' ? { borderLeftColor: colors.warning, borderLeftWidth: 4 } : { borderLeftColor: colors.info, borderLeftWidth: 4 }
               ]}
             >
-              <Text style={{ fontSize: 24, marginRight: 12 }}>{alert.icon}</Text>
+              <MaterialCommunityIcons name={alert.icon || 'file-document'} size={24} color={alert.type === 'danger' ? colors.danger : colors.foreground} style={{ marginRight: 12 }} />
               <View style={{ flex: 1 }}>
                 <Text style={[styles.alertName, { color: colors.foreground }]}>{alert.name}</Text>
                 <Text style={[styles.alertMsg, { color: colors.mutedForeground }]}>{alert.message}</Text>
@@ -845,7 +848,7 @@ export const VaultScreen: React.FC = () => {
               onPress={() => handleCategoryClick(cat.id)}
             >
               <View style={[styles.catIconBox, { backgroundColor: cat.color, borderRadius: radius.md }]}>
-                <Text style={{ fontSize: 20 }}>{cat.icon}</Text>
+                <MaterialCommunityIcons name={cat.icon || 'file-document'} size={24} color={colors.foreground} />
               </View>
               <Text style={[styles.catName, { color: colors.foreground }]}>{cat.name}</Text>
               <Text style={[styles.catCount, { color: colors.mutedForeground }]}>{cat.count}</Text>
@@ -860,20 +863,32 @@ export const VaultScreen: React.FC = () => {
           <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
             Recent Vault Items
           </Text>
-          <Pressable onPress={handleSeeAll}>
-            <Text style={[styles.viewAll, { color: colors.primary }]}>See All</Text>
+          <Pressable
+            onPress={handleSeeAll}
+            style={({ pressed }) => [
+              styles.seeAllButton,
+              {
+                backgroundColor: colors.muted + '15',
+                borderColor: colors.border,
+                opacity: pressed ? 0.8 : 1,
+              },
+            ]}
+          >
+            <Text style={[styles.seeAllText, { color: colors.primary }]}>See All</Text>
+            <AppIcon name="arrowRight" size={14} color={colors.primary} style={{ marginLeft: 6 }} />
           </Pressable>
         </View>
 
         {recentDocs.length > 0 ? (
           recentDocs.map(doc => {
             const docDateLabel = getDocumentDateLabel(doc);
+            const syncButton = renderDocumentActions(doc);
             return (
               <Pressable
                 key={doc.id}
                 style={[styles.docRow, { backgroundColor: colors.card, borderRadius: radius.md }]}
                 onPress={() => {
-                  setSelectedDocumentId(doc.id);
+                  setModalDocument(doc);
                   setShowDetailsModal(true);
                 }}
               >
@@ -891,7 +906,11 @@ export const VaultScreen: React.FC = () => {
                   {renderDocMeta(doc)}
                 </View>
                 <View style={styles.docRowControls}>
-                  {renderDocumentActions(doc)}
+                  {syncButton && (
+                    <View style={styles.syncButtonWrapper}>
+                      {syncButton}
+                    </View>
+                  )}
                   <ChevronRight size={16} color={colors.mutedForeground} />
                 </View>
               </Pressable>
@@ -1000,14 +1019,17 @@ export const VaultScreen: React.FC = () => {
               value={searchQuery}
               onChangeText={handleSearchChange}
             />
-            <TouchableOpacity
-              style={[styles.filterBtn, { padding: 8, zIndex: 10 }]}
-              onPress={() => setShowFilterModal(true)}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              activeOpacity={0.7}
-            >
-              <Filter size={20} color={colors.primary} />
-            </TouchableOpacity>
+            <View style={styles.filterBtnWrapper}>
+              <TouchableOpacity
+                style={[styles.filterBtn, { padding: 8, zIndex: 10 }]}
+                onPress={() => setShowFilterModal(true)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                activeOpacity={0.7}
+              >
+                <Filter size={20} color={colors.primary} />
+                {hasActiveFilters && <View style={[styles.filterDot, { backgroundColor: colors.success }]} />}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
@@ -1034,9 +1056,9 @@ export const VaultScreen: React.FC = () => {
           visible={showDetailsModal}
           onClose={() => {
             setShowDetailsModal(false);
-            setSelectedDocumentId(null);
+            setModalDocument(null);
           }}
-          document={documentForModal}
+          document={modalDocument}
           onUpdate={updateDocument}
           onViewImage={(uri) => {
             setSelectedImageUri(uri);
@@ -1131,6 +1153,19 @@ const styles = StyleSheet.create({
   },
   filterBtn: {
     padding: 4,
+  },
+  filterBtnWrapper: {
+    position: 'relative',
+  },
+  filterDot: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: '#fff',
   },
   storageCard: {
     padding: 16,
@@ -1228,16 +1263,47 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: 20,
   },
+  clearFiltersRow: {
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    alignItems: 'flex-end',
+  },
+  clearFiltersButton: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+  },
+  clearFiltersButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  seeAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  seeAllText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
   docRow: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
     marginBottom: 8,
+    position: 'relative',
   },
   docRowControls: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  syncButtonWrapper: {
+    marginRight: 8,
   },
   docIconBox: {
     width: 48,
@@ -1258,10 +1324,12 @@ const styles = StyleSheet.create({
     right: 2,
   },
   syncButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    width: 56,
+    height: 36,
     borderWidth: 1,
-    borderRadius: 999,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   syncButtonText: {
     fontSize: 11,

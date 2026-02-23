@@ -4,11 +4,12 @@ import { AppLayout } from '../components/layout';
 import { theme } from '../theme';
 import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import { Camera, AlertTriangle, TrendingUp, Check, ChevronRight, Heart, Droplet, Flame, Apple } from 'lucide-react-native';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const mealTimeline = [
   {
     time: 'Breakfast',
-    emoji: '🥞',
+    icon: 'coffee',
     status: 'done',
     items: ['Oatmeal', 'Banana', 'Coffee'],
     calories: 380,
@@ -16,7 +17,7 @@ const mealTimeline = [
   },
   {
     time: 'Lunch',
-    emoji: '🍛',
+    icon: 'food',
     status: 'done',
     items: ['Rice', 'Dal', 'Vegetables'],
     calories: 550,
@@ -24,7 +25,7 @@ const mealTimeline = [
   },
   {
     time: 'Snack',
-    emoji: '🍎',
+    icon: 'food-apple',
     status: 'done',
     items: ['Apple', 'Almonds'],
     calories: 180,
@@ -32,7 +33,7 @@ const mealTimeline = [
   },
   {
     time: 'Dinner',
-    emoji: '🍝',
+    icon: 'pasta',
     status: 'pending',
     items: [],
     calories: 0,
@@ -48,14 +49,14 @@ const nutritionStats = [
 ];
 
 const warnings = [
-  { icon: '🍬', text: 'Sugar intake 15g above daily limit', type: 'warning' },
-  { icon: '🧂', text: 'Sodium levels are optimal', type: 'success' },
+  { icon: 'candy', text: 'Sugar intake 15g above daily limit', type: 'warning' },
+  { icon: 'shaker', text: 'Sodium levels are optimal', type: 'success' },
 ];
 
 const healthTips = [
   'Add more greens to dinner for fiber boost',
   'Consider reducing sugar in your coffee',
-  'Great protein intake today! 💪',
+  'Great protein intake today!',
 ];
 
 export const NutritionScreen: React.FC = () => {
@@ -144,7 +145,7 @@ export const NutritionScreen: React.FC = () => {
                 }
               ]}
             >
-              <Text style={styles.warningIcon}>{warning.icon}</Text>
+              <MaterialCommunityIcons name={warning.icon} size={24} color={warning.type === 'warning' ? colors.warning : colors.success} style={{ marginRight: 12 }} />
               <Text style={[styles.warningText, { color: colors.foreground }]}>{warning.text}</Text>
               {warning.type === 'warning' ? (
                 <AlertTriangle size={20} color={colors.warning} />
@@ -173,7 +174,7 @@ export const NutritionScreen: React.FC = () => {
                       borderRadius: radius.full
                     }
                   ]}>
-                    <Text style={{ fontSize: 20 }}>{meal.emoji}</Text>
+                    <MaterialCommunityIcons name={meal.icon} size={24} color={colors.foreground} />
                   </View>
                   {i < mealTimeline.length - 1 && (
                     <View style={[
@@ -227,9 +228,14 @@ export const NutritionScreen: React.FC = () => {
         <View style={styles.profileContainer}>
           <Text style={[styles.cardTitle, { marginBottom: 12, color: colors.foreground }]}>Personalized for</Text>
           <View style={styles.tagsContainer}>
-            {['👨 Shivam', '🏋️ Gym Diet', '🩺 Low Sugar'].map((profile, i) => (
-              <View key={i} style={[styles.profileTag, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.full }]}>
-                <Text style={[styles.profileTagText, { color: colors.foreground }]}>{profile}</Text>
+            {[
+              { text: 'Shivam', icon: 'account' },
+              { text: 'Gym Diet', icon: 'dumbbell' },
+              { text: 'Low Sugar', icon: 'medical-bag' }
+            ].map((profile, i) => (
+              <View key={i} style={[styles.profileTag, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.full, flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
+                <MaterialCommunityIcons name={profile.icon} size={16} color={colors.foreground} />
+                <Text style={[styles.profileTagText, { color: colors.foreground }]}>{profile.text}</Text>
               </View>
             ))}
           </View>
@@ -360,10 +366,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 12,
     marginBottom: 8,
-  },
-  warningIcon: {
-    fontSize: 24,
-    marginRight: 12,
   },
   warningText: {
     flex: 1,

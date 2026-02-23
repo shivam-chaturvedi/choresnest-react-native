@@ -7,6 +7,10 @@ import { ProfileBootstrapService } from "../services/ProfileBootstrapService";
 import { Session, User as SupabaseUser } from "@supabase/supabase-js";
 import { getHumanReadableMessage } from "../utils/SupabaseErrorHandler";
 import { DocumentUploadScheduler } from "../services/sync/DocumentUploadScheduler";
+import { database } from "../database";
+import UserRecord from "../database/models/User";
+import { Q } from "@nozbe/watermelondb";
+import { ProfileService } from "../services/ProfileService";
 
 interface User {
     id: string;
@@ -22,7 +26,8 @@ interface AuthContextType {
     isLoading: boolean;
     login: (email: string, pass: string) => Promise<boolean>;
     signup: (email: string, pass: string, name: string) => Promise<boolean>;
-    loginAsGuest: () => Promise<void>;
+    loginAsGuest: () => Promise<User[] | void>;
+    selectGuestProfile: (profileId: string) => Promise<void>;
     logout: () => Promise<void>;
     completeOnboarding: () => Promise<void>;
     deleteAccount: () => Promise<void>;
@@ -43,21 +48,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
 
     useEffect(() => {
         const initializeAuth = async () => {
+            const timeoutId = setTimeout(() => {
+                if (isLoading) {
+                    console.warn("AuthContext: initializeAuth timed out after 5s - forcing loading to false");
+                    setIsLoading(false);
+                }
+            }, 5000);
+
             try {
-                // Check active session
-                const { data: { session } } = await supabase.auth.getSession();
-                if (session?.user) {
-                    setUser({
-                        id: session.user.id,
-                        email: session.user.email!,
-                        name: session.user.user_metadata?.name
-                    });
-                    DocumentUploadScheduler.startForUser(session.user.id);
+                console.log("AuthContext: Starting auth initialization...");
+                const start = Date.now();
+
+                // Immediately check local cached user to prevent UI blocking
+                const cachedUserStr = await AsyncStorage.getItem("AUTH_USER");
+                if (cachedUserStr) {
+                    try {
+                        const cachedUser = JSON.parse(cachedUserStr);
+                        setUser(cachedUser);
+                        DocumentUploadScheduler.startForUser(cachedUser.id);
+                    } catch (e) {
+                        console.error("AuthContext: Failed to parse cached user", e);
+                    }
                 } else {
+                    // No cache? Fallback to async check without blocking UI completely
+                    supabase.auth.getSession().catch(e => console.warn('Background session fetch failed', e));
                     setUser(null);
                     setIsGuest(false);
                     DocumentUploadScheduler.stop();
                 }
+
 
                 // Check guest mode independently
                 const guest = await AsyncStorage.getItem("IS_GUEST");
@@ -65,9 +84,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
                     setIsGuest(true);
                 }
 
-                // Check Onboarding status from AppSettingsService
-                const completed = await AppSettingsService.hasCompletedOnboarding();
+                // Check Onboarding status globally across all profiles for this device
+                let completed = await AppSettingsService.hasAnyProfileCompletedOnboarding();
+                if (!completed) {
+                    const asyncComplete = await AsyncStorage.getItem("HAS_COMPLETED_ONBOARDING");
+                    if (asyncComplete === "true") completed = true;
+                }
                 setHasCompletedOnboarding(completed);
+                console.log(`AuthContext: Auth initialization total time: ${Date.now() - start}ms`);
 
             } catch (error) {
                 console.error("Failed to initialize auth state:", error);
@@ -76,6 +100,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
                 setIsGuest(false);
                 setHasCompletedOnboarding(false);
             } finally {
+                clearTimeout(timeoutId);
                 setIsLoading(false);
             }
         };
@@ -85,14 +110,49 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
         // Listen for changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
             if (session?.user) {
-                setUser({
+                const userData = {
                     id: session.user.id,
                     email: session.user.email!,
                     name: session.user.user_metadata?.name
-                });
+                };
+                setUser(userData);
                 setIsGuest(false);
                 AsyncStorage.removeItem("IS_GUEST");
+                AsyncStorage.removeItem("GUEST_PROFILE_ID");
+                AsyncStorage.setItem("AUTH_USER", JSON.stringify(userData));
+                // Explicitly bind the new user's ID as the active profile to eliminate cross-login caching
+                AsyncStorage.setItem('ACTIVE_PROFILE_ID', session.user.id);
+                // Also update the ProfileService in-memory cache so getActiveProfileId() returns instantly
+                void ProfileService.setActiveProfileId(session.user.id);
                 DocumentUploadScheduler.startForUser(session.user.id);
+
+                // Cache user details locally for guest mode discovery
+                try {
+                    await database.write(async () => {
+                        const usersCol = database.get<UserRecord>('users');
+                        const existing = await usersCol.query(Q.where('id', session.user.id)).fetch();
+                        if (existing.length > 0) {
+                            await existing[0].update(u => {
+                                u.email = userData.email;
+                                u.name = userData.name || '';
+                                u.isGuest = false;
+                                u.version = (u.version ?? 0) + 1;
+                            });
+                        } else {
+                            await usersCol.create(u => {
+                                (u._raw as any).id = session.user.id;
+                                u.email = userData.email;
+                                u.name = userData.name || '';
+                                u.isGuest = false;
+                                u.hasCompletedOnboarding = true;
+                                u.version = 1;
+                            });
+                        }
+                    });
+                } catch (e) {
+                    console.error("AuthContext: Failed to cache user record:", e);
+                }
+
                 // Trigger Sync dynamically to avoid circular dependency - run in background, don't block
                 // AppNavigator handles the INITIAL_SESSION sync with an 8 second delay to prevent splash screen blocking
                 if (_event !== 'INITIAL_SESSION') {
@@ -116,6 +176,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
                 }
             } else {
                 setUser(null);
+                AsyncStorage.removeItem("AUTH_USER");
                 DocumentUploadScheduler.stop();
             }
         });
@@ -127,7 +188,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
     }, []);
 
     const login = async (email: string, pass: string): Promise<boolean> => {
-        setIsLoading(true);
         ProfileBootstrapService.resetCache();
         try {
             const { error } = await SupabaseService.signIn(email, pass);
@@ -142,13 +202,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
             const message = getHumanReadableMessage(error, 'login');
             onError?.('Login Failed', message);
             return false;
-        } finally {
-            setIsLoading(false);
         }
     };
 
     const signup = async (email: string, pass: string, name: string): Promise<boolean> => {
-        setIsLoading(true);
         ProfileBootstrapService.resetCache();
         try {
             const { error } = await SupabaseService.signUp(email, pass, name);
@@ -163,53 +220,109 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
             const message = getHumanReadableMessage(error, 'signup');
             onError?.('Signup Failed', message);
             return false;
-        } finally {
-            setIsLoading(false);
         }
     };
 
-    const loginAsGuest = async () => {
+    const loginAsGuest = async (): Promise<User[] | void> => {
         try {
-            setIsLoading(true);
+            console.log("AuthContext: loginAsGuest starting...");
             ProfileBootstrapService.resetCache();
+
+            // Check for local profiles
+            const localUsers = await database.get<UserRecord>('users').query().fetch();
+            console.log(`AuthContext: Found ${localUsers.length} local users`);
+
+            let guestProfiles: User[] | undefined;
+            if (localUsers.length > 1) {
+                guestProfiles = localUsers.map(u => ({
+                    id: u.id,
+                    email: u.email,
+                    name: u.name
+                }));
+            }
+
+            if (localUsers.length === 1) {
+                console.log(`AuthContext: Auto-selecting profile ${localUsers[0].id}`);
+                await ProfileService.setGuestProfileId(localUsers[0].id);
+            } else if (localUsers.length === 0) {
+                console.log("AuthContext: No local profiles, starting fresh guest session");
+                await ProfileService.setGuestProfileId(null);
+            }
+
             setIsGuest(true);
             setUser(null);
             DocumentUploadScheduler.stop();
-            setHasCompletedOnboarding(true); // Ensure this is true on login
+            setHasCompletedOnboarding(true);
 
             await AsyncStorage.setItem("IS_GUEST", "true");
             await AsyncStorage.removeItem("AUTH_USER");
             await AsyncStorage.setItem("HAS_COMPLETED_ONBOARDING", "true");
+            console.log("AuthContext: loginAsGuest state sequence completed");
+
+            if (guestProfiles && guestProfiles.length > 0) {
+                return guestProfiles;
+            }
         } catch (error) {
             console.error("Guest login failed:", error);
-            // Re-throw with user-friendly message
             throw new Error("Failed to continue as guest. Please try again.");
-        } finally {
-            setIsLoading(false);
+        }
+    };
+
+    const selectGuestProfile = async (profileId: string) => {
+        try {
+            console.log(`AuthContext: selectGuestProfile starting for ${profileId || 'fresh session'}...`);
+            await ProfileService.setGuestProfileId(profileId || null);
+
+            // Set all dependent states BEFORE releasing isLoading
+            setIsGuest(true);
+            setUser(null);
+            setHasCompletedOnboarding(true);
+            DocumentUploadScheduler.stop();
+
+            await AsyncStorage.setItem("IS_GUEST", "true");
+            await AsyncStorage.setItem("HAS_COMPLETED_ONBOARDING", "true");
+
+            console.log("AuthContext: selectGuestProfile state sequence completed");
+        } catch (e) {
+            console.error("AuthContext: selectGuestProfile failed", e);
         }
     };
 
     const logout = async () => {
-        setIsLoading(true);
         try {
-            ProfileBootstrapService.resetCache();
-            await SupabaseService.signOut();
+            // First drop immediately from UI before running heavy wipe operations
             setUser(null);
             setIsGuest(false);
-            await AsyncStorage.removeItem("IS_GUEST");
-            DocumentUploadScheduler.stop();
-            // Supabase client handles session removal
+
+            // Background cleanup operations
+            (async () => {
+                try {
+                    // Start clearing database but don't block the UI
+                    const { SyncService } = await import('../services/SyncService');
+                    SyncService.stopPeriodicSync();
+
+                    const { DataCleanupService } = await import('../services/DataCleanupService');
+                    await DataCleanupService.clearDatabase();
+                } catch (err) {
+                    console.error("AuthContext: Failed to clear database on logout", err);
+                }
+
+                ProfileBootstrapService.resetCache();
+                await ProfileService.resetCache();
+                await AsyncStorage.removeItem("IS_GUEST");
+                DocumentUploadScheduler.stop();
+                await SupabaseService.signOut();
+            })();
         } catch (error: any) {
             const message = getHumanReadableMessage(error, 'logout');
             onError?.('Logout Failed', message);
-        } finally {
-            setIsLoading(false);
         }
     };
 
     const completeOnboarding = async () => {
         try {
             setHasCompletedOnboarding(true);
+            await AsyncStorage.setItem("HAS_COMPLETED_ONBOARDING", "true");
             await AppSettingsService.completeOnboarding();
         } catch (error) {
             console.error("Failed to save onboarding completion:", error);
@@ -221,6 +334,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
         setIsLoading(true);
         try {
             ProfileBootstrapService.resetCache();
+            await ProfileService.resetCache();
             // Import DataCleanupService dynamically to avoid circular dependencies
             const { DataCleanupService } = await import('../services/DataCleanupService');
 
@@ -251,6 +365,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
             login,
             signup,
             loginAsGuest,
+            selectGuestProfile,
             logout,
             completeOnboarding,
             deleteAccount

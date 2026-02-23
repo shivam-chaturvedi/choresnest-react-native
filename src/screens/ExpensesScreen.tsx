@@ -32,6 +32,296 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const tabs = ['Overview', 'Breakdown', 'Insights'];
 
+type DailyDataItem = { day: number; income: number; expenses: number };
+
+type Category = { name: string; id: string; formattedAmount: string; numAmount: number; percent: number; icon: string; color: string; budget: number; formattedBudget: string | null; };
+
+const formatViewDate = (date: Date) => {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${months[date.getMonth()]}, ${date.getFullYear()}`;
+};
+
+const AreaChart = ({ dailyData, viewDate, onPrevMonth, onNextMonth }: { dailyData: DailyDataItem[]; viewDate: Date; onPrevMonth: () => void; onNextMonth: () => void; }) => {
+  const colors = useThemeColors();
+  const radius = useThemeRadius();
+  const height = 180;
+  const width = SCREEN_WIDTH - 64;
+
+  const maxDataVal = Math.max(...dailyData.map(d => Math.max(d.income, d.expenses)));
+  const maxValue = maxDataVal > 0 ? maxDataVal * 1.2 : 1000;
+
+  const getY = (val: number) => height - (val / maxValue) * height;
+  const getX = (index: number) => (index / (dailyData.length - 1)) * (width - 20) + 10;
+
+  const createPath = (key: 'income' | 'expenses') => {
+    if (dailyData.length === 0) return '';
+    const points = dailyData.map((d, i) => `${getX(i)},${getY(d[key])}`);
+    return `M${getX(0)},${height} L${points.join(' L')} L${getX(dailyData.length - 1)},${height} Z`;
+  };
+
+  const createLinePath = (key: 'income' | 'expenses') => {
+    if (dailyData.length === 0) return '';
+    const points = dailyData.map((d, i) => `${getX(i)},${getY(d[key])}`);
+    return `M${points.join(' L')}`;
+  };
+
+  const getOrdinalSuffix = (day: number) => {
+    if (day > 3 && day < 21) return 'th';
+    switch (day % 10) {
+      case 1: return "st";
+      case 2: return "nd";
+      case 3: return "rd";
+      default: return "th";
+    }
+  };
+
+  const currentMonthLabel = formatViewDate(viewDate);
+
+  return (
+    <View style={{ marginTop: 8 }}>
+      {/* Month Navigator & Legend at Top */}
+      <View style={{ marginBottom: 16, gap: 12 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <TouchableOpacity onPress={onPrevMonth} style={[styles.iconButton, { backgroundColor: colors.muted, borderRadius: radius.sm, padding: 6 }]}>
+              <AppIcon name="chevronLeft" size={18} color={colors.foreground} />
+            </TouchableOpacity>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: colors.foreground, minWidth: 100, textAlign: 'center' }}>
+              {currentMonthLabel}
+            </Text>
+            <TouchableOpacity onPress={onNextMonth} style={[styles.iconButton, { backgroundColor: colors.muted, borderRadius: radius.sm, padding: 6 }]}>
+              <AppIcon name="chevronRight" size={18} color={colors.foreground} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Legend Tucked to Side */}
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: '#10b981', borderRadius: 2 }]} />
+              <Text style={{ fontSize: 11, color: colors.mutedForeground }}>Inc</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: '#ef4444', borderRadius: 2 }]} />
+              <Text style={{ fontSize: 11, color: colors.mutedForeground }}>Exp</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+
+      <Svg height={height + 30} width={width}>
+        <Defs>
+          <LinearGradient id="incomeGradient" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor="#10b981" stopOpacity="0.3" />
+            <Stop offset="1" stopColor="#10b981" stopOpacity="0" />
+          </LinearGradient>
+          <LinearGradient id="expenseGradient" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor="#ef4444" stopOpacity="0.3" />
+            <Stop offset="1" stopColor="#ef4444" stopOpacity="0" />
+          </LinearGradient>
+        </Defs>
+
+        {/* Grid Lines */}
+        {[0, 0.25, 0.5, 0.75, 1].map((t, i) => (
+          <Path
+            key={i}
+            d={`M0,${height * t} L${width},${height * t}`}
+            stroke={colors.border}
+            strokeDasharray="4,4"
+            opacity={0.3}
+          />
+        ))}
+
+        {dailyData.length > 0 && (
+          <>
+            <Path d={createPath('income')} fill="url(#incomeGradient)" />
+            <Path d={createPath('expenses')} fill="url(#expenseGradient)" />
+
+            <Path d={createLinePath('income')} stroke="#10b981" strokeWidth={2.5} fill="none" />
+            <Path d={createLinePath('expenses')} stroke="#ef4444" strokeWidth={2.5} fill="none" />
+          </>
+        )}
+
+        {/* X Axis Labels - Higher density (every 5 days) */}
+        {(() => {
+          if (dailyData.length === 0) return null;
+          const labelDays = [];
+          for (let d = 1; d <= dailyData.length; d += 6) {
+            labelDays.push(d);
+          }
+          if (labelDays[labelDays.length - 1] < dailyData.length - 2) {
+            labelDays.push(dailyData.length);
+          }
+
+          return labelDays.map((dayNum, i) => {
+            const idx = dayNum - 1;
+            const xPos = getX(idx);
+            const isBoundary = dayNum === 1 || dayNum === dailyData.length;
+            const labelText = `${dayNum}${isBoundary ? getOrdinalSuffix(dayNum) : ''}`;
+
+            return (
+              <SvgText
+                key={i}
+                x={xPos}
+                y={height + 20}
+                fontSize="9"
+                fill={colors.mutedForeground}
+                textAnchor="middle"
+                fontWeight={isBoundary ? "bold" : "normal"}
+              >
+                {labelText}
+              </SvgText>
+            );
+          });
+        })()}
+      </Svg>
+    </View>
+  );
+};
+
+const DonutChart = ({ categories }: { categories: Category[] }) => {
+  const colors = useThemeColors();
+  const { formatCurrency } = useCountry();
+  const size = 180;
+  const chartRadius = size / 2;
+  const strokeWidth = 35;
+  const center = size / 2;
+  const innerRadius = chartRadius - strokeWidth;
+
+  let startAngle = 0;
+  const total = categories.reduce((sum, cat) => sum + cat.numAmount, 0);
+
+  if (total === 0) {
+    return (
+      <View style={{ alignItems: 'center', marginVertical: 16 }}>
+        <Text style={{ color: colors.mutedForeground }}>No expenses yet</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ alignItems: 'center', marginVertical: 16 }}>
+      <Svg height={size} width={size}>
+        <G rotation="-90" origin={`${center}, ${center}`}>
+          {categories.map((cat) => {
+            const percentage = cat.numAmount / total;
+            const angle = percentage * 360;
+
+            if (angle <= 0) return null;
+
+            // SVG arc doesn't handle 360 degrees in one go (start and end points are the same)
+            // If it's 100%, render a simple Circle/Path that's a full ring
+            if (percentage >= 0.999) {
+              return (
+                <Circle
+                  key={cat.id}
+                  cx={center}
+                  cy={center}
+                  r={(chartRadius + innerRadius) / 2}
+                  fill="none"
+                  stroke={cat.color}
+                  strokeWidth={strokeWidth}
+                />
+              );
+            }
+
+            const largeArcFlag = angle > 180 ? 1 : 0;
+
+            const x1 = center + chartRadius * Math.cos(Math.PI * startAngle / 180);
+            const y1 = center + chartRadius * Math.sin(Math.PI * startAngle / 180);
+            const x2 = center + chartRadius * Math.cos(Math.PI * (startAngle + angle) / 180);
+            const y2 = center + chartRadius * Math.sin(Math.PI * (startAngle + angle) / 180);
+
+            const x3 = center + innerRadius * Math.cos(Math.PI * (startAngle + angle) / 180);
+            const y3 = center + innerRadius * Math.sin(Math.PI * (startAngle + angle) / 180);
+            const x4 = center + innerRadius * Math.cos(Math.PI * startAngle / 180);
+            const y4 = center + innerRadius * Math.sin(Math.PI * startAngle / 180);
+
+            const d = `
+              M ${x1} ${y1}
+              A ${chartRadius} ${chartRadius} 0 ${largeArcFlag} 1 ${x2} ${y2}
+              L ${x3} ${y3}
+              A ${innerRadius} ${innerRadius} 0 ${largeArcFlag} 0 ${x4} ${y4}
+              Z
+            `;
+
+            startAngle += angle;
+
+            return (
+              <Path
+                key={cat.id}
+                d={d}
+                fill={cat.color}
+                stroke={colors.card}
+                strokeWidth={1}
+              />
+            );
+          })}
+        </G>
+        <SvgText
+          x={center}
+          y={center - 10}
+          fontSize="12"
+          fill={colors.mutedForeground}
+          textAnchor="middle"
+          fontWeight="500"
+        >
+          Total
+        </SvgText>
+        <SvgText
+          x={center}
+          y={center + 15}
+          fontSize="16"
+          fill={colors.foreground}
+          textAnchor="middle"
+          fontWeight="bold"
+        >
+          {formatCurrency(total)}
+        </SvgText>
+      </Svg>
+    </View>
+  );
+};
+
+const HorizontalBarChart = ({ categories }: { categories: Category[] }) => {
+  const colors = useThemeColors();
+  const radius = useThemeRadius();
+  const height = Math.max(categories.length * 40, 100);
+  const maxVal = Math.max(...categories.map(c => c.numAmount)) || 1;
+
+  if (categories.length === 0) {
+    return (
+      <View style={{ height: 100, alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ color: colors.mutedForeground }}>No data available</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ height, marginTop: 10 }}>
+      {categories.map((cat, i) => (
+        <View key={cat.id} style={styles.barChartRow}>
+          <View style={{ width: 80 }}>
+            <Text style={[styles.barLabel, { color: colors.foreground }]} numberOfLines={1}>{cat.name}</Text>
+          </View>
+          <View style={styles.barTrack}>
+            <View
+              style={[
+                styles.barFill,
+                {
+                  width: `${(cat.numAmount / maxVal) * 100}%`,
+                  backgroundColor: cat.color,
+                  borderRadius: radius.xs
+                }
+              ]}
+            />
+          </View>
+          <Text style={[styles.barValue, { color: colors.mutedForeground }]}>{cat.formattedAmount}</Text>
+        </View>
+      ))}
+    </View>
+  );
+};
+
 export const ExpensesScreen: React.FC = () => {
   const navigation = useNavigation();
   const colors = useThemeColors();
@@ -80,11 +370,6 @@ export const ExpensesScreen: React.FC = () => {
       d.setMonth(d.getMonth() + 1);
       return d;
     });
-  };
-
-  const formatViewDate = (date: Date) => {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return `${months[date.getMonth()]}, ${date.getFullYear()}`;
   };
 
   // --- Dynamic Data Calculation ---
@@ -242,283 +527,6 @@ export const ExpensesScreen: React.FC = () => {
       else if (e.translationX > 30) runOnJS(handleSwipe)('right');
     });
 
-  // --- Chart Components ---
-
-  const AreaChart = () => {
-    const height = 180;
-    const width = SCREEN_WIDTH - 64;
-
-    const maxDataVal = Math.max(...dailyData.map(d => Math.max(d.income, d.expenses)));
-    const maxValue = maxDataVal > 0 ? maxDataVal * 1.2 : 1000;
-
-    const getY = (val: number) => height - (val / maxValue) * height;
-    const getX = (index: number) => (index / (dailyData.length - 1)) * (width - 20) + 10;
-
-    const createPath = (key: 'income' | 'expenses') => {
-      if (dailyData.length === 0) return '';
-      const points = dailyData.map((d, i) => `${getX(i)},${getY(d[key])}`);
-      return `M${getX(0)},${height} L${points.join(' L')} L${getX(dailyData.length - 1)},${height} Z`;
-    };
-
-    const createLinePath = (key: 'income' | 'expenses') => {
-      if (dailyData.length === 0) return '';
-      const points = dailyData.map((d, i) => `${getX(i)},${getY(d[key])}`);
-      return `M${points.join(' L')}`;
-    };
-
-    const getOrdinalSuffix = (day: number) => {
-      if (day > 3 && day < 21) return 'th';
-      switch (day % 10) {
-        case 1: return "st";
-        case 2: return "nd";
-        case 3: return "rd";
-        default: return "th";
-      }
-    };
-
-    const currentMonthLabel = formatViewDate(viewDate);
-
-    return (
-      <View style={{ marginTop: 8 }}>
-        {/* Month Navigator & Legend at Top */}
-        <View style={{ marginBottom: 16, gap: 12 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <TouchableOpacity onPress={handlePrevMonth} style={[styles.iconButton, { backgroundColor: colors.muted, borderRadius: radius.sm, padding: 6 }]}>
-                <AppIcon name="chevronLeft" size={18} color={colors.foreground} />
-              </TouchableOpacity>
-              <Text style={{ fontSize: 15, fontWeight: '700', color: colors.foreground, minWidth: 100, textAlign: 'center' }}>
-                {currentMonthLabel}
-              </Text>
-              <TouchableOpacity onPress={handleNextMonth} style={[styles.iconButton, { backgroundColor: colors.muted, borderRadius: radius.sm, padding: 6 }]}>
-                <AppIcon name="chevronRight" size={18} color={colors.foreground} />
-              </TouchableOpacity>
-            </View>
-
-            {/* Legend Tucked to Side */}
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: '#10b981', borderRadius: 2 }]} />
-                <Text style={{ fontSize: 11, color: colors.mutedForeground }}>Inc</Text>
-              </View>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: '#ef4444', borderRadius: 2 }]} />
-                <Text style={{ fontSize: 11, color: colors.mutedForeground }}>Exp</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        <Svg height={height + 30} width={width}>
-          <Defs>
-            <LinearGradient id="incomeGradient" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor="#10b981" stopOpacity="0.3" />
-              <Stop offset="1" stopColor="#10b981" stopOpacity="0" />
-            </LinearGradient>
-            <LinearGradient id="expenseGradient" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor="#ef4444" stopOpacity="0.3" />
-              <Stop offset="1" stopColor="#ef4444" stopOpacity="0" />
-            </LinearGradient>
-          </Defs>
-
-          {/* Grid Lines */}
-          {[0, 0.25, 0.5, 0.75, 1].map((t, i) => (
-            <Path
-              key={i}
-              d={`M0,${height * t} L${width},${height * t}`}
-              stroke={colors.border}
-              strokeDasharray="4,4"
-              opacity={0.3}
-            />
-          ))}
-
-          {dailyData.length > 0 && (
-            <>
-              <Path d={createPath('income')} fill="url(#incomeGradient)" />
-              <Path d={createPath('expenses')} fill="url(#expenseGradient)" />
-
-              <Path d={createLinePath('income')} stroke="#10b981" strokeWidth={2.5} fill="none" />
-              <Path d={createLinePath('expenses')} stroke="#ef4444" strokeWidth={2.5} fill="none" />
-            </>
-          )}
-
-          {/* X Axis Labels - Higher density (every 5 days) */}
-          {(() => {
-            if (dailyData.length === 0) return null;
-            const labelDays = [];
-            for (let d = 1; d <= dailyData.length; d += 6) {
-              labelDays.push(d);
-            }
-            if (labelDays[labelDays.length - 1] < dailyData.length - 2) {
-              labelDays.push(dailyData.length);
-            }
-
-            return labelDays.map((dayNum, i) => {
-              const idx = dayNum - 1;
-              const xPos = getX(idx);
-              const isBoundary = dayNum === 1 || dayNum === dailyData.length;
-              const labelText = `${dayNum}${isBoundary ? getOrdinalSuffix(dayNum) : ''}`;
-
-              return (
-                <SvgText
-                  key={i}
-                  x={xPos}
-                  y={height + 20}
-                  fontSize="9"
-                  fill={colors.mutedForeground}
-                  textAnchor="middle"
-                  fontWeight={isBoundary ? "bold" : "normal"}
-                >
-                  {labelText}
-                </SvgText>
-              );
-            });
-          })()}
-        </Svg>
-      </View>
-    );
-  };
-
-  const DonutChart = () => {
-    const size = 180;
-    const chartRadius = size / 2;
-    const strokeWidth = 35;
-    const center = size / 2;
-    const innerRadius = chartRadius - strokeWidth;
-
-    let startAngle = 0;
-    const total = categories.reduce((sum, cat) => sum + cat.numAmount, 0);
-
-    if (total === 0) {
-      return (
-        <View style={{ alignItems: 'center', marginVertical: 16 }}>
-          <Text style={{ color: colors.mutedForeground }}>No expenses yet</Text>
-        </View>
-      );
-    }
-
-    return (
-      <View style={{ alignItems: 'center', marginVertical: 16 }}>
-        <Svg height={size} width={size}>
-          <G rotation="-90" origin={`${center}, ${center}`}>
-            {categories.map((cat) => {
-              const percentage = cat.numAmount / total;
-              const angle = percentage * 360;
-
-              if (angle <= 0) return null;
-
-              // SVG arc doesn't handle 360 degrees in one go (start and end points are the same)
-              // If it's 100%, render a simple Circle/Path that's a full ring
-              if (percentage >= 0.999) {
-                return (
-                  <Circle
-                    key={cat.id}
-                    cx={center}
-                    cy={center}
-                    r={(chartRadius + innerRadius) / 2}
-                    fill="none"
-                    stroke={cat.color}
-                    strokeWidth={strokeWidth}
-                  />
-                );
-              }
-
-              const largeArcFlag = angle > 180 ? 1 : 0;
-
-              const x1 = center + chartRadius * Math.cos(Math.PI * startAngle / 180);
-              const y1 = center + chartRadius * Math.sin(Math.PI * startAngle / 180);
-              const x2 = center + chartRadius * Math.cos(Math.PI * (startAngle + angle) / 180);
-              const y2 = center + chartRadius * Math.sin(Math.PI * (startAngle + angle) / 180);
-
-              const x3 = center + innerRadius * Math.cos(Math.PI * (startAngle + angle) / 180);
-              const y3 = center + innerRadius * Math.sin(Math.PI * (startAngle + angle) / 180);
-              const x4 = center + innerRadius * Math.cos(Math.PI * startAngle / 180);
-              const y4 = center + innerRadius * Math.sin(Math.PI * startAngle / 180);
-
-              const d = `
-                M ${x1} ${y1}
-                A ${chartRadius} ${chartRadius} 0 ${largeArcFlag} 1 ${x2} ${y2}
-                L ${x3} ${y3}
-                A ${innerRadius} ${innerRadius} 0 ${largeArcFlag} 0 ${x4} ${y4}
-                Z
-              `;
-
-              startAngle += angle;
-
-              return (
-                <Path
-                  key={cat.id}
-                  d={d}
-                  fill={cat.color}
-                  stroke={colors.card}
-                  strokeWidth={1}
-                />
-              );
-            })}
-          </G>
-          <SvgText
-            x={center}
-            y={center - 10}
-            fontSize="12"
-            fill={colors.mutedForeground}
-            textAnchor="middle"
-            fontWeight="500"
-          >
-            Total
-          </SvgText>
-          <SvgText
-            x={center}
-            y={center + 15}
-            fontSize="16"
-            fill={colors.foreground}
-            textAnchor="middle"
-            fontWeight="bold"
-          >
-            {formatCurrency(total)}
-          </SvgText>
-        </Svg>
-      </View>
-    );
-  };
-
-  const HorizontalBarChart = () => {
-    const height = Math.max(categories.length * 40, 100);
-    const maxVal = Math.max(...categories.map(c => c.numAmount)) || 1;
-
-    if (categories.length === 0) {
-      return (
-        <View style={{ height: 100, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ color: colors.mutedForeground }}>No data available</Text>
-        </View>
-      );
-    }
-
-    return (
-      <View style={{ height, marginTop: 10 }}>
-        {categories.map((cat, i) => (
-          <View key={cat.id} style={styles.barChartRow}>
-            <View style={{ width: 80 }}>
-              <Text style={[styles.barLabel, { color: colors.foreground }]} numberOfLines={1}>{cat.name}</Text>
-            </View>
-            <View style={styles.barTrack}>
-              <View
-                style={[
-                  styles.barFill,
-                  {
-                    width: `${(cat.numAmount / maxVal) * 100}%`,
-                    backgroundColor: cat.color,
-                    borderRadius: radius.xs
-                  }
-                ]}
-              />
-            </View>
-            <Text style={[styles.barValue, { color: colors.mutedForeground }]}>{cat.formattedAmount}</Text>
-          </View>
-        ))}
-      </View>
-    );
-  }
-
   if (screenError) {
     return (
       <AppLayout showNav={false} showAddButton={false}>
@@ -633,7 +641,7 @@ export const ExpensesScreen: React.FC = () => {
                   <BarChart3 size={20} color={colors.primary} />
                   <Text style={[styles.chartTitle, { color: colors.foreground }]}>Trend</Text>
                 </View>
-                <AreaChart />
+                <AreaChart dailyData={dailyData} viewDate={viewDate} onPrevMonth={handlePrevMonth} onNextMonth={handleNextMonth} />
               </View>
 
               {/* Recent Transactions */}
@@ -674,7 +682,7 @@ export const ExpensesScreen: React.FC = () => {
                   <PieChartIcon size={20} color={colors.primary} />
                   <Text style={[styles.chartTitle, { color: colors.foreground }]}>Spending Breakdown</Text>
                 </View>
-                <DonutChart />
+                <DonutChart categories={categories} />
 
                 {/* Legend List */}
                 <View style={{ marginTop: 24, gap: 12, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 16 }}>
@@ -795,7 +803,7 @@ export const ExpensesScreen: React.FC = () => {
                   <BarChart3 size={20} color={colors.primary} />
                   <Text style={[styles.chartTitle, { color: colors.foreground }]}>Category Spending</Text>
                 </View>
-                <HorizontalBarChart />
+                <HorizontalBarChart categories={categories} />
               </View>
 
               {/* Tips Card */}

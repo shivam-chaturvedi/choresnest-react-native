@@ -506,7 +506,7 @@ export const NotificationsScreen: React.FC = () => {
               />
               {Platform.OS === 'ios' && (
                 <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 }}>
-                  <Button size="sm" variant="ghost" onPress={() => setShowStartPicker(false)}>Done</Button>
+                  <Button size="sm" variant="ghost" onPress={() => setShowStartPicker(false)}><Text>Done</Text></Button>
                 </View>
               )}
             </>
@@ -522,7 +522,7 @@ export const NotificationsScreen: React.FC = () => {
               />
               {Platform.OS === 'ios' && (
                 <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 }}>
-                  <Button size="sm" variant="ghost" onPress={() => setShowEndPicker(false)}>Done</Button>
+                  <Button size="sm" variant="ghost" onPress={() => setShowEndPicker(false)}><Text>Done</Text></Button>
                 </View>
               )}
             </>
@@ -536,7 +536,7 @@ export const NotificationsScreen: React.FC = () => {
             <View style={styles.deliveryRow}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                 <Smartphone size={20} color={colors.mutedForeground} />
-                <Text style={[styles.labelTitle, { color: colors.foreground, fontSize: 14 }]}>Push Notifications</Text>
+                <Text style={[styles.labelTitle, { color: colors.foreground, fontSize: 14 }]}>Notifications</Text>
               </View>
               <Switch
                 value={pushEnabled}

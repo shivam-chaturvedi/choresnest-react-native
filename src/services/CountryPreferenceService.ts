@@ -2,6 +2,9 @@ import { database } from '../database';
 import UserPreference from '../database/models/UserPreference';
 import { COUNTRY_CONFIG, DEFAULT_COUNTRY_CODE, CountryConfiguration, getCountryConfig, isSupportedCountry } from '../config/countries';
 import * as RNLocalize from 'react-native-localize';
+import { SyncService } from './SyncService';
+import { AppSettingsService } from './AppSettingsService';
+import { Q } from '@nozbe/watermelondb';
 
 type CountryChangeListener = (config: CountryConfiguration) => void;
 
@@ -128,15 +131,49 @@ export const CountryPreferenceService = {
     async setCountry(code: string): Promise<void> {
         const normalized = isSupportedCountry(code) ? code : DEFAULT_COUNTRY_CODE;
         try {
+            // First update user_preferences for backward compatibility
             const record = await getOrCreatePreferenceRecord();
             await database.write(async () => {
                 await record.update(pref => {
                     pref.countryCode = normalized;
                     pref.updatedAt = Date.now();
+                    pref.version = (pref.version ?? 0) + 1;
                 });
             });
+
+            // NOW ALSO store it in Settings table as key-value pair for Supabase Sync
+            const settingsCollection = database.get('settings');
+            const profileId = await AppSettingsService.getActiveProfileId();
+
+            if (profileId) {
+                const existingSettings = await settingsCollection.query(
+                    Q.where('profile_id', profileId),
+                    Q.where('key', 'localization')
+                ).fetch();
+
+                await database.write(async () => {
+                    if (existingSettings.length > 0) {
+                        await existingSettings[0].update((s: any) => {
+                            s.value = normalized;
+                            s.updatedAt = Date.now();
+                            s.version = (s.version || 0) + 1;
+                        });
+                    } else {
+                        await settingsCollection.create((s: any) => {
+                            s.profileId = profileId;
+                            s.key = 'localization';
+                            s.value = normalized;
+                            s.createdAt = Date.now();
+                            s.updatedAt = Date.now();
+                            s.version = 1;
+                        });
+                    }
+                });
+            }
+
             cachedCountryCode = normalized;
             notifyListeners();
+            void SyncService.requestSyncSoon();
         } catch (error) {
             console.error('Failed to update country preference:', error);
         }

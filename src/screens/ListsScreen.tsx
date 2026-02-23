@@ -7,7 +7,6 @@ import {
   Pressable,
   Modal,
   Alert,
-  FlatList,
 } from "react-native";
 import { Swipeable, PanGestureHandler, State } from "react-native-gesture-handler";
 import { useRoute, RouteProp } from "@react-navigation/native";
@@ -18,6 +17,7 @@ import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { GlobalSearch } from "../components/search/GlobalSearch";
 import { useSidebar } from "../contexts/SidebarContext";
 import { AppIcon, CustomDateTimePicker } from "../components/ui";
+import { MemberIcon } from "../components/ui/MemberIcon";
 import { ScreenErrorView } from "../components/ui/ScreenErrorView";
 import { AddShoppingItemModal } from "../components/modals/AddShoppingItemModal";
 import Config from "react-native-config";
@@ -33,7 +33,8 @@ type GroceryRowProps = {
   radius: ReturnType<typeof useThemeRadius>;
   onToggle: (id: string) => void;
   onRemove: (id: string) => void;
-  getMemberIcon: (memberId: string) => string;
+  memberSymbol?: string;
+  memberName?: string;
 };
 
 const GroceryRow = React.memo<GroceryRowProps>(({
@@ -45,7 +46,8 @@ const GroceryRow = React.memo<GroceryRowProps>(({
   radius,
   onToggle,
   onRemove,
-  getMemberIcon,
+  memberSymbol,
+  memberName,
 }) => {
   const renderRightActions = useCallback(() => (
     <Pressable
@@ -91,14 +93,21 @@ const GroceryRow = React.memo<GroceryRowProps>(({
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
           <View style={[styles.categoryIconSmall, { backgroundColor: (categoryColor || colors.muted) + '20' }]}>
-            <Text style={{ fontSize: 16 }}>{categoryIcon || "📦"}</Text>
+            {categoryIcon ? (
+              <AppIcon source={categoryIcon} size={20} color={colors.foreground} />
+            ) : (
+              <Text style={{ fontSize: 16 }}>📦</Text>
+            )}
           </View>
           <View style={{ flex: 1, marginLeft: 12 }}>
             <Text style={[styles.itemName, { color: colors.foreground, textDecorationLine: isPurchased ? 'line-through' : 'none', opacity: isPurchased ? 0.7 : 1 }]}>{item.name}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
               <Text style={[styles.itemDetail, { color: colors.mutedForeground }]}>{item.quantity} {item.unit}</Text>
-              <View style={[styles.addedByBadge, { backgroundColor: colors.muted, borderRadius: radius.sm, marginLeft: 8 }]}>
-                <Text style={{ fontSize: 10 }}>{getMemberIcon(item.addedBy || "")}</Text>
+              <View style={[styles.addedByBadge, { backgroundColor: colors.muted, borderRadius: radius.sm, marginLeft: 8, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6 }]}>
+                <MemberIcon symbol={memberSymbol} size={14} color={colors.foreground} />
+                <Text style={{ fontSize: 11, marginLeft: 4, color: colors.foreground }}>
+                  {memberName || "Family Member"}
+                </Text>
               </View>
               {isPurchased && item.purchasedAt && (
                 <Text style={[styles.itemDetail, { color: colors.mutedForeground, marginLeft: 8 }]}>
@@ -151,6 +160,9 @@ export const ListsScreen: React.FC = () => {
   const [showImportModal, setShowImportModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
+  const [memberFilterId, setMemberFilterId] = useState<string | null>(null);
+  const [isMemberFilterOpen, setIsMemberFilterOpen] = useState(false);
+  const [updatedDateFilter, setUpdatedDateFilter] = useState<Date | null>(null);
 
   // State to track expanded categories. Default all expanded.
   const [activeTab, setActiveTab] = useState<"current" | "purchased">("current");
@@ -202,9 +214,12 @@ export const ListsScreen: React.FC = () => {
     return map;
   }, [categories]);
 
-  const getMemberIcon = useCallback((memberId: string) => {
+  const getMemberMeta = useCallback((memberId: string) => {
     const member = members.find(m => m.id === memberId);
-    return member ? member.symbol : "👤";
+    return {
+      symbol: member?.symbol,
+      name: member?.name,
+    };
   }, [members]);
 
   const handleToggleItem = useCallback(async (id: string) => {
@@ -231,6 +246,7 @@ export const ListsScreen: React.FC = () => {
       icon: "📦",
     };
 
+    const memberMeta = getMemberMeta(item.addedBy || "");
     return (
       <GroceryRow
         key={item.id}
@@ -242,16 +258,25 @@ export const ListsScreen: React.FC = () => {
         radius={radius}
         onToggle={handleToggleItem}
         onRemove={handleRemoveItem}
-        getMemberIcon={getMemberIcon}
+        memberSymbol={memberMeta.symbol}
+        memberName={memberMeta.name}
       />
     );
-  }, [categoriesById, colors, radius, handleRemoveItem, handleToggleItem, getMemberIcon]);
+  }, [categoriesById, colors, radius, handleRemoveItem, handleToggleItem, getMemberMeta]);
 
   const filteredItems = useMemo(() => {
-    return (groceryList as GroceryItem[]).filter((item) =>
-      item.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [groceryList, searchQuery]);
+    const searchLower = searchQuery.trim().toLowerCase();
+    return (groceryList as GroceryItem[]).filter((item) => {
+      const matchesSearch = item.name.toLowerCase().includes(searchLower);
+      const matchesMember = !memberFilterId || item.addedBy === memberFilterId;
+      const matchesDate = !updatedDateFilter || (
+        item.updatedAt !== undefined &&
+        item.updatedAt !== null &&
+        new Date(item.updatedAt).toDateString() === updatedDateFilter.toDateString()
+      );
+      return matchesSearch && matchesMember && matchesDate;
+    });
+  }, [groceryList, searchQuery, memberFilterId, updatedDateFilter]);
 
   const todoItems = useMemo(() => filteredItems.filter((item) => !item.completed), [filteredItems]);
   const doneItems = useMemo(() => filteredItems.filter((item) => item.completed), [filteredItems]);
@@ -474,6 +499,42 @@ export const ListsScreen: React.FC = () => {
                   </Text>
                 </Pressable>
               </View>
+              {activeTab === "current" && (
+                <View style={[styles.filterRow, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.md }]}>
+                  <Pressable style={[styles.filterDropdownBtn, memberFilterId && { borderColor: colors.primary }]} onPress={() => setIsMemberFilterOpen(true)}>
+                    <AppIcon name="user" size={20} color={colors.primary} />
+                    <Text style={{ marginLeft: 6, color: memberFilterId ? colors.primary : colors.foreground, fontWeight: '600' }}>
+                      {memberFilterId ? (members.find(m => m.id === memberFilterId)?.name ?? "Member") : "All members"}
+                    </Text>
+                    <AppIcon name="chevronDown" size={16} color={colors.mutedForeground} style={{ marginLeft: 4 }} />
+                  </Pressable>
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <View style={styles.clearFiltersRow}>
+                      <Text style={{ fontSize: 12, color: colors.mutedForeground, fontWeight: '600' }}>Updated date</Text>
+                      {(memberFilterId || updatedDateFilter) && (
+                        <Pressable
+                          onPress={() => { setMemberFilterId(null); setUpdatedDateFilter(null); }}
+                          style={[styles.clearFiltersBtn, { borderColor: colors.danger, backgroundColor: colors.background }]}
+                        >
+                          <Text style={{ color: colors.danger, fontWeight: '600', fontSize: 12 }}>Clear filters</Text>
+                        </Pressable>
+                      )}
+                    </View>
+                    <CustomDateTimePicker
+                      mode="date"
+                      value={updatedDateFilter ?? new Date()}
+                      onChange={(value) => setUpdatedDateFilter(value)}
+                      label="Updated Date"
+                      placeholder="Any date"
+                    />
+                    <Text style={{ fontSize: 12, color: colors.mutedForeground, marginTop: 4 }}>
+                      {updatedDateFilter
+                        ? `Showing items updated on ${updatedDateFilter.toLocaleDateString()}`
+                        : "Showing items from any date"}
+                    </Text>
+                  </View>
+                </View>
+              )}
 
               {activeTab === "current" ? (
                 <>
@@ -560,6 +621,36 @@ export const ListsScreen: React.FC = () => {
                     </View>
 
                     <View style={{ padding: 12 }}>
+                      {members.length > 0 && (
+                        <View style={styles.memberHistoryFilterRow}>
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                            <Pressable
+                              style={[
+                                styles.memberHistoryChip,
+                                !memberFilterId && { borderColor: colors.primary, backgroundColor: colors.primary + '10' },
+                              ]}
+                              onPress={() => setMemberFilterId(null)}
+                            >
+                              <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>All</Text>
+                            </Pressable>
+                            {members.map(member => (
+                              <Pressable
+                                key={member.id}
+                                style={[
+                                  styles.memberHistoryChip,
+                                  memberFilterId === member.id && { borderColor: colors.primary, backgroundColor: colors.primary + '10' },
+                                ]}
+                                onPress={() => setMemberFilterId(member.id)}
+                              >
+                                <MemberIcon symbol={member.symbol} size={14} color={colors.foreground} />
+                                <Text style={{ marginLeft: 6, fontSize: 12, color: colors.foreground }}>
+                                  {member.name}
+                                </Text>
+                              </Pressable>
+                            ))}
+                          </ScrollView>
+                        </View>
+                      )}
                       <Text style={[styles.filterLabel, { color: colors.mutedForeground, marginBottom: 8 }]}>Category</Text>
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
                         <Pressable
@@ -632,6 +723,72 @@ export const ListsScreen: React.FC = () => {
         onClose={() => setShowAddModal(false)}
         onAdd={handleAddItem}
       />
+
+      <Modal
+        visible={isMemberFilterOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsMemberFilterOpen(false)}
+      >
+        <Pressable style={styles.memberFilterOverlay} onPress={() => setIsMemberFilterOpen(false)}>
+          <Pressable
+            style={[
+              styles.memberFilterModal,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.memberFilterHeader}>
+              <Text style={{ fontSize: 18, fontWeight: "700", color: colors.foreground }}>Filter by member</Text>
+              <Pressable onPress={() => setIsMemberFilterOpen(false)}>
+                <AppIcon name="x" size={20} color={colors.mutedForeground} />
+              </Pressable>
+            </View>
+            <Pressable
+              style={[
+                styles.memberFilterItem,
+                { borderColor: colors.border },
+                memberFilterId === null && { backgroundColor: colors.primary + "10" },
+              ]}
+              onPress={() => {
+                setMemberFilterId(null);
+                setIsMemberFilterOpen(false);
+              }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <MemberIcon symbol="users" size={20} color={colors.foreground} />
+                <Text style={{ color: colors.foreground, fontWeight: "600" }}>All members</Text>
+              </View>
+              {memberFilterId === null && <AppIcon name="check" size={18} color={colors.success} />}
+            </Pressable>
+            <ScrollView
+              style={{ maxHeight: 260 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {members.map((member) => (
+                <Pressable
+                  key={member.id}
+                  style={[
+                    styles.memberFilterItem,
+                    { borderColor: colors.border },
+                    memberFilterId === member.id && { backgroundColor: colors.primary + "10" },
+                  ]}
+                  onPress={() => {
+                    setMemberFilterId(member.id);
+                    setIsMemberFilterOpen(false);
+                  }}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <MemberIcon symbol={member.symbol} size={20} color={colors.foreground} />
+                    <Text style={{ color: colors.foreground }}>{member.name}</Text>
+                  </View>
+                  {memberFilterId === member.id && <AppIcon name="check" size={18} color={colors.success} />}
+                </Pressable>
+              ))}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Import Modal */}
       <Modal visible={showImportModal} transparent animationType="slide" onRequestClose={() => setShowImportModal(false)}>
@@ -865,6 +1022,76 @@ const styles = StyleSheet.create({
   },
   filterContainer: {
     paddingVertical: 10,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 12,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  filterDropdownBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 8,
+    paddingHorizontal: 12,
+  },
+  clearFiltersBtn: {
+    marginLeft: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  clearFiltersRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  memberHistoryFilterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  memberHistoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#d0d5dd',
+    backgroundColor: '#f8fafc',
+    marginRight: 8,
+    gap: 6,
+  },
+  memberFilterOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
+    justifyContent: "flex-end",
+  },
+  memberFilterModal: {
+    padding: 16,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+  },
+  memberFilterHeader: {
+    marginBottom: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  memberFilterItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
   },
   filterChip: {
     flexDirection: 'row',

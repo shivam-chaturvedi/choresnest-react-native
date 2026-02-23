@@ -8,13 +8,16 @@ import {
   ScrollView,
   Pressable,
   Platform,
-  SafeAreaView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { AppIcon, AppIconName } from "../ui/AppIcon";
 import { useTheme, useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { useFamily } from "../../contexts/FamilyContext";
 import { useRecipes } from "../../contexts/RecipeContext";
+import Config from 'react-native-config';
+
+const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 
 interface SearchResult {
   id: string;
@@ -48,7 +51,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
       event: { label: "Events", icon: "calendar", color: colors.info, bg: colors.info + "20" },
       task: { label: "Tasks", icon: "checkSquare", color: colors.success, bg: colors.success + "20" },
       grocery: { label: "Grocery", icon: "shoppingCart", color: colors.warning, bg: colors.warning + "20" },
-      recipe: { label: "Recipes", icon: "utensils", color: colors.primary, bg: colors.primary + "20" },
+      ...(ENABLE_RECIPE_AND_MEALS ? { recipe: { label: "Recipes", icon: "utensils", color: colors.primary, bg: colors.primary + "20" } } : {}),
       document: { label: "Vault", icon: "file", color: colors.secondary, bg: colors.secondary + "20" },
     }),
     [colors]
@@ -151,13 +154,14 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, onClose }) => 
     }
 
     const performSearch = async () => {
-      const { tasks, events, recipes, documents } = await SearchService.search(query);
+      const { tasks, events, recipes, documents, groceries } = await SearchService.search(query, activeFilter);
 
       const mappedResults: SearchResult[] = [
         ...events.map(e => ({ id: e.id, type: 'event' as const, title: e.title, subtitle: e.dateString, icon: '📅', path: 'calendar', meta: e.time })),
         ...tasks.map(t => ({ id: t.id, type: 'task' as const, title: t.name, subtitle: t.status, icon: '✅', path: 'tasks', meta: t.priority })),
         ...recipes.map(r => ({ id: r.id, type: 'recipe' as const, title: r.name, subtitle: 'Recipe', icon: '🍳', path: 'Recipes', meta: '' })),
         ...documents.map(d => ({ id: d.id, type: 'document' as const, title: d.name, subtitle: d.type, icon: '📄', path: 'Vault', meta: d.date })),
+        ...groceries.map(g => ({ id: g.id, type: 'grocery' as const, title: g.name, subtitle: 'Grocery item', icon: '🛒', path: 'lists', meta: g.quantity ? `${g.quantity} ${g.unit ?? ""}`.trim() : "" })),
       ];
 
       // Filter by active type if set

@@ -7,6 +7,9 @@ import {
   Utensils, FolderLock, DollarSign, Users, Search, Check,
   X, ChevronLeft, ChevronRight
 } from "lucide-react-native";
+import Config from 'react-native-config';
+
+const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 
 export interface GettingStartedTutorialProps {
   open?: boolean;
@@ -14,7 +17,7 @@ export interface GettingStartedTutorialProps {
   onClose: () => void;
 }
 
-const tutorialSteps = [
+const allTutorialSteps = [
   {
     id: 'welcome',
     icon: Sparkles,
@@ -97,6 +100,8 @@ const tutorialSteps = [
     emoji: '🎉'
   }
 ];
+
+const tutorialSteps = allTutorialSteps.filter(step => ENABLE_RECIPE_AND_MEALS ? true : step.id !== 'meals');
 
 export const GettingStartedTutorial: React.FC<GettingStartedTutorialProps> = ({ visible, open, onClose }) => {
   // Support both 'visible' (old prop name from HelpScreen.tsx extraction) and 'open' (current prop name)

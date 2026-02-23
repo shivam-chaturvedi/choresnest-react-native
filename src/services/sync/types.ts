@@ -2,6 +2,7 @@ export type TableChangeSet = {
     created: any[];
     updated: any[];
     deleted: string[];
+    latestUpdatedAt?: number;
 };
 
 export type TableFetchDescriptor = {

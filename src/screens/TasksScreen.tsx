@@ -8,6 +8,7 @@ import {
   Alert,
 } from "react-native";
 import { AppLayout } from "../components/layout";
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 import { AddTaskModal } from "../components/modals/AddTaskModal";
 import { GlobalSearch } from "../components/search/GlobalSearch";
@@ -209,7 +210,12 @@ export const TasksScreen: React.FC = () => {
                       </Pressable>
                       <View style={styles.taskDetails}>
                         <View style={styles.taskTitleRow}>
-                          <Text style={{ fontSize: 20, marginRight: 8 }}>{task.icon}</Text>
+                          <MaterialCommunityIcons
+                            name={task.icon && task.icon.trim() ? task.icon : 'format-list-checks'}
+                            size={22}
+                            color={colors.primary}
+                            style={{ marginRight: 8 }}
+                          />
                           <Text style={[styles.taskTitle, { color: colors.foreground }, task.status === "done" && { color: colors.mutedForeground }]}>
                             {task.name}
                           </Text>

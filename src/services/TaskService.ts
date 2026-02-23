@@ -10,6 +10,11 @@ import { formatDateTime } from '../utils/countryFormatting';
 import { SyncService } from './SyncService';
 import { Q } from '@nozbe/watermelondb';
 import { map } from 'rxjs/operators';
+import { EMPTY } from 'rxjs';
+import { supabase } from '../config/supabase';
+import { ProfileService } from './ProfileService';
+
+const resolveProfileId = ProfileService.getActiveProfileId;
 
 const syncAfterWrite = () => {
     void SyncService.requestSyncSoon();
@@ -370,21 +375,30 @@ const handleEventNotificationJob = async (eventId: string, options: EventNotific
 
 export const TaskService = {
     // --- Tasks ---
-    observeTasks: () => {
+    observeTasks: (profileId?: string | null) => {
+        if (!profileId) return EMPTY;
+
         const query = database.get<Task>('tasks').query(
             Q.where('deleted', false),
+            Q.where('profile_id', profileId)
         );
         return query.observeWithColumns(TASK_OBSERVE_COLUMNS).pipe(
             map(records => records.map(serializeTaskRecord))
         );
     },
 
-    addTask: async (data: Partial<Task>) => {
+    addTask: async (data: Partial<Task> & { profileId?: string | null }) => {
+        if (!data.profileId) {
+            console.warn('TaskService: Cannot add task without profileId');
+            return;
+        }
+
         const now = Date.now();
         let createdTaskId: string | undefined;
 
         await database.write(async () => {
             const task = await database.get<Task>('tasks').create(t => {
+                t.profileId = data.profileId!;
                 t.name = data.name || 'Untitled';
                 t.status = data.status || 'pending';
                 t.priority = data.priority || 'medium';
@@ -392,7 +406,7 @@ export const TaskService = {
                 t.dueDisplay = data.dueDisplay || '';
                 t.assigneeId = data.assigneeId || '';
                 t.tab = data.tab || 'My Tasks';
-                t.icon = data.icon || '📝';
+                t.icon = data.icon || 'format-list-checks';
                 t.reminderEnabled = data.reminderEnabled ?? true;
                 t.createdAt = now;
                 t.updatedAt = now;
@@ -409,10 +423,21 @@ export const TaskService = {
     },
 
     updateTask: async (id: string, updates: Partial<Task>) => {
+        const profileId = await resolveProfileId();
+        if (!profileId) {
+            console.error('TaskService: No profileId for updateTask');
+            return;
+        }
+
         const now = Date.now();
 
         await database.write(async () => {
             const task = await database.get<Task>('tasks').find(id);
+            if (task.profileId !== profileId) {
+                console.warn('TaskService: Security violation - task does not belong to active profile');
+                return;
+            }
+
             await task.update(tsk => {
                 if (updates.name !== undefined) tsk.name = updates.name;
                 if (updates.status !== undefined) tsk.status = updates.status;
@@ -433,9 +458,19 @@ export const TaskService = {
     },
 
     deleteTask: async (id: string) => {
+        const profileId = await resolveProfileId();
+        if (!profileId) {
+            console.error('TaskService: No profileId for deleteTask');
+            return;
+        }
+
         let notificationId: string | undefined;
         try {
             const task = await database.get<Task>('tasks').find(id);
+            if (task.profileId !== profileId) {
+                console.warn('TaskService: Security violation - task does not belong to active profile');
+                return;
+            }
             notificationId = task.notificationId;
         } catch { /* ignore */ }
 
@@ -443,6 +478,8 @@ export const TaskService = {
         await database.write(async () => {
             try {
                 const task = await database.get<Task>('tasks').find(id);
+                if (task.profileId !== profileId) return;
+
                 await task.update(tsk => {
                     tsk.deleted = true;
                     tsk.updatedAt = now;
@@ -460,28 +497,37 @@ export const TaskService = {
     },
 
     // --- Events ---
-    observeEvents: () => {
+    observeEvents: (profileId?: string | null) => {
+        if (!profileId) return EMPTY;
+
         const query = database.get<Event>('events').query(
             Q.where('deleted', false),
+            Q.where('profile_id', profileId)
         );
         return query.observeWithColumns(EVENT_OBSERVE_COLUMNS).pipe(
             map(records => records.map(serializeEventRecord))
         );
     },
 
-    addEvent: async (data: Partial<Event>) => {
+    addEvent: async (data: Partial<Event> & { profileId?: string | null }) => {
+        if (!data.profileId) {
+            console.warn('TaskService: Cannot add event without profileId');
+            return;
+        }
+
         const now = Date.now();
         let createdEventId: string | undefined;
 
         await database.write(async () => {
             const event = await database.get<Event>('events').create(e => {
+                e.profileId = data.profileId!;
                 e.title = data.title || 'Untitled';
                 e.dateString = data.dateString || '';
                 e.time = data.time || '';
                 e.endTime = data.endTime;
                 e.endDate = data.endDate;
                 e.memberId = data.memberId || '';
-                e.icon = data.icon || '📅';
+                e.icon = data.icon || 'calendar-star';
                 e.description = data.description;
                 e.notes = data.notes;
                 e.location = data.location;
@@ -506,10 +552,21 @@ export const TaskService = {
     },
 
     updateEvent: async (id: string, updates: Partial<Event>) => {
+        const profileId = await resolveProfileId();
+        if (!profileId) {
+            console.error('TaskService: No profileId for updateEvent');
+            return;
+        }
+
         const now = Date.now();
 
         await database.write(async () => {
             const event = await database.get<Event>('events').find(id);
+            if (event.profileId !== profileId) {
+                console.warn('TaskService: Security violation - event does not belong to active profile');
+                return;
+            }
+
             await event.update(ev => {
                 if (updates.title !== undefined) ev.title = updates.title;
                 if (updates.dateString !== undefined) ev.dateString = updates.dateString;
@@ -537,9 +594,19 @@ export const TaskService = {
     },
 
     deleteEvent: async (id: string) => {
+        const profileId = await resolveProfileId();
+        if (!profileId) {
+            console.error('TaskService: No profileId for deleteEvent');
+            return;
+        }
+
         let notificationId: string | undefined;
         try {
             const event = await database.get<Event>('events').find(id);
+            if (event.profileId !== profileId) {
+                console.warn('TaskService: Security violation - event does not belong to active profile');
+                return;
+            }
             notificationId = event.notificationId;
         } catch { /* ignore if not found */ }
 
@@ -547,6 +614,8 @@ export const TaskService = {
         await database.write(async () => {
             try {
                 const event = await database.get<Event>('events').find(id);
+                if (event.profileId !== profileId) return;
+
                 await event.update(ev => {
                     ev.deleted = true;
                     ev.updatedAt = now;

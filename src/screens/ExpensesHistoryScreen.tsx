@@ -217,25 +217,25 @@ export const ExpensesHistoryScreen: React.FC = () => {
           {historyFilter === 'week' && (
             <View style={styles.weekSelector}>
               <Text style={[styles.weekLabel, { color: colors.mutedForeground }]}>Week range</Text>
-          <View style={styles.weekPickerRow}>
-            <DateTimePicker
-              value={historyWeekStart}
-              onChange={setHistoryWeekStart}
-              placeholder="Select week start"
-              buttonStyle={styles.weekPickerButton}
-              textStyle={styles.weekPickerText}
-              onOpenRequested={registerWeekPickerOpener}
-            />
-            <Pressable
-              style={styles.weekRangeContainer}
-              onPress={() => weekPickerOpener.current?.()}
-              hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-            >
-              <Text style={[styles.weekRangeText, { color: colors.foreground }]}>{weekRangeLabel}</Text>
-              <Text style={[styles.weekRangeHint, { color: colors.mutedForeground }]}>Aligned to the selected start date</Text>
-            </Pressable>
-          </View>
-        </View>
+              <View style={styles.weekPickerRow}>
+                <DateTimePicker
+                  value={historyWeekStart}
+                  onChange={setHistoryWeekStart}
+                  placeholder="Select week start"
+                  buttonStyle={styles.weekPickerButton}
+                  textStyle={styles.weekPickerText}
+                  onOpenRequested={registerWeekPickerOpener}
+                />
+                <Pressable
+                  style={styles.weekRangeContainer}
+                  onPress={() => weekPickerOpener.current?.()}
+                  hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                >
+                  <Text style={[styles.weekRangeText, { color: colors.foreground }]}>{weekRangeLabel}</Text>
+                  <Text style={[styles.weekRangeHint, { color: colors.mutedForeground }]}>Aligned to the selected start date</Text>
+                </Pressable>
+              </View>
+            </View>
           )}
           {historyFilter === 'year' && (
             <ScrollView
@@ -325,18 +325,22 @@ export const ExpensesHistoryScreen: React.FC = () => {
         <View style={{ width: 36 }} />
       </View>
       {renderFilterControls()}
-      <View style={styles.summaryRow}>
-        <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.md }]}>
+      <View style={styles.summarySection}>
+        {/* Transactions card - full width at top */}
+        <View style={[styles.summaryCardFull, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.md }]}>
           <Text style={[styles.summaryLabel, { color: colors.mutedForeground }]}>Transactions</Text>
           <Text style={[styles.summaryValue, { color: colors.foreground }]}>{summary.count}</Text>
         </View>
-        <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.md }]}>
-          <Text style={[styles.summaryLabel, { color: colors.success }]}>Income</Text>
-          <Text style={[styles.summaryValue, { color: colors.success }]}>{formatCurrency(summary.income)}</Text>
-        </View>
-        <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.md }]}>
-          <Text style={[styles.summaryLabel, { color: colors.danger }]}>Expenses</Text>
-          <Text style={[styles.summaryValue, { color: colors.danger }]}>{formatCurrency(summary.expense)}</Text>
+        {/* Income and Expenses - 50/50 row */}
+        <View style={styles.summaryRow}>
+          <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.md }]}>
+            <Text style={[styles.summaryLabel, { color: colors.success }]}>Income</Text>
+            <Text style={[styles.summaryValue, { color: colors.success }]} numberOfLines={1} adjustsFontSizeToFit>{formatCurrency(summary.income)}</Text>
+          </View>
+          <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.md }]}>
+            <Text style={[styles.summaryLabel, { color: colors.danger }]}>Expenses</Text>
+            <Text style={[styles.summaryValue, { color: colors.danger }]} numberOfLines={1} adjustsFontSizeToFit>{formatCurrency(summary.expense)}</Text>
+          </View>
         </View>
       </View>
       <View style={{ marginBottom: 8 }}>
@@ -467,10 +471,20 @@ const styles = StyleSheet.create({
   yearScroll: {
     gap: 8,
   },
+  summarySection: {
+    gap: 10,
+    marginBottom: 12,
+  },
+  summaryCardFull: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderWidth: 1,
+  },
   summaryRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 12,
+    gap: 10,
   },
   summaryCard: {
     flex: 1,

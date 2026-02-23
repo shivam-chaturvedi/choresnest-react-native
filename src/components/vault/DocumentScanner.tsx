@@ -80,6 +80,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
     // Form fields
     const [documentName, setDocumentName] = useState('');
     const [nameError, setNameError] = useState('');
+    const [categoryError, setCategoryError] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('');
 
     // Warranty fields
@@ -102,6 +103,17 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
     const [reminderOffsets, setReminderOffsets] = useState<number[]>([1]);
     const [reminderTime, setReminderTime] = useState('09:00');
 
+    const createDateSetter = (fieldName: string, setter: (value: string) => void) => (value: string) => {
+        console.log(`[DocumentScanner] ${fieldName} changed to`, value);
+        setter(value);
+    };
+
+    const handlePurchaseDateChange = createDateSetter('purchaseDate', setPurchaseDate);
+    const handleWarrantyTillDateChange = createDateSetter('warrantyTillDate', setWarrantyTillDate);
+    const handleBillDateChange = createDateSetter('billDate', setBillDate);
+    const handleServiceDateChange = createDateSetter('serviceDate', setServiceDate);
+    const handleNextServiceDateChange = createDateSetter('nextServiceDate', setNextServiceDate);
+
     const prevOpenRef = useRef(false);
 
     const resetForm = useCallback(() => {
@@ -109,6 +121,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
         setSelectedFile(null);
         setDocumentName('');
         setNameError('');
+        setCategoryError('');
         setSelectedCategory('');
         setPurchaseDate('');
         setWarrantyTillDate('');
@@ -237,14 +250,23 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
     };
 
     const handleSave = () => {
+        let hasError = false;
+
         if (!documentName.trim()) {
-            setNameError('Document Name is required');
-            return;
+            setNameError('Document name is required');
+            hasError = true;
+        } else {
+            setNameError('');
         }
+
         if (!selectedCategory) {
-            pushNotification("Category Required", "Please select a category for your document.", "warning");
-            return;
+            setCategoryError('Please select a category');
+            hasError = true;
+        } else {
+            setCategoryError('');
         }
+
+        if (hasError) return;
 
         if (selectedFile) {
             onDocumentSaved?.({
@@ -311,7 +333,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
                             <Text style={[styles.label, { color: colors.foreground }]}>Purchase Date</Text>
                             <DateTimePicker
                                 value={purchaseDate}
-                                onChange={setPurchaseDate}
+                                onChange={handlePurchaseDateChange}
                                 placeholder="Select purchase date"
                             />
                         </View>
@@ -319,7 +341,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
                             <Text style={[styles.label, { color: colors.foreground }]}>Warranty Valid Till</Text>
                             <DateTimePicker
                                 value={warrantyTillDate}
-                                onChange={setWarrantyTillDate}
+                                onChange={handleWarrantyTillDateChange}
                                 placeholder="Select warranty expiry date"
                             />
                         </View>
@@ -332,7 +354,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
                             <Text style={[styles.label, { color: colors.foreground }]}>Bill Date</Text>
                             <DateTimePicker
                                 value={billDate}
-                                onChange={setBillDate}
+                                onChange={handleBillDateChange}
                                 placeholder="Select bill date"
                             />
                         </View>
@@ -392,7 +414,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
                             <Text style={[styles.label, { color: colors.foreground }]}>Service Date</Text>
                             <DateTimePicker
                                 value={serviceDate}
-                                onChange={setServiceDate}
+                                onChange={handleServiceDateChange}
                                 placeholder="Select service date"
                             />
                         </View>
@@ -400,7 +422,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
                             <Text style={[styles.label, { color: colors.foreground }]}>Next Service Date</Text>
                             <DateTimePicker
                                 value={nextServiceDate}
-                                onChange={setNextServiceDate}
+                                onChange={handleNextServiceDateChange}
                                 placeholder="Select next service date"
                             />
                         </View>
@@ -549,8 +571,14 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
                             </View>
 
                             <View style={styles.formGroup}>
-                                <Text style={[styles.label, { color: colors.foreground }]}>Category *</Text>
-                                <View style={styles.categoryGrid}>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                    <Text style={[styles.label, { color: colors.foreground, marginBottom: 0 }]}>Category *</Text>
+                                    {categoryError ? <Text style={{ color: colors.danger, fontSize: 12 }}>{categoryError}</Text> : null}
+                                </View>
+                                <View style={[
+                                    styles.categoryGrid,
+                                    categoryError ? { borderWidth: 1, borderColor: colors.danger, borderRadius: radius.md, padding: 4 } : null
+                                ]}>
                                     {CATEGORIES.map(cat => (
                                         <Pressable
                                             key={cat.id}
@@ -562,7 +590,10 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
                                                     borderRadius: radius.md,
                                                 }
                                             ]}
-                                            onPress={() => setSelectedCategory(cat.id)}
+                                            onPress={() => {
+                                                setSelectedCategory(cat.id);
+                                                setCategoryError('');
+                                            }}
                                         >
                                             <Text style={{ fontSize: 16, marginRight: 4 }}>{cat.icon}</Text>
                                             <Text style={[

@@ -4,6 +4,7 @@ import { generatePDF } from 'react-native-html-to-pdf';
 import { database } from "../database";
 import { Platform } from "react-native";
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Q } from "@nozbe/watermelondb";
 
 export type ExportFormat = 'json';
 
@@ -29,13 +30,19 @@ export const exportService = {
     /**
      * Get stats for data selection
      */
-    async getStats(): Promise<ExportStats> {
+    async getStats(profileId: string | null): Promise<ExportStats> {
+        if (!profileId) {
+            return {
+                events: 0, tasks: 0, lists: 0, recipes: 0,
+                documents: 0, notes: 0, expenses: 0, system: 0
+            };
+        }
         try {
             // Helper to get count from Async Storage arrays with error handling
             const getAsyncCount = async (key: string): Promise<number> => {
                 try {
                     if (!key) return 0;
-                    const json = await AsyncStorage.getItem(key);
+                    const json = await AsyncStorage.getItem(`${profileId}:${key}`);
                     if (!json) return 0;
                     const parsed = JSON.parse(json);
                     return Array.isArray(parsed) ? parsed.length : 0;
@@ -69,27 +76,27 @@ export const exportService = {
                 appLock,
                 userPrefs
             ] = await Promise.all([
-                database.collections.get('events').query().fetchCount(),
-                database.collections.get('tasks').query().fetchCount(),
-                database.collections.get('lists').query().fetchCount(),
-                database.collections.get('list_items').query().fetchCount(),
-                database.collections.get('list_categories').query().fetchCount(),
-                database.collections.get('recipes').query().fetchCount(),
-                database.collections.get('collections').query().fetchCount(),
-                database.collections.get('collection_recipes').query().fetchCount(),
-                database.collections.get('meal_plans').query().fetchCount(),
-                database.collections.get('documents').query().fetchCount(),
-                database.collections.get('folders').query().fetchCount(),
-                database.collections.get('notes').query().fetchCount(),
-                database.collections.get('transactions').query().fetchCount(),
-                database.collections.get('budgets').query().fetchCount(),
-                database.collections.get('users').query().fetchCount(),
-                database.collections.get('members').query().fetchCount(),
-                database.collections.get('settings').query().fetchCount(),
-                database.collections.get('notification_preferences').query().fetchCount(),
-                database.collections.get('quiet_hours').query().fetchCount(),
-                database.collections.get('app_lock').query().fetchCount(),
-                database.collections.get('user_preferences').query().fetchCount(),
+                database.collections.get('events').query(Q.where('profile_id', profileId)).fetchCount(),
+                database.collections.get('tasks').query(Q.where('profile_id', profileId)).fetchCount(),
+                database.collections.get('lists').query(Q.where('profile_id', profileId)).fetchCount(),
+                database.collections.get('list_items').query(Q.where('profile_id', profileId)).fetchCount(),
+                database.collections.get('list_categories').query(Q.where('profile_id', profileId)).fetchCount(),
+                database.collections.get('recipes').query(Q.where('profile_id', profileId)).fetchCount(),
+                database.collections.get('collections').query(Q.where('profile_id', profileId)).fetchCount(),
+                database.collections.get('collection_recipes').query(Q.where('profile_id', profileId)).fetchCount(),
+                database.collections.get('meal_plans').query(Q.where('profile_id', profileId)).fetchCount(),
+                database.collections.get('documents').query(Q.where('profile_id', profileId)).fetchCount(),
+                database.collections.get('folders').query(Q.where('profile_id', profileId)).fetchCount(),
+                database.collections.get('notes').query(Q.where('profile_id', profileId)).fetchCount(),
+                database.collections.get('transactions').query(Q.where('profile_id', profileId)).fetchCount(),
+                database.collections.get('budgets').query(Q.where('profile_id', profileId)).fetchCount(),
+                database.collections.get('users').query().fetchCount(), // Users is global
+                database.collections.get('members').query(Q.where('profile_id', profileId)).fetchCount(),
+                database.collections.get('settings').query(Q.where('profile_id', profileId)).fetchCount(),
+                database.collections.get('notification_preferences').query(Q.where('profile_id', profileId)).fetchCount(),
+                database.collections.get('quiet_hours').query(Q.where('profile_id', profileId)).fetchCount(),
+                database.collections.get('app_lock').query(Q.where('profile_id', profileId)).fetchCount(),
+                database.collections.get('user_preferences').query(Q.where('profile_id', profileId)).fetchCount(),
             ]);
 
             // Fetch AsyncStorage counts with error handling
@@ -142,11 +149,14 @@ export const exportService = {
     /**
      * Collect data for export
      */
-    async collectExportData(selectedData: string[]): Promise<Record<string, any[]>> {
+    /**
+     * Collect data for export
+     */
+    async collectExportData(profileId: string | null, selectedData: string[]): Promise<Record<string, any[]>> {
         const data: Record<string, any[]> = {};
 
         // Helper to fetch and add table data with comprehensive error handling
-        const addTableData = async (tableName: string, key: string) => {
+        const addTableData = async (tableName: string, key: string, isGlobal = false) => {
             try {
                 if (!tableName || !key) {
                     console.warn('addTableData: Invalid tableName or key');
@@ -159,7 +169,13 @@ export const exportService = {
                     data[key] = [];
                     return;
                 }
-                const records = await collection.query().fetch();
+
+                let query = collection.query();
+                if (!isGlobal && profileId) {
+                    query = collection.query(Q.where('profile_id', profileId));
+                }
+
+                const records = await query.fetch();
                 data[key] = Array.isArray(records) ? records.map(r => {
                     try {
                         return (r as any)?._raw || {};
@@ -176,12 +192,13 @@ export const exportService = {
         // Helper to fetch from Async Storage
         const addAsyncData = async (asyncKey: string, key: string) => {
             try {
-                const json = await AsyncStorage.getItem(asyncKey);
+                if (!profileId) {
+                    data[key] = [];
+                    return;
+                }
+                const json = await AsyncStorage.getItem(`${profileId}:${asyncKey}`);
                 if (json) {
                     const parsed = JSON.parse(json);
-                    // If it's an object (budgets), wrap in array or keep as is?
-                    // Standard export format usually expects arrays of rows.
-                    // For budgets (object), we might want to normalize it or export as single object in array.
                     data[key] = Array.isArray(parsed) ? parsed : [parsed];
                 } else {
                     data[key] = [];
@@ -225,7 +242,7 @@ export const exportService = {
             await addTableData('budgets', 'budgets');
         }
         if (selectedData.includes('system')) {
-            await addTableData('users', 'users');
+            await addTableData('users', 'users', true);
             await addTableData('members', 'members');
             await addTableData('settings', 'settings');
             await addTableData('notification_preferences', 'notification_preferences');
@@ -240,14 +257,18 @@ export const exportService = {
     /**
      * Generate backup file and return the path
      */
-    async generateBackup(selectedData: string[]): Promise<string> {
-        const data = await this.collectExportData(selectedData);
+    /**
+     * Generate backup file and return the path
+     */
+    async generateBackup(profileId: string | null, selectedData: string[]): Promise<string> {
+        const data = await this.collectExportData(profileId, selectedData);
         const meta = {
             version: 1,
             timestamp: Date.now(),
             date: new Date().toISOString(),
             app: 'Family Chores',
-            format: 'json'
+            format: 'json',
+            profileId
         };
 
         // 2. Format Data
@@ -272,7 +293,7 @@ export const exportService = {
     /**
      * Export data as PDF
      */
-    async exportAsPDF(selectedData: string[]): Promise<string> {
+    async exportAsPDF(profileId: string | null, selectedData: string[]): Promise<string> {
         if (this.isPdfGenerating) {
             throw new Error('A PDF export is already in progress. Please wait.');
         }
@@ -282,7 +303,7 @@ export const exportService = {
 
         try {
             // 1. Fetch Data
-            const data = await this.collectExportData(selectedData);
+            const data = await this.collectExportData(profileId, selectedData);
 
             // 2. Generate HTML
             const html = this.generateHTML(data);
@@ -476,7 +497,7 @@ export const exportService = {
                 {
                     header: 'Title',
                     key: 'title',
-                    render: (e) => `${e.icon || '📅'} ${e.title || '-'}`
+                    render: (e) => `${e.icon || 'calendar-star'} ${e.title || '-'}`
                 },
                 {
                     header: 'Date',
@@ -502,7 +523,7 @@ export const exportService = {
                 {
                     header: 'Task',
                     key: 'name',
-                    render: (t) => `${t.icon || '📝'} ${t.name || '-'}`
+                    render: (t) => `${t.icon || 'format-list-checks'} ${t.name || '-'}`
                 },
                 {
                     header: 'Status',
@@ -531,7 +552,7 @@ export const exportService = {
                 {
                     header: 'Name',
                     key: 'name',
-                    render: (m) => `${m.symbol || '👤'} ${m.name}`
+                    render: (m) => `${m.symbol || 'account'} ${m.name}`
                 },
                 {
                     header: 'Color',
@@ -718,7 +739,7 @@ export const exportService = {
                 {
                     header: 'Title',
                     key: 'title',
-                    render: (f) => `${f.icon || '📁'} ${f.title || '-'}`
+                    render: (f) => `${f.icon || 'folder'} ${f.title || '-'}`
                 },
                 {
                     header: 'Notes Count',

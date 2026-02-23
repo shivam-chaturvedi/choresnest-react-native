@@ -4,29 +4,13 @@ import { SyncService } from './SyncService';
 import { Q } from '@nozbe/watermelondb';
 import { map } from 'rxjs/operators';
 import { supabase } from '../config/supabase';
+import { ProfileService } from './ProfileService';
 
 const syncAfterWrite = () => {
   void SyncService.requestSyncSoon();
 };
 
-const fetchActiveProfileId = async (): Promise<string | null> => {
-  try {
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser();
-    if (error) {
-      console.warn('ListService: Unable to resolve profile for list item write', error);
-    }
-    if (!user) {
-      return null;
-    }
-    return user.id;
-  } catch (error) {
-    console.error('ListService: Failed to read profile for list item write', error);
-    return null;
-  }
-};
+const fetchActiveProfileId = ProfileService.getActiveProfileId;
 
 const LIST_OBSERVE_COLUMNS: string[] = ['updated_at', 'deleted'];
 

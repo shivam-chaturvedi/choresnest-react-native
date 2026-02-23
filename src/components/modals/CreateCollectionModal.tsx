@@ -12,6 +12,7 @@ import {
 import { AppIcon } from "../ui/AppIcon";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { useRecipes } from "../../contexts/RecipeContext";
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { RecipeImage } from "../recipes/RecipeImage";
 
 interface CreateCollectionModalProps {
@@ -19,7 +20,7 @@ interface CreateCollectionModalProps {
     onClose: () => void;
 }
 
-const EMOJI_OPTIONS = ['🍳', '🥗', '🍕', '🍜', '🍰', '🥘', '🌮', '🍱', '🥙', '🍲'];
+const ICON_OPTIONS = ['food-apple', 'food-croissant', 'pizza', 'noodles', 'cupcake', 'food-steak', 'hamburger', 'muffin', 'food', 'coffee'];
 
 export const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({ open, onClose }) => {
     const colors = useThemeColors();
@@ -37,7 +38,7 @@ export const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({ op
     ];
 
     const [name, setName] = useState("");
-    const [selectedEmoji, setSelectedEmoji] = useState("🍳");
+    const [selectedEmoji, setSelectedEmoji] = useState("food-apple");
     const [selectedColor, setSelectedColor] = useState(COLOR_OPTIONS[0]);
     const [selectedRecipes, setSelectedRecipes] = useState<number[]>([]);
 
@@ -111,9 +112,9 @@ export const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({ op
                         {/* Icon Picker */}
                         <Text style={[styles.label, { color: colors.foreground }]}>Choose Icon</Text>
                         <View style={styles.emojiRow}>
-                            {EMOJI_OPTIONS.map(emoji => (
+                            {ICON_OPTIONS.map(icon => (
                                 <TouchableOpacity
-                                    key={emoji}
+                                    key={icon}
                                     style={[
                                         styles.emojiBtn,
                                         {
@@ -121,14 +122,14 @@ export const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({ op
                                             borderColor: colors.border,
                                             borderRadius: radius.full
                                         },
-                                        selectedEmoji === emoji && {
+                                        selectedEmoji === icon && {
                                             borderColor: colors.primary,
                                             backgroundColor: colors.primary + '10'
                                         }
                                     ]}
-                                    onPress={() => setSelectedEmoji(emoji)}
+                                    onPress={() => setSelectedEmoji(icon)}
                                 >
-                                    <Text style={{ fontSize: 24 }}>{emoji}</Text>
+                                    <MaterialCommunityIcons name={icon} size={24} color={selectedEmoji === icon ? colors.primary : colors.foreground} />
                                 </TouchableOpacity>
                             ))}
                         </View>

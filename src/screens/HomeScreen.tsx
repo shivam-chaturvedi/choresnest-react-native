@@ -13,6 +13,7 @@ import {
   StatusBar,
   Dimensions,
   Modal,
+  RefreshControl,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppLayout } from "../components/layout";
@@ -34,9 +35,12 @@ import { GettingStartedTutorial } from "../components/tutorial/GettingStartedTut
 import { GlobalSearch } from "../components/search/GlobalSearch";
 import { useSidebar } from "../contexts/SidebarContext";
 import { AppIcon, AppIconName } from "../components/ui/AppIcon";
+import { MemberIcon } from "../components/ui/MemberIcon";
 import { PROFILE_COLORS } from "../constants/profileColors";
-import { parseDateTimeInZone } from "../utils/SafeDateUtils";
+import { parseDateTimeInZone, safeTimeZone } from "../utils/SafeDateUtils";
+import { getEventsForDate } from "../utils/EventUtils";
 import Config from "react-native-config";
+import { SyncService } from "../services/SyncService";
 
 const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 import ReactNativeHapticFeedback from "react-native-haptic-feedback";
@@ -78,6 +82,18 @@ export const HomeScreen: React.FC = () => {
   const [editingMember, setEditingMember] = useState<any>(null); // FamilyMember
   const [showFamilyOnboarding, setShowFamilyOnboarding] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    try {
+      setIsRefreshing(true);
+      await SyncService.sync(false, { mode: 'manual' });
+    } catch (e) {
+      console.warn('HomeScreen: Pull-to-refresh sync failed:', e);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const navTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const NAV_MARK_DELAY = 3000;
@@ -166,7 +182,10 @@ export const HomeScreen: React.FC = () => {
   }, []);
 
   const todaysDateLabel = useMemo(() => new Date().toISOString().split("T")[0], []);
-  const todaysEvents = useMemo(() => events.filter((event: any) => event.date === todaysDateLabel), [events, todaysDateLabel]);
+  const timeZone = useMemo(() => safeTimeZone(currentCountry?.timeZone), [currentCountry?.timeZone]);
+  const todaysEvents = useMemo(() => {
+    return getEventsForDate(new Date(), events as any[], [], timeZone) as CalendarEvent[];
+  }, [events, timeZone]);
   const parseEventDateTime = (event: any): { dateTime: Date | null; isAllDay: boolean } => {
     const isAllDay = !event?.time || event.time === "All Day";
     const dateTime = parseDateTimeInZone(event?.date, currentCountry.timeZone, event?.time);
@@ -447,7 +466,7 @@ export const HomeScreen: React.FC = () => {
   });
 
   const glanceMetrics = [
-    { label: "Events", value: (events || []).filter((e: any) => e.date === todayKey).length },
+    { label: "Events", value: todaysEvents.length },
     { label: "Tasks", value: (tasks || []).filter((t: any) => t.status === 'pending').length },
     { label: "Shopping", value: (groceryList || []).filter((item: any) => !item.completed).length },
   ];
@@ -455,7 +474,18 @@ export const HomeScreen: React.FC = () => {
   return (
     <>
       <AppLayout>
-        <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
+        >
           {/* Header */}
           <View style={styles.topBar}>
             <TouchableOpacity onPress={openSidebar} style={[styles.menuButton, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radius.sm }]}>
@@ -505,6 +535,11 @@ export const HomeScreen: React.FC = () => {
                 </Pressable>
               </View>
             </View>
+            <View style={[styles.profileInfoBox, { borderRadius: radius.sm, backgroundColor: colors.background, borderColor: colors.border }]}>
+              <Text style={[styles.profileInfoText, { color: colors.mutedForeground }]}>
+                Profiles keep each member's tasks and reminders separate. Tap any avatar to switch to their view or hit the + button to invite someone new so the whole family stays tracked together.
+              </Text>
+            </View>
             <Text style={{ fontSize: 11, color: colors.mutedForeground, marginBottom: 12, marginLeft: 4, fontStyle: 'italic' }}>
               Long press profile to edit
             </Text>
@@ -544,7 +579,7 @@ export const HomeScreen: React.FC = () => {
                       borderRadius: radius.card,
                       borderWidth: 2,
                     }]}>
-                      <Text style={{ fontSize: 24 }}>{member?.symbol || "?"}</Text>
+                      <MemberIcon symbol={member?.symbol} size={28} color={member?.isActive ? "#fff" : colors.foreground} />
                       {member?.isActive && <View style={[styles.activeDot, { backgroundColor: colors.success, borderColor: colors.card }]} />}
                     </View>
                     <Text style={{ fontSize: 12, fontWeight: "600", color: member?.isActive ? profileColor : colors.mutedForeground }}>
@@ -663,7 +698,7 @@ export const HomeScreen: React.FC = () => {
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                       <View style={[styles.scheduleIconBox, { backgroundColor: colors.card, borderRadius: radius.xs }]}>
-                        <Text style={{ fontSize: 18 }}>{item.icon || (item.type === "task" ? "📝" : "📅")}</Text>
+                        <MemberIcon symbol={item.icon || (item.type === "task" ? "format-list-checks" : "calendar")} size={24} color={colors.foreground} />
                       </View>
                       <View style={{ marginLeft: 12 }}>
                         <Text style={{ fontSize: 16, fontWeight: "600", color: colors.foreground }}>{item.title}</Text>
@@ -982,6 +1017,15 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
     borderWidth: 1,
+  },
+  profileInfoBox: {
+    borderWidth: 1,
+    padding: 10,
+    marginBottom: 8,
+  },
+  profileInfoText: {
+    fontSize: 12,
+    lineHeight: 18,
   },
   cardSpacing: {
     marginBottom: 24,

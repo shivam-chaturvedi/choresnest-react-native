@@ -11,11 +11,12 @@ import {
   TouchableWithoutFeedback,
   Alert,
 } from "react-native";
-import { useNavigation, NavigationProp, CommonActions } from "@react-navigation/native";
+import { useNavigation, NavigationProp } from "@react-navigation/native";
 import { theme } from "../../theme";
 import { useFamily, FamilyMember } from "../../contexts/FamilyContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { PROFILE_COLORS, ProfileColor } from "../../constants/profileColors";
+import { MemberIcon } from "../../components/ui/MemberIcon";
 import Config from "react-native-config";
 
 const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
@@ -65,7 +66,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
 
   const navigation = useNavigation<NavigationProp<Record<string, undefined>>>();
   const { members, activeMember, setActiveMember, familyName, updateMemberColor } = useFamily();
-  const { logout } = useAuth();
+  const { logout, isGuest, user } = useAuth();
 
   useEffect(() => {
     openRef.current = open;
@@ -271,7 +272,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                     }}
                   >
                     {activeMember ? (
-                      <Text style={styles.avatarIcon}>{activeMember.symbol}</Text>
+                      <MemberIcon symbol={activeMember.symbol} size={32} color="#f5f8ff" />
                     ) : (
                       <User size={32} color="#f5f8ff" />
                     )}
@@ -292,8 +293,15 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                   style={{ flex: 1 }}
                   onPress={() => setIsProfilesOpen(!isProfilesOpen)}
                 >
-                  <Text style={styles.familyName} numberOfLines={1}>{activeMember?.name || 'Select Profile'}</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+                  <Text style={styles.familyName} numberOfLines={1}>
+                    {familyName || (isGuest ? 'Guest' : 'Select Profile')}
+                  </Text>
+                  {!isGuest && (
+                    <Text style={[styles.memberName, { marginBottom: 0 }]} numberOfLines={1}>
+                      {activeMember?.name || user?.email || ''}
+                    </Text>
+                  )}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16, marginTop: 2 }}>
                     <Text style={styles.memberName}>{isProfilesOpen ? 'Close profiles' : 'Switch profile'}</Text>
                     {isProfilesOpen ? (
                       <ChevronDown size={14} color="rgba(255,255,255,0.7)" style={{ marginLeft: 4 }} />
@@ -344,7 +352,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                           styles.profileAvatar,
                           { backgroundColor: member.isActive ? '#dbeafe' : '#f3f4f6' }
                         ]}>
-                          <Text style={{ fontSize: 20 }}>{member.symbol}</Text>
+                          <MemberIcon symbol={member.symbol} size={24} />
                         </View>
                         <Text style={[styles.profileText, member.isActive && styles.profileTextActive]}>
                           {member.name}
@@ -366,6 +374,32 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             </View>
 
             <View style={styles.separator} />
+
+            {/* Guest Mode Badge */}
+            {isGuest && (
+              <View style={styles.guestBadgeContainer}>
+                <View style={styles.guestBadge}>
+                  <View style={styles.guestBadgeHeader}>
+                    <User size={16} color={theme.colors.primary} />
+                    <Text style={styles.guestBadgeTitle}>Guest</Text>
+                  </View>
+                  <Text style={styles.guestBadgeDesc}>
+                    You are using the app in guest mode. Create an account to sync your data.
+                  </Text>
+                  <Pressable
+                    style={styles.guestSignInBtn}
+                    onPress={async () => {
+                      onClose();
+                      // logout() clears guest session → isAuthenticated becomes false
+                      // → AppNavigator automatically renders the Auth branch
+                      try { await logout(); } catch (e) { console.error(e); }
+                    }}
+                  >
+                    <Text style={styles.guestSignInText}>Sign In / Create Account</Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
 
             {/* Quick Shortcuts */}
             <View style={styles.section}>
@@ -405,15 +439,28 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
 
             <View style={styles.separator} />
 
-            {/* Logout Section */}
+            {/* Logout / Sign In section */}
             <View style={styles.section}>
-              <Pressable
-                style={[styles.linkRow, { opacity: 0.8 }]}
-                onPress={handleLogout}
-              >
-                <LogOut size={20} color={theme.colors.danger} style={styles.linkIcon} />
-                <Text style={[styles.linkText, { color: theme.colors.danger }]}>Log Out</Text>
-              </Pressable>
+              {isGuest ? (
+                <Pressable
+                  style={[styles.linkRow, { opacity: 0.8 }]}
+                  onPress={async () => {
+                    onClose();
+                    try { await logout(); } catch (e) { console.error(e); }
+                  }}
+                >
+                  <LogOut size={20} color={theme.colors.primary} style={styles.linkIcon} />
+                  <Text style={[styles.linkText, { color: theme.colors.primary }]}>Sign In / Create Account</Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  style={[styles.linkRow, { opacity: 0.8 }]}
+                  onPress={handleLogout}
+                >
+                  <LogOut size={20} color={theme.colors.danger} style={styles.linkIcon} />
+                  <Text style={[styles.linkText, { color: theme.colors.danger }]}>Log Out</Text>
+                </Pressable>
+              )}
             </View>
 
           </ScrollView>
@@ -694,5 +741,44 @@ const styles = StyleSheet.create({
   },
   colorPickerFooter: {
     fontSize: 12,
-  }
+  },
+
+  // Guest Badge
+  guestBadgeContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+  },
+  guestBadge: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 12,
+    padding: 14,
+  },
+  guestBadgeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  guestBadgeTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: theme.colors.foreground,
+  },
+  guestBadgeDesc: {
+    fontSize: 13,
+    color: theme.colors.mutedForeground,
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  guestSignInBtn: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: 8,
+    paddingVertical: 9,
+    alignItems: 'center',
+  },
+  guestSignInText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 13,
+  },
 });
