@@ -79,12 +79,30 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   const colors = useThemeColors();
   const { currentCountry } = useCountry();
 
+  const getPriorityMeta = (priority: string = "medium") => {
+    switch (priority) {
+      case "high":
+        return { label: "High", color: colors.danger, background: colors.danger + "20", borderColor: colors.danger };
+      case "medium":
+        return { label: "Medium", color: colors.warning, background: colors.warning + "20", borderColor: colors.warning };
+      default:
+        return { label: "Low", color: colors.info, background: colors.info + "30", borderColor: colors.info };
+    }
+  };
+
   const [activeTab, setActiveTab] = useState<'event' | 'task' | 'existing'>('event');
 
   /* Event State */
 
   const isEditing = !!eventToEdit;
-  const isOwner = !eventToEdit || activeMember?.id === eventToEdit.memberId;
+  const ownerIdCandidates = [
+    eventToEdit?.memberId,
+    eventToEdit?.assigneeId,
+    eventToEdit?.assignee,
+    (eventToEdit as any)?.ownerId,
+  ];
+  const ownerId = (ownerIdCandidates.find((id) => !!id) || "").trim();
+  const isOwner = !eventToEdit || !ownerId || ownerId === activeMember?.id;
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -94,7 +112,6 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   const [endTime, setEndTime] = useState<Date | null>(null);
   const [selectedIcon, setSelectedIcon] = useState("calendar-star");
   const [allDay, setAllDay] = useState(false);
-  const [location, setLocation] = useState("");
   const [memberId, setMemberId] = useState("");
   const [color, setColor] = useState("member-blue");
 
@@ -147,7 +164,8 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
     if (eventToEdit) {
       setActiveTab((eventToEdit as any).type === 'task' ? 'task' : 'event');
-      setName(eventToEdit.title);
+      const eventName = eventToEdit.title || (eventToEdit as any).name || "";
+      setName(eventName);
       setDescription(eventToEdit.description || "");
       setNotes(eventToEdit.notes || "");
       setStartDate(new Date(eventToEdit.date));
@@ -189,7 +207,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         setEndTime(null);
       }
 
-      setMemberId(eventToEdit.memberId || "");
+      setMemberId(eventToEdit.memberId || (eventToEdit as any).assignee || eventToEdit.assigneeId || "");
 
       const anyEvent = eventToEdit as any;
       if (anyEvent.type === 'task') {
@@ -262,8 +280,6 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
       setSelectedIcon("calendar-star");
       setAllDay(false);
-      setLocation("");
-
       const fallbackMember = defaultMember;
       setMemberId(fallbackMember?.id || membersSnapshot[0]?.id || "");
       setColor(fallbackMember?.color || "member-blue");
@@ -393,23 +409,22 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         }
       } else {
         if (isEditing && eventToEdit) {
-          await updateEvent(eventToEdit.id, {
-            title: name.trim(),
-            description: description.trim(),
-            notes: notes.trim(),
-            dateString: formattedDate,
-            time: formattedTime,
-            endTime: formattedEndTime,
-            icon: selectedIcon,
-            memberId,
-            location,
-            endDate: formattedEndDate,
-            isRecurring: repeatType !== 'never',
-            recurrenceRule: repeatType !== 'never' ? repeatType : undefined,
-            recurrenceEndDate: safeFormat(repeatEndDate, "yyyy-MM-dd"),
-            reminderOffsetMinutes,
-            timeZone: eventTimeZone,
-          });
+            await updateEvent(eventToEdit.id, {
+              title: name.trim(),
+              description: description.trim(),
+              notes: notes.trim(),
+              dateString: formattedDate,
+              time: formattedTime,
+              endTime: formattedEndTime,
+              icon: selectedIcon,
+              memberId,
+              endDate: formattedEndDate,
+              isRecurring: repeatType !== 'never',
+              recurrenceRule: repeatType !== 'never' ? repeatType : undefined,
+              recurrenceEndDate: safeFormat(repeatEndDate, "yyyy-MM-dd"),
+              reminderOffsetMinutes,
+              timeZone: eventTimeZone,
+            });
         } else {
           // Validation for recurring events
           if (repeatType !== 'never') {
@@ -432,7 +447,6 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             endTime: formattedEndTime,
             icon: selectedIcon,
             memberId,
-            location,
             endDate: formattedEndDate,
             isRecurring: repeatType !== 'never',
             recurrenceRule: repeatType !== 'never' ? repeatType : undefined,
@@ -550,6 +564,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                   getExistingItems().map((item: any, index) => {
                     const member = members.find((m: any) => m.id === item.memberId);
                     const profileColor = PROFILE_COLORS.find(c => c.value === member?.color)?.hex || colors.primary;
+                    const priorityMeta = getPriorityMeta(item.priority);
 
                     return (
                       <Pressable
@@ -567,7 +582,8 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                           borderRadius: 12,
                           borderWidth: 1,
                           borderColor: colors.border,
-                          gap: 12
+                          gap: 12,
+                          position: 'relative',
                         }}
                       >
                         <View style={{
@@ -604,6 +620,13 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                         <View style={{ padding: 4 }}>
                           <AppIcon name="chevronRight" size={16} color={colors.mutedForeground} />
                         </View>
+                        {item.type === 'task' && (
+                          <View style={[styles.priorityBadge, { backgroundColor: priorityMeta.background, borderColor: priorityMeta.borderColor }]}>
+                            <Text style={[styles.priorityBadgeText, { color: priorityMeta.color }]}>
+                              {priorityMeta.label}
+                            </Text>
+                          </View>
+                        )}
                       </Pressable>
                     );
                   })
@@ -966,24 +989,6 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
               </View>
             </View> 
             */}
-
-                {/* Location - EVENT ONLY */}
-                {activeTab === 'event' && (
-                  <View style={styles.fieldGroup}>
-                    <View style={styles.labelRow}>
-                      <AppIcon name="pin" size={14} color={colors.mutedForeground} />
-                      <Text style={[styles.label, { color: colors.mutedForeground }]}>Location</Text>
-                    </View>
-                    <TextInput
-                      style={[styles.input, { backgroundColor: colors.card, color: colors.foreground }]}
-                      value={location}
-                      onChangeText={setLocation}
-                      placeholder="Add location..."
-                      placeholderTextColor={colors.mutedForeground}
-                      editable={isOwner}
-                    />
-                  </View>
-                )}
 
                 {/* Assign To */}
                 <View style={styles.fieldGroup}>
@@ -1378,6 +1383,7 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
     gap: 12,
+    position: 'relative',
   },
   existingEventColorBar: {
     width: 4,
@@ -1394,6 +1400,19 @@ const styles = StyleSheet.create({
   },
   existingEventTime: {
     fontSize: 13,
+  },
+  priorityBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  priorityBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
   },
   noEventsContainer: {
     alignItems: 'center',

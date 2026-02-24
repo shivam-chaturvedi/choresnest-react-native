@@ -4,34 +4,125 @@ import { database } from '../database';
 
 /**
  * DataCleanupService
- * 
- * Handles complete data deletion across all storage mechanisms:
- * - AsyncStorage (app preferences, settings, cached data)
- * - WatermelonDB (SQLite database with all family data)
- * - File System (images, documents, audio files, etc.)
+ *
+ * Two distinct tiers of cleanup:
+ *
+ *  1. clearSessionCaches() — NON-DESTRUCTIVE. Clears in-memory caches and
+ *     session-specific AsyncStorage keys. Called on logout / profile switch.
+ *     NEVER touches WatermelonDB rows or tables.
+ *
+ *  2. deleteAllData() — DESTRUCTIVE. Full factory-reset: clears AsyncStorage,
+ *     resets WatermelonDB, and deletes local files. Called ONLY from
+ *     "Delete Account / Delete all local data" UX flows.
+ *
+ * Legacy alias: clearDatabase() now delegates to clearSessionCaches() so
+ * any code still referencing the old name gets safe non-destructive behaviour.
  */
 export const DataCleanupService = {
     /**
-     * Delete all application data
-     * This is called when user deletes their account
+     * NON-DESTRUCTIVE session cleanup.
+     *
+     * Stops sync, unregisters realtime listeners, clears in-memory caches,
+     * and removes session-specific AsyncStorage keys.
+     * Does NOT touch WatermelonDB rows, tables, or sync cursors.
+     */
+    clearSessionCaches: async (): Promise<void> => {
+        console.log('[DataCleanupService] clearSessionCaches: clearing in-memory session state (DB untouched)');
+
+        try {
+            // Stop sync and clear in-memory sync state (no cursor reset)
+            const { SyncService } = await import('./SyncService');
+            SyncService.stopPeriodicSync();
+            // Reset in-memory counters/flags only — cursors are preserved per-profile
+            SyncService.resetSyncStateInMemory?.();
+        } catch (err) {
+            console.warn('[DataCleanupService] clearSessionCaches: failed to stop SyncService', err);
+        }
+
+        // Remove session tokens / volatile AsyncStorage keys — preserve profile data
+        const SESSION_KEYS = [
+            'AUTH_USER',
+            'LAST_SYNC_SUCCESS_AT',
+            'LAST_WRITE_SYNC_TIME',
+        ];
+        try {
+            await AsyncStorage.multiRemove(SESSION_KEYS);
+            console.log('[DataCleanupService] clearSessionCaches: session AsyncStorage keys removed');
+        } catch (err) {
+            console.warn('[DataCleanupService] clearSessionCaches: failed to remove session keys', err);
+        }
+
+        console.log('[DataCleanupService] clearSessionCaches: complete. WatermelonDB rows PRESERVED.');
+    },
+
+    /**
+     * Legacy alias — previously called unsafeResetDatabase().
+     * Now delegates to non-destructive clearSessionCaches() so callers that
+     * have not yet been updated get safe behaviour automatically.
+     *
+     * @deprecated Prefer clearSessionCaches() for new code.
+     */
+    clearDatabase: async (): Promise<void> => {
+        console.warn(
+            '[DataCleanupService] clearDatabase() is deprecated and now NON-DESTRUCTIVE. ' +
+            'Use clearSessionCaches() for session cleanup, or deleteAllData() for a full factory reset.'
+        );
+        return DataCleanupService.clearSessionCaches();
+    },
+
+    /**
+     * DESTRUCTIVE full factory reset.
+     * Clears AsyncStorage, resets WatermelonDB, and deletes local files.
+     * MUST only be called from explicit "Delete account / Delete all local data" UX.
      */
     deleteAllData: async (): Promise<void> => {
         console.log('=== Starting Complete Data Deletion ===');
 
         try {
-            // Step 1: Clear AsyncStorage
+            // Step 1: Clear AsyncStorage entirely
             await DataCleanupService.clearAsyncStorage();
 
-            // Step 2: Clear WatermelonDB (SQLite)
-            await DataCleanupService.clearDatabase();
+            // Step 2: Reset WatermelonDB (only permissible destructive path)
+            await DataCleanupService._unsafeWipeDatabase();
 
-            // Step 3: Clear File System
+            // Step 3: Clear file system
             await DataCleanupService.clearFileSystem();
 
             console.log('=== Data Deletion Completed Successfully ===');
         } catch (error) {
             console.error('Error during data deletion:', error);
             throw error;
+        }
+    },
+
+    /**
+     * Internal: physically wipes the WatermelonDB SQLite database and resets
+     * all sync cursors. Only called from deleteAllData().
+     * @private
+     */
+    _unsafeWipeDatabase: async (): Promise<void> => {
+        try {
+            console.log('[DataCleanupService] _unsafeWipeDatabase: resetting WatermelonDB...');
+
+            // WARNING: DO NOT use markAsDeleted() here or background sync
+            // will try to propagate deletions to Supabase, deleting cloud data!
+            await database.write(async () => {
+                await database.unsafeResetDatabase();
+            });
+
+            // Reset all sync cursors since the entire DB was wiped
+            try {
+                const { resetSyncCursorState } = await import('./sync/SyncCursorStore');
+                await resetSyncCursorState();
+                console.log('[DataCleanupService] _unsafeWipeDatabase: sync cursors reset');
+            } catch (cursorError) {
+                console.warn('[DataCleanupService] _unsafeWipeDatabase: failed to reset sync cursors', cursorError);
+            }
+
+            console.log('[DataCleanupService] _unsafeWipeDatabase: complete');
+        } catch (error) {
+            console.error('[DataCleanupService] _unsafeWipeDatabase: error', error);
+            throw new Error('Failed to wipe database');
         }
     },
 
@@ -50,33 +141,7 @@ export const DataCleanupService = {
     },
 
     /**
-     * Clear WatermelonDB database
-     * This deletes all tables and resets the database
-     */
-    clearDatabase: async (): Promise<void> => {
-        try {
-            console.log('Clearing WatermelonDB database...');
-
-            // Directly reset the database to initial state.
-            // WARNING: DO NOT use markAsDeleted() here or background sync
-            // will try to propagate deletions to Supabase, deleting cloud data!
-            await database.write(async () => {
-                await database.unsafeResetDatabase();
-            });
-
-            console.log('✓ WatermelonDB database cleared and reset');
-        } catch (error) {
-            console.error('Error clearing database:', error);
-            throw new Error('Failed to clear database');
-        }
-    },
-
-    /**
      * Clear all files from the file system
-     * This includes:
-     * - Document directory (vault documents, images)
-     * - Cache directory (temporary files)
-     * - Any app-specific directories
      */
     clearFileSystem: async (): Promise<void> => {
         try {
@@ -96,11 +161,9 @@ export const DataCleanupService = {
 
                         for (const file of files) {
                             try {
-                                // Skip system files and directories we shouldn't delete
                                 if (file.name.startsWith('.')) {
                                     continue;
                                 }
-
                                 await RNFS.unlink(file.path);
                                 console.log(`Deleted: ${file.name}`);
                             } catch (fileError) {
@@ -141,7 +204,7 @@ export const DataCleanupService = {
     },
 
     /**
-     * Get storage usage statistics (useful for showing user what will be deleted)
+     * Get storage usage statistics
      */
     getStorageStats: async (): Promise<{
         asyncStorageKeys: number;
@@ -149,11 +212,9 @@ export const DataCleanupService = {
         fileSystemSize: number;
     }> => {
         try {
-            // AsyncStorage keys count
             const keys = await AsyncStorage.getAllKeys();
             const asyncStorageKeys = keys.length;
 
-            // Database records count
             let databaseRecords = 0;
             try {
                 const collections = ['members', 'events', 'tasks', 'grocery_items', 'vault_documents', 'recipes', 'meals', 'notes'];
@@ -170,7 +231,6 @@ export const DataCleanupService = {
                 // Database might not be initialized
             }
 
-            // File system size
             let fileSystemSize = 0;
             try {
                 const dirs = [RNFS.DocumentDirectoryPath, RNFS.CachesDirectoryPath];
@@ -184,18 +244,10 @@ export const DataCleanupService = {
                 // Directory might not be accessible
             }
 
-            return {
-                asyncStorageKeys,
-                databaseRecords,
-                fileSystemSize
-            };
+            return { asyncStorageKeys, databaseRecords, fileSystemSize };
         } catch (error) {
             console.error('Error getting storage stats:', error);
-            return {
-                asyncStorageKeys: 0,
-                databaseRecords: 0,
-                fileSystemSize: 0
-            };
+            return { asyncStorageKeys: 0, databaseRecords: 0, fileSystemSize: 0 };
         }
-    }
+    },
 };

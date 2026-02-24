@@ -11,7 +11,6 @@ const TABLE_NAMES = [
     'tasks',
     'lists',
     'list_items',
-    'list_categories',
     'recipes',
     'collections',
     'collection_recipes',

@@ -3,7 +3,7 @@ import { database } from '../database';
 import { Folder as DbFolder, Note as DbNote } from '../database/models/Note';
 import { Q } from '@nozbe/watermelondb';
 import { SyncService } from '../services/SyncService';
-import { supabase } from '../config/supabase';
+import { useActiveProfileId } from '../hooks/useActiveProfileId';
 
 // Types
 export interface NoteBlock {
@@ -47,7 +47,7 @@ const NotesContext = createContext<NotesContextType | undefined>(undefined);
 export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [folderMeta, setFolderMeta] = useState<{ id: string; title: string; icon: string }[]>([]);
     const [notes, setNotes] = useState<Note[]>([]);
-    const [profileId, setProfileId] = useState<string | null>(null);
+    const profileId = useActiveProfileId();
     const syncAfterWrite = useCallback(() => {
         void SyncService.requestSyncSoon();
     }, []);
@@ -58,32 +58,6 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             notes: notes.filter(note => note.folderId === folder.id),
         }));
     }, [folderMeta, notes]);
-
-    useEffect(() => {
-        let mounted = true;
-        const refreshProfile = async () => {
-            try {
-                const { data: { session } } = await supabase.auth.getSession();
-                if (mounted) {
-                    setProfileId(session?.user?.id ?? null);
-                }
-            } catch (error) {
-                console.warn('NotesContext: Failed to read profile id', error);
-                if (mounted) {
-                    setProfileId(null);
-                }
-            }
-        };
-        refreshProfile();
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            if (!mounted) return;
-            setProfileId(session?.user?.id ?? null);
-        });
-        return () => {
-            mounted = false;
-            subscription?.unsubscribe();
-        };
-    }, []);
 
     const ensureDefaultFolder = useCallback(async () => {
         if (!profileId) {

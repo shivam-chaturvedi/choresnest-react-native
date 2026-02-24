@@ -57,7 +57,6 @@ export const exportService = {
                 tasks,
                 lists,
                 listItems,
-                listCategories,
                 // WatermelonDB returns 0 for these if unused, so we fetch from Async Storage too
                 wmRecipes,
                 wmCollections,
@@ -80,7 +79,6 @@ export const exportService = {
                 database.collections.get('tasks').query(Q.where('profile_id', profileId)).fetchCount(),
                 database.collections.get('lists').query(Q.where('profile_id', profileId)).fetchCount(),
                 database.collections.get('list_items').query(Q.where('profile_id', profileId)).fetchCount(),
-                database.collections.get('list_categories').query(Q.where('profile_id', profileId)).fetchCount(),
                 database.collections.get('recipes').query(Q.where('profile_id', profileId)).fetchCount(),
                 database.collections.get('collections').query(Q.where('profile_id', profileId)).fetchCount(),
                 database.collections.get('collection_recipes').query(Q.where('profile_id', profileId)).fetchCount(),
@@ -108,7 +106,7 @@ export const exportService = {
             return {
                 events,
                 tasks,
-                lists: lists + listItems + listCategories,
+                lists: lists + listItems,
                 // Combine DB + Async Storage just in case (though likely mutually exclusive)
                 recipes: wmRecipes + wmCollections + wmRel + mealPlans + asRecipes + asCollections,
                 documents,
@@ -219,7 +217,6 @@ export const exportService = {
         if (selectedData.includes('lists')) {
             await addTableData('lists', 'lists');
             await addTableData('list_items', 'list_items');
-            await addTableData('list_categories', 'list_categories');
         }
         if (selectedData.includes('recipes')) {
             await addTableData('recipes', 'recipes');

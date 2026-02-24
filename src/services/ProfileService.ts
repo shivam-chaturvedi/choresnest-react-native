@@ -6,6 +6,8 @@ const ACTIVE_PROFILE_KEY = 'ACTIVE_PROFILE_ID';
 const GUEST_PROFILE_KEY = 'GUEST_PROFILE_ID';
 const IS_GUEST_KEY = 'IS_GUEST';
 
+export const GUEST_PROFILE_ID = 'guest';
+
 // In-memory fast cache — avoids any AsyncStorage or Supabase call on the hot path
 let cachedProfileId: string | null = null;
 
@@ -56,7 +58,7 @@ export const ProfileService = {
      *  5. Supabase session token cached in AsyncStorage  (offline fallback)
      */
     async getActiveProfileId(): Promise<string | null> {
-        // 1. In-memory cache
+        // 1. In-memory cache (instant — hot path)
         if (cachedProfileId) {
             return cachedProfileId;
         }
@@ -72,43 +74,18 @@ export const ProfileService = {
             // 3. Guest mode
             const isGuest = await AsyncStorage.getItem(IS_GUEST_KEY);
             if (isGuest === 'true') {
-                const guestProfile = await AsyncStorage.getItem(GUEST_PROFILE_KEY);
-                if (guestProfile) {
-                    await persistActiveProfile(guestProfile);
-                    return guestProfile;
-                } else {
-                    const defaultGuestId = 'local_guest_profile';
-                    await persistActiveProfile(defaultGuestId);
-                    await AsyncStorage.setItem(GUEST_PROFILE_KEY, defaultGuestId);
-                    return defaultGuestId;
-                }
+                await persistActiveProfile(GUEST_PROFILE_ID);
+                await AsyncStorage.setItem(GUEST_PROFILE_KEY, GUEST_PROFILE_ID);
+                return GUEST_PROFILE_ID;
             }
 
-            // 4. Live Supabase auth session (with timeout)
-            try {
-                const sessionPromise = supabase.auth.getSession();
-                const timeoutPromise = new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Supabase Auth Timeout')), 3500)
-                );
-                const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any;
-                if (session?.user) {
-                    await persistActiveProfile(session.user.id);
-                    return session.user.id;
-                }
-            } catch (authError: any) {
-                if (authError?.message === 'Supabase Auth Timeout') {
-                    // 5. Fallback: read Supabase's own locally cached session token
-                    const cachedUserId = await tryReadCachedSupabaseSession();
-                    if (cachedUserId) {
-                        console.log('ProfileService: Auth timed out but found cached session; using cached user ID.');
-                        await persistActiveProfile(cachedUserId);
-                        return cachedUserId;
-                    }
-                    console.warn('ProfileService: Supabase Auth Timeout — no cached session found either.');
-                } else {
-                    console.error('ProfileService: Failed to resolve active profile ID (auth):', authError);
-                }
-            }
+            // No cached profile found and no guest session.
+            // Do NOT fall through to a live Supabase network call here — calling
+            // supabase.auth.getSession() when unauthenticated produces repeated
+            // "Network request failed" errors on every effect cycle.
+            // The caller (AuthContext / AppNavigator) will handle the null case
+            // and redirect to the auth screen.
+            return null;
         } catch (error) {
             console.error('ProfileService: Unexpected error resolving profile ID:', error);
         }
@@ -119,14 +96,9 @@ export const ProfileService = {
     /**
      * Persists the selected profile ID for guest mode.
      */
-    async setGuestProfileId(profileId: string | null): Promise<void> {
-        if (profileId) {
-            await AsyncStorage.setItem(GUEST_PROFILE_KEY, profileId);
-            await persistActiveProfile(profileId);
-        } else {
-            await AsyncStorage.removeItem(GUEST_PROFILE_KEY);
-            await persistActiveProfile(null);
-        }
+    async setGuestProfileId(): Promise<void> {
+        await AsyncStorage.setItem(GUEST_PROFILE_KEY, GUEST_PROFILE_ID);
+        await persistActiveProfile(GUEST_PROFILE_ID);
     },
 
     /**
@@ -145,5 +117,3 @@ export const ProfileService = {
         }
     }
 };
-
-

@@ -58,7 +58,7 @@ export const PrivacyScreen: React.FC = () => {
     const colors = useThemeColors();
     const radius = useThemeRadius();
     const activeMemberColor =
-        PROFILE_COLORS.find(color => color.value === activeMember?.color)?.hex || colors.primary;
+     PROFILE_COLORS.find(color => color.value === activeMember?.color)?.hex || colors.primary;
 
     const [clearNotifications, setClearNotifications] = useState(false);
 
@@ -140,6 +140,7 @@ export const PrivacyScreen: React.FC = () => {
     const [currentPassword, setCurrentPassword] = useState("");
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
+    const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
     const [pin, setPin] = useState("");
     const [confirmPin, setConfirmPin] = useState("");
     const [appLockBusy, setAppLockBusy] = useState(false);
@@ -175,21 +176,57 @@ export const PrivacyScreen: React.FC = () => {
     // Always use the actual database state, only show pending state during transitions
     const appLockSwitchValue = pendingAppLockRequest ?? isAppLockEnabled;
 
-    const handleSavePassword = () => {
+    const handleSavePassword = async () => {
         if (!currentPassword || !newPassword || !confirmPassword) {
-            Alert.alert("Error", "Please fill in all fields");
+            Alert.alert("Error", "Please fill in all fields.");
             return;
         }
         if (newPassword !== confirmPassword) {
-            Alert.alert("Error", "New passwords do not match");
+            Alert.alert("Error", "New passwords do not match.");
             return;
         }
-        // Mock save
-        setShowPasswordModal(false);
-        Alert.alert("Success", "Password changed successfully");
-        setCurrentPassword("");
-        setNewPassword("");
-        setConfirmPassword("");
+        if (newPassword.length < 8) {
+            Alert.alert("Security Tip", "Use at least 8 characters for your password.");
+            return;
+        }
+        if (!user?.email) {
+            Alert.alert("Error", "Unable to determine you are signed in right now.");
+            return;
+        }
+
+        setIsUpdatingPassword(true);
+        try {
+            const { error: reauthError } = await supabase.auth.signInWithPassword({
+                email: user.email,
+                password: currentPassword,
+            });
+
+            if (reauthError) {
+                Alert.alert("Authentication failed", "The current password is incorrect.");
+                return;
+            }
+
+            const { error: updateError } = await supabase.auth.updateUser({
+                password: newPassword,
+            });
+
+            if (updateError) {
+                console.error("Password update failed", updateError);
+                Alert.alert("Update failed", "We couldn't update your password right now. Please try again later.");
+                return;
+            }
+
+            setShowPasswordModal(false);
+            Alert.alert(
+                "Success",
+                "Your password has been updated. Please use the new password the next time you sign in."
+            );
+            setCurrentPassword("");
+            setNewPassword("");
+            setConfirmPassword("");
+        } finally {
+            setIsUpdatingPassword(false);
+        }
     };
 
     const handleSavePin = async () => {
@@ -529,9 +566,19 @@ export const PrivacyScreen: React.FC = () => {
 
                                 <Pressable
                                     onPress={handleSavePassword}
-                                    style={[styles.saveButton, { backgroundColor: colors.primary, borderRadius: radius.sm }]}
+                                    disabled={isUpdatingPassword}
+                                    style={[
+                                        styles.saveButton,
+                                        {
+                                            backgroundColor: colors.primary,
+                                            borderRadius: radius.sm,
+                                            opacity: isUpdatingPassword ? 0.75 : 1,
+                                        },
+                                    ]}
                                 >
-                                    <Text style={{ color: colors.primaryForeground, fontWeight: '600' }}>Update Password</Text>
+                                    <Text style={{ color: colors.primaryForeground, fontWeight: '600' }}>
+                                        {isUpdatingPassword ? "Updating…" : "Update Password"}
+                                    </Text>
                                 </Pressable>
                             </View>
                         </View>

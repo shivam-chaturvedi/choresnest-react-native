@@ -217,7 +217,7 @@ export const RecipesScreen: React.FC = () => {
           name: ing.name,
           quantity: Number(ing.quantity) || 1,
           unit: ing.unit || 'pcs',
-          categoryId: undefined,
+          category: undefined,
           addedBy: activeMember?.id,
           completed: false,
         });

@@ -182,6 +182,8 @@ const buildErrorContext = (error: any) => {
     };
 };
 
+// resetSyncCursors is only used by forceFullSync() — an explicit user action.
+// It is NOT called on logout/login/profile-switch (that would destroy cross-profile data).
 const resetSyncCursors = async (): Promise<void> => {
     await resetSyncCursorState();
 };
@@ -436,14 +438,19 @@ export const SyncService = {
         });
 
         if (lastSyncedProfileId && lastSyncedProfileId !== activeProfileId) {
-            console.log('Active Profile changed since last sync, resetting sync state and cursors.');
-            this.resetSyncState();
+            // Profile changed: reset in-memory state only.
+            // Do NOT reset sync cursors — each profile keeps its own continuation point
+            // so switching back to a profile continues from where it left off.
+            console.log(`[SyncService] Profile switched: ${lastSyncedProfileId} → ${activeProfileId}. Resetting in-memory state only (cursors preserved).`);
+            consecutiveFailures = 0;
+            lastSyncError = null;
+            resetBackoff();
+            clearConflictHistory();
             pendingSyncRequest = false;
             if (syncSoonTimer) {
                 clearTimeout(syncSoonTimer);
                 syncSoonTimer = null;
             }
-            await resetSyncCursors();
         }
         lastSyncedProfileId = activeProfileId;
         if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
@@ -587,17 +594,38 @@ export const SyncService = {
         return getBackoffNextAttempt();
     },
 
+    /**
+     * Resets all in-memory sync state AND the WatermelonDB global cursor.
+     * Used for forceFullSync() and similar explicit user-triggered resets.
+     * Does NOT need to be called on logout/profile-switch.
+     */
     resetSyncState(): void {
         consecutiveFailures = 0;
         lastSyncError = null;
         resetBackoff();
         clearConflictHistory();
         lastSyncedProfileId = null;
+        // NOTE: cursor reset is intentional here — this is the full-reset path.
         void resetSyncCursorState();
         lastSyncAttemptAt = null;
         lastSyncSuccessAt = null;
         lastSyncErrorMessage = null;
         lastSyncMode = 'unknown';
+    },
+
+    /**
+     * Resets in-memory counters and flags ONLY — does NOT reset sync cursors.
+     * Called by DataCleanupService.clearSessionCaches() on logout/profile-switch
+     * to clear stale retry counts without destroying cross-profile cursor state.
+     */
+    resetSyncStateInMemory(): void {
+        consecutiveFailures = 0;
+        lastSyncError = null;
+        lastSyncAttemptAt = null;
+        lastSyncErrorMessage = null;
+        resetBackoff();
+        // Deliberately NOT resetting lastSyncedProfileId or calling resetSyncCursorState()
+        console.log('[SyncService] In-memory sync state cleared (cursors preserved)');
     },
 
     async forceFullSync(): Promise<void> {

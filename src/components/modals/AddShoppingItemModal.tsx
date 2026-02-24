@@ -12,7 +12,8 @@ import {
 } from "react-native";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { AppIcon } from "../ui/AppIcon";
-import { useFamily, GroceryCategory } from "../../contexts/FamilyContext";
+import { CategoryIcon } from "../ui/CategoryIcon";
+import { shoppingCategories } from "../../constants/shoppingCategories";
 
 interface AddShoppingItemModalProps {
     visible: boolean;
@@ -21,7 +22,7 @@ interface AddShoppingItemModalProps {
         name: string;
         quantity: number;
         unit: string;
-        categoryId: string;
+        category: string;
     }) => void;
     preSelectedCategory?: string;
 }
@@ -48,10 +49,8 @@ export const AddShoppingItemModal: React.FC<AddShoppingItemModalProps> = ({
 }) => {
     const colors = useThemeColors();
     const radius = useThemeRadius();
-    const { categories } = useFamily();
-
     const [name, setName] = useState("");
-    const [categoryId, setCategoryId] = useState(preSelectedCategory || "");
+    const [category, setCategory] = useState(preSelectedCategory || shoppingCategories[0]?.id || "");
     const [quantity, setQuantity] = useState(1);
     const [unit, setUnit] = useState("pcs");
     const [showUnitPicker, setShowUnitPicker] = useState(false);
@@ -59,12 +58,12 @@ export const AddShoppingItemModal: React.FC<AddShoppingItemModalProps> = ({
     useEffect(() => {
         if (visible) {
             setName("");
-            setCategoryId(preSelectedCategory || categories[0]?.id || "");
+            setCategory(preSelectedCategory || shoppingCategories[0]?.id || "");
             setQuantity(1);
             setUnit("pcs");
             setShowUnitPicker(false);
         }
-    }, [visible, preSelectedCategory, categories]);
+    }, [visible, preSelectedCategory]);
 
     const handleAdd = () => {
         if (!name.trim()) return;
@@ -72,7 +71,7 @@ export const AddShoppingItemModal: React.FC<AddShoppingItemModalProps> = ({
             name: name.trim(),
             quantity,
             unit,
-            categoryId: categoryId || categories[0]?.id,
+            category: category || shoppingCategories[0]?.id,
         });
         onClose();
     };
@@ -147,26 +146,32 @@ export const AddShoppingItemModal: React.FC<AddShoppingItemModalProps> = ({
                                 Category
                             </Text>
                             <View style={styles.categoryGrid}>
-                                {categories.map((cat) => (
+                                {shoppingCategories.map((cat) => (
                                     <Pressable
                                         key={cat.id}
                                         style={[
                                             styles.categoryItem,
                                             {
                                                 backgroundColor:
-                                                    categoryId === cat.id ? colors.primary : colors.muted,
+                                                    category === cat.id ? colors.primary : colors.muted,
                                                 borderRadius: radius.md,
                                             },
                                         ]}
-                                        onPress={() => setCategoryId(cat.id)}
+                                        onPress={() => setCategory(cat.id)}
                                     >
-                                        <Text style={styles.categoryIcon}>{cat.icon}</Text>
+                                        <CategoryIcon
+                                            icon={cat.icon || "tag"}
+                                            library={cat.library}
+                                            size={18}
+                                            color={category === cat.id ? colors.primaryForeground : colors.foreground}
+                                            style={{ marginBottom: 2 }}
+                                        />
                                         <Text
                                             style={[
                                                 styles.categoryName,
                                                 {
                                                     color:
-                                                        categoryId === cat.id
+                                                        category === cat.id
                                                             ? colors.primaryForeground
                                                             : colors.foreground,
                                                 },
@@ -177,6 +182,11 @@ export const AddShoppingItemModal: React.FC<AddShoppingItemModalProps> = ({
                                         </Text>
                                     </Pressable>
                                 ))}
+                                {shoppingCategories.length === 0 && (
+                                    <Text style={[styles.categoryPlaceholder, { color: colors.mutedForeground }]}>
+                                        No categories available yet.
+                                    </Text>
+                                )}
                             </View>
                         </View>
 
@@ -400,23 +410,30 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         flexWrap: "wrap",
         gap: 8,
+        justifyContent: "space-between",
     },
     categoryItem: {
-        width: "30%",
-        aspectRatio: 1.1,
+        width: "16%",
         alignItems: "center",
         justifyContent: "center",
-        padding: 4,
-        flexGrow: 1,
+        padding: 8,
+        flexGrow: 0,
+        borderRadius: 0,
+        backgroundColor: "rgba(226, 232, 240, 0.3)",
     },
     categoryIcon: {
-        fontSize: 24,
-        marginBottom: 4,
+        fontSize: 14,
+        marginBottom: 2,
     },
     categoryName: {
-        fontSize: 12,
+        fontSize: 8,
         fontWeight: "600",
         textAlign: "center",
+    },
+    categoryPlaceholder: {
+        fontSize: 12,
+        textAlign: "center",
+        marginTop: 12,
     },
     row: {
         flexDirection: "row",
