@@ -9,7 +9,10 @@ export interface SupabaseResponse<T = any> {
 export class SupabaseService {
     private static logError(error: PostgrestError | AuthError | null, context: string) {
         if (error) {
-            console.error(`Supabase error [${context}]`, error.message ?? error.toString(), error);
+            // Use console.warn (not console.error) so auth errors don't trigger
+            // the React Native red error overlay — AuthContext already surfaces
+            // a user-friendly toast for these failures.
+            console.warn(`Supabase error [${context}]`, error.message ?? error.toString());
         }
     }
     /**

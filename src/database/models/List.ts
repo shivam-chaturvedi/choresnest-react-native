@@ -30,23 +30,10 @@ export class ListItem extends Model {
     @text('name') name!: string;
     @field('quantity') quantity!: number;
     @text('unit') unit!: string;
-    @text('category_id') categoryId?: string;
+    @text('category') category?: string;
     @text('added_by_id') addedById!: string;
     @field('is_completed') isCompleted!: boolean;
     @field('purchased_at') purchasedAt?: number;
-    @field('version') version!: number;
-    @text('profile_id') profileId!: string;
-    @field('created_at') createdAt!: number;
-    @field('updated_at') updatedAt!: number;
-    @field('deleted') deleted!: boolean;
-}
-
-export class ListCategory extends Model {
-    static table = 'list_categories';
-
-    @text('name') name!: string;
-    @text('icon') icon!: string;
-    @text('color') color!: string;
     @field('version') version!: number;
     @text('profile_id') profileId!: string;
     @field('created_at') createdAt!: number;

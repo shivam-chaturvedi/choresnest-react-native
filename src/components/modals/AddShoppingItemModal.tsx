@@ -22,7 +22,7 @@ interface AddShoppingItemModalProps {
         name: string;
         quantity: number;
         unit: string;
-        categoryId: string;
+        category: string;
     }) => void;
     preSelectedCategory?: string;
 }
@@ -50,7 +50,7 @@ export const AddShoppingItemModal: React.FC<AddShoppingItemModalProps> = ({
     const colors = useThemeColors();
     const radius = useThemeRadius();
     const [name, setName] = useState("");
-    const [categoryId, setCategoryId] = useState(preSelectedCategory || shoppingCategories[0]?.id || "");
+    const [category, setCategory] = useState(preSelectedCategory || shoppingCategories[0]?.id || "");
     const [quantity, setQuantity] = useState(1);
     const [unit, setUnit] = useState("pcs");
     const [showUnitPicker, setShowUnitPicker] = useState(false);
@@ -58,7 +58,7 @@ export const AddShoppingItemModal: React.FC<AddShoppingItemModalProps> = ({
     useEffect(() => {
         if (visible) {
             setName("");
-            setCategoryId(preSelectedCategory || shoppingCategories[0]?.id || "");
+            setCategory(preSelectedCategory || shoppingCategories[0]?.id || "");
             setQuantity(1);
             setUnit("pcs");
             setShowUnitPicker(false);
@@ -71,7 +71,7 @@ export const AddShoppingItemModal: React.FC<AddShoppingItemModalProps> = ({
             name: name.trim(),
             quantity,
             unit,
-        categoryId: categoryId || shoppingCategories[0]?.id,
+            category: category || shoppingCategories[0]?.id,
         });
         onClose();
     };
@@ -147,40 +147,40 @@ export const AddShoppingItemModal: React.FC<AddShoppingItemModalProps> = ({
                             </Text>
                             <View style={styles.categoryGrid}>
                                 {shoppingCategories.map((cat) => (
-                                <Pressable
-                                    key={cat.id}
-                                    style={[
-                                        styles.categoryItem,
-                                        {
-                                            backgroundColor:
-                                                categoryId === cat.id ? colors.primary : colors.muted,
-                                            borderRadius: radius.md,
-                                        },
-                                    ]}
-                                    onPress={() => setCategoryId(cat.id)}
-                                >
-                                    <CategoryIcon
-                                        icon={cat.icon || "tag"}
-                                        library={cat.library}
-                                        size={18}
-                                        color={categoryId === cat.id ? colors.primaryForeground : colors.foreground}
-                                        style={{ marginBottom: 2 }}
-                                    />
-                                    <Text
+                                    <Pressable
+                                        key={cat.id}
                                         style={[
-                                            styles.categoryName,
+                                            styles.categoryItem,
                                             {
-                                                color:
-                                                    categoryId === cat.id
-                                                        ? colors.primaryForeground
-                                                        : colors.foreground,
+                                                backgroundColor:
+                                                    category === cat.id ? colors.primary : colors.muted,
+                                                borderRadius: radius.md,
                                             },
                                         ]}
-                                        numberOfLines={1}
+                                        onPress={() => setCategory(cat.id)}
                                     >
-                                        {cat.name}
-                                    </Text>
-                                </Pressable>
+                                        <CategoryIcon
+                                            icon={cat.icon || "tag"}
+                                            library={cat.library}
+                                            size={18}
+                                            color={category === cat.id ? colors.primaryForeground : colors.foreground}
+                                            style={{ marginBottom: 2 }}
+                                        />
+                                        <Text
+                                            style={[
+                                                styles.categoryName,
+                                                {
+                                                    color:
+                                                        category === cat.id
+                                                            ? colors.primaryForeground
+                                                            : colors.foreground,
+                                                },
+                                            ]}
+                                            numberOfLines={1}
+                                        >
+                                            {cat.name}
+                                        </Text>
+                                    </Pressable>
                                 ))}
                                 {shoppingCategories.length === 0 && (
                                     <Text style={[styles.categoryPlaceholder, { color: colors.mutedForeground }]}>

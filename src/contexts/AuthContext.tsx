@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "../config/supabase";
 import { SupabaseService } from "../services/SupabaseService";
@@ -24,6 +24,13 @@ interface AuthContextType {
     isAuthenticated: boolean;
     hasCompletedOnboarding: boolean;
     isLoading: boolean;
+    /**
+     * Monotonically-increasing integer. Incremented on every login / logout /
+     * guest-login / profile-switch. Pass this into any async bootstrap/sync
+     * function and bail out early if it changes mid-flight to avoid acting on
+     * stale auth state.
+     */
+    sessionEpoch: number;
     login: (email: string, pass: string) => Promise<boolean>;
     signup: (email: string, pass: string, name: string) => Promise<boolean>;
     loginAsGuest: () => Promise<void>;
@@ -44,6 +51,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
     const [isGuest, setIsGuest] = useState(false);
     const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    const [sessionEpoch, setSessionEpoch] = useState(0);
+
+    // Ref copy so async callbacks can read the latest epoch without closure capture
+    const epochRef = useRef(0);
+    const bumpEpoch = () => {
+        epochRef.current += 1;
+        setSessionEpoch(epochRef.current);
+    };
 
     useEffect(() => {
         const initializeAuth = async () => {
@@ -69,13 +84,38 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
                         console.error("AuthContext: Failed to parse cached user", e);
                     }
                 } else {
-                    // No cache? Fallback to async check without blocking UI completely
-                    supabase.auth.getSession().catch(e => console.warn('Background session fetch failed', e));
+                    // No AUTH_USER in our cache → user is logged-out.
+                    //
+                    // CRITICAL: If a stale/expired Supabase session exists in AsyncStorage,
+                    // onAuthStateChange registration triggers _recoverAndRefresh internally,
+                    // making a network token-refresh call that fails with "Network request failed".
+                    //
+                    // DO NOT call supabase.auth.signOut() — despite scope:'local', the SDK
+                    // still makes a network attempt first and blocks for 46+ seconds on failure.
+                    //
+                    // Instead: directly delete Supabase's AsyncStorage keys. Zero network. Instant.
+                    try {
+                        const supabaseUrl = (await AsyncStorage.getItem('__supabase_url__')) || '';
+                        // Extract project ref from stored URL OR from known keys via getAllKeys
+                        const allKeys = await AsyncStorage.getAllKeys();
+                        const supabaseKeys = allKeys.filter(k =>
+                            k.startsWith('sb-') ||
+                            k === 'supabase.auth.token' ||
+                            k.includes('-auth-token') ||
+                            k.includes('-auth-code-verifier')
+                        );
+                        if (supabaseKeys.length > 0) {
+                            await AsyncStorage.multiRemove(supabaseKeys);
+                            console.log(`AuthContext: Cleared ${supabaseKeys.length} stale Supabase session key(s) from AsyncStorage (no network)`);
+                        }
+                    } catch (e) {
+                        // Ignore — stoarge error does not block auth init
+                    }
                     setUser(null);
                     setIsGuest(false);
                     DocumentUploadScheduler.stop();
-                }
 
+                }
 
                 // Check guest mode independently
                 const guest = await AsyncStorage.getItem("IS_GUEST");
@@ -94,7 +134,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
 
             } catch (error) {
                 console.error("Failed to initialize auth state:", error);
-                // Default to safe states if initialization fails
                 setUser(null);
                 setIsGuest(false);
                 setHasCompletedOnboarding(false);
@@ -106,7 +145,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
 
         initializeAuth();
 
-        // Listen for changes
+        // Listen for Supabase auth state changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
             if (session?.user) {
                 const userData = {
@@ -116,16 +155,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
                 };
                 setUser(userData);
                 setIsGuest(false);
+                // Start token auto-refresh only when we have a real authenticated session
+                supabase.auth.startAutoRefresh();
                 AsyncStorage.removeItem("IS_GUEST");
                 AsyncStorage.removeItem("GUEST_PROFILE_ID");
                 AsyncStorage.setItem("AUTH_USER", JSON.stringify(userData));
-                // Explicitly bind the new user's ID as the active profile to eliminate cross-login caching
+                // Bind the new user's ID as the active profile before any query runs
                 AsyncStorage.setItem('ACTIVE_PROFILE_ID', session.user.id);
-                // Also update the ProfileService in-memory cache so getActiveProfileId() returns instantly
                 void ProfileService.setActiveProfileId(session.user.id);
                 DocumentUploadScheduler.startForUser(session.user.id);
 
-                // Cache user details locally for guest mode discovery
+                // Cache user record locally for guest-mode discovery
                 try {
                     await database.write(async () => {
                         const usersCol = database.get<UserRecord>('users');
@@ -152,17 +192,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
                     console.error("AuthContext: Failed to cache user record:", e);
                 }
 
-                // Trigger Sync dynamically to avoid circular dependency - run in background, don't block
-                // AppNavigator handles the INITIAL_SESSION sync with an 8 second delay to prevent splash screen blocking
+                // Trigger sync in background — AppNavigator handles INITIAL_SESSION with 8s delay
                 if (_event !== 'INITIAL_SESSION') {
                     (async () => {
                         try {
                             const { SyncService } = await import("../services/SyncService");
-                            // Check if sync is already in progress before triggering
                             if (!SyncService.getSyncStatus()) {
-                                // Don't await - let sync run in background
                                 SyncService.sync().catch(err => {
-                                    // Don't log concurrent sync errors - they're expected
                                     if (!err?.message?.includes('Concurrent synchronization')) {
                                         console.error("Background sync failed:", err);
                                     }
@@ -174,6 +210,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
                     })();
                 }
             } else {
+                // No session — stop background token refresh to prevent spurious network errors
+                supabase.auth.stopAutoRefresh();
                 setUser(null);
                 AsyncStorage.removeItem("AUTH_USER");
                 DocumentUploadScheduler.stop();
@@ -189,13 +227,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
     const login = async (email: string, pass: string): Promise<boolean> => {
         ProfileBootstrapService.resetCache();
         try {
-            const { error } = await SupabaseService.signIn(email, pass);
+            // Race against a 10-second timeout so the spinner never hangs indefinitely
+            // when the device has no internet access.
+            const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
+                setTimeout(
+                    () => resolve({ data: null, error: new Error('Network request timed out. Please check your internet connection and try again.') }),
+                    10000
+                )
+            );
+            const { error } = await Promise.race([SupabaseService.signIn(email, pass), timeoutPromise]);
             if (error) {
                 const message = getHumanReadableMessage(error, 'login');
                 onError?.('Login Failed', message);
                 return false;
             }
-            // State updates via onAuthStateChange
+
+            // ✅ NON-DESTRUCTIVE: bump epoch so stale async work self-aborts.
+            // Do NOT call DataCleanupService.clearDatabase() — it wipes local rows.
+            // The active profile will be set by onAuthStateChange above.
+            bumpEpoch();
+            console.log("[AuthContext] login: success — DB preserved. sessionEpoch:", epochRef.current);
             return true;
         } catch (error: any) {
             const message = getHumanReadableMessage(error, 'login');
@@ -213,7 +264,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
                 onError?.('Signup Failed', message);
                 return false;
             }
-            // State updates via onAuthStateChange if auto-confirm is on, otherwise user waits
+
+            // ✅ NON-DESTRUCTIVE: bump epoch only.
+            bumpEpoch();
+            console.log("[AuthContext] signup: success — DB preserved. sessionEpoch:", epochRef.current);
             return true;
         } catch (error: any) {
             const message = getHumanReadableMessage(error, 'signup');
@@ -226,17 +280,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
         try {
             console.log("AuthContext: loginAsGuest starting...");
             ProfileBootstrapService.resetCache();
+
+            // ✅ NON-DESTRUCTIVE: set guest profile — no DB wipe.
             await ProfileService.setGuestProfileId();
 
             setIsGuest(true);
             setUser(null);
             DocumentUploadScheduler.stop();
             setHasCompletedOnboarding(true);
+            bumpEpoch();
 
             await AsyncStorage.setItem("IS_GUEST", "true");
             await AsyncStorage.removeItem("AUTH_USER");
             await AsyncStorage.setItem("HAS_COMPLETED_ONBOARDING", "true");
-            console.log("AuthContext: loginAsGuest state sequence completed");
+            console.log("AuthContext: loginAsGuest complete. DB preserved. sessionEpoch:", epochRef.current);
         } catch (error) {
             console.error("Guest login failed:", error);
             throw new Error("Failed to continue as guest. Please try again.");
@@ -245,28 +302,32 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
 
     const logout = async () => {
         try {
-            // First drop immediately from UI before running heavy wipe operations
+            // Immediately clear UI state
             setUser(null);
             setIsGuest(false);
+            bumpEpoch();
 
-            // Background cleanup operations
+            // Non-blocking background cleanup
             (async () => {
                 try {
-                    // Start clearing database but don't block the UI
+                    // Stop sync — no DB wipe, no cursor reset
                     const { SyncService } = await import('../services/SyncService');
                     SyncService.stopPeriodicSync();
 
+                    // ✅ NON-DESTRUCTIVE session cleanup: clears in-memory caches +
+                    // session AsyncStorage keys only. DB rows are PRESERVED.
                     const { DataCleanupService } = await import('../services/DataCleanupService');
-                    await DataCleanupService.clearDatabase();
+                    await DataCleanupService.clearSessionCaches();
                 } catch (err) {
-                    console.error("AuthContext: Failed to clear database on logout", err);
+                    console.error("AuthContext: Session cleanup error during logout", err);
                 }
 
                 ProfileBootstrapService.resetCache();
                 await ProfileService.resetCache();
-                await AsyncStorage.removeItem("IS_GUEST");
+                await AsyncStorage.multiRemove(["IS_GUEST", "GUEST_PROFILE_ID"]);
                 DocumentUploadScheduler.stop();
                 await SupabaseService.signOut();
+                console.log("[AuthContext] logout complete. Local DB rows PRESERVED. sessionEpoch:", epochRef.current);
             })();
         } catch (error: any) {
             const message = getHumanReadableMessage(error, 'logout');
@@ -281,7 +342,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
             await AppSettingsService.completeOnboarding();
         } catch (error) {
             console.error("Failed to save onboarding completion:", error);
-            // Don't throw - onboarding is complete in memory even if storage fails
+            // Don't throw — onboarding is complete in memory even if storage fails
         }
     };
 
@@ -290,16 +351,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
         try {
             ProfileBootstrapService.resetCache();
             await ProfileService.resetCache();
-            // Import DataCleanupService dynamically to avoid circular dependencies
-            const { DataCleanupService } = await import('../services/DataCleanupService');
 
-            // Delete all data from all storage mechanisms
+            // ✅ DESTRUCTIVE — intentional. This is the ONLY place that wipes the DB.
+            const { DataCleanupService } = await import('../services/DataCleanupService');
             await DataCleanupService.deleteAllData();
 
-            // Reset auth state
             setUser(null);
             setIsGuest(false);
             setHasCompletedOnboarding(false);
+            bumpEpoch();
 
             console.log('Account deleted successfully');
         } catch (error) {
@@ -317,6 +377,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
             isAuthenticated: !!user || isGuest,
             hasCompletedOnboarding,
             isLoading,
+            sessionEpoch,
             login,
             signup,
             loginAsGuest,

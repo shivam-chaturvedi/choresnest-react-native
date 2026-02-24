@@ -322,23 +322,29 @@ const AppNavigatorInner = () => {
       }
 
       try {
-        console.log("AppNavigator: loadLocalMembers starting (Fast Path)...");
+        console.log("AppNavigator: loadLocalMembers starting...");
 
-        // 1. FAST PATH: Check if we already have members locally
-        // If we do, we can proceed to the app screens immediately without waiting for remote sync
+        // 1. Resolve the active profile — AsyncStorage/memory only, no network
+        const pid = isGuest ? null : await ProfileService.getActiveProfileId();
+
+        // 1a. FAST PATH: Check if we already have members locally for this profile
         const membersCollection = database.collections.get<Member>('members');
-        const localMembers = await membersCollection.query().fetch();
+        let localQuery = membersCollection.query();
+        // Filter by profile_id if we have one so we don't pick up another profile's rows
+        if (pid) {
+          const { Q: WQ } = require('@nozbe/watermelondb');
+          localQuery = membersCollection.query(WQ.where('profile_id', pid));
+        }
+        const localMembers = await localQuery.fetch();
         const existsLocally = localMembers.length > 0;
 
         if (existsLocally && !cancelled) {
-          console.log(`AppNavigator: Found ${localMembers.length} members locally. Proceding...`);
+          console.log(`AppNavigator: Found ${localMembers.length} members locally for profile ${pid}. Proceeding...`);
           setHasMembersInDB(true);
-          // We don't return here! We still want to try bootstrapping in the background
-          // to catch any remote changes, but we've already satisfied the boot condition.
+          // Don't return — still want to bootstrap in background for freshness
         }
 
-        // 2. REMOTE CHECK (with timeout)
-        const pid = await ProfileService.getActiveProfileId();
+        // 2. REMOTE BOOTSTRAP (with timeout) — only for authenticated, non-guest users
         if (pid && !isGuest) {
           try {
             console.log("AppNavigator: Attempting profile bootstrap with timeout...");
@@ -359,13 +365,13 @@ const AppNavigatorInner = () => {
           }
         }
 
-        // 3. FINAL DECISION: If we still haven't set it, use the local exists check
+        // 3. FINAL DECISION: fall back to the local-exists check
         if (!cancelled && hasMembersInDB === null) {
           console.log(`AppNavigator: Setting final members state from local check: ${existsLocally}`);
           setHasMembersInDB(existsLocally);
         }
       } catch (error) {
-        console.error('AppNavigator: Error loading global members:', error);
+        console.error('AppNavigator: Error loading local members:', error);
         if (!cancelled && hasMembersInDB === null) {
           setHasMembersInDB(false);
         }

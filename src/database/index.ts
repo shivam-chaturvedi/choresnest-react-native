@@ -10,7 +10,7 @@ import Setting from './models/Setting';
 import AppSettings from './models/AppSettings';
 import Event from './models/Event';
 import Task from './models/Task';
-import { List, ListItem, ListCategory } from './models/List';
+import { List, ListItem } from './models/List';
 import { Recipe, Collection, CollectionRecipe } from './models/Recipe';
 import MealPlan from './models/MealPlan';
 import Document from './models/Document';
@@ -42,7 +42,6 @@ export const database = new Database({
         Task,
         List,
         ListItem,
-        ListCategory,
         Recipe,
         Collection,
         CollectionRecipe,

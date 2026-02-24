@@ -17,7 +17,6 @@ export const SYNC_TABLES: TableSyncConfig[] = [
     { key: 'notification_preferences', phase: 1 },
     { key: 'quiet_hours', phase: 1 },
     { key: 'app_settings', phase: 1, hasProfileId: true, addProfileId: true },
-    { key: 'list_categories', remoteTable: 'list_categories', phase: 1, hasProfileId: true, addProfileId: true },
     { key: 'recipes', remoteTable: 'recipes', phase: 2, hasProfileId: true, addProfileId: true },
     { key: 'collections', remoteTable: 'collections', phase: 2, hasProfileId: true, addProfileId: true },
     { key: 'collection_recipes', remoteTable: 'collection_recipes', phase: 3, hasProfileId: true, addProfileId: true },

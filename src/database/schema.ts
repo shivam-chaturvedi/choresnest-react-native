@@ -100,7 +100,7 @@ export default appSchema({
                 { name: 'name', type: 'string' },
                 { name: 'quantity', type: 'number' },
                 { name: 'unit', type: 'string' },
-                { name: 'category_id', type: 'string', isOptional: true },
+                { name: 'category', type: 'string', isOptional: true },
                 { name: 'added_by_id', type: 'string' },
                 { name: 'is_completed', type: 'boolean' },
                 { name: 'purchased_at', type: 'number', isOptional: true },

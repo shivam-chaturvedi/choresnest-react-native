@@ -45,6 +45,7 @@ const GroceryRow = React.memo<GroceryRowProps>(({
   isPurchased,
   categoryColor,
   categoryIcon,
+  categoryLibrary,
   colors,
   radius,
   onToggle,
@@ -160,8 +161,9 @@ export const ListsScreen: React.FC = () => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
   const route = useRoute<RouteProp<{ params: { addItems?: any[] } }, 'params'>>();
-  const { groceryList, addGroceryItem, toggleGroceryItem, removeGroceryItem, activeMember, members, categories } = useFamily();
+  const { groceryList, addGroceryItem, toggleGroceryItem, removeGroceryItem, activeMember, members } = useFamily();
   const { generateGroceryList } = useMealPlan();
+  const defaultCategoryId = shoppingCategories[0]?.id ?? "Groceries";
 
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
@@ -193,7 +195,7 @@ export const ListsScreen: React.FC = () => {
             name: item.name,
             quantity: item.quantity,
             unit: item.unit,
-            categoryId: categories[0]?.id || "cat6",
+            category: defaultCategoryId,
             addedBy: activeMember?.id || "1",
             completed: false,
           });
@@ -219,11 +221,8 @@ export const ListsScreen: React.FC = () => {
   const categoriesById = useMemo(() => {
     const map = new Map<string, { color?: string; icon?: string; library?: IconLibrary }>();
     shoppingCategories.forEach(cat => map.set(cat.id, { icon: cat.icon, color: cat.color, library: cat.library }));
-    categories.forEach(cat => {
-      map.set(cat.id, { color: cat.color, icon: cat.icon, library: 'MaterialCommunityIcons' as IconLibrary });
-    });
     return map;
-  }, [categories]);
+  }, []);
 
   const getMemberMeta = useCallback((memberId: string) => {
     const member = members.find(m => m.id === memberId);
@@ -252,7 +251,7 @@ export const ListsScreen: React.FC = () => {
   }, [removeGroceryItem]);
 
   const renderItemCard = useCallback((item: GroceryItem, _index: number, _isHistory: boolean) => {
-    const categoryMeta = categoriesById.get(item.categoryId || "") || {
+    const categoryMeta = categoriesById.get(item.category || "") || {
       color: colors.muted,
       icon: "cube-outline",
       library: 'MaterialCommunityIcons',
@@ -282,7 +281,7 @@ export const ListsScreen: React.FC = () => {
     return (groceryList as GroceryItem[]).filter((item) => {
       const matchesSearch = item.name.toLowerCase().includes(searchLower);
       const matchesMember = !memberFilterId || item.addedBy === memberFilterId;
-      const matchesCategory = !categoryFilterId || item.categoryId === categoryFilterId;
+      const matchesCategory = !categoryFilterId || item.category === categoryFilterId;
       const matchesDate = !updatedDateFilter || (
         item.updatedAt !== undefined &&
         item.updatedAt !== null &&
@@ -298,7 +297,7 @@ export const ListsScreen: React.FC = () => {
   const historyItems = useMemo(() => {
     let items = doneItems;
     if (historyCategoryFilter) {
-      items = items.filter(i => i.categoryId === historyCategoryFilter);
+      items = items.filter(i => i.category === historyCategoryFilter);
     }
     if (historyDate) {
       const dateStr = historyDate.toISOString().split('T')[0];
@@ -328,13 +327,13 @@ export const ListsScreen: React.FC = () => {
     ? Math.round((doneItems.length / filteredItems.length) * 100)
     : 0;
 
-  const handleAddItem = (item: { name: string; quantity: number; unit: string; categoryId: string }) => {
+  const handleAddItem = (item: { name: string; quantity: number; unit: string; category: string }) => {
     try {
       addGroceryItem({
         name: item.name,
         quantity: item.quantity,
         unit: item.unit,
-        categoryId: item.categoryId,
+        category: item.category,
         addedBy: activeMember?.id || "1",
         completed: false,
       });
@@ -361,7 +360,7 @@ export const ListsScreen: React.FC = () => {
         name: item.name,
         quantity: item.quantity,
         unit: item.unit,
-        categoryId: categories[0]?.id || "cat6",
+        category: defaultCategoryId,
         addedBy: activeMember?.id || "1",
         completed: false,
       });
@@ -379,7 +378,7 @@ export const ListsScreen: React.FC = () => {
           name: item.name,
           quantity: item.quantity,
           unit: item.unit,
-          categoryId: categories[0]?.id || "cat6",
+          category: defaultCategoryId,
           addedBy: activeMember?.id || "1",
           completed: false,
         });
@@ -652,8 +651,8 @@ export const ListsScreen: React.FC = () => {
                         </View>
                         <View style={[styles.progressBar, { backgroundColor: colors.muted, borderRadius: radius.full }]}>
                           <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: colors.success, borderRadius: radius.full }]} />
-                  </View>
-                </View>
+                        </View>
+                      </View>
                     </View>
 
                     {ENABLE_RECIPE_AND_MEALS && (

@@ -1,8 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from "react";
 import { FamilyService } from "../services/FamilyService";
 import { TaskService } from "../services/TaskService";
 import { ListService } from "../services/ListService";
-import type { ListCategoryRecord, ListItemRecord } from "../services/ListService";
+import type { ListItemRecord } from "../services/ListService";
 import { VaultService } from "../services/VaultService";
 import { supabase } from "../config/supabase";
 import { ProfileService } from "../services/ProfileService";
@@ -57,16 +57,9 @@ export interface GroceryItem {
   unit: string;
   completed: boolean;
   addedBy?: string;
-  categoryId?: string;
+  category?: string;
   purchasedAt?: number;
   updatedAt?: number;
-}
-
-export interface GroceryCategory {
-  id: string;
-  name: string;
-  icon?: string;
-  color?: string;
 }
 
 import { VaultReminderRule } from "../utils/VaultReminderUtils";
@@ -128,8 +121,6 @@ export interface FamilyContextValue {
   addTask: (task: any) => Promise<void>;
   updateTask: (id: string, updates: any) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
-  categories: any[];
-  addCategory: () => void;
   profileId: string | null;
 }
 
@@ -182,7 +173,6 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [globalVault, setGlobalVault] = useState<any[]>([]);
   const [memberVaults, setMemberVaults] = useState<Record<string, any[]>>({});
   const [rawGroceryItems, setRawGroceryItems] = useState<ListItemRecord[]>([]);
-  const [rawCategories, setRawCategories] = useState<ListCategoryRecord[]>([]);
   const [profileId, setProfileId] = useState<string | null>(null);
 
   const membersById = useMemo(() => {
@@ -227,15 +217,6 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     return normalized.map(taskModel => mapTaskModelToTask(taskModel, membersById));
   }, [rawTasks, membersById]);
 
-  const categories = useMemo(() => {
-    return rawCategories.map(cat => ({
-      id: cat.id,
-      name: cat.name,
-      icon: cat.icon,
-      color: cat.color,
-    }));
-  }, [rawCategories]);
-
   const groceryList = useMemo(() => {
     return rawGroceryItems.map(item => ({
       id: item.id,
@@ -243,7 +224,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       quantity: item.quantity,
       unit: item.unit,
       completed: item.isCompleted,
-      categoryId: item.categoryId,
+      category: item.category,
       addedBy: item.addedById,
       purchasedAt: item.purchasedAt,
       updatedAt: item.updatedAt,
@@ -277,7 +258,6 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setRawEvents([]);
     setRawTasks([]);
     setRawGroceryItems([]);
-    setRawCategories([]);
     setGlobalVault([]);
     setMemberVaults({});
     setMembers([]);
@@ -366,7 +346,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     return explicit || (members.length > 0 ? members[0] : null);
   }, [members]);
 
-  const setActiveMember = async (member: FamilyMember) => {
+  const setActiveMember = useCallback(async (member: FamilyMember) => {
     try {
       if (!profileId) {
         console.warn('FamilyContext: Profile ID unavailable for active member update');
@@ -381,7 +361,17 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       console.error('FamilyContext: Error setting active member:', error);
       throw error;
     }
-  };
+  }, [profileId]);
+
+  useEffect(() => {
+    if (members.length === 0) {
+      return;
+    }
+    const hasActive = members.some(member => member.isActive);
+    if (!hasActive) {
+      void setActiveMember(members[0]);
+    }
+  }, [members, setActiveMember]);
 
   const ensureProfileId = () => {
     if (!profileId) {
@@ -576,28 +566,6 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   }, [profileId]);
 
-  // --- Observe Grocery Categories ---
-  useEffect(() => {
-    if (!profileId) {
-      setRawCategories([]);
-      return;
-    }
-    try {
-      const sub = ListService.observeCategories(profileId).subscribe({
-        next: (items) => {
-          setRawCategories(items);
-        },
-        error: (error) => {
-          console.error('Error observing grocery categories:', error);
-        }
-      });
-      return () => sub.unsubscribe();
-    } catch (error) {
-      console.error('Error setting up grocery categories subscription:', error);
-    }
-  }, [profileId]);
-
-
   // ... Expose methods ...
 
   const handleCascadeDelete = async (id: string) => {
@@ -655,8 +623,6 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         updateTask,
         deleteTask,
 
-        categories,
-        addCategory: () => { },
         profileId,
       }}
     >

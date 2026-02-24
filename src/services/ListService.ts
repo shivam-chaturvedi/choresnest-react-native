@@ -1,5 +1,5 @@
 import { database } from '../database';
-import { List, ListCategory, ListItem } from '../database/models/List';
+import { List, ListItem } from '../database/models/List';
 import { SyncService } from './SyncService';
 import { Q } from '@nozbe/watermelondb';
 import { map } from 'rxjs/operators';
@@ -31,7 +31,7 @@ const serializeListItemRecord = (item: ListItem) => ({
   name: item.name,
   quantity: item.quantity,
   unit: item.unit,
-  categoryId: item.categoryId,
+  category: item.category,
   addedById: item.addedById,
   isCompleted: item.isCompleted,
   purchasedAt: item.purchasedAt,
@@ -43,27 +43,12 @@ const serializeListItemRecord = (item: ListItem) => ({
   deleted: item.deleted,
 });
 
-const serializeListCategoryRecord = (category: ListCategory) => ({
-  id: category.id,
-  name: category.name,
-  icon: category.icon,
-  color: category.color,
-  profileId: category.profileId,
-  createdAt: category.createdAt,
-  updatedAt: category.updatedAt,
-  version: category.version,
-  deleted: category.deleted,
-});
-
 export type ListRecord = ReturnType<typeof serializeListRecord>;
 export type ListItemRecord = ReturnType<typeof serializeListItemRecord>;
-export type ListCategoryRecord = ReturnType<typeof serializeListCategoryRecord>;
 
 type GroceryItemPayload = Partial<ListItem> & { addedBy?: string };
 type ListPayload = { name: string; type: string; icon?: string };
 type ListUpdates = Partial<{ name: string; type: string; icon?: string }>;
-type CategoryPayload = { name: string; icon?: string; color?: string };
-type CategoryUpdates = Partial<{ name: string; icon: string; color: string }>;
 
 export const ListService = {
   observeLists: (profileId?: string | null) => {
@@ -87,18 +72,6 @@ export const ListService = {
     );
     return query.observeWithColumns(LIST_OBSERVE_COLUMNS).pipe(
       map(records => records.map(serializeListItemRecord))
-    );
-  },
-
-  observeCategories: (profileId?: string | null) => {
-    const effectiveProfileId = profileId ?? '';
-    const query = database.get<ListCategory>('list_categories').query(
-      Q.where('profile_id', effectiveProfileId),
-      Q.where('deleted', false),
-      Q.sortBy('updated_at', Q.desc)
-    );
-    return query.observeWithColumns(LIST_OBSERVE_COLUMNS).pipe(
-      map(records => records.map(serializeListCategoryRecord))
     );
   },
 
@@ -138,8 +111,8 @@ export const ListService = {
         item.name = data.name || 'Item';
         item.quantity = data.quantity ?? 1;
         item.unit = data.unit || 'pcs';
-        if (data.categoryId) {
-          item.categoryId = data.categoryId;
+        if (data.category) {
+          item.category = data.category;
         }
         item.addedById = addedById;
         item.isCompleted = data.isCompleted ?? false;
@@ -231,62 +204,6 @@ export const ListService = {
     await database.write(async () => {
       const list = await database.get<List>('lists').find(id);
       await list.update(record => {
-        record.deleted = true;
-        record.updatedAt = now;
-        record.version = (record.version ?? 0) + 1;
-      });
-    });
-    syncAfterWrite();
-  },
-
-  addCategory: async (data: CategoryPayload) => {
-    const profileId = await fetchActiveProfileId();
-    if (!profileId) {
-      console.warn('Skipping category create until profile is known');
-      return;
-    }
-    const now = Date.now();
-    await database.write(async () => {
-      await database.get<ListCategory>('list_categories').create(category => {
-        category.profileId = profileId;
-        category.name = data.name;
-        category.icon = data.icon || 'tag';
-        category.color = data.color || '#9CA3AF';
-        category.createdAt = now;
-        category.updatedAt = now;
-        category.version = 1;
-        category.deleted = false;
-      });
-    });
-    syncAfterWrite();
-  },
-
-  updateCategory: async (id: string, updates: CategoryUpdates) => {
-    const now = Date.now();
-    await database.write(async () => {
-      const category = await database.get<ListCategory>('list_categories').find(id);
-      await category.update(record => {
-        if (updates.name !== undefined) {
-          record.name = updates.name;
-        }
-        if (updates.icon !== undefined) {
-          record.icon = updates.icon;
-        }
-        if (updates.color !== undefined) {
-          record.color = updates.color;
-        }
-        record.updatedAt = now;
-        record.version = (record.version ?? 0) + 1;
-      });
-    });
-    syncAfterWrite();
-  },
-
-  deleteCategory: async (id: string) => {
-    const now = Date.now();
-    await database.write(async () => {
-      const category = await database.get<ListCategory>('list_categories').find(id);
-      await category.update(record => {
         record.deleted = true;
         record.updatedAt = now;
         record.version = (record.version ?? 0) + 1;

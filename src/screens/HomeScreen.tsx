@@ -105,13 +105,13 @@ export const HomeScreen: React.FC = () => {
   //   'false' -> Already seen (Don't show)
   //   'true' -> (Legacy/Unused but treated as unset if we wanted, but we will treating null as unset)
 
-  const handleAddItem = (item: { name: string; quantity: number; unit: string; categoryId: string }) => {
+  const handleAddItem = (item: { name: string; quantity: number; unit: string; category: string }) => {
     try {
       addGroceryItem({
         name: item.name,
         quantity: item.quantity,
         unit: item.unit,
-        categoryId: item.categoryId,
+        category: item.category,
         addedBy: activeMember?.id || "1",
         completed: false,
       });

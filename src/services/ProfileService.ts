@@ -58,7 +58,7 @@ export const ProfileService = {
      *  5. Supabase session token cached in AsyncStorage  (offline fallback)
      */
     async getActiveProfileId(): Promise<string | null> {
-        // 1. In-memory cache
+        // 1. In-memory cache (instant — hot path)
         if (cachedProfileId) {
             return cachedProfileId;
         }
@@ -79,31 +79,13 @@ export const ProfileService = {
                 return GUEST_PROFILE_ID;
             }
 
-            // 4. Live Supabase auth session (with timeout)
-            try {
-                const sessionPromise = supabase.auth.getSession();
-                const timeoutPromise = new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Supabase Auth Timeout')), 3500)
-                );
-                const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any;
-                if (session?.user) {
-                    await persistActiveProfile(session.user.id);
-                    return session.user.id;
-                }
-            } catch (authError: any) {
-                if (authError?.message === 'Supabase Auth Timeout') {
-                    // 5. Fallback: read Supabase's own locally cached session token
-                    const cachedUserId = await tryReadCachedSupabaseSession();
-                    if (cachedUserId) {
-                        console.log('ProfileService: Auth timed out but found cached session; using cached user ID.');
-                        await persistActiveProfile(cachedUserId);
-                        return cachedUserId;
-                    }
-                    console.warn('ProfileService: Supabase Auth Timeout — no cached session found either.');
-                } else {
-                    console.error('ProfileService: Failed to resolve active profile ID (auth):', authError);
-                }
-            }
+            // No cached profile found and no guest session.
+            // Do NOT fall through to a live Supabase network call here — calling
+            // supabase.auth.getSession() when unauthenticated produces repeated
+            // "Network request failed" errors on every effect cycle.
+            // The caller (AuthContext / AppNavigator) will handle the null case
+            // and redirect to the auth screen.
+            return null;
         } catch (error) {
             console.error('ProfileService: Unexpected error resolving profile ID:', error);
         }
