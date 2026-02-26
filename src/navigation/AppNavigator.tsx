@@ -325,7 +325,7 @@ const AppNavigatorInner = () => {
         console.log("AppNavigator: loadLocalMembers starting...");
 
         // 1. Resolve the active profile — AsyncStorage/memory only, no network
-        const pid = isGuest ? null : await ProfileService.getActiveProfileId();
+        const pid = await ProfileService.getActiveProfileId();
 
         // 1a. FAST PATH: Check if we already have members locally for this profile
         const membersCollection = database.collections.get<Member>('members');
@@ -345,6 +345,7 @@ const AppNavigatorInner = () => {
         }
 
         // 2. REMOTE BOOTSTRAP (with timeout) — only for authenticated, non-guest users
+        let remoteBootstrapSuccess = false;
         if (pid && !isGuest) {
           try {
             console.log("AppNavigator: Attempting profile bootstrap with timeout...");
@@ -355,17 +356,22 @@ const AppNavigatorInner = () => {
 
             const bootstrapResult = await Promise.race([bootstrapPromise, timeoutPromise]) as any;
 
-            if (!cancelled && bootstrapResult.memberCount > 0) {
-              console.log(`AppNavigator: Bootstrap succeeded with ${bootstrapResult.memberCount} members`);
-              setHasMembersInDB(true);
-              return;
+            if (!cancelled) {
+              if (bootstrapResult.membersFetchSuccess) {
+                remoteBootstrapSuccess = true;
+              }
+              if (bootstrapResult.memberCount > 0) {
+                console.log(`AppNavigator: Bootstrap succeeded with ${bootstrapResult.memberCount} members`);
+                setHasMembersInDB(true);
+                return;
+              }
             }
           } catch (e) {
             console.warn('AppNavigator: Bootstrap skipped or timed out', e);
           }
         }
 
-        // 3. FINAL DECISION: fall back to the local-exists check
+        // 3. FINAL DECISION: fall back to the local-exists check if remote didn't succeed
         if (!cancelled && hasMembersInDB === null) {
           console.log(`AppNavigator: Setting final members state from local check: ${existsLocally}`);
           setHasMembersInDB(existsLocally);

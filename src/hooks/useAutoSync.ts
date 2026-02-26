@@ -76,7 +76,10 @@ export const useAutoSync = () => {
         // Subscribe to database changes
         const subscriptions: Array<{ unsubscribe: () => void }> = [];
 
-        // Subscribe to all collections that need syncing
+        // Subscribe to all collections that need syncing.
+        // NOTE: 'list_categories' was removed because it no longer exists
+        // in the local WatermelonDB schema on some builds, which caused
+        // noisy "Cannot read property 'query' of null" warnings.
         const collections = [
             'events',
             'tasks',
@@ -85,7 +88,6 @@ export const useAutoSync = () => {
             'budgets',
             'lists',
             'list_items',
-            'list_categories',
             'recipes',
             'collection_recipes',
             'collections',

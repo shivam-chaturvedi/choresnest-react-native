@@ -12,9 +12,34 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     // Optionally throw error, but logging checks if Config is loading at all
 }
 
+// Create a safe wrapper around AsyncStorage to catch malformed JSON
+// This prevents the app from crashing on boot if an old/corrupted
+// session string exists in storage instead of a proper JSON object.
+const SafeStorage = {
+    getItem: async (key: string) => {
+        try {
+            const value = await AsyncStorage.getItem(key);
+            if (!value) return null;
+            // Supabase Auth expects JSON. Check if it parses correctly.
+            JSON.parse(value);
+            return value;
+        } catch (error) {
+            console.warn(`[SafeStorage] Cleared corrupted JSON for key ${key}:`, error);
+            await AsyncStorage.removeItem(key);
+            return null;
+        }
+    },
+    setItem: (key: string, value: string) => {
+        return AsyncStorage.setItem(key, value);
+    },
+    removeItem: (key: string) => {
+        return AsyncStorage.removeItem(key);
+    }
+};
+
 export const supabase = createClient(SUPABASE_URL || '', SUPABASE_ANON_KEY || '', {
     auth: {
-        storage: AsyncStorage,
+        storage: SafeStorage,
         // autoRefreshToken is intentionally false: when true, the Supabase client
         // spawns background token-refresh HTTP requests even when there is no
         // active session. On devices with intermittent connectivity (or emulators)

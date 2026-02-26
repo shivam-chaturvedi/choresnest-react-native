@@ -8,6 +8,17 @@ import { PullCursor, PullCursorEngineOptions, TableChangeSet } from './types';
 const SYNC_PAGE_SIZE = Math.min(1000, Math.max(50, Number.parseInt(Config.SUPABASE_SYNC_PAGE_SIZE ?? '250', 10)));
 const MAX_PULL_RECORDS = Number.parseInt(Config.SUPABASE_SYNC_MAX_PULL_RECORDS ?? '5000', 10);
 const LOG_INDEX_HINT = Config.LOG_SYNC_INDEX_HINTS ? Config.LOG_SYNC_INDEX_HINTS.toLowerCase() : 'true';
+const LOG_SYNC_NETWORK =
+    Config.LOG_SYNC_NETWORK && Config.LOG_SYNC_NETWORK.toLowerCase() === 'false'
+        ? false
+        : true;
+
+const logPullDebug = (message: string, details?: Record<string, unknown>): void => {
+    if (!LOG_SYNC_NETWORK) {
+        return;
+    }
+    console.log(`[Sync][Pull] ${message}`, details ?? {});
+};
 let hasLoggedIndexHint = false;
 
 const logIndexHint = () => {
@@ -100,14 +111,31 @@ export const pullTableChangesWithCursor = async (opts: PullCursorEngineOptions):
 
   const targetTable = remoteTable ?? table;
   const normalizedLastPulled = lastPulled ? new Date(lastPulled).toISOString() : new Date(0).toISOString();
-  const rows: any[] = [];
-  const defaultCursorId = `${targetTable}-init`;
-  let cursor: PullCursor = opts.lastCursor ?? { updatedAt: normalizedLastPulled, id: defaultCursorId };
-  let totalFetched = 0;
-  let latestUpdatedAtMs = 0;
+    const rows: any[] = [];
+    const defaultCursorId = `${targetTable}-init`;
+    let cursor: PullCursor = opts.lastCursor ?? { updatedAt: normalizedLastPulled, id: defaultCursorId };
+    let totalFetched = 0;
+    let latestUpdatedAtMs = 0;
+    let pageIndex = 0;
 
-  while (totalFetched < maxRecords) {
-    let query: any = supabase.from(targetTable).select(selectFields);
+    logPullDebug('Starting pull loop', {
+        table: targetTable,
+        lastPulled: normalizedLastPulled,
+        pageSize,
+        maxRecords,
+        hasProfileId,
+    });
+
+    while (totalFetched < maxRecords) {
+        pageIndex += 1;
+        logPullDebug('Query iteration', {
+            table: targetTable,
+            pageIndex,
+            cursor,
+            pageSize,
+            totalFetched,
+        });
+        let query: any = supabase.from(targetTable).select(selectFields);
     if (hasProfileId) {
       query = query.eq('profile_id', userId);
     }
@@ -117,16 +145,42 @@ export const pullTableChangesWithCursor = async (opts: PullCursorEngineOptions):
       .limit(pageSize);
 
     if (error) {
+      logPullDebug('Supabase query error', {
+          table: targetTable,
+          pageIndex,
+          cursor,
+          pageSize,
+          error: {
+              message: error.message,
+              details: error.details,
+              hint: error.hint,
+              code: error.code,
+              status: error.status,
+          },
+      });
       throw error;
     }
     if (!data || data.length === 0) {
+      logPullDebug('No rows returned from Supabase (cursor unchanged)', {
+          table: targetTable,
+          pageIndex,
+          cursor,
+          totalFetched,
+      });
       break;
     }
 
     rows.push(...data);
     totalFetched += data.length;
+    logPullDebug('Received rows from Supabase', {
+        table: targetTable,
+        pageIndex,
+        rowsFetched: data.length,
+        totalFetched,
+        lastRow: getRecordId(data[data.length - 1]),
+    });
 
-    data.forEach(row => {
+    data.forEach((row: any) => {
       const rawUpdatedAt = row.updated_at ?? row.updatedAt;
       const updatedAtMs = parseUpdatedAtMs(rawUpdatedAt);
       if (updatedAtMs > latestUpdatedAtMs) {

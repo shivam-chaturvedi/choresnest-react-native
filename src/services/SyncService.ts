@@ -286,7 +286,7 @@ const shouldDoWriteSync = async (): Promise<boolean> => {
 };
 
 const applySyncTimeout = (callback: () => void): ReturnType<typeof setTimeout> =>
-    setTimeout(callback, 120000);
+    setTimeout(callback, 300000); // 5-minute timeout to accommodate large initial syncs
 
 const handleSyncError = (error: any): void => {
     // Silently ignore concurrent sync errors as they are expected when multiple triggers fire

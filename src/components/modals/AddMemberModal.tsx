@@ -158,7 +158,12 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, m
           ]}
           onPress={(e) => e.stopPropagation()}
         >
-          <Text style={[styles.heading, { color: colors.foreground }]}>{memberToEdit ? "Edit Member" : "Add New Member"}</Text>
+          <View style={styles.headerRow}>
+            <Text style={[styles.heading, { color: colors.foreground }]}>{memberToEdit ? "Edit Member" : "Add New Member"}</Text>
+            <Pressable onPress={onClose} style={({ pressed }) => [styles.closeButton, pressed && { opacity: 0.6 }]}> 
+              <MaterialCommunityIcons name="close" size={20} color={colors.mutedForeground} />
+            </Pressable>
+          </View>
           {error ? <Text style={{ color: colors.danger, marginBottom: 12 }}>{error}</Text> : null}
 
           <TextInput
@@ -241,6 +246,19 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, m
             >
               <Text style={[styles.addButtonText, { color: colors.foreground }]}>{memberToEdit ? "Update Member" : "Add Member"}</Text>
             </Pressable>
+            <Pressable
+              style={[
+                styles.cancelButton,
+                {
+                  borderColor: colors.border,
+                  borderRadius: radius.md,
+                  marginTop: 12,
+                }
+              ]}
+              onPress={onClose}
+            >
+              <Text style={[styles.cancelButtonText, { color: colors.mutedForeground }]}>Cancel</Text>
+            </Pressable>
             {memberToEdit && (
               <Pressable
                 style={[
@@ -286,7 +304,17 @@ const styles = StyleSheet.create({
   heading: {
     fontSize: 18,
     fontWeight: "700",
+    marginBottom: 0,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 16,
+  },
+  closeButton: {
+    padding: 4,
+    borderRadius: 999,
   },
   sectionLabel: {
     fontSize: 14,
@@ -327,8 +355,18 @@ const styles = StyleSheet.create({
   addButtonText: {
     fontSize: 16,
     fontWeight: '600',
-  }
-  ,
+  },
+  cancelButton: {
+    width: '100%',
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
   deleteButton: {
     width: '100%',
     paddingVertical: 12,

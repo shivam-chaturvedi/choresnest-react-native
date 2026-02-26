@@ -14,6 +14,7 @@ import {
   Dimensions,
   Modal,
   RefreshControl,
+  ActivityIndicator,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppLayout } from "../components/layout";
@@ -83,6 +84,8 @@ export const HomeScreen: React.FC = () => {
   const [showFamilyOnboarding, setShowFamilyOnboarding] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isForcePulling, setIsForcePulling] = useState(false);
+  const [isForcePushing, setIsForcePushing] = useState(false);
 
   const handleRefresh = async () => {
     try {
@@ -92,6 +95,30 @@ export const HomeScreen: React.FC = () => {
       console.warn('HomeScreen: Pull-to-refresh sync failed:', e);
     } finally {
       setIsRefreshing(false);
+    }
+  };
+
+  const handleForcePull = async () => {
+    try {
+      setIsForcePulling(true);
+      await SyncService.sync(true, { mode: 'manual' });
+    } catch (e) {
+      console.warn('HomeScreen: Force pull failed:', e);
+      Alert.alert('Force Pull', 'Unable to pull data right now. Please try again.');
+    } finally {
+      setIsForcePulling(false);
+    }
+  };
+
+  const handleForcePush = async () => {
+    try {
+      setIsForcePushing(true);
+      await SyncService.sync(false, { mode: 'manual' });
+    } catch (e) {
+      console.warn('HomeScreen: Force push failed:', e);
+      Alert.alert('Force Push', 'Unable to push data right now. Please try again.');
+    } finally {
+      setIsForcePushing(false);
     }
   };
 
@@ -652,6 +679,39 @@ export const HomeScreen: React.FC = () => {
                 </Pressable>
               ))}
             </View>
+            <View style={styles.syncControlsContainer}>
+              <Text style={{ fontSize: 14, fontWeight: "600", color: colors.mutedForeground, marginBottom: 6 }}>Debug Sync</Text>
+              <View style={styles.syncControlsRow}>
+                <Pressable
+                  style={[
+                    styles.syncButton,
+                    { backgroundColor: colors.card, borderColor: colors.border },
+                  ]}
+                  onPress={handleForcePush}
+                  disabled={isForcePushing || isForcePulling}
+                >
+                  {isForcePushing ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <Text style={{ color: colors.foreground, fontWeight: "600" }}>Force Push</Text>
+                  )}
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.syncButton,
+                    { backgroundColor: colors.card, borderColor: colors.border },
+                  ]}
+                  onPress={handleForcePull}
+                  disabled={isForcePushing || isForcePulling}
+                >
+                  {isForcePulling ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <Text style={{ color: colors.foreground, fontWeight: "600" }}>Force Pull</Text>
+                  )}
+                </Pressable>
+              </View>
+            </View>
           </View>
 
           {/* Today's Schedule */}
@@ -1107,6 +1167,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 8,
+  },
+  syncControlsContainer: {
+    marginTop: 16,
+  },
+  syncControlsRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  syncButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.radius.md,
   },
   linkText: {
     fontWeight: "600",

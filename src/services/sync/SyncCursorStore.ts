@@ -55,6 +55,23 @@ export const resetSyncCursorState = async (): Promise<void> => {
 // Per-profile cursor helpers (AsyncStorage-backed)
 // ---------------------------------------------------------------------------
 
+const getLegacyGlobalCursor = (): Promise<number | null> =>
+    new Promise((resolve) => {
+        const adapter: any = database.adapter;
+        if (typeof adapter.getLocal !== 'function') {
+            resolve(null);
+            return;
+        }
+        adapter.getLocal(LAST_PULLED_AT_KEY, (error: any, value: string | null) => {
+            if (error || value == null) {
+                resolve(null);
+                return;
+            }
+            const parsed = parseInt(value, 10);
+            resolve(Number.isNaN(parsed) ? null : parsed);
+        });
+    });
+
 /**
  * Reads the last-pulled-at timestamp for a specific profile from AsyncStorage.
  * Returns null if this profile has never synced (triggers a full pull).
@@ -63,9 +80,23 @@ export const getProfileLastPulledAt = async (profileId: string): Promise<number 
     try {
         const AsyncStorage = require('@react-native-async-storage/async-storage').default;
         const raw = await AsyncStorage.getItem(profileCursorKey(profileId));
-        if (raw == null) return null;
-        const parsed = parseInt(raw, 10);
-        return Number.isNaN(parsed) ? null : parsed;
+        if (raw != null) {
+            const parsed = parseInt(raw, 10);
+            return Number.isNaN(parsed) ? null : parsed;
+        }
+
+        // MIGRATION PATH: If we don't have a profile cursor but we DO have an old 
+        // WatermelonDB global cursor, use the global cursor. This prevents the app
+        // from attempting to download 100% of historical data on existing devices
+        // and crashing due to memory limits.
+        const legacyCursor = await getLegacyGlobalCursor();
+        if (legacyCursor !== null) {
+            console.log(`[SyncCursorStore] Migrating legacy global cursor ${legacyCursor} to profile ${profileId}`);
+            await setProfileLastPulledAt(profileId, legacyCursor);
+            return legacyCursor;
+        }
+
+        return null;
     } catch (error) {
         console.warn(`[SyncCursorStore] Failed to read cursor for profile ${profileId}:`, error);
         return null;
@@ -79,6 +110,18 @@ export const getProfileLastPulledAt = async (profileId: string): Promise<number 
 export const setProfileLastPulledAt = async (profileId: string, timestamp: number): Promise<void> => {
     try {
         const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        const raw = await AsyncStorage.getItem(profileCursorKey(profileId));
+        if (raw != null) {
+            const existing = parseInt(raw, 10);
+            if (!Number.isNaN(existing) && timestamp <= existing) {
+                if (__DEV__) {
+                    console.log(
+                        `[SyncCursorStore] Skipping cursor regression for ${profileId}: stored=${existing}, incoming=${timestamp}`
+                    );
+                }
+                return;
+            }
+        }
         await AsyncStorage.setItem(profileCursorKey(profileId), timestamp.toString());
     } catch (error) {
         console.warn(`[SyncCursorStore] Failed to persist cursor for profile ${profileId}:`, error);
