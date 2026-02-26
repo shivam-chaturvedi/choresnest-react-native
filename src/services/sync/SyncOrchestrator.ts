@@ -33,11 +33,16 @@ const collectTableFetchResults = async (descriptors: TableFetchDescriptor[]): Pr
     return output;
 };
 
-const getLatestPulledTimestamp = (tableChangesMap: Record<string, TableChangeSet>): number =>
-    Object.values(tableChangesMap).reduce((max, changeSet) => {
-        const timestamp = changeSet.latestUpdatedAt ?? 0;
-        return timestamp > max ? timestamp : max;
-    }, 0);
+const getLatestPulledTimestamp = (tableChangesMap: Record<string, TableChangeSet>): number | null => {
+    let max: number | null = null;
+    for (const changeSet of Object.values(tableChangesMap)) {
+        const timestamp = changeSet.latestUpdatedAt;
+        if (timestamp && timestamp > 0) {
+            max = max === null ? timestamp : Math.max(max, timestamp);
+        }
+    }
+    return max;
+};
 
 // TableSyncConfig is imported from TableRegistry above
 
@@ -79,6 +84,11 @@ export class SyncOrchestrator {
             console.warn('🔥 SyncCursorStore imported');
             const profileLastPulledAt = await getProfileLastPulledAt(this.userId);
             console.warn('🔥 Cursor read complete:', profileLastPulledAt);
+            console.log('CURRENT CURSOR RAW:', profileLastPulledAt);
+            console.log(
+                'CURRENT CURSOR ISO:',
+                profileLastPulledAt ? new Date(profileLastPulledAt).toISOString() : null
+            );
 
             // For deferred syncs, use the same cursor so we only fetch what's new
             let pendingCursorTimestamp: number | null = null;
@@ -96,7 +106,10 @@ export class SyncOrchestrator {
                     }),
                 onDidPullChanges: async (pullResult: any) => {
                     const timestamp = pullResult?.timestamp;
-                    if (timestamp) {
+                    // Use != null (not truthiness) so a valid timestamp of 0 is still captured.
+                    // pullChanges always returns at least Date.now() so 0 should not occur in
+                    // practice, but guard explicitly to be safe.
+                    if (timestamp != null && timestamp > 0) {
                         pendingCursorTimestamp = timestamp;
                     }
                 },
@@ -146,14 +159,19 @@ export class SyncOrchestrator {
 
         const buildDescriptor = (config: TableSyncConfig): TableFetchDescriptor => ({
             key: config.key,
-            fetcher: () =>
-                pullTableChangesWithCursor({
-                    table: config.key,
-                    remoteTable: config.remoteTable,
-                    userId: this.userId,
-                    lastPulled,
-                    hasProfileId: config.hasProfileId ?? true,
-                }),
+            fetcher: config.localOnly
+                // Local-only tables (e.g. list_categories) have no Supabase counterpart.
+                // Return an empty changeset immediately so WatermelonDB still sees the
+                // table in pullChanges without making a network request.
+                ? () => Promise.resolve({ created: [], updated: [], deleted: [], latestUpdatedAt: 0 })
+                : () =>
+                    pullTableChangesWithCursor({
+                        table: config.key,
+                        remoteTable: config.remoteTable,
+                        userId: this.userId,
+                        lastPulled,
+                        hasProfileId: config.hasProfileId ?? true,
+                    }),
         });
 
         // Only fetch the tables we've been asked to sync in this pass
@@ -165,8 +183,19 @@ export class SyncOrchestrator {
 
         const tableChangesMap = await collectTableFetchResults(descriptors);
         Object.entries(tableChangesMap).forEach(([table, changeSet]) => logChangeSetSummary(table, changeSet));
+
+        const latestDataTimestamp = getLatestPulledTimestamp(tableChangesMap);
+        // Always advance the cursor — even when no rows were returned — so subsequent syncs
+        // don't redundantly re-query from epoch 0. We pick the maximum of:
+        //   1. The latest updated_at seen in returned rows (non-null only when rows exist)
+        //   2. The previous cursor (so we never regress)
+        //   3. The current wall-clock time (fallback: marks "checked up to now")
         const lastPulledMs = lastPulledAt ? new Date(lastPulledAt).getTime() : 0;
-        const aggregatedTimestamp = Math.max(lastPulledMs, getLatestPulledTimestamp(tableChangesMap));
+        const aggregatedTimestamp = Math.max(
+            latestDataTimestamp ?? 0,
+            lastPulledMs,
+            Date.now(), // ensures cursor always advances even on empty pulls
+        );
 
         // WatermelonDB requires ALL tables in the schema to be present in the changes
         // object, even if they weren't fetched in this pass. Return empty sets for
@@ -277,7 +306,8 @@ export class SyncOrchestrator {
                     (changeSet?.updated?.length ?? 0) > 0 ||
                     (changeSet?.deleted?.length ?? 0) > 0;
 
-                if (!hasWork) return Promise.resolve({ success: true, errors: 0 });
+                // Skip tables that have no Supabase counterpart
+                if (config.localOnly || !hasWork) return Promise.resolve({ success: true, errors: 0 });
 
                 return pushTableChanges({
                     table: config.key,

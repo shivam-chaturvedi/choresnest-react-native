@@ -178,20 +178,12 @@ const AppNavigatorInner = () => {
     setTimeout(() => { appHasStarted = true; }, INITIAL_SYNC_DELAY);
 
     const runInitialSync = async () => {
-      setTimeout(async () => {
-        try {
-          const shouldDoWriteSync = await SyncService.shouldDoWriteSync();
-          if (shouldDoWriteSync) {
-            console.log('App start: Last write sync was >1 hour ago, doing full sync');
-            void triggerSync(false);
-          } else {
-            console.log('App start: Last write sync was <1 hour ago, doing read-only sync');
-            void triggerSync(true);
-          }
-        } catch (err) {
-          console.error('Failed to check write sync requirement, doing read-only sync:', err);
-          void triggerSync(true);
-        }
+      setTimeout(() => {
+        // Always do a full sync on app start so any locally-created-while-offline
+        // changes are pushed immediately. The removed 1-hour gate was converting
+        // most app-start syncs to read-only, silently suppressing pushes.
+        console.log('App start: Triggering full sync to push any offline changes');
+        void triggerSync(false);
       }, INITIAL_SYNC_DELAY);
     };
 
