@@ -164,8 +164,7 @@ const normalizeVirtualId = (id: string): string => {
 
 export const FamilyContext = createContext<FamilyContextValue | undefined>(undefined);
 
-export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { isGuest, user } = useAuth();
+const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean; children: ReactNode }> = ({ profileId, isGuest, children }) => {
   const [familyName, setFamilyNameState] = useState("Family Chores");
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [rawEvents, setRawEvents] = useState<any[]>([]);
@@ -173,7 +172,6 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [globalVault, setGlobalVault] = useState<any[]>([]);
   const [memberVaults, setMemberVaults] = useState<Record<string, any[]>>({});
   const [rawGroceryItems, setRawGroceryItems] = useState<ListItemRecord[]>([]);
-  const [profileId, setProfileId] = useState<string | null>(null);
 
   const membersById = useMemo(() => {
     const map = new Map<string, FamilyMember>();
@@ -249,43 +247,6 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       console.error("FamilyContext: Error setting up family name subscription", error);
     }
   }, [profileId]);
-
-  // --- Track Profile ---
-  // *** IMPORTANT: This effect must run FIRST to clear stale cross-profile data ***
-  // When profileId changes (e.g. switching profiles or logging in/out), immediately
-  // wipe all data arrays so the UI never shows another profile's events/tasks/etc.
-  useEffect(() => {
-    setRawEvents([]);
-    setRawTasks([]);
-    setRawGroceryItems([]);
-    setGlobalVault([]);
-    setMemberVaults({});
-    setMembers([]);
-    setFamilyNameState('Family Chores');
-  }, [profileId]);
-
-  useEffect(() => {
-    let mounted = true;
-    const refreshProfile = async () => {
-      const pid = await ProfileService.getActiveProfileId();
-      if (mounted) {
-        setProfileId(pid);
-      }
-    };
-    refreshProfile();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async () => {
-      const pid = await ProfileService.getActiveProfileId();
-      if (mounted) {
-        setProfileId(pid);
-      }
-    });
-
-    return () => {
-      mounted = false;
-      subscription?.unsubscribe();
-    };
-  }, [isGuest, user?.id]);
 
   useEffect(() => {
     if (!profileId || isGuest) {
@@ -628,6 +589,40 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     >
       {children}
     </FamilyContext.Provider>
+  );
+};
+
+export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const { isGuest, user } = useAuth();
+  const [profileId, setProfileId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const refreshProfile = async () => {
+      const pid = await ProfileService.getActiveProfileId();
+      if (mounted) {
+        setProfileId(pid);
+      }
+    };
+    refreshProfile();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async () => {
+      const pid = await ProfileService.getActiveProfileId();
+      if (mounted) {
+        setProfileId(pid);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription?.unsubscribe();
+    };
+  }, [isGuest, user?.id]);
+
+  return (
+    <FamilyProviderInner key={String(profileId)} profileId={profileId} isGuest={isGuest}>
+      {children}
+    </FamilyProviderInner>
   );
 };
 
