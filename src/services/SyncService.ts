@@ -11,7 +11,7 @@ import {
 } from './sync/BackoffEngine';
 import { clearConflictHistory, getConflictHistory } from './sync/ConflictEngine';
 import { BackoffFailureType, ConflictRecord, TableChangeSet } from './sync/types';
-import { resetSyncCursorState } from './sync/SyncCursorStore';
+import { resetWatermelonCursor } from './sync/cursor';
 import { REALTIME_WATCH_TABLES } from './sync/realtime/RealtimeWatchList';
 import { ProfileService } from './ProfileService';
 
@@ -185,7 +185,7 @@ const buildErrorContext = (error: any) => {
 // resetSyncCursors is only used by forceFullSync() — an explicit user action.
 // It is NOT called on logout/login/profile-switch (that would destroy cross-profile data).
 const resetSyncCursors = async (): Promise<void> => {
-    await resetSyncCursorState();
+    await resetWatermelonCursor();
 };
 
 const formatSafeErrorMessage = (error: any): string => {
@@ -432,22 +432,7 @@ export const SyncService = {
             void this.requestSyncSoon();
         });
 
-        if (lastSyncedProfileId && lastSyncedProfileId !== activeProfileId) {
-            // Profile changed: reset in-memory state only.
-            // Do NOT reset sync cursors — each profile keeps its own continuation point
-            // so switching back to a profile continues from where it left off.
-            console.log(`[SyncService] Profile switched: ${lastSyncedProfileId} → ${activeProfileId}. Resetting in-memory state only (cursors preserved).`);
-            consecutiveFailures = 0;
-            lastSyncError = null;
-            resetBackoff();
-            clearConflictHistory();
-            pendingSyncRequest = false;
-            if (syncSoonTimer) {
-                clearTimeout(syncSoonTimer);
-                syncSoonTimer = null;
-            }
-        }
-        lastSyncedProfileId = activeProfileId;
+        await this.handleProfileSwitch(activeProfileId);
         if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
             console.log(`Sync paused due to ${consecutiveFailures} consecutive failures. Will auto-retry after backoff window.`);
             // Self-healing: schedule a single reset attempt after the backoff window
@@ -572,6 +557,29 @@ export const SyncService = {
         return syncPromise;
     },
 
+    async handleProfileSwitch(activeProfileId: string): Promise<void> {
+        if (lastSyncedProfileId && lastSyncedProfileId !== activeProfileId) {
+            // Profile changed: reset in-memory state only.
+            // Do NOT reset sync cursors — each profile keeps its own continuation point
+            // so switching back to a profile continues from where it left off.
+            console.log(
+                `[SyncService] Profile switched: ${lastSyncedProfileId} → ${activeProfileId}. ` +
+                'Resetting in-memory state only (cursors preserved).'
+            );
+            consecutiveFailures = 0;
+            lastSyncError = null;
+            resetBackoff();
+            clearConflictHistory();
+            pendingSyncRequest = false;
+            if (syncSoonTimer) {
+                clearTimeout(syncSoonTimer);
+                syncSoonTimer = null;
+            }
+        }
+        lastSyncedProfileId = activeProfileId;
+
+    },
+
     getSyncStatus(): boolean {
         return isSyncing;
     },
@@ -612,7 +620,7 @@ export const SyncService = {
         clearConflictHistory();
         lastSyncedProfileId = null;
         // NOTE: cursor reset is intentional here — this is the full-reset path.
-        void resetSyncCursorState();
+        void resetWatermelonCursor();
         lastSyncAttemptAt = null;
         lastSyncSuccessAt = null;
         lastSyncErrorMessage = null;
@@ -630,7 +638,7 @@ export const SyncService = {
         lastSyncAttemptAt = null;
         lastSyncErrorMessage = null;
         resetBackoff();
-        // Deliberately NOT resetting lastSyncedProfileId or calling resetSyncCursorState()
+        // Deliberately NOT resetting lastSyncedProfileId or calling resetWatermelonCursor()
         console.log('[SyncService] In-memory sync state cleared (cursors preserved)');
     },
 
@@ -641,7 +649,7 @@ export const SyncService = {
         resetBackoff();
         clearConflictHistory();
         // Reset the persisted cursor so ALL rows are re-fetched, even those with old updated_at
-        await resetSyncCursorState();
+        await resetWatermelonCursor();
         lastSyncAttemptAt = null;
         lastSyncSuccessAt = null;
         lastSyncErrorMessage = null;

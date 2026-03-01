@@ -7,7 +7,7 @@ import { ProfileBootstrapService } from "../services/ProfileBootstrapService";
 import { Session, User as SupabaseUser } from "@supabase/supabase-js";
 import { getHumanReadableMessage } from "../utils/SupabaseErrorHandler";
 import { DocumentUploadScheduler } from "../services/sync/DocumentUploadScheduler";
-import { database } from "../database";
+import { getDatabase } from "../database";
 import UserRecord from "../database/models/User";
 import { Q } from "@nozbe/watermelondb";
 import { ProfileService } from "../services/ProfileService";
@@ -167,8 +167,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
 
                 // Cache user record locally for guest-mode discovery
                 try {
-                    await database.write(async () => {
-                        const usersCol = database.get<UserRecord>('users');
+                    await getDatabase().write(async () => {
+                        const usersCol = getDatabase().get<UserRecord>('users');
                         const existing = await usersCol.query(Q.where('id', session.user.id)).fetch();
                         if (existing.length > 0) {
                             await existing[0].update(u => {

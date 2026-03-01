@@ -44,7 +44,7 @@ export const SYNC_TABLES: TableSyncConfig[] = [
     // list_categories is a deprecated local-only table. It must remain in SYNC_TABLES
     // so WatermelonDB's synchronize() receives it in the pullChanges result (it requires
     // ALL schema tables to be present). localOnly: true prevents any Supabase query.
-    { key: 'list_categories', phase: 1, localOnly: true },
+    // { key: 'list_categories', phase: 1 },
     // app_lock exists in both the local schema and Supabase (with RLS + version column).
     // It MUST be listed here so pullChanges includes it for WatermelonDB.
     { key: 'app_lock', phase: 1, hasProfileId: true, addProfileId: true },

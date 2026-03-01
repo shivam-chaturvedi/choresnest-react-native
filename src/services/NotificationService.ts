@@ -1,4 +1,4 @@
-import { database } from '../database';
+import { getDatabase } from '../database';
 import Task from '../database/models/Task';
 import Event from '../database/models/Event';
 import { Q } from '@nozbe/watermelondb';
@@ -9,14 +9,15 @@ export const NotificationService = {
     getUnreadCount: async () => {
         try {
             // Example: Only count high priority pending tasks
-            const pendingTasks = await database.get<Task>('tasks').query(
+            const db = getDatabase();
+            const pendingTasks = await db.get<Task>('tasks').query(
                 Q.where('status', 'pending'),
                 Q.where('priority', 'high')
             ).fetchCount();
 
             // Upcoming events today
             const today = new Date().toISOString().split('T')[0];
-            const eventsToday = await database.get<Event>('events').query(
+            const eventsToday = await db.get<Event>('events').query(
                 Q.where('date', today)
             ).fetchCount();
 

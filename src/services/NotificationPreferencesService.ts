@@ -1,4 +1,4 @@
-import { database } from '../database';
+import { getDatabase } from '../database';
 import NotificationPreference from '../database/models/NotificationPreference';
 import QuietHours from '../database/models/QuietHours';
 import Setting from '../database/models/Setting';
@@ -22,7 +22,7 @@ const DELIVERY_SETTINGS = {
 
 const getDeliverySetting = async (key: string, defaultValue: boolean): Promise<boolean> => {
     try {
-        const settings = await database.get<Setting>('settings').query(Q.where('key', key)).fetch();
+        const settings = await getDatabase().get<Setting>('settings').query(Q.where('key', key)).fetch();
         if (settings.length > 0) {
             return settings[0].value === 'true';
         }
@@ -34,14 +34,14 @@ const getDeliverySetting = async (key: string, defaultValue: boolean): Promise<b
 
 const setDeliverySetting = async (key: string, value: boolean): Promise<void> => {
     try {
-        await database.write(async () => {
-            const existing = await database.get<Setting>('settings').query(Q.where('key', key)).fetch();
+        await getDatabase().write(async () => {
+            const existing = await getDatabase().get<Setting>('settings').query(Q.where('key', key)).fetch();
             if (existing.length > 0) {
                 await existing[0].update(setting => {
                     setting.value = value ? 'true' : 'false';
                 });
             } else {
-                await database.get<Setting>('settings').create(setting => {
+                await getDatabase().get<Setting>('settings').create(setting => {
                     setting.key = key;
                     setting.value = value ? 'true' : 'false';
                 });
@@ -67,7 +67,7 @@ export const NotificationPreferencesService = {
      */
     async getReminderTime(category: NotificationCategory): Promise<number> {
         try {
-            const prefs = await database.get<NotificationPreference>('notification_preferences')
+            const prefs = await getDatabase().get<NotificationPreference>('notification_preferences')
                 .query(Q.where('category', category))
                 .fetch();
 
@@ -101,8 +101,8 @@ export const NotificationPreferencesService = {
      */
     async saveReminderTime(category: NotificationCategory, minutes: number): Promise<void> {
         try {
-            await database.write(async () => {
-                const existing = await database.get<NotificationPreference>('notification_preferences')
+            await getDatabase().write(async () => {
+                const existing = await getDatabase().get<NotificationPreference>('notification_preferences')
                     .query(Q.where('category', category))
                     .fetch();
 
@@ -112,7 +112,7 @@ export const NotificationPreferencesService = {
                         pref.updatedAt = Date.now();
                     });
                 } else {
-                    await database.get<NotificationPreference>('notification_preferences').create(pref => {
+                    await getDatabase().get<NotificationPreference>('notification_preferences').create(pref => {
                         pref.category = category;
                         pref.enabled = true;
                         pref.reminderOffsetMinutes = minutes;
@@ -132,7 +132,7 @@ export const NotificationPreferencesService = {
      */
     async isCategoryEnabled(category: NotificationCategory): Promise<boolean> {
         try {
-            const prefs = await database.get<NotificationPreference>('notification_preferences')
+            const prefs = await getDatabase().get<NotificationPreference>('notification_preferences')
                 .query(Q.where('category', category))
                 .fetch();
 
@@ -152,8 +152,8 @@ export const NotificationPreferencesService = {
      */
     async toggleCategory(category: NotificationCategory, enabled: boolean): Promise<void> {
         try {
-            await database.write(async () => {
-                const existing = await database.get<NotificationPreference>('notification_preferences')
+            await getDatabase().write(async () => {
+                const existing = await getDatabase().get<NotificationPreference>('notification_preferences')
                     .query(Q.where('category', category))
                     .fetch();
 
@@ -163,7 +163,7 @@ export const NotificationPreferencesService = {
                         pref.updatedAt = Date.now();
                     });
                 } else {
-                    await database.get<NotificationPreference>('notification_preferences').create(pref => {
+                    await getDatabase().get<NotificationPreference>('notification_preferences').create(pref => {
                         pref.category = category;
                         pref.enabled = enabled;
                         pref.reminderOffsetMinutes = this.getDefaultReminderTime(category);
@@ -183,7 +183,7 @@ export const NotificationPreferencesService = {
      */
     async getQuietHours(): Promise<QuietHoursSettings | null> {
         try {
-            const settings = await database.get<QuietHours>('quiet_hours').query().fetch();
+            const settings = await getDatabase().get<QuietHours>('quiet_hours').query().fetch();
 
             if (settings.length > 0) {
                 const qh = settings[0];
@@ -208,8 +208,8 @@ export const NotificationPreferencesService = {
      */
     async saveQuietHours(settings: QuietHoursSettings): Promise<void> {
         try {
-            await database.write(async () => {
-                const existing = await database.get<QuietHours>('quiet_hours').query().fetch();
+            await getDatabase().write(async () => {
+                const existing = await getDatabase().get<QuietHours>('quiet_hours').query().fetch();
 
                 if (existing.length > 0) {
                     await existing[0].update(qh => {
@@ -220,7 +220,7 @@ export const NotificationPreferencesService = {
                         qh.endMinute = settings.endMinute;
                     });
                 } else {
-                    await database.get<QuietHours>('quiet_hours').create(qh => {
+                    await getDatabase().get<QuietHours>('quiet_hours').create(qh => {
                         qh.enabled = settings.enabled;
                         qh.startHour = settings.startHour;
                         qh.startMinute = settings.startMinute;

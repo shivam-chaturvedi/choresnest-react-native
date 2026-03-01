@@ -1,13 +1,11 @@
 import { synchronize } from '@nozbe/watermelondb/sync';
 import { Q } from '@nozbe/watermelondb';
-import { database } from '../../database';
+import { getDatabase, GUEST_PROFILE_ID } from '../../database';
 import Config from 'react-native-config';
 import { pullTableChangesWithCursor } from './PullCursorEngine';
 import { pushTableChanges } from './PushEngine';
-import { SYNC_TABLES, TableSyncConfig } from './TableRegistry';
+import { SYNC_TABLES } from './TableRegistry';
 import { TableChangeSet, TableFetchDescriptor } from './types';
-
-console.warn('🔥 SyncOrchestrator module loaded (build marker = 2026-02-26-1)');
 
 const logChangeSetSummary = (table: string, changeSet: TableChangeSet): void => {
     if (Config.NODE_ENV === 'production') {
@@ -33,106 +31,48 @@ const collectTableFetchResults = async (descriptors: TableFetchDescriptor[]): Pr
     return output;
 };
 
-const getLatestPulledTimestamp = (tableChangesMap: Record<string, TableChangeSet>): number | null => {
-    let max: number | null = null;
-    for (const changeSet of Object.values(tableChangesMap)) {
-        const timestamp = changeSet.latestUpdatedAt;
-        if (timestamp && timestamp > 0) {
-            max = max === null ? timestamp : Math.max(max, timestamp);
-        }
-    }
-    return max;
+const getLatestPulledTimestamp = (tableChangesMap: Record<string, TableChangeSet>): number =>
+    Object.values(tableChangesMap).reduce((max, changeSet) => {
+        const timestamp = changeSet.latestUpdatedAt ?? 0;
+        return timestamp > max ? timestamp : max;
+    }, 0);
+
+type TableSyncConfig = {
+    key: string;
+    remoteTable?: string;
+    hasProfileId?: boolean;
 };
 
-// TableSyncConfig is imported from TableRegistry above
-
 const syncPhases = Array.from(new Set(SYNC_TABLES.map(config => config.phase))).sort();
-
-// Tables that participate in the primary (blocking) sync
-const PRIMARY_TABLES = SYNC_TABLES.filter(t => !t.deferred);
-// Tables deferred to an async background sync after the primary completes
-const DEFERRED_TABLES = SYNC_TABLES.filter(t => t.deferred);
 
 export class SyncOrchestrator {
     private readonly userId: string;
 
     constructor(userId: string) {
-        console.warn('🔥 SyncOrchestrator constructed for', userId);
         this.userId = userId;
     }
 
     async run(readOnly: boolean): Promise<void> {
-        // PRIMARY SYNC: fetch all tables except deferred ones (e.g. documents).
-        // This completes quickly so the user can see their data immediately.
-        await this.executeSync(readOnly, 'primary', PRIMARY_TABLES);
-
-        // DEFERRED SYNC: run documents (and any other deferred tables) async in
-        // the background. Do NOT await — we want the app to be usable right away.
-        if (DEFERRED_TABLES.length > 0) {
-            setTimeout(() => {
-                this.executeSync(readOnly, 'deferred', DEFERRED_TABLES).catch(err => {
-                    console.warn('[SyncOrchestrator] Deferred sync (documents) failed:', err);
-                });
-            }, 2000); // 2s delay so primary sync cursor write settles first
+        if (this.userId === GUEST_PROFILE_ID) {
+            console.log('Guest profile detected in SyncOrchestrator - skipping synchronize()');
+            return;
         }
+        await this.executeSync(readOnly, 'primary');
     }
 
-    private async executeSync(readOnly: boolean, label: string, tablesToSync: TableSyncConfig[]): Promise<void> {
-        console.warn('🔥 executeSync entered');
-        try {
-            const { getProfileLastPulledAt, setProfileLastPulledAt } = await import('./SyncCursorStore');
-            console.warn('🔥 SyncCursorStore imported');
-            const profileLastPulledAt = await getProfileLastPulledAt(this.userId);
-            console.warn('🔥 Cursor read complete:', profileLastPulledAt);
-            console.log('CURRENT CURSOR RAW:', profileLastPulledAt);
-            console.log(
-                'CURRENT CURSOR ISO:',
-                profileLastPulledAt ? new Date(profileLastPulledAt).toISOString() : null
-            );
-
-            // For deferred syncs, use the same cursor so we only fetch what's new
-            let pendingCursorTimestamp: number | null = null;
-
-            await synchronize({
-                database,
-                pullChanges: async ({ schemaVersion, migration }) =>
-                    this.pullChanges({
-                        lastPulledAt: profileLastPulledAt,
-                        schemaVersion,
-                        migration,
-                        readOnly,
-                        label,
-                        tablesToSync,
-                    }),
-                onDidPullChanges: async (pullResult: any) => {
-                    const timestamp = pullResult?.timestamp;
-                    // Use != null (not truthiness) so a valid timestamp of 0 is still captured.
-                    // pullChanges always returns at least Date.now() so 0 should not occur in
-                    // practice, but guard explicitly to be safe.
-                    if (timestamp != null && timestamp > 0) {
-                        pendingCursorTimestamp = timestamp;
-                    }
+    private async executeSync(readOnly: boolean, label: string): Promise<void> {
+        await synchronize({
+            database: getDatabase(),
+            pullChanges: async ({ lastPulledAt, schemaVersion, migration }) =>
+                this.pullChanges({ lastPulledAt, schemaVersion, migration, readOnly, label }),
+            pushChanges: readOnly
+                ? undefined
+                : async ({ changes }) => {
+                    console.log(`PUSH_START for user ${this.userId}`);
+                    await this.pushToServer(changes as Record<string, TableChangeSet | undefined>);
                 },
-                pushChanges: readOnly
-                    ? undefined
-                    : async ({ changes }) => {
-                        console.log(`PUSH_START (${label}) for user ${this.userId}`);
-                        await this.pushToServer(changes as Record<string, TableChangeSet | undefined>, tablesToSync);
-                    },
-                migrationsEnabledAtVersion: 5,
-            });
-
-            if (pendingCursorTimestamp) {
-                // Advance the shared profile cursor ONLY AFTER synchronize successfully commits
-                // to the local WatermelonDB database. If `synchronize` threw an error during
-                // local apply, this won't run, preventing the cursor from silently skipping data.
-                await setProfileLastPulledAt(this.userId, pendingCursorTimestamp);
-                console.log(`[SyncOrchestrator] (${label}) Saved cursor for ${this.userId} at ${pendingCursorTimestamp}`);
-            }
-        } catch (e) {
-            console.error('🔥 executeSync crashed:', e);
-            throw e;
-        }
+            migrationsEnabledAtVersion: 5,
+        });
     }
 
     private async pullChanges({
@@ -141,65 +81,41 @@ export class SyncOrchestrator {
         migration,
         readOnly,
         label,
-        tablesToSync,
     }: {
         lastPulledAt: number | null | undefined;
         schemaVersion: number;
         migration: any;
         readOnly: boolean;
         label: string;
-        tablesToSync: TableSyncConfig[];
     }): Promise<{ changes: Record<string, TableChangeSet>; timestamp: number }> {
         if (migration) {
             console.log(`Sync migration: ${migration}`);
         }
-        console.log('Using cursor:', lastPulledAt);
         const lastPulled = lastPulledAt ? new Date(lastPulledAt).toISOString() : new Date(0).toISOString();
-        console.log(`PULL_START (${label}) for user ${this.userId}; readOnly=${readOnly}; since=${lastPulled}`);
+        console.log(`PULL_START${label ? ` (${label})` : ''} for user ${this.userId}; readOnly=${readOnly}; since=${lastPulled}`);
 
         const buildDescriptor = (config: TableSyncConfig): TableFetchDescriptor => ({
             key: config.key,
-            fetcher: config.localOnly
-                // Local-only tables (e.g. list_categories) have no Supabase counterpart.
-                // Return an empty changeset immediately so WatermelonDB still sees the
-                // table in pullChanges without making a network request.
-                ? () => Promise.resolve({ created: [], updated: [], deleted: [], latestUpdatedAt: 0 })
-                : () =>
-                    pullTableChangesWithCursor({
-                        table: config.key,
-                        remoteTable: config.remoteTable,
-                        userId: this.userId,
-                        lastPulled,
-                        hasProfileId: config.hasProfileId ?? true,
-                    }),
+            fetcher: () =>
+                pullTableChangesWithCursor({
+                    table: config.key,
+                    remoteTable: config.remoteTable,
+                    userId: this.userId,
+                    lastPulled,
+                    hasProfileId: config.hasProfileId ?? true,
+                }),
         });
 
-        // Only fetch the tables we've been asked to sync in this pass
         const descriptors: TableFetchDescriptor[] = [];
         for (const phase of syncPhases) {
-            const tablesInPhase = tablesToSync.filter(config => config.phase === phase);
+            const tablesInPhase = SYNC_TABLES.filter(config => config.phase === phase);
             tablesInPhase.forEach(config => descriptors.push(buildDescriptor(config)));
         }
 
         const tableChangesMap = await collectTableFetchResults(descriptors);
         Object.entries(tableChangesMap).forEach(([table, changeSet]) => logChangeSetSummary(table, changeSet));
-
-        const latestDataTimestamp = getLatestPulledTimestamp(tableChangesMap);
-        // Always advance the cursor — even when no rows were returned — so subsequent syncs
-        // don't redundantly re-query from epoch 0. We pick the maximum of:
-        //   1. The latest updated_at seen in returned rows (non-null only when rows exist)
-        //   2. The previous cursor (so we never regress)
-        //   3. The current wall-clock time (fallback: marks "checked up to now")
         const lastPulledMs = lastPulledAt ? new Date(lastPulledAt).getTime() : 0;
-        const aggregatedTimestamp = Math.max(
-            latestDataTimestamp ?? 0,
-            lastPulledMs,
-            Date.now(), // ensures cursor always advances even on empty pulls
-        );
-
-        // WatermelonDB requires ALL tables in the schema to be present in the changes
-        // object, even if they weren't fetched in this pass. Return empty sets for
-        // tables not included in the current pass so WatermelonDB doesn't complain.
+        const aggregatedTimestamp = Math.max(lastPulledMs, getLatestPulledTimestamp(tableChangesMap));
         return {
             changes: SYNC_TABLES.reduce<Record<string, TableChangeSet>>((acc, config) => {
                 acc[config.key] = tableChangesMap[config.key] ?? { created: [], updated: [], deleted: [] };
@@ -209,7 +125,7 @@ export class SyncOrchestrator {
         };
     }
 
-    private async pushToServer(changes: Record<string, TableChangeSet | undefined>, tablesToSync: TableSyncConfig[] = SYNC_TABLES): Promise<void> {
+    private async pushToServer(changes: Record<string, TableChangeSet | undefined>): Promise<void> {
         const hasChanges = Object.values(changes).some(tableChanges => {
             if (!tableChanges) return false;
             const { created = [], updated = [], deleted = [] } = tableChanges;
@@ -229,7 +145,7 @@ export class SyncOrchestrator {
         // ---------------------------------------------------------
         // CRITICAL: Account Isolation Filter
         // ---------------------------------------------------------
-        // WatermelonDB tracks changes globally in its database. If a user logs out
+        // WatermelonDB tracks changes globally in its getDatabase(). If a user logs out
         // and another logs in on the same device, Watermelon will try to push
         // Account A's pending changes using Account B's auth headers, causing
         // RLS violations (42501).
@@ -237,7 +153,7 @@ export class SyncOrchestrator {
         // allowed profile IDs.
         const allowedProfiles = new Set<string>();
         try {
-            const memberRecords = await database.get('members').query(
+            const memberRecords = await getDatabase().get('members').query(
                 Q.where('deleted', Q.notEq(true))
             ).fetch();
             // In our system, members table records that exist locally for this 
@@ -256,27 +172,15 @@ export class SyncOrchestrator {
 
             const config = SYNC_TABLES.find(c => c.key === tableName);
 
-            console.log('Raw Watermelon changes for', tableName, changeSet);
-
-            console.log(`Before filtering ${tableName}`, {
-                created: changeSet.created.length,
-                updated: changeSet.updated.length,
-            });
-
             // If the table doesn't use profile scoping (like Global items), push as-is
             if (config && config.hasProfileId === false) {
                 filteredChanges[tableName] = changeSet;
-                console.log(`After filtering ${tableName}`, {
-                    created: filteredChanges[tableName].created.length,
-                    updated: filteredChanges[tableName].updated.length,
-                });
                 continue;
             }
 
             // Otherwise, filter created/updated records to only include allowed profiles or the active profile itself
             const filterByProfile = (record: any) => {
                 const pid = record.profile_id || record.profileId;
-                if (pid === 'guest') return false;
                 return pid === this.userId || (pid && allowedProfiles.has(pid));
             };
 
@@ -290,24 +194,18 @@ export class SyncOrchestrator {
                 // in the payload.
                 deleted: changeSet.deleted
             };
-
-            console.log(`After filtering ${tableName}`, {
-                created: filteredChanges[tableName].created.length,
-                updated: filteredChanges[tableName].updated.length,
-            });
         }
 
         const phaseResults = [] as PromiseSettledResult<{ success: boolean; errors: number }>[][];
         for (const phase of syncPhases) {
-            const tablesInPhase = tablesToSync.filter(config => config.phase === phase);
+            const tablesInPhase = SYNC_TABLES.filter(config => config.phase === phase);
             const tasks = tablesInPhase.map(config => {
                 const changeSet = filteredChanges[config.key];
                 const hasWork = (changeSet?.created?.length ?? 0) > 0 ||
                     (changeSet?.updated?.length ?? 0) > 0 ||
                     (changeSet?.deleted?.length ?? 0) > 0;
 
-                // Skip tables that have no Supabase counterpart
-                if (config.localOnly || !hasWork) return Promise.resolve({ success: true, errors: 0 });
+                if (!hasWork) return Promise.resolve({ success: true, errors: 0 });
 
                 return pushTableChanges({
                     table: config.key,
@@ -332,10 +230,7 @@ export class SyncOrchestrator {
         }, 0);
 
         if (totalErrors > 0) {
-            console.warn(
-                `[SyncOrchestrator] Push completed with ${totalErrors} error(s) for user ${this.userId}.` +
-                ' Remote rows may be out of date; check device logs for RLS, validation, or schema details.'
-            );
+            throw new Error(`Sync push failed for ${this.userId}. Total errors: ${totalErrors}. Check device logs for RLS or Validation details.`);
         }
     }
 }

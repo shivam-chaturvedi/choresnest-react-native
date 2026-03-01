@@ -1,4 +1,4 @@
-import { database } from '../database';
+import { getDatabase } from '../database';
 import { SupabaseService } from './SupabaseService';
 import Member from '../database/models/Member';
 import Setting from '../database/models/Setting';
@@ -37,8 +37,8 @@ const syncAfterWrite = () => {
 
 const writeFamilyName = async (profileId: string, familySetting: SupabaseSettingRecord) => {
   const now = Date.now();
-  await database.write(async () => {
-    const settingsCollection = database.collections.get<Setting>('settings');
+  await getDatabase().write(async () => {
+    const settingsCollection = getDatabase().collections.get<Setting>('settings');
     const existing = await settingsCollection.query(
       Q.where('profile_id', profileId),
       Q.where('key', 'family_name')
@@ -72,12 +72,12 @@ const writeMembers = async (profileId: string, remoteMembers: SupabaseMemberReco
     return 0;
   }
   const now = Date.now();
-  const membersCollection = database.collections.get<Member>('members');
+  const membersCollection = getDatabase().collections.get<Member>('members');
   const existing = await membersCollection.query(
     Q.where('profile_id', profileId)
   ).fetch();
   const existingById = new Map(existing.map(record => [record.id, record]));
-  await database.write(async () => {
+  await getDatabase().write(async () => {
     for (const remote of remoteMembers) {
       const isDeleted = remote.deleted ?? false;
       const local = existingById.get(remote.id);

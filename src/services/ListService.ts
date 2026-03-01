@@ -1,4 +1,4 @@
-import { database } from '../database';
+import { getDatabase } from '../database';
 import { List, ListItem } from '../database/models/List';
 import { SyncService } from './SyncService';
 import { Q } from '@nozbe/watermelondb';
@@ -53,7 +53,7 @@ type ListUpdates = Partial<{ name: string; type: string; icon?: string }>;
 export const ListService = {
   observeLists: (profileId?: string | null) => {
     const effectiveProfileId = profileId ?? '';
-    const query = database.get<List>('lists').query(
+    const query = getDatabase().get<List>('lists').query(
       Q.where('profile_id', effectiveProfileId),
       Q.where('deleted', false),
       Q.sortBy('updated_at', Q.desc)
@@ -65,7 +65,7 @@ export const ListService = {
 
   observeShoppingListItems: (profileId?: string | null) => {
     const effectiveProfileId = profileId ?? '';
-    const query = database.get<ListItem>('list_items').query(
+    const query = getDatabase().get<ListItem>('list_items').query(
       Q.where('profile_id', effectiveProfileId),
       Q.where('deleted', false),
       Q.sortBy('updated_at', Q.desc)
@@ -82,8 +82,8 @@ export const ListService = {
       return;
     }
     const now = Date.now();
-    await database.write(async () => {
-      const listsCollection = database.get<List>('lists');
+    await getDatabase().write(async () => {
+      const listsCollection = getDatabase().get<List>('lists');
       const groceryLists = await listsCollection.query(
         Q.where('profile_id', profileId),
         Q.where('type', 'grocery'),
@@ -104,7 +104,7 @@ export const ListService = {
         groceryListId = created.id;
       }
 
-      await database.get<ListItem>('list_items').create(item => {
+      await getDatabase().get<ListItem>('list_items').create(item => {
         const addedById = data.addedBy || data.addedById || 'system';
         item.profileId = profileId;
         item.listId = groceryListId!;
@@ -130,8 +130,8 @@ export const ListService = {
 
   toggleGroceryItem: async (id: string) => {
     const now = Date.now();
-    await database.write(async () => {
-      const item = await database.get<ListItem>('list_items').find(id);
+    await getDatabase().write(async () => {
+      const item = await getDatabase().get<ListItem>('list_items').find(id);
       const nextState = !item.isCompleted;
       await item.update(i => {
         i.isCompleted = nextState;
@@ -145,8 +145,8 @@ export const ListService = {
 
   removeGroceryItem: async (id: string) => {
     const now = Date.now();
-    await database.write(async () => {
-      const item = await database.get<ListItem>('list_items').find(id);
+    await getDatabase().write(async () => {
+      const item = await getDatabase().get<ListItem>('list_items').find(id);
       await item.update(i => {
         i.deleted = true;
         i.updatedAt = now;
@@ -163,8 +163,8 @@ export const ListService = {
       return;
     }
     const now = Date.now();
-    await database.write(async () => {
-      await database.get<List>('lists').create(list => {
+    await getDatabase().write(async () => {
+      await getDatabase().get<List>('lists').create(list => {
         list.profileId = profileId;
         list.name = (data.name || 'List').trim();
         list.type = data.type;
@@ -180,8 +180,8 @@ export const ListService = {
 
   updateList: async (id: string, updates: ListUpdates) => {
     const now = Date.now();
-    await database.write(async () => {
-      const list = await database.get<List>('lists').find(id);
+    await getDatabase().write(async () => {
+      const list = await getDatabase().get<List>('lists').find(id);
       await list.update(record => {
         if (updates.name !== undefined) {
           record.name = updates.name;
@@ -201,8 +201,8 @@ export const ListService = {
 
   deleteList: async (id: string) => {
     const now = Date.now();
-    await database.write(async () => {
-      const list = await database.get<List>('lists').find(id);
+    await getDatabase().write(async () => {
+      const list = await getDatabase().get<List>('lists').find(id);
       await list.update(record => {
         record.deleted = true;
         record.updatedAt = now;

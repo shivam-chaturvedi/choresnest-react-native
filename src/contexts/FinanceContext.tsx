@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
-import { database } from '../database';
+import { getDatabase } from '../database';
 import { Transaction as DbTransaction, Budget as DbBudget } from '../database/models/Finance';
 import { Q } from '@nozbe/watermelondb';
 import { SyncService } from '../services/SyncService';
@@ -92,7 +92,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
             setTransactions([]);
             return;
         }
-        const collection = database.get<DbTransaction>('transactions');
+        const collection = getDatabase().get<DbTransaction>('transactions');
         const subscription = collection
             .query(
                 Q.where('profile_id', profileId),
@@ -129,7 +129,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
             setBudgetMeta({});
             return;
         }
-        const collection = database.get<DbBudget>('budgets');
+        const collection = getDatabase().get<DbBudget>('budgets');
         const currentMonth = new Date().toISOString().slice(0, 7);
         const subscription = collection
             .query(
@@ -182,8 +182,8 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
                     return;
                 }
                 let createdTransaction: Transaction | null = null;
-                await database.write(async () => {
-                    const collection = database.get<DbTransaction>('transactions');
+                await getDatabase().write(async () => {
+                    const collection = getDatabase().get<DbTransaction>('transactions');
                     const record = await collection.create(rec => {
                         rec.profileId = profileId;
                         rec.name = transaction.name;
@@ -223,8 +223,8 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
         void (async () => {
             try {
                 let updatedTransaction: Transaction | null = null;
-                await database.write(async () => {
-                    const collection = database.get<DbTransaction>('transactions');
+                await getDatabase().write(async () => {
+                    const collection = getDatabase().get<DbTransaction>('transactions');
                     const record = await collection.find(id);
                     const now = Date.now();
                     await record.update(tx => {
@@ -261,8 +261,8 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     const deleteTransaction = (id: string) => {
         void (async () => {
             try {
-                await database.write(async () => {
-                    const collection = database.get<DbTransaction>('transactions');
+                await getDatabase().write(async () => {
+                    const collection = getDatabase().get<DbTransaction>('transactions');
                     const record = await collection.find(id);
                     const now = Date.now();
                     await record.update(tx => {
@@ -288,8 +288,8 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
                 }
 
                 let budgetRecord: DbBudget | null = null;
-                await database.write(async () => {
-                    const collection = database.get<DbBudget>('budgets');
+                await getDatabase().write(async () => {
+                    const collection = getDatabase().get<DbBudget>('budgets');
                     const matches = await collection
                         .query(
                             Q.where('profile_id', profileId),
@@ -349,8 +349,8 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
                     console.warn('Skipping budget delete until profile is known');
                     return;
                 }
-                await database.write(async () => {
-                    const collection = database.get<DbBudget>('budgets');
+                await getDatabase().write(async () => {
+                    const collection = getDatabase().get<DbBudget>('budgets');
                     const matches = await collection
                         .query(
                             Q.where('profile_id', profileId),

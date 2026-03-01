@@ -7,7 +7,7 @@ import React, {
   useState,
   ReactNode,
 } from 'react';
-import { database } from '../database';
+import { getDatabase } from '../database';
 import { Q } from '@nozbe/watermelondb';
 import { uuidv4 } from '../utils/uuid';
 import { Recipe as RecipeType, RecipeCollection } from '../types/recipes';
@@ -127,7 +127,7 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       setRawRecipes([]);
       return;
     }
-    const query = database
+    const query = getDatabase()
       .get<RecipeModel>('recipes')
       .query(
         Q.where('profile_id', profileId),
@@ -146,7 +146,7 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       setRawCollections([]);
       return;
     }
-    const query = database
+    const query = getDatabase()
       .get<CollectionModel>('collections')
       .query(
         Q.where('profile_id', profileId),
@@ -165,7 +165,7 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       setRawCollectionLinks([]);
       return;
     }
-    const query = database
+    const query = getDatabase()
       .get<CollectionRecipeModel>('collection_recipes')
       .query(
         Q.where('profile_id', profileId),
@@ -326,8 +326,8 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       const pendingMedia = hasLocalMedia(sanitizedLocalImageUris, sanitizedLocalAudioUri ?? null);
 
       try {
-        await database.write(async () => {
-          const collection = database.get<RecipeModel>('recipes');
+        await getDatabase().write(async () => {
+          const collection = getDatabase().get<RecipeModel>('recipes');
           await collection.create((record) => {
             record._raw.id = recipeId;
             record.profileId = effectiveProfileId;
@@ -397,8 +397,8 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
       const now = Date.now();
       try {
-        await database.write(async () => {
-          const record = await database.get<RecipeModel>('recipes').find(recordId);
+        await getDatabase().write(async () => {
+          const record = await getDatabase().get<RecipeModel>('recipes').find(recordId);
           if (record.profileId !== effectiveProfileId) {
             return;
           }
@@ -492,9 +492,9 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const currentRecipe = recipes.find((item) => item.id === id);
     const nextValue = currentRecipe ? !currentRecipe.saved : true;
     const now = Date.now();
-    database
+    getDatabase()
       .write(async () => {
-        const record = await database.get<RecipeModel>('recipes').find(recordId);
+        const record = await getDatabase().get<RecipeModel>('recipes').find(recordId);
         if (record.profileId !== effectiveProfileId) {
           return;
         }
@@ -520,9 +520,9 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       return;
     }
     const now = Date.now();
-    database
+    getDatabase()
       .write(async () => {
-        const recipeRecord = await database.get<RecipeModel>('recipes').find(recordId);
+        const recipeRecord = await getDatabase().get<RecipeModel>('recipes').find(recordId);
         if (recipeRecord.profileId !== effectiveProfileId) {
           return;
         }
@@ -533,7 +533,7 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             draft.version = (draft.version ?? 0) + 1;
           }),
         ];
-        const linkCollection = database.get<CollectionRecipeModel>('collection_recipes');
+        const linkCollection = getDatabase().get<CollectionRecipeModel>('collection_recipes');
         const links = await linkCollection
           .query(
             Q.where('profile_id', effectiveProfileId),
@@ -551,7 +551,7 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           );
         });
         if (operations.length > 0) {
-          await database.batch(...operations);
+          await getDatabase().batch(...operations);
         }
       })
       .then(syncAfterWrite)
@@ -564,9 +564,9 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       return;
     }
     const now = Date.now();
-    database
+    getDatabase()
       .write(async () => {
-        const collection = await database.get<CollectionModel>('collections').create((record) => {
+        const collection = await getDatabase().get<CollectionModel>('collections').create((record) => {
           record.profileId = effectiveProfileId;
           record.name = newCollectionData.name;
           record.description = newCollectionData.description ?? '';
@@ -579,7 +579,7 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         if (!newCollectionData.recipeIds?.length) {
           return;
         }
-        const linkCollection = database.get<CollectionRecipeModel>('collection_recipes');
+        const linkCollection = getDatabase().get<CollectionRecipeModel>('collection_recipes');
         const links = newCollectionData.recipeIds
           .map(resolveRecipeRecordId)
           .filter((recipeId): recipeId is string => Boolean(recipeId))
@@ -595,7 +595,7 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             })
           );
         if (links.length > 0) {
-          await database.batch(...links);
+          await getDatabase().batch(...links);
         }
       })
       .then(syncAfterWrite)
@@ -613,9 +613,9 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       return;
     }
     const now = Date.now();
-    database
+    getDatabase()
       .write(async () => {
-        const collection = await database.get<CollectionModel>('collections').find(recordId);
+        const collection = await getDatabase().get<CollectionModel>('collections').find(recordId);
         if (collection.profileId !== effectiveProfileId) {
           return;
         }
@@ -635,7 +635,7 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         if (!updates.recipeIds) {
           return;
         }
-        const linkCollection = database.get<CollectionRecipeModel>('collection_recipes');
+        const linkCollection = getDatabase().get<CollectionRecipeModel>('collection_recipes');
         const existingLinks = await linkCollection
           .query(
             Q.where('profile_id', effectiveProfileId),
@@ -675,7 +675,7 @@ export const RecipeProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           )
         );
         if (operations.length > 0) {
-          await database.batch(...operations);
+          await getDatabase().batch(...operations);
         }
       })
       .then(syncAfterWrite)

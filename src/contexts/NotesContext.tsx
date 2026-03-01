@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
-import { database } from '../database';
+import { getDatabase } from '../database';
 import { Folder as DbFolder, Note as DbNote } from '../database/models/Note';
 import { Q } from '@nozbe/watermelondb';
 import { SyncService } from '../services/SyncService';
@@ -64,7 +64,7 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             return;
         }
         try {
-            const collection = database.get<DbFolder>('folders');
+            const collection = getDatabase().get<DbFolder>('folders');
             const existing = await collection
                 .query(
                     Q.where('profile_id', profileId),
@@ -73,7 +73,7 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 .fetch();
             if (existing.length === 0) {
                 let createdDefault = false;
-                await database.write(async () => {
+                await getDatabase().write(async () => {
                     const now = Date.now();
                     await collection.create(folder => {
                         folder.title = 'Notes';
@@ -109,7 +109,7 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             setFolderMeta([]);
             return;
         }
-        const collection = database.get<DbFolder>('folders');
+        const collection = getDatabase().get<DbFolder>('folders');
         const subscription = collection
             .query(
                 Q.where('profile_id', profileId),
@@ -134,7 +134,7 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             setNotes([]);
             return;
         }
-        const collection = database.get<DbNote>('notes');
+        const collection = getDatabase().get<DbNote>('notes');
         const subscription = collection
             .query(
                 Q.where('profile_id', profileId),
@@ -176,8 +176,8 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 console.warn('Skipping folder create until profile is known');
                 return;
             }
-            await database.write(async () => {
-                const collection = database.get<DbFolder>('folders');
+            await getDatabase().write(async () => {
+                const collection = getDatabase().get<DbFolder>('folders');
                 const now = Date.now();
                 await collection.create(folder => {
                     folder.title = title;
@@ -202,8 +202,8 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             return;
         }
         try {
-            await database.write(async () => {
-                const notesCollection = database.get<DbNote>('notes');
+            await getDatabase().write(async () => {
+                const notesCollection = getDatabase().get<DbNote>('notes');
                 const folderNotes = await notesCollection
                     .query(
                         Q.where('folder_id', id),
@@ -221,7 +221,7 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                         })
                     )
                 );
-                const folder = await database.get<DbFolder>('folders').find(id);
+                const folder = await getDatabase().get<DbFolder>('folders').find(id);
                 await folder.update(f => {
                     f.deleted = true;
                     f.updatedAt = now;
@@ -273,9 +273,9 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
         try {
             let createdId: string | null = null;
-            await database.write(async () => {
+            await getDatabase().write(async () => {
                 const now = Date.now();
-                const note = await database.get<DbNote>('notes').create(record => {
+                const note = await getDatabase().get<DbNote>('notes').create(record => {
                     record.title = noteData?.title || 'Untitled';
                     record.preview = computePreview(noteData);
                     record.tag = noteData?.tag || 'General';
@@ -305,8 +305,8 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (!noteId) return;
         try {
             console.log('📝 Updating note in DB:', noteId, updates);
-            await database.write(async () => {
-                const note = await database.get<DbNote>('notes').find(noteId);
+            await getDatabase().write(async () => {
+                const note = await getDatabase().get<DbNote>('notes').find(noteId);
                 const now = Date.now();
                 await note.update(record => {
                     if (updates.title !== undefined) record.title = updates.title;
@@ -335,8 +335,8 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const deleteNote = useCallback(async (noteId: string) => {
         if (!noteId) return;
         try {
-            await database.write(async () => {
-                const note = await database.get<DbNote>('notes').find(noteId);
+            await getDatabase().write(async () => {
+                const note = await getDatabase().get<DbNote>('notes').find(noteId);
                 const now = Date.now();
                 await note.update(record => {
                     record.deleted = true;

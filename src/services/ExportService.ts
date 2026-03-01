@@ -1,7 +1,7 @@
 import Share from "react-native-share";
 import RNFS from "react-native-fs";
 import { generatePDF } from 'react-native-html-to-pdf';
-import { database } from "../database";
+import { getDatabase } from "../database";
 import { Platform } from "react-native";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Q } from "@nozbe/watermelondb";
@@ -75,26 +75,26 @@ export const exportService = {
                 appLock,
                 userPrefs
             ] = await Promise.all([
-                database.collections.get('events').query(Q.where('profile_id', profileId)).fetchCount(),
-                database.collections.get('tasks').query(Q.where('profile_id', profileId)).fetchCount(),
-                database.collections.get('lists').query(Q.where('profile_id', profileId)).fetchCount(),
-                database.collections.get('list_items').query(Q.where('profile_id', profileId)).fetchCount(),
-                database.collections.get('recipes').query(Q.where('profile_id', profileId)).fetchCount(),
-                database.collections.get('collections').query(Q.where('profile_id', profileId)).fetchCount(),
-                database.collections.get('collection_recipes').query(Q.where('profile_id', profileId)).fetchCount(),
-                database.collections.get('meal_plans').query(Q.where('profile_id', profileId)).fetchCount(),
-                database.collections.get('documents').query(Q.where('profile_id', profileId)).fetchCount(),
-                database.collections.get('folders').query(Q.where('profile_id', profileId)).fetchCount(),
-                database.collections.get('notes').query(Q.where('profile_id', profileId)).fetchCount(),
-                database.collections.get('transactions').query(Q.where('profile_id', profileId)).fetchCount(),
-                database.collections.get('budgets').query(Q.where('profile_id', profileId)).fetchCount(),
-                database.collections.get('users').query().fetchCount(), // Users is global
-                database.collections.get('members').query(Q.where('profile_id', profileId)).fetchCount(),
-                database.collections.get('settings').query(Q.where('profile_id', profileId)).fetchCount(),
-                database.collections.get('notification_preferences').query(Q.where('profile_id', profileId)).fetchCount(),
-                database.collections.get('quiet_hours').query(Q.where('profile_id', profileId)).fetchCount(),
-                database.collections.get('app_lock').query(Q.where('profile_id', profileId)).fetchCount(),
-                database.collections.get('user_preferences').query(Q.where('profile_id', profileId)).fetchCount(),
+                getDatabase().collections.get('events').query(Q.where('profile_id', profileId)).fetchCount(),
+                getDatabase().collections.get('tasks').query(Q.where('profile_id', profileId)).fetchCount(),
+                getDatabase().collections.get('lists').query(Q.where('profile_id', profileId)).fetchCount(),
+                getDatabase().collections.get('list_items').query(Q.where('profile_id', profileId)).fetchCount(),
+                getDatabase().collections.get('recipes').query(Q.where('profile_id', profileId)).fetchCount(),
+                getDatabase().collections.get('collections').query(Q.where('profile_id', profileId)).fetchCount(),
+                getDatabase().collections.get('collection_recipes').query(Q.where('profile_id', profileId)).fetchCount(),
+                getDatabase().collections.get('meal_plans').query(Q.where('profile_id', profileId)).fetchCount(),
+                getDatabase().collections.get('documents').query(Q.where('profile_id', profileId)).fetchCount(),
+                getDatabase().collections.get('folders').query(Q.where('profile_id', profileId)).fetchCount(),
+                getDatabase().collections.get('notes').query(Q.where('profile_id', profileId)).fetchCount(),
+                getDatabase().collections.get('transactions').query(Q.where('profile_id', profileId)).fetchCount(),
+                getDatabase().collections.get('budgets').query(Q.where('profile_id', profileId)).fetchCount(),
+                getDatabase().collections.get('users').query().fetchCount(), // Users is global
+                getDatabase().collections.get('members').query(Q.where('profile_id', profileId)).fetchCount(),
+                getDatabase().collections.get('settings').query(Q.where('profile_id', profileId)).fetchCount(),
+                getDatabase().collections.get('notification_preferences').query(Q.where('profile_id', profileId)).fetchCount(),
+                getDatabase().collections.get('quiet_hours').query(Q.where('profile_id', profileId)).fetchCount(),
+                getDatabase().collections.get('app_lock').query(Q.where('profile_id', profileId)).fetchCount(),
+                getDatabase().collections.get('user_preferences').query(Q.where('profile_id', profileId)).fetchCount(),
             ]);
 
             // Fetch AsyncStorage counts with error handling
@@ -161,7 +161,7 @@ export const exportService = {
                     data[key] = [];
                     return;
                 }
-                const collection = database?.collections?.get(tableName);
+                const collection = getDatabase().collections.get(tableName);
                 if (!collection) {
                     console.warn(`addTableData: Collection ${tableName} not found`);
                     data[key] = [];

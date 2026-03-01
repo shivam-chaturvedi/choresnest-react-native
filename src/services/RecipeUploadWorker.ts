@@ -1,5 +1,5 @@
 import { Q } from '@nozbe/watermelondb';
-import { database } from '../database';
+import { getDatabase } from '../database';
 import { Recipe } from '../database/models/Recipe';
 import RNFS from 'react-native-fs';
 import { uploadRecipeAudio, uploadRecipeImage } from './StorageService';
@@ -102,7 +102,7 @@ const defaultPersist = async (record: RecipeRecord, updates: PersistUpdates): Pr
     if (!record?.model) {
         return;
     }
-    await database.write(async () => {
+    await getDatabase().write(async () => {
         await record.model!.update((recipe: Recipe) => {
             if (updates.uploadStatus !== undefined) {
                 recipe.uploadStatus = updates.uploadStatus ?? 'pending_upload';

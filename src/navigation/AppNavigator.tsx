@@ -21,7 +21,7 @@ import { AppLockProvider, useAppLock } from "../contexts/AppLockContext";
 import { AppLockScreen } from "../screens/AppLockScreen";
 import { BiometricLockScreen } from "../screens/BiometricLockScreen";
 import { useAutoSync } from "../hooks/useAutoSync";
-import { database } from "../database";
+import { getDatabase } from "../database";
 import { SyncService } from "../services/SyncService";
 import NetInfo from "@react-native-community/netinfo";
 import { AppState, AppStateStatus } from "react-native";
@@ -320,7 +320,7 @@ const AppNavigatorInner = () => {
         const pid = await ProfileService.getActiveProfileId();
 
         // 1a. FAST PATH: Check if we already have members locally for this profile
-        const membersCollection = database.collections.get<Member>('members');
+        const membersCollection = getDatabase().collections.get<Member>('members');
         let localQuery = membersCollection.query();
         // Filter by profile_id if we have one so we don't pick up another profile's rows
         if (pid) {
@@ -441,7 +441,7 @@ const AppNavigatorInner = () => {
                   <InitialSetupScreen
                     onComplete={async () => {
                       // Refresh member check
-                      const membersCollection = database.get('members');
+                      const membersCollection = getDatabase().get('members');
                       const members = await membersCollection.query().fetch();
                       setHasMembersInDB(members.length > 0);
                       setHasLocalOnboarding(true);

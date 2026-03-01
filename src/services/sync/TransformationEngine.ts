@@ -1,4 +1,4 @@
-import { database } from '../../database';
+import { getDatabase } from '../../database';
 import { Q } from '@nozbe/watermelondb';
 import { TableChangeSet } from './types';
 
@@ -126,7 +126,7 @@ export const classifyPullRows = async (table: string, rows: any[], lastPulledDat
     const existingIds = new Set<string>();
 
     try {
-        const watermelonTable = database.get(table);
+        const watermelonTable = getDatabase().get(table);
         // SQLite has a limit of 999 variables per query. Chunk IDs into smaller batches.
         const chunkArray = <T>(arr: T[], size: number): T[][] =>
             Array.from({ length: Math.ceil(arr.length / size) }, (_, i) =>

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { SyncService } from '../services/SyncService';
-import { database } from '../database';
+import { getDatabase } from '../database';
 import { useAuth } from '../contexts/AuthContext';
 
 export const shouldTriggerAutoSync = (
@@ -97,7 +97,7 @@ export const useAutoSync = () => {
 
         collections.forEach(collectionName => {
             try {
-                const collection = database.get(collectionName);
+                const collection = getDatabase().get(collectionName);
                 const subscription = collection.query().observe().subscribe(() => {
                     triggerSync();
                 });

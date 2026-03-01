@@ -18,7 +18,7 @@ import { ThemeProvider } from "./src/contexts/ThemeContext";
 import { AuthProvider } from "./src/contexts/AuthContext";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { databaseService } from "./src/services/DBService";
-import { database } from "./src/database";
+import { getDatabase } from "./src/database";
 import Event from "./src/database/models/Event";
 import Task from "./src/database/models/Task";
 import {
@@ -108,15 +108,17 @@ const App = () => {
         }
 
         if (category === "events" && payload.eventId) {
-          await database.write(async () => {
-            const record = await database.get<Event>("events").find(payload.eventId);
+          const db = getDatabase();
+          await db.write(async () => {
+            const record = await db.get<Event>("events").find(payload.eventId);
             await record.update(e => {
               e.notificationId = newNotificationId;
             });
           });
         } else if (category === "tasks" && payload.taskId) {
-          await database.write(async () => {
-            const record = await database.get<Task>("tasks").find(payload.taskId);
+          const db = getDatabase();
+          await db.write(async () => {
+            const record = await db.get<Task>("tasks").find(payload.taskId);
             await record.update(t => {
               t.notificationId = newNotificationId;
             });

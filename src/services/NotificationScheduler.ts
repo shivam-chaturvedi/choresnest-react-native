@@ -1,6 +1,6 @@
 import notifee, { AndroidImportance, AndroidNotificationSetting, TriggerType, TimestampTrigger, RepeatFrequency } from '@notifee/react-native';
 import { Platform } from 'react-native';
-import { database } from '../database';
+import { getDatabase } from '../database';
 import { Q } from '@nozbe/watermelondb';
 import Event from '../database/models/Event';
 import Task from '../database/models/Task';
@@ -425,8 +425,8 @@ const buildReminderTrigger = (baseDate: Date, offsetDays: number, timeOfDay?: st
 
 const persistDocumentNotificationIds = async (documentId: string, ids: string[] | null): Promise<void> => {
     try {
-        await database.write(async () => {
-            const doc = await database.get<Document>('documents').find(documentId);
+        await getDatabase().write(async () => {
+            const doc = await getDatabase().get<Document>('documents').find(documentId);
             await doc.update(d => {
                 d.notificationIdsJson = ids && ids.length ? JSON.stringify(ids) : undefined;
             });
@@ -476,7 +476,7 @@ export const getActiveMemberId = async (): Promise<string | null> => {
             console.warn('NotificationScheduler: Cannot resolve active member without profile id');
             return null;
         }
-        const members = await database.get<Member>('members').query(
+        const members = await getDatabase().get<Member>('members').query(
             Q.where('profile_id', profileId),
             Q.where('is_active', true)
         ).fetch();
@@ -645,7 +645,7 @@ export const NotificationScheduler = {
      */
     async isCategoryEnabled(category: NotificationCategory): Promise<boolean> {
         try {
-            const prefsCollection = database.get('notification_preferences');
+            const prefsCollection = getDatabase().get('notification_preferences');
             const prefs = await prefsCollection.query(
                 Q.where('category', category)
             ).fetch();
@@ -667,7 +667,7 @@ export const NotificationScheduler = {
      */
     async getQuietHours(): Promise<QuietHours | null> {
         try {
-            const quietHoursCollection = database.get('quiet_hours');
+            const quietHoursCollection = getDatabase().get('quiet_hours');
             const settings = await quietHoursCollection.query().fetch();
 
             if (settings.length === 0) {
@@ -1083,19 +1083,19 @@ export const NotificationScheduler = {
 
             switch (category) {
                 case 'events':
-                    collection = database.get('events');
+                    collection = getDatabase().get('events');
                     break;
                 case 'tasks':
-                    collection = database.get('tasks');
+                    collection = getDatabase().get('tasks');
                     break;
                 case 'documents':
-                    collection = database.get('documents');
+                    collection = getDatabase().get('documents');
                     break;
                 case 'meals':
-                    collection = database.get('meal_plans');
+                    collection = getDatabase().get('meal_plans');
                     break;
                 case 'budgets':
-                    collection = database.get('budgets');
+                    collection = getDatabase().get('budgets');
                     break;
             }
 
@@ -1246,14 +1246,14 @@ export const NotificationScheduler = {
             ]);
 
             // Fetch all Events and Tasks for comparison
-            const events = await database.collections
+            const events = await getDatabase().collections
                 .get<Event>('events')
                 .query(
                     Q.where('profile_id', profileId),
                     Q.where('deleted', false)
                 )
                 .fetch();
-            const tasks = await database.collections
+            const tasks = await getDatabase().collections
                 .get<Task>('tasks')
                 .query(
                     Q.where('profile_id', profileId),
@@ -1315,7 +1315,7 @@ export const NotificationScheduler = {
                     // Cancel notification if it exists but event is not for active member
                     if (event.notificationId) {
                         await notifee.cancelTriggerNotification(event.notificationId);
-                        await database.write(async () => {
+                        await getDatabase().write(async () => {
                             await event.update(e => { e.notificationId = null as any; });
                         });
                     }
@@ -1331,7 +1331,7 @@ export const NotificationScheduler = {
                     // Self-healing: Update DB if ID mismatch
                     if (event.notificationId !== correctId) {
                         console.log(`[Scheduler] Healing Event ${event.id}: DB ID ${event.notificationId} -> Notifee ID ${correctId}`);
-                        await database.write(async () => {
+                        await getDatabase().write(async () => {
                             await event.update(e => { e.notificationId = correctId; });
                         });
                     }
@@ -1341,7 +1341,7 @@ export const NotificationScheduler = {
                 // If DB has an ID but it's not in Notifee (and not in our map check above), it's stale.
                 // We clear it to be clean, though scheduleNotification would overwrite it usually.
                 if (event.notificationId) {
-                    await database.write(async () => {
+                    await getDatabase().write(async () => {
                         await event.update(e => { e.notificationId = null as any; });
                     });
                 }
@@ -1393,7 +1393,7 @@ export const NotificationScheduler = {
                 );
 
                 if (notificationId) {
-                    await database.write(async () => {
+                    await getDatabase().write(async () => {
                         await event.update(e => { e.notificationId = notificationId; });
                     });
                 }
@@ -1406,7 +1406,7 @@ export const NotificationScheduler = {
                     // Cancel notification if it exists but task is not for active member
                     if (task.notificationId) {
                         await notifee.cancelTriggerNotification(task.notificationId);
-                        await database.write(async () => {
+                        await getDatabase().write(async () => {
                             await task.update(t => { t.notificationId = null as any; });
                         });
                     }
@@ -1418,7 +1418,7 @@ export const NotificationScheduler = {
                 if (taskTriggerMap.has(task.id)) {
                     const correctId = taskTriggerMap.get(task.id)!;
                     if (task.notificationId !== correctId) {
-                        await database.write(async () => {
+                        await getDatabase().write(async () => {
                             await task.update(t => { t.notificationId = correctId; });
                         });
                     }
@@ -1426,7 +1426,7 @@ export const NotificationScheduler = {
                 }
 
                 if (task.notificationId) {
-                    await database.write(async () => {
+                    await getDatabase().write(async () => {
                         await task.update(t => { t.notificationId = null as any; });
                     });
                 }
@@ -1453,14 +1453,14 @@ export const NotificationScheduler = {
                 );
 
                 if (notificationId) {
-                    await database.write(async () => {
+                    await getDatabase().write(async () => {
                         await task.update(t => { t.notificationId = notificationId; });
                     });
                 }
             }
 
             // 4. Reschedule Document Reminders
-            const documents = await database.collections
+            const documents = await getDatabase().collections
                 .get<Document>('documents')
                 .query(
                     Q.where('profile_id', profileId),
@@ -1510,14 +1510,14 @@ export const NotificationScheduler = {
             resetNotificationSchedulerState();
 
             // Clear notification IDs from database
-            const events = await database.collections
+            const events = await getDatabase().collections
                 .get<Event>('events')
                 .query(
                     Q.where('profile_id', profileId),
                     Q.where('deleted', false)
                 )
                 .fetch();
-            const tasks = await database.collections
+            const tasks = await getDatabase().collections
                 .get<Task>('tasks')
                 .query(
                     Q.where('profile_id', profileId),
@@ -1525,7 +1525,7 @@ export const NotificationScheduler = {
                 )
                 .fetch();
 
-            await database.write(async () => {
+            await getDatabase().write(async () => {
                 for (const event of events) {
                     if (event.notificationId) {
                         await event.update(e => { e.notificationId = null as any; });

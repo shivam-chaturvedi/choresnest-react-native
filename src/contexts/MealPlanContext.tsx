@@ -6,7 +6,7 @@ import { MealType } from '../types/meals';
 import { NotificationScheduler } from '../services/NotificationScheduler';
 import { NotificationPreferencesService } from '../services/NotificationPreferencesService';
 import { getTargetTimeForMeal } from '../utils/mealTimes';
-import { database } from '../database';
+import { getDatabase } from '../database';
 import MealPlan from '../database/models/MealPlan';
 import { Q } from '@nozbe/watermelondb';
 
@@ -63,7 +63,7 @@ export const MealPlanProvider: React.FC<{ children: ReactNode }> = ({ children }
   useEffect(() => {
     const loadMealPlans = async () => {
       try {
-        const mealPlansCollection = database.get<MealPlan>('meal_plans');
+        const mealPlansCollection = getDatabase().get<MealPlan>('meal_plans');
         const allMealPlans = await mealPlansCollection.query().fetch();
 
         const meals: PlannedMeal[] = allMealPlans.map(mp => ({
@@ -113,8 +113,8 @@ export const MealPlanProvider: React.FC<{ children: ReactNode }> = ({ children }
 
       if (notificationId) {
         // Update database with notification ID
-        await database.write(async () => {
-          const mealPlan = await database.get<MealPlan>('meal_plans').find(meal.id);
+        await getDatabase().write(async () => {
+          const mealPlan = await getDatabase().get<MealPlan>('meal_plans').find(meal.id);
           await mealPlan.update(mp => {
             mp.notificationId = notificationId;
           });
@@ -138,8 +138,8 @@ export const MealPlanProvider: React.FC<{ children: ReactNode }> = ({ children }
     try {
       if (!recipeId || !date || !mealType) return;
 
-      const newMealPlan = await database.write(async () => {
-        return await database.get<MealPlan>('meal_plans').create(mp => {
+      const newMealPlan = await getDatabase().write(async () => {
+        return await getDatabase().get<MealPlan>('meal_plans').create(mp => {
           mp.recipeId = recipeId.toString();
           mp.date = date;
           mp.type = mealType;
@@ -170,8 +170,8 @@ export const MealPlanProvider: React.FC<{ children: ReactNode }> = ({ children }
         cancelMealReminder(meal.notificationId);
       }
 
-      await database.write(async () => {
-        const mealPlan = await database.get<MealPlan>('meal_plans').find(mealId);
+      await getDatabase().write(async () => {
+        const mealPlan = await getDatabase().get<MealPlan>('meal_plans').find(mealId);
         await mealPlan.destroyPermanently();
       });
 
@@ -258,8 +258,8 @@ export const MealPlanProvider: React.FC<{ children: ReactNode }> = ({ children }
       });
 
       // Delete from database
-      await database.write(async () => {
-        const mealPlansCollection = database.get<MealPlan>('meal_plans');
+      await getDatabase().write(async () => {
+        const mealPlansCollection = getDatabase().get<MealPlan>('meal_plans');
         const mealPlansToDelete = await mealPlansCollection
           .query(
             Q.where('date', Q.gte(format(weekStart, 'yyyy-MM-dd'))),

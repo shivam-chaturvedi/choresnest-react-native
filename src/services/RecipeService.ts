@@ -1,5 +1,5 @@
 import RNFS from 'react-native-fs';
-import { database } from '../database';
+import { getDatabase } from '../database';
 import { Recipe, Collection } from '../database/models/Recipe';
 import MealPlan from '../database/models/MealPlan';
 import { Q } from '@nozbe/watermelondb';
@@ -33,12 +33,12 @@ const saveImageToStorage = async (tempUri: string): Promise<string> => {
 export const RecipeService = {
     // Recipes
     observeRecipes: () => {
-        return database.get<Recipe>('recipes').query().observe();
+        return getDatabase().get<Recipe>('recipes').query().observe();
     },
 
     getRecipeById: async (id: string) => {
         try {
-            return await database.get<Recipe>('recipes').find(id);
+            return await getDatabase().get<Recipe>('recipes').find(id);
         } catch {
             return null;
         }
@@ -53,8 +53,8 @@ export const RecipeService = {
                 finalImagePath = await saveImageToStorage(finalImagePath);
             }
 
-            return await database.write(async () => {
-                return await database.get<Recipe>('recipes').create(r => {
+            return await getDatabase().write(async () => {
+                return await getDatabase().get<Recipe>('recipes').create(r => {
                     r.name = data.name || 'Untitled Recipe';
                     r.description = data.description || '';
                     r.prepTime = data.prepTime || '0 mins';
@@ -76,17 +76,17 @@ export const RecipeService = {
     // Meal Plans
     observeMealPlansForDate: (date: string) => {
         try {
-            return database.get<MealPlan>('meal_plans').query(Q.where('date', date)).observe();
+            return getDatabase().get<MealPlan>('meal_plans').query(Q.where('date', date)).observe();
         } catch (error) {
             console.error('Error observing meal plans:', error);
-            return database.get<MealPlan>('meal_plans').query(Q.where('date', date)).observe();
+            return getDatabase().get<MealPlan>('meal_plans').query(Q.where('date', date)).observe();
         }
     },
 
     addMealPlan: async (recipeId: string, date: string, type: 'breakfast' | 'lunch' | 'dinner' | 'snack') => {
         try {
-            await database.write(async () => {
-                await database.get<MealPlan>('meal_plans').create(mp => {
+            await getDatabase().write(async () => {
+                await getDatabase().get<MealPlan>('meal_plans').create(mp => {
                     mp.recipeId = recipeId;
                     mp.date = date;
                     mp.type = type;
@@ -100,6 +100,6 @@ export const RecipeService = {
 
     // Collections
     observeCollections: () => {
-        return database.get<Collection>('collections').query().observe();
+        return getDatabase().get<Collection>('collections').query().observe();
     }
 };

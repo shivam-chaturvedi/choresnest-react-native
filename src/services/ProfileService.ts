@@ -1,12 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase } from '../config/supabase';
-import { LocalCacheService } from './LocalCacheService';
+import { setActiveProfile, GUEST_PROFILE_ID as DATABASE_GUEST_PROFILE_ID } from '../database';
 
 const ACTIVE_PROFILE_KEY = 'ACTIVE_PROFILE_ID';
 const GUEST_PROFILE_KEY = 'GUEST_PROFILE_ID';
 const IS_GUEST_KEY = 'IS_GUEST';
-
-export const GUEST_PROFILE_ID = 'guest';
 
 // In-memory fast cache — avoids any AsyncStorage or Supabase call on the hot path
 let cachedProfileId: string | null = null;
@@ -45,7 +42,13 @@ export const ProfileService = {
      * so that the profile ID is in the in-memory cache before any component needs it.
      */
     async setActiveProfileId(profileId: string | null): Promise<void> {
-        await persistActiveProfile(profileId);
+        if (profileId) {
+            setActiveProfile(profileId);
+            await persistActiveProfile(profileId);
+        } else {
+            setActiveProfile(DATABASE_GUEST_PROFILE_ID);
+            await persistActiveProfile(null);
+        }
     },
 
     /**
@@ -97,8 +100,9 @@ export const ProfileService = {
      * Persists the selected profile ID for guest mode.
      */
     async setGuestProfileId(): Promise<void> {
-        await AsyncStorage.setItem(GUEST_PROFILE_KEY, GUEST_PROFILE_ID);
-        await persistActiveProfile(GUEST_PROFILE_ID);
+        await AsyncStorage.setItem(GUEST_PROFILE_KEY, DATABASE_GUEST_PROFILE_ID);
+        await persistActiveProfile(DATABASE_GUEST_PROFILE_ID);
+        setActiveProfile(DATABASE_GUEST_PROFILE_ID);
     },
 
     /**
@@ -108,6 +112,7 @@ export const ProfileService = {
     async resetCache() {
         console.log('ProfileService: Resetting in-memory cache and AsyncStorage profile keys');
         cachedProfileId = null;
+        setActiveProfile(DATABASE_GUEST_PROFILE_ID);
         try {
             await AsyncStorage.removeItem(ACTIVE_PROFILE_KEY);
             await AsyncStorage.removeItem(GUEST_PROFILE_KEY);
@@ -117,3 +122,5 @@ export const ProfileService = {
         }
     }
 };
+
+export { DATABASE_GUEST_PROFILE_ID as GUEST_PROFILE_ID };

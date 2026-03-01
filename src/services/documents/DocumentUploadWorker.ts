@@ -1,5 +1,5 @@
 import { Q } from '@nozbe/watermelondb';
-import { database } from '../../database';
+import { getDatabase } from '../../database';
 import Document from '../../database/models/Document';
 import { DocumentStorageClient, DocumentUploadResult } from './DocumentStorageClient';
 import { SyncService } from '../SyncService';
@@ -66,7 +66,7 @@ const defaultIsGuest = async (): Promise<boolean> => {
 };
 
 const defaultFetchDocuments = async (profileId: string): Promise<DocumentRecord[]> => {
-    const query = database
+    const query = getDatabase()
         .get<Document>('documents')
         .query(
             Q.where('profile_id', profileId),
@@ -90,7 +90,7 @@ const defaultPersist = async (record: DocumentRecord, updates: PersistUpdates): 
     if (!record?.model) {
         return;
     }
-    await database.write(async () => {
+    await getDatabase().write(async () => {
         await record.model!.update(doc => {
             if (updates.uploadStatus !== undefined) doc.uploadStatus = updates.uploadStatus ?? 'pending_upload';
             if (updates.uploadAttempts !== undefined) doc.uploadAttempts = updates.uploadAttempts ?? 0;

@@ -1,6 +1,6 @@
 import Config from 'react-native-config';
 import { Q } from '@nozbe/watermelondb';
-import { database } from '../../database';
+import { getDatabase } from '../../database';
 import { isValidRecordForTable, mapLocalFieldToServer, transformRecordForSupabase } from './TransformationEngine';
 import { recordConflict } from './ConflictEngine';
 import { ConflictSeverity, ConflictType, TableChangeSet } from './types';
@@ -132,7 +132,7 @@ const fetchLocalVersions = async (table: string, ids: string[]): Promise<Map<str
         return versions;
     }
     try {
-        const collection = database.collections.get(table);
+        const collection = getDatabase().collections.get(table);
         if (!collection) {
             return versions;
         }
