@@ -1,13 +1,14 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useContext } from 'react';
 import { Text, StyleSheet, Animated, ActivityIndicator } from 'react-native';
 import { useThemeColors } from '../contexts/ThemeContext';
 import { useSyncStatus } from '../hooks/useSyncStatus';
-import { useAuth } from '../contexts/AuthContext';
+import { AuthContext } from '../contexts/AuthContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export const SyncIndicator: React.FC = () => {
     const { isSyncing } = useSyncStatus();
-    const { isGuest } = useAuth();
+    const auth = useContext(AuthContext);
+    const isGuest = auth?.isGuest ?? true;
     const colors = useThemeColors();
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const insets = useSafeAreaInsets();

@@ -626,10 +626,51 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   );
 };
 
+const fallbackVoidAsync = async () => {};
+const fallbackValueAsync = async () => undefined;
+
+const FALLBACK_FAMILY_CONTEXT: FamilyContextValue = {
+  familyName: "Family Chores",
+  setFamilyName: fallbackVoidAsync as (name: string) => Promise<void>,
+  members: [],
+  activeMember: null,
+  setActiveMember: fallbackVoidAsync as (member: FamilyMember) => Promise<void>,
+  addMember: fallbackValueAsync as (member: any) => Promise<any>,
+  removeMember: fallbackValueAsync as (id: string) => Promise<any>,
+  deleteMemberCascade: fallbackValueAsync as (id: string) => Promise<any>,
+  updateMember: fallbackValueAsync as (id: string, updates: any) => Promise<any>,
+  updateMemberColor: fallbackValueAsync as (id: string, color: string) => Promise<any>,
+  globalVault: [],
+  memberVaults: {},
+  addDocument: fallbackValueAsync as (doc: any) => Promise<any>,
+  updateDocument: fallbackValueAsync as (id: string, updates: any) => Promise<any>,
+  events: [],
+  addEvent: fallbackVoidAsync as (event: any) => Promise<void>,
+  updateEvent: fallbackVoidAsync as (id: string, updates: any) => Promise<void>,
+  deleteEvent: fallbackVoidAsync as (id: string) => Promise<void>,
+  groceryList: [],
+  addGroceryItem: fallbackValueAsync as (item: any) => Promise<any>,
+  toggleGroceryItem: fallbackValueAsync as (id: string) => Promise<any>,
+  removeGroceryItem: fallbackValueAsync as (id: string) => Promise<any>,
+  tasks: [],
+  addTask: fallbackVoidAsync as (task: any) => Promise<void>,
+  updateTask: fallbackVoidAsync as (id: string, updates: any) => Promise<void>,
+  deleteTask: fallbackVoidAsync as (id: string) => Promise<void>,
+  profileId: null,
+};
+
+let hasWarnedMissingFamilyProvider = false;
+
 export const useFamily = () => {
   const context = useContext(FamilyContext);
   if (!context) {
-    throw new Error("useFamily must be used within a FamilyProvider");
+    if (!hasWarnedMissingFamilyProvider) {
+      console.warn(
+        "useFamily called outside of FamilyProvider. Returning fallback context while the provider initializes."
+      );
+      hasWarnedMissingFamilyProvider = true;
+    }
+    return FALLBACK_FAMILY_CONTEXT;
   }
   return context;
 };

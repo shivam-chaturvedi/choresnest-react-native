@@ -32,6 +32,7 @@ import { appLockManager } from "./src/services/AppLockManager";
 import { SyncIndicator } from "./src/components/SyncIndicator";
 import { SyncService } from "./src/services/SyncService";
 import NetInfo from "@react-native-community/netinfo";
+import { PermissionPromptRenderer } from "./src/components/ui/PermissionPrompt";
 
 const App = () => {
   useEffect(() => {
@@ -166,7 +167,8 @@ const App = () => {
             </ToastProvider>
           </ThemeProvider>
         </SafeAreaProvider>
-      </CountryProvider>
+        </CountryProvider>
+        <PermissionPromptRenderer />
     </GestureHandlerRootView>
   );
 };

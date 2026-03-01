@@ -305,11 +305,27 @@ const AppNavigatorInner = () => {
   }, [isAuthenticated, isGuest, isLoading, user?.id]);
 
   React.useEffect(() => {
+    if (!isAuthenticated || isGuest || isLoading) {
+      return;
+    }
+
     let cancelled = false;
 
+    const waitForProfileId = async (): Promise<string | null> => {
+      const timeoutMs = 4000;
+      const start = Date.now();
+      while (!cancelled && Date.now() - start < timeoutMs) {
+        const pid = await ProfileService.getActiveProfileId();
+        if (pid) {
+          return pid;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      }
+      return null;
+    };
+
     const loadLocalMembers = async () => {
-      if (!isAuthenticated || isLoading) {
-        if (!cancelled) setHasMembersInDB(false);
+      if (cancelled) {
         return;
       }
 
@@ -317,7 +333,14 @@ const AppNavigatorInner = () => {
         console.log("AppNavigator: loadLocalMembers starting...");
 
         // 1. Resolve the active profile — AsyncStorage/memory only, no network
-        const pid = await ProfileService.getActiveProfileId();
+        const pid = await waitForProfileId();
+        if (!pid) {
+          console.warn("AppNavigator: Unable to resolve profile ID in time, deferring member check.");
+          if (!cancelled && hasMembersInDB === null) {
+            setHasMembersInDB(false);
+          }
+          return;
+        }
 
         // 1a. FAST PATH: Check if we already have members locally for this profile
         const membersCollection = getDatabase().collections.get<Member>('members');
@@ -338,7 +361,7 @@ const AppNavigatorInner = () => {
 
         // 2. REMOTE BOOTSTRAP (with timeout) — only for authenticated, non-guest users
         let remoteBootstrapSuccess = false;
-        if (pid && !isGuest) {
+        if (!cancelled && pid && !isGuest) {
           try {
             console.log("AppNavigator: Attempting profile bootstrap with timeout...");
             const bootstrapPromise = ProfileBootstrapService.bootstrap(pid);

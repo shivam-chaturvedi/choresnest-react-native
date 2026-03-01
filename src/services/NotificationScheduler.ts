@@ -1153,7 +1153,7 @@ export const NotificationScheduler = {
     /**
      * Ensure all reminders for a document are aligned with its metadata
      */
-    async syncDocumentReminders(document: Document, options?: { checkExisting?: boolean; activeNotificationIds?: Set<string>; notifyCenter?: boolean }): Promise<void> {
+    async syncDocumentReminders(document: Document, options?: { checkExisting?: boolean; activeNotificationIds?: Set<string>; notifyCenter?: boolean; promptForPermission?: boolean }): Promise<void> {
         if (!document) return;
         try {
             // Optimization: If doing a safety check, skip if notifications already exist
@@ -1206,7 +1206,7 @@ export const NotificationScheduler = {
                             triggerDate,
                             {
                                 notifyCenter: options?.notifyCenter ?? false, // Configurable, default to false
-                                promptForPermission: true,
+                                promptForPermission: options?.promptForPermission ?? false,
                                 promptForAlarm: true,
                             }
                         );

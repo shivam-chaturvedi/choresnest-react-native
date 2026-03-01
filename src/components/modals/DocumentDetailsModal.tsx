@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
+    ActivityIndicator,
     Modal,
     View,
     Text,
@@ -751,20 +752,28 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                     )}
                     {!viewUri && (
                         <View style={[styles.viewUnavailableBox, { borderColor: colors.border, backgroundColor: colors.background }]}>
-                            <Text style={[styles.viewUnavailableText, { color: colors.mutedForeground }]}>
-                                {(() => {
-                                    if (document.uploadStatus && ['pending_upload', 'uploading'].includes(document.uploadStatus)) {
-                                        return 'Document is still uploading. Please try again after the upload finishes.';
-                                    }
-                                    if (document.uploadStatus === 'failed') {
-                                        return 'Upload failed. Please retry the document upload before viewing.';
-                                    }
-                                    if (!document.remotePath && !document.localUri) {
-                                        return 'No file has been attached to this document yet.';
-                                    }
-                                    return 'Unable to load this file at the moment.';
-                                })()}
-                            </Text>
+                            <View style={styles.viewUnavailableRow}>
+                                <Text style={[styles.viewUnavailableText, { color: colors.mutedForeground }]}>
+                                    {(() => {
+                                        if (document.uploadStatus && ['pending_upload', 'uploading'].includes(document.uploadStatus)) {
+                                            return 'Document is still uploading. Please try again after the upload finishes.';
+                                        }
+                                        if (document.uploadStatus === 'failed') {
+                                            return 'Upload failed. Please retry the document upload before viewing.';
+                                        }
+                                        if (!document.remotePath && !document.localUri) {
+                                            return 'No file has been attached to this document yet.';
+                                        }
+                                        return 'Unable to load this file at the moment.';
+                                    })()}
+                                </Text>
+                                {(document.remotePath && document.uploadStatus !== 'failed') && (
+                                    <View style={styles.syncHint}>
+                                        <ActivityIndicator size="small" color={colors.foreground} />
+                                        <Text style={[styles.syncHintText, { color: colors.foreground }]}>Syncing…</Text>
+                                    </View>
+                                )}
+                            </View>
                         </View>
                     )}
                             </>
@@ -919,9 +928,24 @@ const styles = StyleSheet.create({
         padding: 12,
         marginTop: 12,
     },
+    viewUnavailableRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 8,
+    },
     viewUnavailableText: {
         fontSize: 13,
         lineHeight: 18,
+    },
+    syncHint: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    syncHintText: {
+        fontSize: 12,
+        fontWeight: '500',
     },
     viewerModalOverlay: {
         ...StyleSheet.absoluteFillObject,

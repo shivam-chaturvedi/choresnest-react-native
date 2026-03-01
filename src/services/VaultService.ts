@@ -234,7 +234,7 @@ export const VaultService = {
 
             cacheLocalUri(documentId, localUri);
 
-            NotificationScheduler.syncDocumentReminders(createdDoc).catch(err =>
+            NotificationScheduler.syncDocumentReminders(createdDoc, { promptForPermission: true }).catch(err =>
                 console.error('Failed to schedule document notifications:', err)
             );
 

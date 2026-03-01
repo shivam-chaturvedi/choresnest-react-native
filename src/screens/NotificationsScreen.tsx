@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -22,6 +22,8 @@ import {
   NotificationCategory,
   NotificationScheduler,
 } from "../services/NotificationScheduler";
+import { useToast } from "../components/ui/Toast";
+import { checkPermission, requestPermission } from "../utils/permissions";
 import {
   Calendar,
   CheckSquare,
@@ -173,6 +175,22 @@ export const NotificationsScreen: React.FC = () => {
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
 
+  const { showToast } = useToast();
+  const ensureNotificationPermission = async (): Promise<boolean> => {
+    const hasPermission = await checkPermission('notification');
+    if (hasPermission) return true;
+    const granted = await requestPermission('notification');
+    if (!granted) {
+      showToast({
+        type: 'warning',
+        title: 'Notifications permission required',
+        description: 'Enable notifications in settings to keep reminders active.',
+        duration: 3000,
+      });
+    }
+    return granted;
+  };
+
   // Load preferences on mount
   useEffect(() => {
     loadPreferences();
@@ -214,9 +232,21 @@ export const NotificationsScreen: React.FC = () => {
   };
 
   // Save event reminders when changed
+  const eventPrefsInitialized = useRef(false);
   useEffect(() => {
     const saveEventPrefs = async () => {
+      if (!eventPrefsInitialized.current) {
+        eventPrefsInitialized.current = true;
+        return;
+      }
       try {
+        if (eventReminders) {
+          const permissionGranted = await ensureNotificationPermission();
+          if (!permissionGranted) {
+            setEventReminders(false);
+            return;
+          }
+        }
         await NotificationPreferencesService.toggleCategory('events', eventReminders);
         if (eventReminders) {
           await NotificationPreferencesService.saveReminderTime('events', eventReminderTime);
@@ -229,8 +259,13 @@ export const NotificationsScreen: React.FC = () => {
   }, [eventReminders, eventReminderTime]);
 
   // Save meal prep reminders when changed
+  const mealPrefsInitialized = useRef(false);
   useEffect(() => {
     const saveMealPrefs = async () => {
+      if (!mealPrefsInitialized.current) {
+        mealPrefsInitialized.current = true;
+        return;
+      }
       try {
         await NotificationPreferencesService.toggleCategory('meals', mealPrepReminders);
         if (mealPrepReminders) {
@@ -265,9 +300,21 @@ export const NotificationsScreen: React.FC = () => {
     saveQuietHours();
   }, [quietHoursEnabled, quietStart, quietEnd]);
 
+  const pushPrefsInitialized = useRef(false);
   useEffect(() => {
     const updatePush = async () => {
+      if (!pushPrefsInitialized.current) {
+        pushPrefsInitialized.current = true;
+        return;
+      }
       try {
+        if (pushEnabled) {
+          const permissionGranted = await ensureNotificationPermission();
+          if (!permissionGranted) {
+            setPushEnabled(false);
+            return;
+          }
+        }
         await NotificationPreferencesService.setPushEnabled(pushEnabled);
         if (!pushEnabled) {
           await Promise.all(DELIVERY_CATEGORIES.map(category => NotificationScheduler.cancelAllForCategory(category)));
@@ -294,20 +341,26 @@ export const NotificationsScreen: React.FC = () => {
   }, [soundEnabled]);
 
   const toggleSetting = async (id: string) => {
-    const newSettings = settings.map(s => s.id === id ? { ...s, enabled: !s.enabled } : s);
+    const currentSetting = settings.find(s => s.id === id);
+    if (!currentSetting) return;
+    const newEnabled = !currentSetting.enabled;
+    if (newEnabled) {
+      const permissionGranted = await ensureNotificationPermission();
+      if (!permissionGranted) {
+        return;
+      }
+    }
+    const newSettings = settings.map(s => s.id === id ? { ...s, enabled: newEnabled } : s);
     setSettings(newSettings);
 
     // Save to database
     try {
-      const setting = newSettings.find(s => s.id === id);
-      if (setting) {
-        let category: 'tasks' | 'documents' | 'meals' = 'tasks';
-        if (id === 'tasks') category = 'tasks';
-        else if (id === 'vault') category = 'documents';
-        else if (id === 'mealprep') category = 'meals';
+      let category: 'tasks' | 'documents' | 'meals' = 'tasks';
+      if (id === 'tasks') category = 'tasks';
+      else if (id === 'vault') category = 'documents';
+      else if (id === 'mealprep') category = 'meals';
 
-        await NotificationPreferencesService.toggleCategory(category, setting.enabled);
-      }
+      await NotificationPreferencesService.toggleCategory(category, newEnabled);
     } catch (error) {
       console.error('Error toggling setting:', error);
     }

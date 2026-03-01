@@ -1,4 +1,4 @@
-import { Platform, Alert, Linking } from 'react-native';
+import { Platform, Linking } from 'react-native';
 import {
     check,
     request,
@@ -10,8 +10,9 @@ import {
     Permission,
     PermissionStatus,
 } from 'react-native-permissions';
-
-export type PermissionType = 'camera' | 'photo' | 'audio' | 'notification' | 'storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { PermissionType } from '../types/Permissions';
+import { showPermissionPrompt } from '../components/ui/PermissionPrompt';
 
 const PERMISSION_LABELS: Record<PermissionType, string> = {
     camera: 'camera',
@@ -42,15 +43,38 @@ const getPermissionType = (type: Exclude<PermissionType, 'notification'>): Permi
     }
 };
 
-const showSettingsPrompt = (type: PermissionType) => {
-    Alert.alert(
-        'Permission Required',
-        `This feature requires ${PERMISSION_LABELS[type]} access. Please enable it in settings.`,
-        [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => Linking.openSettings() }
-        ]
-    );
+const PROMPT_SUPPRESS_PREFIX = 'permission_prompt_suppress_';
+
+const getPromptKey = (type: PermissionType) => `${PROMPT_SUPPRESS_PREFIX}${type}`;
+
+const isPromptSuppressed = async (type: PermissionType): Promise<boolean> => {
+    try {
+        const value = await AsyncStorage.getItem(getPromptKey(type));
+        return value === 'true';
+    } catch (error) {
+        console.error('Failed to read permission prompt suppression flag:', error);
+        return false;
+    }
+};
+
+const suppressPrompt = async (type: PermissionType) => {
+    try {
+        await AsyncStorage.setItem(getPromptKey(type), 'true');
+    } catch (error) {
+        console.error('Failed to save permission prompt suppression flag:', error);
+    }
+};
+
+const maybeShowSettingsPrompt = async (type: PermissionType) => {
+    if (await isPromptSuppressed(type)) {
+        return;
+    }
+    showPermissionPrompt({
+        type,
+        message: `This feature requires ${PERMISSION_LABELS[type]} access. Please enable it in settings.`,
+        onOpenSettings: () => Linking.openSettings(),
+        onDontShowAgain: () => suppressPrompt(type),
+    });
 };
 
 const isStatusGranted = (status: PermissionStatus) =>
@@ -81,7 +105,7 @@ const requestNotificationPermission = async (): Promise<boolean> => {
         }
 
         if (response.status === RESULTS.DENIED || response.status === RESULTS.BLOCKED) {
-            showSettingsPrompt('notification');
+            await maybeShowSettingsPrompt('notification');
         }
         return false;
     } catch (error) {
@@ -133,7 +157,7 @@ export const requestPermission = async (type: PermissionType): Promise<boolean> 
         if (isStatusGranted(result)) return true;
 
         if (result === RESULTS.BLOCKED || result === RESULTS.DENIED) {
-            showSettingsPrompt(type);
+            await maybeShowSettingsPrompt(type);
         }
         return false;
     } catch (error) {

@@ -13,6 +13,7 @@ import { map } from 'rxjs/operators';
 import { EMPTY } from 'rxjs';
 import { supabase } from '../config/supabase';
 import { ProfileService } from './ProfileService';
+import Config from 'react-native-config';
 
 const resolveProfileId = ProfileService.getActiveProfileId;
 
@@ -100,7 +101,7 @@ const pushHomeNotification = (
     });
 };
 
-type TaskNotificationJobOptions = { showFeedback: boolean };
+type TaskNotificationJobOptions = { showFeedback: boolean; promptForPermission?: boolean };
 const enqueueTaskNotificationJob = (taskId: string, options: TaskNotificationJobOptions) => {
     NotificationScheduler.enqueueJob(async () => {
         await handleTaskNotificationJob(taskId, options);
@@ -142,7 +143,7 @@ const handleTaskNotificationJob = async (taskId: string, options: TaskNotificati
                     notificationTrigger,
                     {
                         notifyCenter: true,
-                        promptForPermission: true,
+                        promptForPermission: options.promptForPermission ?? false,
                         promptForAlarm: true,
                     }
                 );
@@ -199,11 +200,64 @@ const handleTaskNotificationJob = async (taskId: string, options: TaskNotificati
     }
 };
 
-type EventNotificationJobOptions = { showFeedback: boolean; updates?: Partial<Event> };
+type EventNotificationJobOptions = { showFeedback: boolean; updates?: Partial<Event>; promptForPermission?: boolean };
 const enqueueEventNotificationJob = (eventId: string, options: EventNotificationJobOptions) => {
     NotificationScheduler.enqueueJob(async () => {
         await handleEventNotificationJob(eventId, options);
     });
+};
+
+const parseDelayFromEnv = (value?: string | null): number => {
+    if (!value) return 30 * 1000;
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
+    }
+    return 30 * 1000;
+};
+const EVENT_SYNC_DELAY_MS = parseDelayFromEnv(Config.EVENT_SYNC_DELAY_MS);
+const delayedEventTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const pendingEventSyncs = new Map<string, EventNotificationJobOptions>();
+
+const cancelDelayedEventSync = (eventId: string) => {
+    const timer = delayedEventTimers.get(eventId);
+    if (timer) {
+        clearTimeout(timer);
+        delayedEventTimers.delete(eventId);
+    }
+    pendingEventSyncs.delete(eventId);
+};
+
+const flushDelayedEventSync = (eventId: string) => {
+    const pending = pendingEventSyncs.get(eventId);
+    if (!pending) {
+        return;
+    }
+    pendingEventSyncs.delete(eventId);
+    delayedEventTimers.delete(eventId);
+    enqueueEventNotificationJob(eventId, pending);
+    syncAfterWrite();
+};
+
+const scheduleDelayedEventSync = (eventId: string, options: EventNotificationJobOptions) => {
+    const existing = pendingEventSyncs.get(eventId);
+    const merged: EventNotificationJobOptions = {
+        showFeedback: Boolean(existing?.showFeedback || options.showFeedback),
+        updates: options.updates ?? existing?.updates,
+        promptForPermission: Boolean(existing?.promptForPermission || options.promptForPermission),
+    };
+    pendingEventSyncs.set(eventId, merged);
+
+    const existingTimer = delayedEventTimers.get(eventId);
+    if (existingTimer) {
+        clearTimeout(existingTimer);
+    }
+
+    const timer = setTimeout(() => {
+        flushDelayedEventSync(eventId);
+    }, EVENT_SYNC_DELAY_MS);
+
+    delayedEventTimers.set(eventId, timer);
 };
 
 const handleEventNotificationJob = async (eventId: string, options: EventNotificationJobOptions) => {
@@ -275,7 +329,7 @@ const handleEventNotificationJob = async (eventId: string, options: EventNotific
                     {
                         repeatType: 'none',
                         notifyCenter: true,
-                        promptForPermission: true,
+                        promptForPermission: options.promptForPermission ?? false,
                         promptForAlarm: true,
                     }
                 );
@@ -311,21 +365,21 @@ const handleEventNotificationJob = async (eventId: string, options: EventNotific
             const repeatRule = event.isRecurring ? event.recurrenceRule : undefined;
             const repeatType = NotificationScheduler.normalizeRepeatType(repeatRule);
             const repeatMeta = NotificationScheduler.buildRepeatMetaFromRule(repeatRule);
-            const newId = await NotificationScheduler.scheduleNotification(
-                'events',
-                {
-                    title: `Event: ${event.title}`,
-                    body: event.location ? `at ${event.location}` : `Starting soon`,
-                    data: { eventId: event.id }
-                },
-                triggerDate,
-                {
-                    repeatType,
-                    repeatMeta,
-                    notifyCenter: true,
-                    promptForPermission: true,
-                    promptForAlarm: true,
-                }
+                    const newId = await NotificationScheduler.scheduleNotification(
+                        'events',
+                        {
+                            title: `Event: ${event.title}`,
+                            body: event.location ? `at ${event.location}` : `Starting soon`,
+                            data: { eventId: event.id }
+                        },
+                        triggerDate,
+                        {
+                            repeatType,
+                            repeatMeta,
+                            notifyCenter: true,
+                            promptForPermission: options.promptForPermission ?? false,
+                            promptForAlarm: true,
+                        }
             );
 
             if (newId) {
@@ -417,7 +471,7 @@ export const TaskService = {
         });
 
         if (createdTaskId) {
-            enqueueTaskNotificationJob(createdTaskId, { showFeedback: false });
+            enqueueTaskNotificationJob(createdTaskId, { showFeedback: false, promptForPermission: true });
         }
         syncAfterWrite();
     },
@@ -546,9 +600,8 @@ export const TaskService = {
         });
 
         if (createdEventId) {
-            enqueueEventNotificationJob(createdEventId, { showFeedback: false });
+            scheduleDelayedEventSync(createdEventId, { showFeedback: false, promptForPermission: true });
         }
-        syncAfterWrite();
     },
 
     updateEvent: async (id: string, updates: Partial<Event>) => {
@@ -589,8 +642,7 @@ export const TaskService = {
             });
         });
 
-        enqueueEventNotificationJob(id, { showFeedback: true, updates });
-        syncAfterWrite();
+        scheduleDelayedEventSync(id, { showFeedback: true, updates });
     },
 
     deleteEvent: async (id: string) => {
@@ -599,6 +651,8 @@ export const TaskService = {
             console.error('TaskService: No profileId for deleteEvent');
             return;
         }
+
+        cancelDelayedEventSync(id);
 
         let notificationId: string | undefined;
         try {
