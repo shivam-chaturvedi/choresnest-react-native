@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import RNFS from 'react-native-fs';
-import { database } from '../database';
+import { getDatabase } from '../database';
+import { resetWatermelonCursor } from './sync/cursor';
 
 /**
  * DataCleanupService
@@ -106,14 +107,13 @@ export const DataCleanupService = {
 
             // WARNING: DO NOT use markAsDeleted() here or background sync
             // will try to propagate deletions to Supabase, deleting cloud data!
-            await database.write(async () => {
-                await database.unsafeResetDatabase();
+            await getDatabase().write(async () => {
+                await getDatabase().unsafeResetDatabase();
             });
 
             // Reset all sync cursors since the entire DB was wiped
             try {
-                const { resetSyncCursorState } = await import('./sync/SyncCursorStore');
-                await resetSyncCursorState();
+                await resetWatermelonCursor();
                 console.log('[DataCleanupService] _unsafeWipeDatabase: sync cursors reset');
             } catch (cursorError) {
                 console.warn('[DataCleanupService] _unsafeWipeDatabase: failed to reset sync cursors', cursorError);
@@ -220,7 +220,7 @@ export const DataCleanupService = {
                 const collections = ['members', 'events', 'tasks', 'grocery_items', 'vault_documents', 'recipes', 'meals', 'notes'];
                 for (const collectionName of collections) {
                     try {
-                        const collection = database.get(collectionName);
+                        const collection = getDatabase().get(collectionName);
                         const records = await collection.query().fetch();
                         databaseRecords += records.length;
                     } catch {

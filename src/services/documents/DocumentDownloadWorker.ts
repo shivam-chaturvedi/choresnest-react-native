@@ -1,5 +1,5 @@
 import { Q } from '@nozbe/watermelondb';
-import { database } from '../../database';
+import { getDatabase } from '../../database';
 import Document from '../../database/models/Document';
 import { VaultStorageService } from '../VaultStorageService';
 import { VaultService } from '../VaultService';
@@ -70,7 +70,7 @@ export class DocumentDownloadWorker {
     private async restoreMemoryCache() {
         if (!this.profileId) return;
 
-        const records = await database
+        const records = await getDatabase()
             .get<Document>('documents')
             .query(
                 Q.where('profile_id', this.profileId),
@@ -93,7 +93,7 @@ export class DocumentDownloadWorker {
     private async processDocuments() {
         if (!this.profileId) return;
 
-        const records = await database
+        const records = await getDatabase()
             .get<Document>('documents')
             .query(
                 Q.where('profile_id', this.profileId),

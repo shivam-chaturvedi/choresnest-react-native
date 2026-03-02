@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { SyncService } from '../services/SyncService';
-import { database } from '../database';
+import { getDatabase } from '../database';
 import { useAuth } from '../contexts/AuthContext';
 
 export const shouldTriggerAutoSync = (
@@ -76,7 +76,10 @@ export const useAutoSync = () => {
         // Subscribe to database changes
         const subscriptions: Array<{ unsubscribe: () => void }> = [];
 
-        // Subscribe to all collections that need syncing
+        // Subscribe to all collections that need syncing.
+        // NOTE: 'list_categories' was removed because it no longer exists
+        // in the local WatermelonDB schema on some builds, which caused
+        // noisy "Cannot read property 'query' of null" warnings.
         const collections = [
             'events',
             'tasks',
@@ -85,7 +88,6 @@ export const useAutoSync = () => {
             'budgets',
             'lists',
             'list_items',
-            'list_categories',
             'recipes',
             'collection_recipes',
             'collections',
@@ -95,7 +97,7 @@ export const useAutoSync = () => {
 
         collections.forEach(collectionName => {
             try {
-                const collection = database.get(collectionName);
+                const collection = getDatabase().get(collectionName);
                 const subscription = collection.query().observe().subscribe(() => {
                     triggerSync();
                 });

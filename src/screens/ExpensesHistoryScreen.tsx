@@ -15,6 +15,7 @@ import { DateTimePicker } from '../components/ui/SimpleDatePicker';
 import { ChevronLeft } from 'lucide-react-native';
 import { formatMonthKey, formatMonthLabel, parseTransactionDate, toDate } from '../utils/financeDateUtils';
 import { useCountry } from '../contexts/CountryContext';
+import { IconGlyph } from '../components/ui/IconGlyph';
 
 type HistoryFilter = 'month' | 'week' | 'year' | 'custom';
 
@@ -295,7 +296,7 @@ export const ExpensesHistoryScreen: React.FC = () => {
   const renderItem = ({ item }: { item: TransactionWithDate }) => (
     <View style={[styles.txRow, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radius.md }]}>
       <View style={[styles.txIcon, { backgroundColor: colors.muted }]}>
-        <Text style={{ fontSize: 18 }}>{item.icon}</Text>
+        <IconGlyph icon={item.icon} size={18} color={colors.foreground} />
       </View>
       <View style={styles.txDetails}>
         <Text style={[styles.txTitle, { color: colors.foreground }]} numberOfLines={1}>{item.name}</Text>

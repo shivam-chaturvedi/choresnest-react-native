@@ -1,6 +1,6 @@
 import { synchronize } from '@nozbe/watermelondb/sync';
 import { Q } from '@nozbe/watermelondb';
-import { database } from '../../database';
+import { getDatabase, GUEST_PROFILE_ID } from '../../database';
 import Config from 'react-native-config';
 import { pullTableChangesWithCursor } from './PullCursorEngine';
 import { pushTableChanges } from './PushEngine';
@@ -53,12 +53,16 @@ export class SyncOrchestrator {
     }
 
     async run(readOnly: boolean): Promise<void> {
+        if (this.userId === GUEST_PROFILE_ID) {
+            console.log('Guest profile detected in SyncOrchestrator - skipping synchronize()');
+            return;
+        }
         await this.executeSync(readOnly, 'primary');
     }
 
     private async executeSync(readOnly: boolean, label: string): Promise<void> {
         await synchronize({
-            database,
+            database: getDatabase(),
             pullChanges: async ({ lastPulledAt, schemaVersion, migration }) =>
                 this.pullChanges({ lastPulledAt, schemaVersion, migration, readOnly, label }),
             pushChanges: readOnly
@@ -141,7 +145,7 @@ export class SyncOrchestrator {
         // ---------------------------------------------------------
         // CRITICAL: Account Isolation Filter
         // ---------------------------------------------------------
-        // WatermelonDB tracks changes globally in its database. If a user logs out
+        // WatermelonDB tracks changes globally in its getDatabase(). If a user logs out
         // and another logs in on the same device, Watermelon will try to push
         // Account A's pending changes using Account B's auth headers, causing
         // RLS violations (42501).
@@ -149,7 +153,7 @@ export class SyncOrchestrator {
         // allowed profile IDs.
         const allowedProfiles = new Set<string>();
         try {
-            const memberRecords = await database.get('members').query(
+            const memberRecords = await getDatabase().get('members').query(
                 Q.where('deleted', Q.notEq(true))
             ).fetch();
             // In our system, members table records that exist locally for this 

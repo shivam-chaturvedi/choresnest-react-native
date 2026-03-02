@@ -1,4 +1,4 @@
-import { database } from '../database';
+import { getDatabase } from '../database';
 import UserPreference from '../database/models/UserPreference';
 import { COUNTRY_CONFIG, DEFAULT_COUNTRY_CODE, CountryConfiguration, getCountryConfig, isSupportedCountry } from '../config/countries';
 import * as RNLocalize from 'react-native-localize';
@@ -36,7 +36,7 @@ const detectDeviceCountryCode = (): string | undefined => {
 };
 
 const fallbackCountryCode = detectDeviceCountryCode() ?? DEFAULT_COUNTRY_CODE;
-const preferencesCollection = () => database.get<UserPreference>('user_preferences');
+const preferencesCollection = () => getDatabase().get<UserPreference>('user_preferences');
 
 let cachedCountryCode = fallbackCountryCode;
 let preferenceRecordId: string | null = null;
@@ -71,7 +71,7 @@ const getOrCreatePreferenceRecord = async (): Promise<UserPreference> => {
         return existing[0];
     }
 
-    return await database.write(async () => {
+    return await getDatabase().write(async () => {
         const created = await collection.create(pref => {
             pref.countryCode = cachedCountryCode;
             pref.createdAt = Date.now();
@@ -90,7 +90,7 @@ export const CountryPreferenceService = {
                 ? record.countryCode
                 : cachedCountryCode;
             if (!record.countryCode || record.countryCode !== normalized) {
-                await database.write(async () => {
+                await getDatabase().write(async () => {
                     await record.update(pref => {
                         pref.countryCode = normalized;
                         pref.updatedAt = Date.now();
@@ -133,7 +133,7 @@ export const CountryPreferenceService = {
         try {
             // First update user_preferences for backward compatibility
             const record = await getOrCreatePreferenceRecord();
-            await database.write(async () => {
+            await getDatabase().write(async () => {
                 await record.update(pref => {
                     pref.countryCode = normalized;
                     pref.updatedAt = Date.now();
@@ -142,7 +142,7 @@ export const CountryPreferenceService = {
             });
 
             // NOW ALSO store it in Settings table as key-value pair for Supabase Sync
-            const settingsCollection = database.get('settings');
+            const settingsCollection = getDatabase().get('settings');
             const profileId = await AppSettingsService.getActiveProfileId();
 
             if (profileId) {
@@ -151,7 +151,7 @@ export const CountryPreferenceService = {
                     Q.where('key', 'localization')
                 ).fetch();
 
-                await database.write(async () => {
+                await getDatabase().write(async () => {
                     if (existingSettings.length > 0) {
                         await existingSettings[0].update((s: any) => {
                             s.value = normalized;

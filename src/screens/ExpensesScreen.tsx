@@ -27,6 +27,7 @@ import { useFinance, Transaction } from '../contexts/FinanceContext';
 import { ScreenErrorView } from '../components/ui/ScreenErrorView';
 import { useCountry } from '../contexts/CountryContext';
 import { SyncService } from '../services/SyncService';
+import { IconGlyph } from '../components/ui/IconGlyph';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -653,7 +654,7 @@ export const ExpensesScreen: React.FC = () => {
                 {transactions.slice(0, 5).map((tx) => (
                   <View key={tx.id} style={[styles.transactionCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
                     <View style={[styles.transactionIconBg, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
-                      <Text style={{ fontSize: 20 }}>{tx.icon}</Text>
+                      <IconGlyph icon={tx.icon} size={20} color={colors.foreground} />
                     </View>
                     <View style={{ flex: 1, paddingHorizontal: 12 }}>
                       <Text style={[styles.txName, { color: colors.foreground }]}>{tx.name}</Text>
@@ -690,7 +691,7 @@ export const ExpensesScreen: React.FC = () => {
                     <View key={cat.id} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                         <View style={{ width: 32, height: 32, backgroundColor: cat.color + '20', borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' }}>
-                          <Text style={{ fontSize: 16 }}>{cat.icon}</Text>
+                          <IconGlyph icon={cat.icon} size={18} color={colors.foreground} />
                         </View>
                         <View>
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>

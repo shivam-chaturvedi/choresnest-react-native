@@ -155,7 +155,11 @@ export const VaultStorageService = {
         return data.signedUrl;
     },
 
-    async downloadToLocalCache(remotePath: string, documentId: string): Promise<string> {
+    async downloadToLocalCache(
+        remotePath: string,
+        documentId: string,
+        onProgress?: (bytesWritten: number, contentLength: number) => void
+    ): Promise<string> {
         if (!remotePath || !documentId) {
             throw new Error('VaultStorageService: remotePath and documentId are required for download');
         }
@@ -188,6 +192,13 @@ export const VaultStorageService = {
         const result = await RNFS.downloadFile({
             fromUrl: signedUrl,
             toFile: localFilePath,
+            progressInterval: 250,
+            progressDivider: 1,
+            progress: progress => {
+                if (onProgress) {
+                    onProgress(progress.bytesWritten, progress.contentLength ?? 0);
+                }
+            },
         }).promise;
 
         if (result.statusCode !== 200) {

@@ -164,8 +164,7 @@ const normalizeVirtualId = (id: string): string => {
 
 export const FamilyContext = createContext<FamilyContextValue | undefined>(undefined);
 
-export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { isGuest, user } = useAuth();
+const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean; children: ReactNode }> = ({ profileId, isGuest, children }) => {
   const [familyName, setFamilyNameState] = useState("Family Chores");
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [rawEvents, setRawEvents] = useState<any[]>([]);
@@ -173,7 +172,6 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [globalVault, setGlobalVault] = useState<any[]>([]);
   const [memberVaults, setMemberVaults] = useState<Record<string, any[]>>({});
   const [rawGroceryItems, setRawGroceryItems] = useState<ListItemRecord[]>([]);
-  const [profileId, setProfileId] = useState<string | null>(null);
 
   const membersById = useMemo(() => {
     const map = new Map<string, FamilyMember>();
@@ -249,43 +247,6 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       console.error("FamilyContext: Error setting up family name subscription", error);
     }
   }, [profileId]);
-
-  // --- Track Profile ---
-  // *** IMPORTANT: This effect must run FIRST to clear stale cross-profile data ***
-  // When profileId changes (e.g. switching profiles or logging in/out), immediately
-  // wipe all data arrays so the UI never shows another profile's events/tasks/etc.
-  useEffect(() => {
-    setRawEvents([]);
-    setRawTasks([]);
-    setRawGroceryItems([]);
-    setGlobalVault([]);
-    setMemberVaults({});
-    setMembers([]);
-    setFamilyNameState('Family Chores');
-  }, [profileId]);
-
-  useEffect(() => {
-    let mounted = true;
-    const refreshProfile = async () => {
-      const pid = await ProfileService.getActiveProfileId();
-      if (mounted) {
-        setProfileId(pid);
-      }
-    };
-    refreshProfile();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async () => {
-      const pid = await ProfileService.getActiveProfileId();
-      if (mounted) {
-        setProfileId(pid);
-      }
-    });
-
-    return () => {
-      mounted = false;
-      subscription?.unsubscribe();
-    };
-  }, [isGuest, user?.id]);
 
   useEffect(() => {
     if (!profileId || isGuest) {
@@ -631,10 +592,85 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   );
 };
 
+export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const { isGuest, user } = useAuth();
+  const [profileId, setProfileId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const refreshProfile = async () => {
+      const pid = await ProfileService.getActiveProfileId();
+      if (mounted) {
+        setProfileId(pid);
+      }
+    };
+    refreshProfile();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async () => {
+      const pid = await ProfileService.getActiveProfileId();
+      if (mounted) {
+        setProfileId(pid);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription?.unsubscribe();
+    };
+  }, [isGuest, user?.id]);
+
+  return (
+    <FamilyProviderInner key={String(profileId)} profileId={profileId} isGuest={isGuest}>
+      {children}
+    </FamilyProviderInner>
+  );
+};
+
+const fallbackVoidAsync = async () => {};
+const fallbackValueAsync = async () => undefined;
+
+const FALLBACK_FAMILY_CONTEXT: FamilyContextValue = {
+  familyName: "Family Chores",
+  setFamilyName: fallbackVoidAsync as (name: string) => Promise<void>,
+  members: [],
+  activeMember: null,
+  setActiveMember: fallbackVoidAsync as (member: FamilyMember) => Promise<void>,
+  addMember: fallbackValueAsync as (member: any) => Promise<any>,
+  removeMember: fallbackValueAsync as (id: string) => Promise<any>,
+  deleteMemberCascade: fallbackValueAsync as (id: string) => Promise<any>,
+  updateMember: fallbackValueAsync as (id: string, updates: any) => Promise<any>,
+  updateMemberColor: fallbackValueAsync as (id: string, color: string) => Promise<any>,
+  globalVault: [],
+  memberVaults: {},
+  addDocument: fallbackValueAsync as (doc: any) => Promise<any>,
+  updateDocument: fallbackValueAsync as (id: string, updates: any) => Promise<any>,
+  events: [],
+  addEvent: fallbackVoidAsync as (event: any) => Promise<void>,
+  updateEvent: fallbackVoidAsync as (id: string, updates: any) => Promise<void>,
+  deleteEvent: fallbackVoidAsync as (id: string) => Promise<void>,
+  groceryList: [],
+  addGroceryItem: fallbackValueAsync as (item: any) => Promise<any>,
+  toggleGroceryItem: fallbackValueAsync as (id: string) => Promise<any>,
+  removeGroceryItem: fallbackValueAsync as (id: string) => Promise<any>,
+  tasks: [],
+  addTask: fallbackVoidAsync as (task: any) => Promise<void>,
+  updateTask: fallbackVoidAsync as (id: string, updates: any) => Promise<void>,
+  deleteTask: fallbackVoidAsync as (id: string) => Promise<void>,
+  profileId: null,
+};
+
+let hasWarnedMissingFamilyProvider = false;
+
 export const useFamily = () => {
   const context = useContext(FamilyContext);
   if (!context) {
-    throw new Error("useFamily must be used within a FamilyProvider");
+    if (!hasWarnedMissingFamilyProvider) {
+      console.warn(
+        "useFamily called outside of FamilyProvider. Returning fallback context while the provider initializes."
+      );
+      hasWarnedMissingFamilyProvider = true;
+    }
+    return FALLBACK_FAMILY_CONTEXT;
   }
   return context;
 };

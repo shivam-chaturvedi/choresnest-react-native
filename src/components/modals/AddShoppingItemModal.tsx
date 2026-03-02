@@ -52,6 +52,7 @@ export const AddShoppingItemModal: React.FC<AddShoppingItemModalProps> = ({
     const [name, setName] = useState("");
     const [category, setCategory] = useState(preSelectedCategory || shoppingCategories[0]?.id || "");
     const [quantity, setQuantity] = useState(1);
+    const [quantityInput, setQuantityInput] = useState("1");
     const [unit, setUnit] = useState("pcs");
     const [showUnitPicker, setShowUnitPicker] = useState(false);
 
@@ -60,6 +61,7 @@ export const AddShoppingItemModal: React.FC<AddShoppingItemModalProps> = ({
             setName("");
             setCategory(preSelectedCategory || shoppingCategories[0]?.id || "");
             setQuantity(1);
+            setQuantityInput("1");
             setUnit("pcs");
             setShowUnitPicker(false);
         }
@@ -76,8 +78,41 @@ export const AddShoppingItemModal: React.FC<AddShoppingItemModalProps> = ({
         onClose();
     };
 
+    const formatQuantityValue = (value: number) => {
+        const normalized = Number.isInteger(value)
+            ? value.toString()
+            : value.toFixed(2).replace(/\.?0+$/, "");
+        return normalized;
+    };
+
     const handleQuantityChange = (delta: number) => {
-        setQuantity((prev) => Math.max(1, prev + delta));
+        setQuantity((prev) => {
+            const next = Math.max(0.1, prev + delta);
+            const normalized = parseFloat(next.toFixed(2));
+            const formatted = formatQuantityValue(normalized);
+            setQuantityInput(formatted);
+            return normalized;
+        });
+    };
+
+    const handleQuantityInputChange = (value: string) => {
+        const sanitized = value.replace(/[^0-9.,]/g, "");
+        setQuantityInput(sanitized);
+        const parsed = parseFloat(sanitized.replace(",", "."));
+        if (!Number.isNaN(parsed) && parsed > 0) {
+            setQuantity(parsed);
+        }
+    };
+
+    const handleQuantityInputBlur = () => {
+        const parsed = parseFloat(quantityInput.replace(",", "."));
+        if (Number.isNaN(parsed) || parsed <= 0) {
+            setQuantityInput(formatQuantityValue(quantity));
+            return;
+        }
+        const normalized = parseFloat(parsed.toFixed(2));
+        setQuantity(normalized);
+        setQuantityInput(formatQuantityValue(normalized));
     };
 
     return (
@@ -212,9 +247,16 @@ export const AddShoppingItemModal: React.FC<AddShoppingItemModalProps> = ({
                                     >
                                         <AppIcon name="minus" size={16} color={colors.foreground} />
                                     </Pressable>
-                                    <Text style={[styles.qtyValue, { color: colors.foreground }]}>
-                                        {quantity}
-                                    </Text>
+                                    <TextInput
+                                        style={[styles.qtyValue, { color: colors.foreground }]}
+                                        value={quantityInput}
+                                        onChangeText={handleQuantityInputChange}
+                                        onBlur={handleQuantityInputBlur}
+                                        keyboardType="decimal-pad"
+                                        returnKeyType="done"
+                                        selectTextOnFocus
+                                        underlineColorAndroid="transparent"
+                                    />
                                     <Pressable
                                         style={[styles.qtyBtn, { borderLeftColor: colors.border }]}
                                         onPress={() => handleQuantityChange(1)}
@@ -457,6 +499,8 @@ const styles = StyleSheet.create({
         textAlign: "center",
         fontSize: 18,
         fontWeight: "600",
+        textAlignVertical: "center",
+        paddingVertical: 0,
     },
     unitSelector: {
         flexDirection: 'row',

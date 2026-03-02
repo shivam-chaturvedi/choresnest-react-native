@@ -41,6 +41,7 @@ import { parseDateTimeInZone, safeTimeZone } from "../utils/SafeDateUtils";
 import { getEventsForDate } from "../utils/EventUtils";
 import Config from "react-native-config";
 import { SyncService } from "../services/SyncService";
+import { supabase } from "../config/supabase";
 
 const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 import ReactNativeHapticFeedback from "react-native-haptic-feedback";
@@ -64,7 +65,7 @@ const MEAL_TYPES: { key: MealType; label: string; icon: string }[] = [
 export const HomeScreen: React.FC = () => {
   const colors = useThemeColors();
   const radius = theme.radius; // Dynamic radius
-  const { members, activeMember, events, groceryList, setActiveMember, addGroceryItem, tasks, globalVault, memberVaults, familyName } = useFamily();
+  const { members, activeMember, events, groceryList, setActiveMember, addGroceryItem, tasks, globalVault, memberVaults, familyName, profileId } = useFamily();
   const { isGuest, logout } = useAuth();
   const { getMealsForDay, getRecipeById } = useMealPlan();
   const navigation = useNavigation<any>();
@@ -151,6 +152,45 @@ export const HomeScreen: React.FC = () => {
     initNotifications();
 
   }, []);
+
+  useEffect(() => {
+    if (!profileId) {
+      return;
+    }
+
+    let isMounted = true;
+    const fetchEvents = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("events")
+          .select("*")
+          .eq("profile_id", profileId)
+          .order("updated_at", { ascending: false });
+
+        if (!isMounted) {
+          return;
+        }
+
+        if (error) {
+          console.error(`[HomeScreen] Supabase events fetch failed for profile ${profileId}:`, error);
+          return;
+        }
+
+        console.log(`[HomeScreen] Supabase events for profile ${profileId}:`, data);
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+        console.error(`[HomeScreen] Unexpected error fetching supabase events for profile ${profileId}:`, error);
+      }
+    };
+
+    fetchEvents();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [profileId]);
 
   useEffect(() => {
     return () => {

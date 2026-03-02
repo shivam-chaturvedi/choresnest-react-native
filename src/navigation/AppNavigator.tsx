@@ -21,7 +21,7 @@ import { AppLockProvider, useAppLock } from "../contexts/AppLockContext";
 import { AppLockScreen } from "../screens/AppLockScreen";
 import { BiometricLockScreen } from "../screens/BiometricLockScreen";
 import { useAutoSync } from "../hooks/useAutoSync";
-import { database } from "../database";
+import { getDatabase } from "../database";
 import { SyncService } from "../services/SyncService";
 import NetInfo from "@react-native-community/netinfo";
 import { AppState, AppStateStatus } from "react-native";
@@ -178,20 +178,12 @@ const AppNavigatorInner = () => {
     setTimeout(() => { appHasStarted = true; }, INITIAL_SYNC_DELAY);
 
     const runInitialSync = async () => {
-      setTimeout(async () => {
-        try {
-          const shouldDoWriteSync = await SyncService.shouldDoWriteSync();
-          if (shouldDoWriteSync) {
-            console.log('App start: Last write sync was >1 hour ago, doing full sync');
-            void triggerSync(false);
-          } else {
-            console.log('App start: Last write sync was <1 hour ago, doing read-only sync');
-            void triggerSync(true);
-          }
-        } catch (err) {
-          console.error('Failed to check write sync requirement, doing read-only sync:', err);
-          void triggerSync(true);
-        }
+      setTimeout(() => {
+        // Always do a full sync on app start so any locally-created-while-offline
+        // changes are pushed immediately. The removed 1-hour gate was converting
+        // most app-start syncs to read-only, silently suppressing pushes.
+        console.log('App start: Triggering full sync to push any offline changes');
+        void triggerSync(false);
       }, INITIAL_SYNC_DELAY);
     };
 
@@ -313,11 +305,27 @@ const AppNavigatorInner = () => {
   }, [isAuthenticated, isGuest, isLoading, user?.id]);
 
   React.useEffect(() => {
+    if (!isAuthenticated || isGuest || isLoading) {
+      return;
+    }
+
     let cancelled = false;
 
+    const waitForProfileId = async (): Promise<string | null> => {
+      const timeoutMs = 4000;
+      const start = Date.now();
+      while (!cancelled && Date.now() - start < timeoutMs) {
+        const pid = await ProfileService.getActiveProfileId();
+        if (pid) {
+          return pid;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      }
+      return null;
+    };
+
     const loadLocalMembers = async () => {
-      if (!isAuthenticated || isLoading) {
-        if (!cancelled) setHasMembersInDB(false);
+      if (cancelled) {
         return;
       }
 
@@ -325,10 +333,17 @@ const AppNavigatorInner = () => {
         console.log("AppNavigator: loadLocalMembers starting...");
 
         // 1. Resolve the active profile — AsyncStorage/memory only, no network
-        const pid = isGuest ? null : await ProfileService.getActiveProfileId();
+        const pid = await waitForProfileId();
+        if (!pid) {
+          console.warn("AppNavigator: Unable to resolve profile ID in time, deferring member check.");
+          if (!cancelled && hasMembersInDB === null) {
+            setHasMembersInDB(false);
+          }
+          return;
+        }
 
         // 1a. FAST PATH: Check if we already have members locally for this profile
-        const membersCollection = database.collections.get<Member>('members');
+        const membersCollection = getDatabase().collections.get<Member>('members');
         let localQuery = membersCollection.query();
         // Filter by profile_id if we have one so we don't pick up another profile's rows
         if (pid) {
@@ -345,27 +360,43 @@ const AppNavigatorInner = () => {
         }
 
         // 2. REMOTE BOOTSTRAP (with timeout) — only for authenticated, non-guest users
-        if (pid && !isGuest) {
-          try {
-            console.log("AppNavigator: Attempting profile bootstrap with timeout...");
-            const bootstrapPromise = ProfileBootstrapService.bootstrap(pid);
-            const timeoutPromise = new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('Bootstrap Timeout')), 4000)
-            );
+        if (!cancelled && pid && !isGuest) {
+          console.log("AppNavigator: Attempting profile bootstrap with timeout...");
+          const bootstrapPromise = ProfileBootstrapService.bootstrap(pid);
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Bootstrap Timeout')), 4000)
+          );
 
+          void bootstrapPromise
+            .then(bootstrapResult => {
+              if (cancelled || hasMembersInDB) {
+                return;
+              }
+              if (bootstrapResult.memberCount > 0) {
+                console.log(`AppNavigator: Backend bootstrap resolved with ${bootstrapResult.memberCount} members`);
+                setHasMembersInDB(true);
+              }
+            })
+            .catch(error => {
+              console.warn('AppNavigator: Background bootstrap failed', error);
+            });
+
+          try {
             const bootstrapResult = await Promise.race([bootstrapPromise, timeoutPromise]) as any;
 
-            if (!cancelled && bootstrapResult.memberCount > 0) {
-              console.log(`AppNavigator: Bootstrap succeeded with ${bootstrapResult.memberCount} members`);
-              setHasMembersInDB(true);
-              return;
+            if (!cancelled) {
+              if (bootstrapResult.memberCount > 0) {
+                console.log(`AppNavigator: Bootstrap succeeded with ${bootstrapResult.memberCount} members`);
+                setHasMembersInDB(true);
+                return;
+              }
             }
           } catch (e) {
             console.warn('AppNavigator: Bootstrap skipped or timed out', e);
           }
         }
 
-        // 3. FINAL DECISION: fall back to the local-exists check
+        // 3. FINAL DECISION: fall back to the local-exists check if remote didn't succeed
         if (!cancelled && hasMembersInDB === null) {
           console.log(`AppNavigator: Setting final members state from local check: ${existsLocally}`);
           setHasMembersInDB(existsLocally);
@@ -443,7 +474,7 @@ const AppNavigatorInner = () => {
                   <InitialSetupScreen
                     onComplete={async () => {
                       // Refresh member check
-                      const membersCollection = database.get('members');
+                      const membersCollection = getDatabase().get('members');
                       const members = await membersCollection.query().fetch();
                       setHasMembersInDB(members.length > 0);
                       setHasLocalOnboarding(true);

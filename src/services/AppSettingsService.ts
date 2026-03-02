@@ -1,4 +1,4 @@
-import { database } from '../database';
+import { getDatabase } from '../database';
 import AppSettings from '../database/models/AppSettings';
 import { Q } from '@nozbe/watermelondb';
 import { EMPTY } from 'rxjs';
@@ -24,7 +24,7 @@ export const AppSettingsService = {
     if (!profileId) {
       return EMPTY;
     }
-    const query = database.get<AppSettings>('app_settings').query(
+    const query = getDatabase().get<AppSettings>('app_settings').query(
       Q.where('profile_id', profileId),
       Q.where('deleted', false),
       Q.sortBy('updated_at', Q.desc)
@@ -37,7 +37,7 @@ export const AppSettingsService = {
     if (!resolvedProfileId) {
       return null;
     }
-    const records = await database.get<AppSettings>('app_settings').query(
+    const records = await getDatabase().get<AppSettings>('app_settings').query(
       Q.where('profile_id', resolvedProfileId),
       Q.where('deleted', false),
       Q.sortBy('updated_at', Q.desc)
@@ -52,7 +52,7 @@ export const AppSettingsService = {
 
   hasAnyProfileCompletedOnboarding: async (): Promise<boolean> => {
     try {
-      const records = await database.get<AppSettings>('app_settings').query(
+      const records = await getDatabase().get<AppSettings>('app_settings').query(
         Q.where('has_completed_onboarding', true),
         Q.where('deleted', false)
       ).fetch();
@@ -75,8 +75,8 @@ export const AppSettingsService = {
       return;
     }
     const now = Date.now();
-    await database.write(async () => {
-      const settingsCollection = database.get<AppSettings>('app_settings');
+    await getDatabase().write(async () => {
+      const settingsCollection = getDatabase().get<AppSettings>('app_settings');
       const records = await settingsCollection.query(
         Q.where('profile_id', resolvedProfileId),
         Q.where('deleted', false)

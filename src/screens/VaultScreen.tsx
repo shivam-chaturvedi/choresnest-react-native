@@ -30,7 +30,9 @@ import { formatReminderRulesSummary, getPrimaryReminderField } from "../utils/Va
 import { saveFileToStorage, SavedDocument } from "../utils/DocumentUtils";
 import RNFS from "react-native-fs";
 import { DocumentUploadScheduler } from "../services/sync/DocumentUploadScheduler";
+import { DocumentSyncStatusService, DocumentSyncStatusUpdate } from "../services/sync/DocumentSyncStatusService";
 import { VaultService } from "../services/VaultService";
+import type { DocumentUploadStatus } from "../services/documents/types";
 import NetInfo from "@react-native-community/netinfo";
 import { Menu, Upload, Search, Plus, Filter, Calendar as CalendarIcon, FileText, ChevronRight, Shield, Bell, AlertTriangle, UploadCloud, X, Check, Lock, Settings, ArrowLeft } from "lucide-react-native";
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -42,6 +44,13 @@ import { useObservableValue } from "../hooks/useObservableValue";
 import { of } from "rxjs";
 import { map } from "rxjs/operators";
 const PENDING_UPLOAD_STATUSES = new Set(['pending_upload', 'uploading', 'failed']);
+
+const SYNC_STATUS_LABELS: Record<DocumentUploadStatus, string> = {
+  pending_upload: 'Queued for upload',
+  uploading: 'Uploading now',
+  failed: 'Upload failed',
+  uploaded: 'Uploaded',
+};
 
 
 export const VaultScreen: React.FC = () => {
@@ -74,6 +83,7 @@ export const VaultScreen: React.FC = () => {
   const [currentView, setCurrentView] = useState<'main' | 'category' | 'all'>('main');
   const [viewCategory, setViewCategory] = useState<string | null>(null);
   const [docStorageLabels, setDocStorageLabels] = useState<Record<string, string>>({});
+  const [documentSyncStatuses, setDocumentSyncStatuses] = useState<Record<string, DocumentSyncStatusUpdate>>({});
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [isNetworkReachable, setNetworkReachable] = useState(true);
   const { formatDateTime } = useCountry();
@@ -171,11 +181,45 @@ export const VaultScreen: React.FC = () => {
     return formatReminderRulesSummary(doc.reminderRules);
   };
 
+  const renderSyncStatus = (doc: VaultDocument) => {
+    const update = documentSyncStatuses[doc.id];
+    const status = update?.status ?? (doc.uploadStatus as DocumentUploadStatus | undefined);
+    if (!status || status === 'uploaded') return null;
+    const percent =
+      update?.progress !== undefined
+        ? Math.min(100, Math.max(0, Math.round(update.progress * 100)))
+        : undefined;
+    const baseLabel = SYNC_STATUS_LABELS[status] ?? 'Syncing…';
+    const label = update?.detail ? `${baseLabel} (${update.detail})` : baseLabel;
+    return (
+      <View style={{ marginTop: 4 }}>
+        <Text style={[styles.docMetaText, { color: colors.primary }]}>
+          {label}
+          {percent !== undefined ? ` • ${percent}%` : ''}
+        </Text>
+        {percent !== undefined ? (
+          <View style={[styles.docSyncProgressBar, { backgroundColor: colors.border }]}>
+            <View
+              style={[
+                styles.docSyncProgressFill,
+                {
+                  width: `${percent}%`,
+                  backgroundColor: colors.primary,
+                },
+              ]}
+            />
+          </View>
+        ) : null}
+      </View>
+    );
+  };
+
   const renderDocMeta = (doc: VaultDocument) => {
     const statusText = getDocumentStatus(doc);
     const reminderText = getReminderSummaryText(doc);
     const storageText = docStorageLabels[doc.id];
-    if (!statusText && !reminderText && !storageText) return null;
+    const syncStatusNode = renderSyncStatus(doc);
+    if (!statusText && !reminderText && !storageText && !syncStatusNode) return null;
     return (
       <View style={{ marginTop: 4 }}>
         {statusText ? <Text style={[styles.docMetaText, { color: colors.mutedForeground }]}>{statusText}</Text> : null}
@@ -189,6 +233,7 @@ export const VaultScreen: React.FC = () => {
             Stored locally • {storageText}
           </Text>
         ) : null}
+        {syncStatusNode}
       </View>
     );
   };
@@ -233,11 +278,19 @@ export const VaultScreen: React.FC = () => {
   };
 
   const handleSyncNow = useCallback(
-    (documentId: string) => {
+    (documentId: string, status?: DocumentUploadStatus, progress?: number, detail?: string) => {
       void DocumentUploadScheduler.requestUploadNow(profileId || user?.id);
+      const parts: string[] = [status ? SYNC_STATUS_LABELS[status] : 'Queued for upload'];
+      if (detail) {
+        parts.push(detail);
+      }
+      if (progress !== undefined) {
+        const percent = Math.min(100, Math.max(0, Math.round(progress * 100)));
+        parts.push(`${percent}%`);
+      }
       showToast({
-        title: "Document queued",
-        description: "Document is in queue.",
+        title: "Sync requested",
+        description: parts.join(' • '),
         type: "default",
       });
     },
@@ -248,6 +301,10 @@ export const VaultScreen: React.FC = () => {
     if (!shouldShowSyncButton(doc)) {
       return null;
     }
+    const statusRecord = documentSyncStatuses[doc.id];
+    const docStatus = statusRecord?.status ?? (doc.uploadStatus as DocumentUploadStatus | undefined);
+    const docProgress = statusRecord?.progress;
+    const docDetail = statusRecord?.detail;
     return (
       <Pressable
         style={({ pressed }) => [
@@ -261,9 +318,9 @@ export const VaultScreen: React.FC = () => {
         ]}
         onPress={(event: GestureResponderEvent) => {
           event.stopPropagation();
-        handleSyncNow(doc.id);
-      }}
-    >
+          handleSyncNow(doc.id, docStatus, docProgress, docDetail);
+        }}
+      >
       <Text style={[styles.syncButtonText, { color: colors.foreground }]}>Sync now</Text>
     </Pressable>
   );
@@ -304,6 +361,24 @@ export const VaultScreen: React.FC = () => {
       active = false;
       unsubscribe();
     };
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = DocumentSyncStatusService.subscribe(update => {
+      setDocumentSyncStatuses(prev => {
+        const existing = prev[update.documentId];
+        if (
+          existing
+          && existing.status === update.status
+          && existing.detail === update.detail
+          && existing.progress === update.progress
+        ) {
+          return prev;
+        }
+        return { ...prev, [update.documentId]: update };
+      });
+    });
+    return unsubscribe;
   }, []);
 
   // Calculate dynamic values
@@ -1396,6 +1471,16 @@ const styles = StyleSheet.create({
   docMetaText: {
     fontSize: 10,
     lineHeight: 14,
+  },
+  docSyncProgressBar: {
+    marginTop: 6,
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+    width: '100%',
+  },
+  docSyncProgressFill: {
+    height: '100%',
   },
   actionsGrid: {
     flexDirection: 'row',

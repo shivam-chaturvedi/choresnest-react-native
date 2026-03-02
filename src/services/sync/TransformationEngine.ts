@@ -1,4 +1,4 @@
-import { database } from '../../database';
+import { getDatabase } from '../../database';
 import { Q } from '@nozbe/watermelondb';
 import { TableChangeSet } from './types';
 
@@ -126,9 +126,17 @@ export const classifyPullRows = async (table: string, rows: any[], lastPulledDat
     const existingIds = new Set<string>();
 
     try {
-        const watermelonTable = database.get(table);
-        const existingRecords = await watermelonTable.query(Q.where('id', Q.oneOf(incomingIds))).fetch();
-        existingRecords.forEach(r => existingIds.add(r.id));
+        const watermelonTable = getDatabase().get(table);
+        // SQLite has a limit of 999 variables per query. Chunk IDs into smaller batches.
+        const chunkArray = <T>(arr: T[], size: number): T[][] =>
+            Array.from({ length: Math.ceil(arr.length / size) }, (_, i) =>
+                arr.slice(i * size, i * size + size)
+            );
+
+        for (const idChunk of chunkArray(incomingIds, 500)) {
+            const existingRecords = await watermelonTable.query(Q.where('id', Q.oneOf(idChunk))).fetch();
+            existingRecords.forEach(r => existingIds.add(r.id));
+        }
     } catch (e) {
         safeWarn(`classifyPullRows: Failed to query existing records for table ${table}. Error:`, e);
     }
@@ -309,6 +317,10 @@ export const transformRecordForSupabase = (
 
 export const isValidRecordForTable = (record: any, table: string): boolean => {
     if (!record?.id) {
+        return false;
+    }
+    if (record.id === 'guest' || record.profile_id === 'guest' || record.profileId === 'guest') {
+        safeWarn(`[TransformationEngine] Skipping guest record ${record.id} in ${table} - guest data is local only`);
         return false;
     }
     if (table === 'list_items' && (!record.list_id || String(record.list_id).trim() === '')) {

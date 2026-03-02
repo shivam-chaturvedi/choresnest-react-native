@@ -1,13 +1,13 @@
 import { Q } from '@nozbe/watermelondb';
-import { database } from '../../database';
+import { getDatabase } from '../../database';
 import Document from '../../database/models/Document';
 import { DocumentStorageClient, DocumentUploadResult } from './DocumentStorageClient';
 import { SyncService } from '../SyncService';
 import RNFS from 'react-native-fs';
 import { VaultService } from '../VaultService';
 import { buildLocalCachePath, ensureCacheDir } from './DocumentDownloadWorker';
-
-export type DocumentUploadStatus = 'pending_upload' | 'uploading' | 'uploaded' | 'failed';
+import { DocumentSyncStatusService } from '../sync/DocumentSyncStatusService';
+import type { DocumentUploadStatus } from './types';
 
 type DocumentRecord = {
     id: string;
@@ -66,7 +66,7 @@ const defaultIsGuest = async (): Promise<boolean> => {
 };
 
 const defaultFetchDocuments = async (profileId: string): Promise<DocumentRecord[]> => {
-    const query = database
+    const query = getDatabase()
         .get<Document>('documents')
         .query(
             Q.where('profile_id', profileId),
@@ -90,7 +90,7 @@ const defaultPersist = async (record: DocumentRecord, updates: PersistUpdates): 
     if (!record?.model) {
         return;
     }
-    await database.write(async () => {
+    await getDatabase().write(async () => {
         await record.model!.update(doc => {
             if (updates.uploadStatus !== undefined) doc.uploadStatus = updates.uploadStatus ?? 'pending_upload';
             if (updates.uploadAttempts !== undefined) doc.uploadAttempts = updates.uploadAttempts ?? 0;
@@ -198,6 +198,7 @@ export class DocumentUploadWorker {
                 if (this.uploadLocks.has(doc.id)) {
                     continue;
                 }
+                this.notifySyncStatus(doc.id, doc.uploadStatus ?? 'pending_upload');
                 const waitingUntil = this.nextAttemptAt.get(doc.id);
                 if (waitingUntil && waitingUntil > now) {
                     const delay = waitingUntil - now;
@@ -243,6 +244,7 @@ export class DocumentUploadWorker {
             uploadAttempts: attempts,
             lastUploadError: 'Missing document bytes for upload',
         });
+        this.notifySyncStatus(doc.id, 'failed', 'Missing document bytes for upload');
     }
 
     private async uploadDocument(doc: DocumentRecord) {
@@ -276,6 +278,7 @@ export class DocumentUploadWorker {
                         uploadAttempts: attempts,
                         lastUploadError: 'File missing locally but record is synced'
                     });
+                    this.notifySyncStatus(doc.id, 'uploaded', 'Already synced');
                     this.nextAttemptAt.delete(doc.id);
                     return;
                 } else {
@@ -289,6 +292,7 @@ export class DocumentUploadWorker {
                 uploadAttempts: attempts,
                 lastUploadError: null,
             });
+            this.notifySyncStatus(doc.id, 'uploading');
 
             const metadata = await this.dependencies.upload!(this.profileId, doc.id, localUri);
             console.log('DocumentUploadWorker: upload succeeded', {
@@ -322,6 +326,7 @@ export class DocumentUploadWorker {
                 fileSize: metadata.fileSize ?? null,
                 checksum: metadata.checksum ?? null,
             });
+            this.notifySyncStatus(doc.id, 'uploaded');
             this.nextAttemptAt.delete(doc.id);
         } catch (error: any) {
             const message = (error?.message ?? 'Document upload failed').toString();
@@ -337,12 +342,22 @@ export class DocumentUploadWorker {
                 uploadAttempts: attempts,
                 lastUploadError: message,
             });
+            this.notifySyncStatus(doc.id, 'failed', message);
             const delay = this.computeBackoff(attempts);
             this.nextAttemptAt.set(doc.id, Date.now() + delay);
             this.scheduleRetry(delay);
         } finally {
             this.uploadLocks.delete(doc.id);
         }
+    }
+
+    private notifySyncStatus(documentId: string, status: DocumentUploadStatus, detail?: string, progress?: number) {
+        DocumentSyncStatusService.notify({
+            documentId,
+            status,
+            detail,
+            progress,
+        });
     }
 
     private computeBackoff(attempts: number): number {
@@ -364,3 +379,5 @@ export class DocumentUploadWorker {
         }, Math.max(1000, Math.min(MAX_BACKOFF_DELAY_MS, delayMs)));
     }
 }
+
+export type { DocumentUploadStatus } from './types';

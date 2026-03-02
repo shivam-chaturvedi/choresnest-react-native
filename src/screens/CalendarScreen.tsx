@@ -21,6 +21,7 @@ import { MemberIcon } from "../components/ui/MemberIcon";
 import { PROFILE_COLORS } from "../constants/profileColors";
 import { useSidebar } from "../contexts/SidebarContext";
 import { useCountry } from "../contexts/CountryContext";
+import { useIsFocused } from "@react-navigation/native";
 import ReactNativeHapticFeedback from "react-native-haptic-feedback";
 
 const hapticOptions = {
@@ -547,6 +548,8 @@ export const CalendarScreen: React.FC = () => {
     return safeFormatInTimeZone(value, timeZone, pattern);
   }, [timeZone]);
 
+  const isFocused = useIsFocused();
+
   const showPermissionToast = (type: 'event' | 'task') => {
     ReactNativeHapticFeedback.trigger("notificationError", hapticOptions);
     const message = type === 'task'
@@ -577,30 +580,36 @@ export const CalendarScreen: React.FC = () => {
   const scrollViewRef = useRef<ScrollView>(null);
   const scrollOffsetRef = useRef(0);
   const headerScrollRef = useRef<ScrollView>(null);
-  const autoScrollEnabledRef = useRef(true);
-  const manualScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const HOUR_HEIGHT = 60;
+  const TIMELINE_VERTICAL_PADDING = 16;
+  const TIMELINE_BOTTOM_BUFFER = 40;
+  const layoutReadyRef = useRef(false);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 60000); // Update every minute
     return () => clearInterval(timer);
   }, []);
 
-  const layoutReadyRef = useRef(false);
+  const handleTimelineLayout = () => {
+    layoutReadyRef.current = true;
+  };
 
-  const scrollToCurrentTime = useCallback((animated = true) => {
-    if (activeView !== "Day" && activeView !== "Week") return;
+  const scrollToCurrentTime = useCallback((targetDate: Date | null = null, animated = true) => {
     if (!layoutReadyRef.current) return;
+    if (activeView !== "Day" && activeView !== "Week") return;
+
+    const referenceDate = targetDate || selectedDate;
+    if (!referenceDate) return;
 
     const currentZoned = toZonedTime(new Date(), timeZone);
     const todayZoned = startOfDay(currentZoned);
     let shouldScroll = false;
 
     if (activeView === "Day") {
-      shouldScroll = isSameDay(selectedDate, todayZoned);
+      shouldScroll = isSameDay(referenceDate, todayZoned);
     } else {
-      const startOfCurrentWeek = startOfWeek(selectedDate, weekOptions);
-      const endOfCurrentWeek = endOfWeek(selectedDate, weekOptions);
+      const startOfCurrentWeek = startOfWeek(referenceDate, weekOptions);
+      const endOfCurrentWeek = endOfWeek(referenceDate, weekOptions);
       shouldScroll = isWithinInterval(todayZoned, { start: startOfCurrentWeek, end: endOfCurrentWeek });
     }
 
@@ -612,39 +621,14 @@ export const CalendarScreen: React.FC = () => {
     const minutes = (hour * 60) + minute;
     const y = (minutes / 60) * HOUR_HEIGHT;
     const twoHoursInPx = 2 * HOUR_HEIGHT;
+    const targetOffset = Math.max(0, y - twoHoursInPx);
 
-    requestAnimationFrame(() => {
-      scrollViewRef.current?.scrollTo({
-        y: Math.max(0, y - twoHoursInPx),
-        animated,
-      });
+    scrollOffsetRef.current = targetOffset;
+    scrollViewRef.current?.scrollTo({
+      y: targetOffset,
+      animated,
     });
   }, [activeView, selectedDate, timeZone, weekOptions]);
-
-  const suspendAutoScroll = useCallback(() => {
-    if (manualScrollTimeoutRef.current) {
-      clearTimeout(manualScrollTimeoutRef.current);
-      manualScrollTimeoutRef.current = null;
-    }
-    autoScrollEnabledRef.current = false;
-  }, []);
-
-  const scheduleAutoScrollResume = useCallback(() => {
-    if (manualScrollTimeoutRef.current) {
-      clearTimeout(manualScrollTimeoutRef.current);
-    }
-    manualScrollTimeoutRef.current = setTimeout(() => {
-      autoScrollEnabledRef.current = true;
-      scrollToCurrentTime(true);
-    }, 6000);
-  }, [scrollToCurrentTime]);
-
-  const handleTimelineLayout = () => {
-    if (!layoutReadyRef.current) {
-      layoutReadyRef.current = true;
-      scrollToCurrentTime(false);
-    }
-  };
 
   // Scroll on mount, view change, or when returning to today
   useEffect(() => {
@@ -656,16 +640,27 @@ export const CalendarScreen: React.FC = () => {
     });
   }, []);
 
+  const focusScrollRef = useRef(false);
+  const previousActiveViewRef = useRef(activeView);
   useEffect(() => {
-    if (!autoScrollEnabledRef.current) return;
-    scrollToCurrentTime(false);
-  }, [now, activeView, scrollToCurrentTime]);
+    if (isFocused) {
+      const viewChanged = previousActiveViewRef.current !== activeView;
+      const isTimelineView = activeView === "Day" || activeView === "Week";
+      if (!focusScrollRef.current || (viewChanged && isTimelineView)) {
+        const nowZoned = toZonedTime(new Date(), timeZone);
+        requestAnimationFrame(() => scrollToCurrentTime(nowZoned));
+        focusScrollRef.current = true;
+      }
+      previousActiveViewRef.current = activeView;
+    } else {
+      focusScrollRef.current = false;
+    }
+  }, [activeView, isFocused, scrollToCurrentTime, timeZone]);
 
   useEffect(() => {
     return () => {
-      if (manualScrollTimeoutRef.current) {
-        clearTimeout(manualScrollTimeoutRef.current);
-      }
+      scrollViewRef.current = null;
+      headerScrollRef.current = null;
     };
   }, []);
 
@@ -1019,37 +1014,57 @@ export const CalendarScreen: React.FC = () => {
             </View>
           )}
 
-          <ScrollView
-            ref={scrollViewRef}
-            style={{ height: 300 }}
-            contentContainerStyle={{ height: 24 * HOUR_HEIGHT }}
-            onLayout={handleTimelineLayout}
-            nestedScrollEnabled={true}
-            showsVerticalScrollIndicator={false}
-            scrollEventThrottle={16}
-            onScroll={(event) => {
-              scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
-            }}
-            onScrollBeginDrag={suspendAutoScroll}
-            onMomentumScrollBegin={suspendAutoScroll}
-            onScrollEndDrag={scheduleAutoScrollResume}
-            onMomentumScrollEnd={scheduleAutoScrollResume}
-          >
-            <View style={{ flexDirection: 'row', height: '100%' }}>
-              <View style={{ width: 50, borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: colors.card, zIndex: 20 }}>
-                {Array.from({ length: 24 }).map((_, hour) => (
-                  <View key={hour} style={{ height: HOUR_HEIGHT, justifyContent: 'flex-start', alignItems: 'flex-end', paddingRight: 8 }}>
+            <ScrollView
+              ref={scrollViewRef}
+              style={{ height: 300 }}
+              contentContainerStyle={{
+                height: 24 * HOUR_HEIGHT + TIMELINE_VERTICAL_PADDING + TIMELINE_BOTTOM_BUFFER,
+              }}
+              onLayout={handleTimelineLayout}
+              nestedScrollEnabled={true}
+              showsVerticalScrollIndicator={false}
+              scrollEventThrottle={16}
+              onScroll={(event) => {
+                scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+              }}
+            >
+              <View style={{ flexDirection: 'row', height: '100%' }}>
+                <View
+                  style={{
+                    width: 50,
+                    borderRightWidth: 1,
+                    borderRightColor: colors.border,
+                    backgroundColor: colors.card,
+                    zIndex: 20,
+                    paddingTop: TIMELINE_VERTICAL_PADDING,
+                    paddingBottom: TIMELINE_BOTTOM_BUFFER,
+                  }}
+                >
+                  {Array.from({ length: 24 }).map((_, hour) => (
+                    <View key={`hour-${hour}`} style={{ height: HOUR_HEIGHT, justifyContent: 'flex-start', alignItems: 'flex-end', paddingRight: 8 }}>
+                      <Text style={{ fontSize: 12, color: colors.mutedForeground, transform: [{ translateY: -8 }] }}>
+                        {hour === 0 ? "12 AM" : hour < 12 ? `${hour} AM` : hour === 12 ? "12 PM" : `${hour - 12} PM`}
+                      </Text>
+                    </View>
+                  ))}
+                  <View style={{ height: HOUR_HEIGHT, justifyContent: 'flex-start', alignItems: 'flex-end', paddingRight: 8 }}>
                     <Text style={{ fontSize: 12, color: colors.mutedForeground, transform: [{ translateY: -8 }] }}>
-                      {hour === 0 ? "12 AM" : hour < 12 ? `${hour} AM` : hour === 12 ? "12 PM" : `${hour - 12} PM`}
+                      12 AM
                     </Text>
                   </View>
-                ))}
-              </View>
+                </View>
 
-              <View
-                style={{ width: (Dimensions.get('window').width - DAY_VIEW_OFFSET) }}
-              >
-                <View style={{ flex: 1, position: 'relative' }}>
+                <View
+                  style={{ width: (Dimensions.get('window').width - DAY_VIEW_OFFSET) }}
+                >
+                  <View
+                    style={{
+                      flex: 1,
+                      position: 'relative',
+                      paddingTop: TIMELINE_VERTICAL_PADDING,
+                      paddingBottom: TIMELINE_BOTTOM_BUFFER,
+                    }}
+                  >
                   {Array.from({ length: 24 }).map((_, hour) => (
                     <View
                       key={`line-${hour}`}
@@ -1412,7 +1427,7 @@ export const CalendarScreen: React.FC = () => {
             <Pressable onPress={() => {
               const now = toZonedTime(new Date(), timeZone);
               setSelectedDate(now);
-              // We rely on the useEffect [selectedDate] to trigger the scroll
+              requestAnimationFrame(() => scrollToCurrentTime(now));
             }} style={[styles.todayBtn, { backgroundColor: colors.primary + '15', borderRadius: radius.sm }]}>
               <Text style={[styles.todayText, { color: colors.primary }]}>Today</Text>
             </Pressable>
@@ -1799,8 +1814,8 @@ const styles = StyleSheet.create({
   },
   calendarPriorityBadge: {
     position: 'absolute',
-    top: 4,
-    right: 4,
+    bottom: 4,
+    left: 4,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 999,

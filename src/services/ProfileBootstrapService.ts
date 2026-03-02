@@ -1,4 +1,4 @@
-import { database } from '../database';
+import { getDatabase } from '../database';
 import { SupabaseService } from './SupabaseService';
 import Member from '../database/models/Member';
 import Setting from '../database/models/Setting';
@@ -37,8 +37,8 @@ const syncAfterWrite = () => {
 
 const writeFamilyName = async (profileId: string, familySetting: SupabaseSettingRecord) => {
   const now = Date.now();
-  await database.write(async () => {
-    const settingsCollection = database.collections.get<Setting>('settings');
+  await getDatabase().write(async () => {
+    const settingsCollection = getDatabase().collections.get<Setting>('settings');
     const existing = await settingsCollection.query(
       Q.where('profile_id', profileId),
       Q.where('key', 'family_name')
@@ -67,50 +67,50 @@ const writeFamilyName = async (profileId: string, familySetting: SupabaseSetting
   });
 };
 
-const writeMembers = async (profileId: string, remoteMembers: SupabaseMemberRecord[]) => {
-  if (remoteMembers.length === 0) {
-    return 0;
-  }
+  const writeMembers = async (profileId: string, remoteMembers: SupabaseMemberRecord[]) => {
+    if (remoteMembers.length === 0) {
+      return 0;
+    }
   const now = Date.now();
-  const membersCollection = database.collections.get<Member>('members');
-      const existing = await membersCollection.query(
-        Q.where('profile_id', profileId)
-      ).fetch();
-      const existingById = new Map(existing.map(record => [record.id, record]));
-      await database.write(async () => {
-        for (const remote of remoteMembers) {
-          const isDeleted = remote.deleted ?? false;
-          const local = existingById.get(remote.id);
-          if (local) {
-            await local.update(record => {
-              record.name = remote.name;
-              record.symbol = remote.symbol;
-              record.color = remote.color;
-              record.role = remote.role ?? '';
-              record.updatedAt = now;
-              record.version = (record.version ?? 0) + 1;
-              record.deleted = isDeleted;
-            });
-          } else if (!isDeleted) {
-            await membersCollection.create(member => {
-              const raw = member._raw as any;
-              raw.id = remote.id;
-              member.profileId = profileId;
-              member.name = remote.name;
-              member.symbol = remote.symbol;
-              member.color = remote.color;
-              member.role = remote.role ?? '';
-              member.isActive = false;
-              member.createdAt = now;
-              member.updatedAt = now;
-              member.version = 1;
-              member.deleted = false;
-            });
-          }
-        }
-      });
-    return remoteMembers.filter(member => !member.deleted).length;
-  };
+  const membersCollection = getDatabase().collections.get<Member>('members');
+  const existing = await membersCollection.query(
+    Q.where('profile_id', profileId)
+  ).fetch();
+  const existingById = new Map(existing.map(record => [record.id, record]));
+  await getDatabase().write(async () => {
+    for (const remote of remoteMembers) {
+      const isDeleted = remote.deleted ?? false;
+      const local = existingById.get(remote.id);
+      if (local) {
+        await local.update(record => {
+          record.name = remote.name;
+          record.symbol = remote.symbol;
+          record.color = remote.color;
+          record.role = remote.role ?? '';
+          record.updatedAt = now;
+          record.version = (record.version ?? 0) + 1;
+          record.deleted = isDeleted;
+        });
+      } else if (!isDeleted) {
+        await membersCollection.create(member => {
+          const raw = member._raw as any;
+          raw.id = remote.id;
+          member.profileId = profileId;
+          member.name = remote.name;
+          member.symbol = remote.symbol;
+          member.color = remote.color;
+          member.role = remote.role ?? '';
+          member.isActive = false;
+          member.createdAt = now;
+          member.updatedAt = now;
+          member.version = 1;
+          member.deleted = false;
+        });
+      }
+    }
+  });
+  return remoteMembers.filter(member => !member.deleted).length;
+};
 
 export const ProfileBootstrapService = {
   async bootstrap(profileId: string): Promise<ProfileBootstrapResult> {
@@ -132,6 +132,7 @@ export const ProfileBootstrapService = {
       let familyName: string | undefined;
       let memberCount = 0;
       let hasMembers = false;
+      let membersFetchSuccess = false;
 
       try {
         const settingsResponse = await SupabaseService.from('settings')
@@ -163,6 +164,7 @@ export const ProfileBootstrapService = {
         if (membersResponse.error) {
           console.warn('ProfileBootstrapService: failed to fetch members', membersResponse.error);
         } else if (membersResponse.data) {
+          membersFetchSuccess = true;
           memberCount = await writeMembers(profileId, membersResponse.data as SupabaseMemberRecord[]);
           hasMembers = memberCount > 0;
         }
@@ -170,10 +172,11 @@ export const ProfileBootstrapService = {
         console.error('ProfileBootstrapService: unexpected error while fetching members', error);
       }
 
-      const result: ProfileBootstrapResult = {
+      const result: ProfileBootstrapResult & { membersFetchSuccess?: boolean } = {
         familyName,
         memberCount,
         hasMembers: hasMembers || memberCount > 0,
+        membersFetchSuccess,
       };
 
       lastResult = result;

@@ -1,11 +1,11 @@
-import { database } from '../database';
+import { getDatabase } from '../database';
 import Document from '../database/models/Document';
 
 let ready = false;
 let ensurePromise: Promise<void> | null = null;
 
 const preloadDocuments = async () => {
-  const collection = database.collections.get<Document>('documents');
+  const collection = getDatabase().collections.get<Document>('documents');
   await collection.query().fetch();
 };
 

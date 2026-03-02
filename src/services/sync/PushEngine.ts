@@ -1,6 +1,6 @@
 import Config from 'react-native-config';
 import { Q } from '@nozbe/watermelondb';
-import { database } from '../../database';
+import { getDatabase } from '../../database';
 import { isValidRecordForTable, mapLocalFieldToServer, transformRecordForSupabase } from './TransformationEngine';
 import { recordConflict } from './ConflictEngine';
 import { ConflictSeverity, ConflictType, TableChangeSet } from './types';
@@ -9,6 +9,17 @@ import { supabase } from '../../config/supabase';
 const SYNC_UPSERT_BATCH_SIZE = Number.parseInt(Config.SUPABASE_SYNC_UPSERT_BATCH ?? '100', 10);
 const SYNC_DELETE_BATCH_SIZE = Number.parseInt(Config.SUPABASE_SYNC_DELETE_BATCH ?? '100', 10);
 const FETCH_CHUNK_SIZE = 200;
+const LOG_SYNC_NETWORK =
+    Config.LOG_SYNC_NETWORK && Config.LOG_SYNC_NETWORK.toLowerCase() === 'false'
+        ? false
+        : true;
+
+const logPushDebug = (message: string, details?: Record<string, unknown>): void => {
+    if (!LOG_SYNC_NETWORK) {
+        return;
+    }
+    console.log(`[Sync][Push] ${message}`, details ?? {});
+};
 
 const chunkArray = <T>(items: T[], chunkSize: number): T[][] => {
     const chunks: T[][] = [];
@@ -121,7 +132,7 @@ const fetchLocalVersions = async (table: string, ids: string[]): Promise<Map<str
         return versions;
     }
     try {
-        const collection = database.collections.get(table);
+        const collection = getDatabase().collections.get(table);
         if (!collection) {
             return versions;
         }
@@ -183,6 +194,13 @@ export const pushTableChanges = async ({
 
     const idsArray = Array.from(candidateIds);
     let serverRows: Map<string, any>;
+    logPushDebug('Preparing push batch', {
+        table: targetTable,
+        created: created.length,
+        updated: updated.length,
+        deleted: deleted.length,
+        uniqueIds: idsArray.length,
+    });
     try {
         serverRows = await fetchServerRows(targetTable, idsArray);
     } catch (err) {
@@ -239,6 +257,11 @@ export const pushTableChanges = async ({
     await prepareRecords(created, 'create');
     await prepareRecords(updated, 'update');
 
+    logPushDebug('Records ready to upsert', {
+        table: targetTable,
+        recordsToUpsert: recordsToUpsert.length,
+    });
+
     const upsertChunks = chunkArray(recordsToUpsert, SYNC_UPSERT_BATCH_SIZE);
     for (const chunk of upsertChunks) {
         try {
@@ -246,6 +269,13 @@ export const pushTableChanges = async ({
             if (error) {
                 console.error(`Failed to upsert ${targetTable} (${chunk.length} records):`, error);
                 errors += chunk.length;
+            }
+            else {
+                logPushDebug('Upsert chunk succeeded', {
+                    table: targetTable,
+                    chunkSize: chunk.length,
+                    conflictKey,
+                });
             }
         } catch (err) {
             if (isVersionMissingError(err)) {
@@ -266,7 +296,9 @@ export const pushTableChanges = async ({
         }
     }
 
-    const validDeletedIds = deleted.filter(id => typeof id === 'string' && id.trim() !== '');
+    const validDeletedIds = deleted.filter(id =>
+        typeof id === 'string' && id.trim() !== '' && id !== 'guest'
+    );
     const localDeleteVersions = await fetchLocalVersions(table, validDeletedIds);
 
     const deletionsToApply = validDeletedIds.filter(id => {
@@ -285,6 +317,12 @@ export const pushTableChanges = async ({
         return true;
     });
 
+    logPushDebug('Computed deletions to apply', {
+        table: targetTable,
+        validDeletedIds: validDeletedIds.length,
+        deletionsToApply: deletionsToApply.length,
+    });
+
     const deleteChunks = chunkArray(deletionsToApply, SYNC_DELETE_BATCH_SIZE);
     for (const chunk of deleteChunks) {
         try {
@@ -297,6 +335,12 @@ export const pushTableChanges = async ({
             if (error) {
                 console.error(`Failed to mark ${targetTable} deletions (${chunk.length} ids):`, error);
                 errors += chunk.length;
+            }
+            else {
+                logPushDebug('Deletion chunk succeeded', {
+                    table: targetTable,
+                    chunkSize: chunk.length,
+                });
             }
         } catch (err) {
             if (isVersionMissingError(err)) {

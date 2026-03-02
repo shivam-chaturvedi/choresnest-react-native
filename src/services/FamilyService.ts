@@ -1,4 +1,4 @@
-import { database } from '../database';
+import { getDatabase } from '../database';
 import Member from '../database/models/Member';
 import Task from '../database/models/Task';
 import Event from '../database/models/Event';
@@ -29,7 +29,7 @@ export const FamilyService = {
     if (!profileId) {
       return EMPTY;
     }
-    return database.get<Member>('members').query(
+    return getDatabase().get<Member>('members').query(
       Q.where('profile_id', profileId),
       Q.where('deleted', false),
       Q.sortBy('updated_at', Q.desc)
@@ -40,7 +40,7 @@ export const FamilyService = {
     if (!profileId) {
       return EMPTY;
     }
-    return database
+    return getDatabase()
       .get<Setting>('settings')
       .query(
         Q.where('profile_id', profileId),
@@ -61,8 +61,8 @@ export const FamilyService = {
       return;
     }
     const now = Date.now();
-    await database.write(async () => {
-      const settingsCollection = database.get<Setting>('settings');
+    await getDatabase().write(async () => {
+      const settingsCollection = getDatabase().get<Setting>('settings');
       const records = await settingsCollection.query(
         Q.where('profile_id', effectiveProfileId),
         Q.where('key', 'family_name')
@@ -97,8 +97,8 @@ export const FamilyService = {
     }
 
     const now = Date.now();
-    await database.write(async () => {
-      await database.get<Member>('members').create(member => {
+    await getDatabase().write(async () => {
+      await getDatabase().get<Member>('members').create(member => {
         member.profileId = effectiveProfileId;
         member.name = name;
         member.symbol = symbol;
@@ -120,8 +120,8 @@ export const FamilyService = {
       return;
     }
     const now = Date.now();
-    await database.write(async () => {
-      const member = await database.get<Member>('members').find(id);
+    await getDatabase().write(async () => {
+      const member = await getDatabase().get<Member>('members').find(id);
       if (member.profileId !== effectiveProfileId) {
         return;
       }
@@ -154,8 +154,8 @@ export const FamilyService = {
       return;
     }
     const now = Date.now();
-    await database.write(async () => {
-      const member = await database.get<Member>('members').find(id);
+    await getDatabase().write(async () => {
+      const member = await getDatabase().get<Member>('members').find(id);
       if (member.profileId !== effectiveProfileId) {
         return;
       }
@@ -174,8 +174,8 @@ export const FamilyService = {
       return;
     }
     const now = Date.now();
-    await database.write(async () => {
-      const members = await database.get<Member>('members').query(
+    await getDatabase().write(async () => {
+      const members = await getDatabase().get<Member>('members').query(
         Q.where('profile_id', effectiveProfileId),
         Q.where('deleted', false)
       ).fetch();
@@ -189,7 +189,7 @@ export const FamilyService = {
       );
 
       if (updates.length > 0) {
-        await database.batch(...updates);
+        await getDatabase().batch(...updates);
       }
     });
     syncAfterWrite();
@@ -202,9 +202,9 @@ export const FamilyService = {
     }
     const now = Date.now();
 
-    await database.write(async () => {
+    await getDatabase().write(async () => {
       const batchOps: any[] = [];
-      const memberRecord = await database.get<Member>('members').find(memberId);
+      const memberRecord = await getDatabase().get<Member>('members').find(memberId);
       if (memberRecord.profileId !== effectiveProfileId) {
         return;
       }
@@ -217,7 +217,7 @@ export const FamilyService = {
         })
       );
 
-      const taskRecords = await database.get<Task>('tasks').query(
+      const taskRecords = await getDatabase().get<Task>('tasks').query(
         Q.where('assignee_id', memberId),
         Q.where('deleted', false),
         Q.where('profile_id', effectiveProfileId)
@@ -232,7 +232,7 @@ export const FamilyService = {
         )
       );
 
-      const eventRecords = await database.get<Event>('events').query(
+      const eventRecords = await getDatabase().get<Event>('events').query(
         Q.where('member_id', memberId),
         Q.where('deleted', false),
         Q.where('profile_id', effectiveProfileId)
@@ -247,7 +247,7 @@ export const FamilyService = {
         )
       );
 
-      const documentRecords = await database.get<Document>('documents').query(
+      const documentRecords = await getDatabase().get<Document>('documents').query(
         Q.where('member_id', memberId),
         Q.where('deleted', false),
         Q.where('profile_id', effectiveProfileId)
@@ -262,7 +262,7 @@ export const FamilyService = {
         )
       );
 
-      const listItemRecords = await database.get<ListItem>('list_items').query(
+      const listItemRecords = await getDatabase().get<ListItem>('list_items').query(
         Q.where('added_by_id', memberId),
         Q.where('deleted', false),
         Q.where('profile_id', effectiveProfileId)
@@ -278,7 +278,7 @@ export const FamilyService = {
       );
 
       if (batchOps.length > 0) {
-        await database.batch(...batchOps);
+        await getDatabase().batch(...batchOps);
       }
     });
 

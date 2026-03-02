@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { database } from '../../database';
+import { getDatabase } from '../../database';
 import { useThemeColors, useThemeRadius } from '../../contexts/ThemeContext';
 import { Cloud, Database as DatabaseIcon } from 'lucide-react-native';
 
@@ -45,7 +45,7 @@ export const DatabaseVisualization: React.FC = () => {
         const fetchStats = async () => {
             const promises = TABLE_NAMES.map(async (table) => {
                 try {
-                    const count = await database.get(table).query().fetchCount();
+                    const count = await getDatabase().get(table).query().fetchCount();
                     return {
                         name: table,
                         count,

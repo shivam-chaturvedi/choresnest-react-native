@@ -11,7 +11,7 @@ import React, {
 import { useAuth } from './AuthContext';
 import { appLockService, hashPin } from '../services/AppLockService';
 import AppLock from '../database/models/AppLock';
-import { database } from '../database';
+import { getDatabase } from '../database';
 import { appLockManager } from '../services/AppLockManager';
 
 type EnableAppLockOptions = {
@@ -82,7 +82,7 @@ export const AppLockProvider: React.FC<AppLockProviderProps> = ({
     }, [mapToSnapshot]);
 
     useEffect(() => {
-        const collection = database.get<AppLock>('app_lock');
+        const collection = getDatabase().get<AppLock>('app_lock');
         const subscription = collection.query().observe().subscribe(records => {
             setRecord(mapToSnapshot(records[0] || null));
         });

@@ -1,4 +1,4 @@
-import { database } from '../database';
+import { getDatabase } from '../database';
 import Task from '../database/models/Task';
 import Event from '../database/models/Event';
 import { NotificationScheduler, getActiveMemberId } from './NotificationScheduler';
@@ -13,6 +13,7 @@ import { map } from 'rxjs/operators';
 import { EMPTY } from 'rxjs';
 import { supabase } from '../config/supabase';
 import { ProfileService } from './ProfileService';
+import Config from 'react-native-config';
 
 const resolveProfileId = ProfileService.getActiveProfileId;
 
@@ -100,7 +101,7 @@ const pushHomeNotification = (
     });
 };
 
-type TaskNotificationJobOptions = { showFeedback: boolean };
+type TaskNotificationJobOptions = { showFeedback: boolean; promptForPermission?: boolean };
 const enqueueTaskNotificationJob = (taskId: string, options: TaskNotificationJobOptions) => {
     NotificationScheduler.enqueueJob(async () => {
         await handleTaskNotificationJob(taskId, options);
@@ -109,14 +110,14 @@ const enqueueTaskNotificationJob = (taskId: string, options: TaskNotificationJob
 
 const handleTaskNotificationJob = async (taskId: string, options: TaskNotificationJobOptions) => {
     try {
-        const task = await database.get<Task>('tasks').find(taskId);
+        const task = await getDatabase().get<Task>('tasks').find(taskId);
         const activeMemberId = await getActiveMemberId();
         const oldNotificationId = task.notificationId;
 
         if (!activeMemberId || task.assigneeId !== activeMemberId) {
             if (oldNotificationId) {
                 await NotificationScheduler.cancelNotification(oldNotificationId);
-                await database.write(async () => {
+                await getDatabase().write(async () => {
                     await task.update(t => {
                         t.notificationId = undefined;
                     });
@@ -142,13 +143,13 @@ const handleTaskNotificationJob = async (taskId: string, options: TaskNotificati
                     notificationTrigger,
                     {
                         notifyCenter: true,
-                        promptForPermission: true,
+                        promptForPermission: options.promptForPermission ?? false,
                         promptForAlarm: true,
                     }
                 );
 
                 if (newId) {
-                    await database.write(async () => {
+                    await getDatabase().write(async () => {
                         await task.update(t => {
                             t.notificationId = newId;
                         });
@@ -173,7 +174,7 @@ const handleTaskNotificationJob = async (taskId: string, options: TaskNotificati
             }
         } else if (oldNotificationId) {
             await NotificationScheduler.cancelNotification(oldNotificationId);
-            await database.write(async () => {
+            await getDatabase().write(async () => {
                 await task.update(t => { t.notificationId = undefined; });
             });
 
@@ -199,23 +200,76 @@ const handleTaskNotificationJob = async (taskId: string, options: TaskNotificati
     }
 };
 
-type EventNotificationJobOptions = { showFeedback: boolean; updates?: Partial<Event> };
+type EventNotificationJobOptions = { showFeedback: boolean; updates?: Partial<Event>; promptForPermission?: boolean };
 const enqueueEventNotificationJob = (eventId: string, options: EventNotificationJobOptions) => {
     NotificationScheduler.enqueueJob(async () => {
         await handleEventNotificationJob(eventId, options);
     });
 };
 
+const parseDelayFromEnv = (value?: string | null): number => {
+    if (!value) return 30 * 1000;
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
+    }
+    return 30 * 1000;
+};
+const EVENT_SYNC_DELAY_MS = parseDelayFromEnv(Config.EVENT_SYNC_DELAY_MS);
+const delayedEventTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const pendingEventSyncs = new Map<string, EventNotificationJobOptions>();
+
+const cancelDelayedEventSync = (eventId: string) => {
+    const timer = delayedEventTimers.get(eventId);
+    if (timer) {
+        clearTimeout(timer);
+        delayedEventTimers.delete(eventId);
+    }
+    pendingEventSyncs.delete(eventId);
+};
+
+const flushDelayedEventSync = (eventId: string) => {
+    const pending = pendingEventSyncs.get(eventId);
+    if (!pending) {
+        return;
+    }
+    pendingEventSyncs.delete(eventId);
+    delayedEventTimers.delete(eventId);
+    enqueueEventNotificationJob(eventId, pending);
+    syncAfterWrite();
+};
+
+const scheduleDelayedEventSync = (eventId: string, options: EventNotificationJobOptions) => {
+    const existing = pendingEventSyncs.get(eventId);
+    const merged: EventNotificationJobOptions = {
+        showFeedback: Boolean(existing?.showFeedback || options.showFeedback),
+        updates: options.updates ?? existing?.updates,
+        promptForPermission: Boolean(existing?.promptForPermission || options.promptForPermission),
+    };
+    pendingEventSyncs.set(eventId, merged);
+
+    const existingTimer = delayedEventTimers.get(eventId);
+    if (existingTimer) {
+        clearTimeout(existingTimer);
+    }
+
+    const timer = setTimeout(() => {
+        flushDelayedEventSync(eventId);
+    }, EVENT_SYNC_DELAY_MS);
+
+    delayedEventTimers.set(eventId, timer);
+};
+
 const handleEventNotificationJob = async (eventId: string, options: EventNotificationJobOptions) => {
     try {
-        const event = await database.get<Event>('events').find(eventId);
+        const event = await getDatabase().get<Event>('events').find(eventId);
         const oldNotificationId = event.notificationId;
         const eventDate = parseReminderDateTime(event.dateString, event.time);
 
         if (event.reminderOffsetMinutes !== undefined && event.reminderOffsetMinutes < 0) {
             if (oldNotificationId) {
                 await NotificationScheduler.cancelNotification(oldNotificationId);
-                await database.write(async () => {
+                await getDatabase().write(async () => {
                     await event.update(e => { e.notificationId = undefined; });
                 });
                 if (options.showFeedback) {
@@ -240,7 +294,7 @@ const handleEventNotificationJob = async (eventId: string, options: EventNotific
         if (!activeMemberId || event.memberId !== activeMemberId) {
             if (oldNotificationId) {
                 await NotificationScheduler.cancelNotification(oldNotificationId);
-                await database.write(async () => {
+                await getDatabase().write(async () => {
                     await event.update(e => { e.notificationId = undefined; });
                 });
             }
@@ -258,7 +312,7 @@ const handleEventNotificationJob = async (eventId: string, options: EventNotific
         if (options.updates?.isRecurring === false && event.isRecurring) {
             if (oldNotificationId) {
                 await NotificationScheduler.cancelNotification(oldNotificationId);
-                await database.write(async () => {
+                await getDatabase().write(async () => {
                     await event.update(e => { e.notificationId = undefined; });
                 });
             }
@@ -275,12 +329,12 @@ const handleEventNotificationJob = async (eventId: string, options: EventNotific
                     {
                         repeatType: 'none',
                         notifyCenter: true,
-                        promptForPermission: true,
+                        promptForPermission: options.promptForPermission ?? false,
                         promptForAlarm: true,
                     }
                 );
                 if (newId) {
-                    await database.write(async () => {
+                    await getDatabase().write(async () => {
                         await event.update(e => { e.notificationId = newId; });
                     });
                     if (options.showFeedback) {
@@ -311,25 +365,25 @@ const handleEventNotificationJob = async (eventId: string, options: EventNotific
             const repeatRule = event.isRecurring ? event.recurrenceRule : undefined;
             const repeatType = NotificationScheduler.normalizeRepeatType(repeatRule);
             const repeatMeta = NotificationScheduler.buildRepeatMetaFromRule(repeatRule);
-            const newId = await NotificationScheduler.scheduleNotification(
-                'events',
-                {
-                    title: `Event: ${event.title}`,
-                    body: event.location ? `at ${event.location}` : `Starting soon`,
-                    data: { eventId: event.id }
-                },
-                triggerDate,
-                {
-                    repeatType,
-                    repeatMeta,
-                    notifyCenter: true,
-                    promptForPermission: true,
-                    promptForAlarm: true,
-                }
+                    const newId = await NotificationScheduler.scheduleNotification(
+                        'events',
+                        {
+                            title: `Event: ${event.title}`,
+                            body: event.location ? `at ${event.location}` : `Starting soon`,
+                            data: { eventId: event.id }
+                        },
+                        triggerDate,
+                        {
+                            repeatType,
+                            repeatMeta,
+                            notifyCenter: true,
+                            promptForPermission: options.promptForPermission ?? false,
+                            promptForAlarm: true,
+                        }
             );
 
             if (newId) {
-                await database.write(async () => {
+                await getDatabase().write(async () => {
                     await event.update(e => { e.notificationId = newId; });
                 });
                 if (options.showFeedback) {
@@ -350,7 +404,7 @@ const handleEventNotificationJob = async (eventId: string, options: EventNotific
             }
         } else if (oldNotificationId) {
             await NotificationScheduler.cancelNotification(oldNotificationId);
-            await database.write(async () => {
+            await getDatabase().write(async () => {
                 await event.update(e => { e.notificationId = undefined; });
             });
             if (options.showFeedback) {
@@ -378,7 +432,7 @@ export const TaskService = {
     observeTasks: (profileId?: string | null) => {
         if (!profileId) return EMPTY;
 
-        const query = database.get<Task>('tasks').query(
+        const query = getDatabase().get<Task>('tasks').query(
             Q.where('deleted', false),
             Q.where('profile_id', profileId)
         );
@@ -396,8 +450,8 @@ export const TaskService = {
         const now = Date.now();
         let createdTaskId: string | undefined;
 
-        await database.write(async () => {
-            const task = await database.get<Task>('tasks').create(t => {
+        await getDatabase().write(async () => {
+            const task = await getDatabase().get<Task>('tasks').create(t => {
                 t.profileId = data.profileId!;
                 t.name = data.name || 'Untitled';
                 t.status = data.status || 'pending';
@@ -417,7 +471,7 @@ export const TaskService = {
         });
 
         if (createdTaskId) {
-            enqueueTaskNotificationJob(createdTaskId, { showFeedback: false });
+            enqueueTaskNotificationJob(createdTaskId, { showFeedback: false, promptForPermission: true });
         }
         syncAfterWrite();
     },
@@ -431,8 +485,8 @@ export const TaskService = {
 
         const now = Date.now();
 
-        await database.write(async () => {
-            const task = await database.get<Task>('tasks').find(id);
+        await getDatabase().write(async () => {
+            const task = await getDatabase().get<Task>('tasks').find(id);
             if (task.profileId !== profileId) {
                 console.warn('TaskService: Security violation - task does not belong to active profile');
                 return;
@@ -466,7 +520,7 @@ export const TaskService = {
 
         let notificationId: string | undefined;
         try {
-            const task = await database.get<Task>('tasks').find(id);
+            const task = await getDatabase().get<Task>('tasks').find(id);
             if (task.profileId !== profileId) {
                 console.warn('TaskService: Security violation - task does not belong to active profile');
                 return;
@@ -475,9 +529,9 @@ export const TaskService = {
         } catch { /* ignore */ }
 
         const now = Date.now();
-        await database.write(async () => {
+        await getDatabase().write(async () => {
             try {
-                const task = await database.get<Task>('tasks').find(id);
+                const task = await getDatabase().get<Task>('tasks').find(id);
                 if (task.profileId !== profileId) return;
 
                 await task.update(tsk => {
@@ -500,7 +554,7 @@ export const TaskService = {
     observeEvents: (profileId?: string | null) => {
         if (!profileId) return EMPTY;
 
-        const query = database.get<Event>('events').query(
+        const query = getDatabase().get<Event>('events').query(
             Q.where('deleted', false),
             Q.where('profile_id', profileId)
         );
@@ -518,8 +572,8 @@ export const TaskService = {
         const now = Date.now();
         let createdEventId: string | undefined;
 
-        await database.write(async () => {
-            const event = await database.get<Event>('events').create(e => {
+        await getDatabase().write(async () => {
+            const event = await getDatabase().get<Event>('events').create(e => {
                 e.profileId = data.profileId!;
                 e.title = data.title || 'Untitled';
                 e.dateString = data.dateString || '';
@@ -546,9 +600,8 @@ export const TaskService = {
         });
 
         if (createdEventId) {
-            enqueueEventNotificationJob(createdEventId, { showFeedback: false });
+            scheduleDelayedEventSync(createdEventId, { showFeedback: false, promptForPermission: true });
         }
-        syncAfterWrite();
     },
 
     updateEvent: async (id: string, updates: Partial<Event>) => {
@@ -560,8 +613,8 @@ export const TaskService = {
 
         const now = Date.now();
 
-        await database.write(async () => {
-            const event = await database.get<Event>('events').find(id);
+        await getDatabase().write(async () => {
+            const event = await getDatabase().get<Event>('events').find(id);
             if (event.profileId !== profileId) {
                 console.warn('TaskService: Security violation - event does not belong to active profile');
                 return;
@@ -589,8 +642,7 @@ export const TaskService = {
             });
         });
 
-        enqueueEventNotificationJob(id, { showFeedback: true, updates });
-        syncAfterWrite();
+        scheduleDelayedEventSync(id, { showFeedback: true, updates });
     },
 
     deleteEvent: async (id: string) => {
@@ -600,9 +652,11 @@ export const TaskService = {
             return;
         }
 
+        cancelDelayedEventSync(id);
+
         let notificationId: string | undefined;
         try {
-            const event = await database.get<Event>('events').find(id);
+            const event = await getDatabase().get<Event>('events').find(id);
             if (event.profileId !== profileId) {
                 console.warn('TaskService: Security violation - event does not belong to active profile');
                 return;
@@ -611,9 +665,9 @@ export const TaskService = {
         } catch { /* ignore if not found */ }
 
         const now = Date.now();
-        await database.write(async () => {
+        await getDatabase().write(async () => {
             try {
-                const event = await database.get<Event>('events').find(id);
+                const event = await getDatabase().get<Event>('events').find(id);
                 if (event.profileId !== profileId) return;
 
                 await event.update(ev => {

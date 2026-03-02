@@ -1,4 +1,4 @@
-import { database } from '../database';
+import { getDatabase } from '../database';
 import { Q } from '@nozbe/watermelondb';
 import Task from '../database/models/Task';
 import Event from '../database/models/Event';
@@ -25,19 +25,19 @@ export const SearchService = {
             let groceries: ListItem[] = [];
 
             if (!activeFilter || activeFilter === 'task') {
-                tasks = await database.get<Task>('tasks').query(searchCondition, notDeleted).fetch();
+                tasks = await getDatabase().get<Task>('tasks').query(searchCondition, notDeleted).fetch();
             }
             if (!activeFilter || activeFilter === 'event') {
-                events = await database.get<Event>('events').query(titleCondition, notDeleted).fetch();
+                events = await getDatabase().get<Event>('events').query(titleCondition, notDeleted).fetch();
             }
             if (!activeFilter || activeFilter === 'recipe') {
-                recipes = await database.get<Recipe>('recipes').query(searchCondition, notDeleted).fetch();
+                recipes = await getDatabase().get<Recipe>('recipes').query(searchCondition, notDeleted).fetch();
             }
             if (!activeFilter || activeFilter === 'document') {
-                documents = await database.get<Document>('documents').query(searchCondition, notDeleted).fetch();
+                documents = await getDatabase().get<Document>('documents').query(searchCondition, notDeleted).fetch();
             }
             if (!activeFilter || activeFilter === 'grocery') {
-                groceries = await database.get<ListItem>('list_items').query(
+                groceries = await getDatabase().get<ListItem>('list_items').query(
                     searchCondition,
                     Q.where('is_completed', false),
                     notDeleted,

@@ -1,4 +1,4 @@
-import { database } from '../database';
+import { getDatabase } from '../database';
 import Document from '../database/models/Document';
 import AppSettings from '../database/models/AppSettings';
 import { Q } from '@nozbe/watermelondb';
@@ -70,7 +70,7 @@ const syncAfterWrite = () => {
 
 export const VaultService = {
     observeGlobalDocuments: (profileId: string) => {
-        return database
+        return getDatabase()
             .get<Document>('documents')
             .query(
                 Q.where('profile_id', profileId),
@@ -82,7 +82,7 @@ export const VaultService = {
     },
 
     observeMemberDocuments: (profileId: string, memberId: string) => {
-        return database
+        return getDatabase()
             .get<Document>('documents')
             .query(
                 Q.where('profile_id', profileId),
@@ -94,7 +94,7 @@ export const VaultService = {
     },
 
     observeAllDocuments: (profileId: string) => {
-        return database
+        return getDatabase()
             .get<Document>('documents')
             .query(
                 Q.where('profile_id', profileId),
@@ -127,7 +127,10 @@ export const VaultService = {
      * If a download occurs, WatermelonDB is updated and the URI is cached.
      * Returns null if the file is unavailable (no remote path and no valid local file).
      */
-    ensureLocalUri: async (document: { id: string; localUri?: string | null; remotePath?: string | null; uploadStatus?: string }): Promise<string | null> => {
+    ensureLocalUri: async (
+        document: { id: string; localUri?: string | null; remotePath?: string | null; uploadStatus?: string },
+        onDownloadProgress?: (bytesWritten: number, contentLength: number) => void
+    ): Promise<string | null> => {
         // Step 1: In-memory cache
         const cached = localUriCache.get(document.id);
         if (cached) {
@@ -164,11 +167,11 @@ export const VaultService = {
 
         try {
             console.log(`VaultService: Downloading document ${document.id} from remote...`);
-            const localUri = await VaultStorageService.downloadToLocalCache(document.remotePath, document.id);
+            const localUri = await VaultStorageService.downloadToLocalCache(document.remotePath, document.id, onDownloadProgress);
 
             // Update WatermelonDB so future boots use the local file path directly
-            await database.write(async () => {
-                const doc = await database.get<Document>('documents').find(document.id);
+            await getDatabase().write(async () => {
+                const doc = await getDatabase().get<Document>('documents').find(document.id);
                 await doc.update(d => {
                     d.localUri = localUri;
                     d.updatedAt = Date.now();
@@ -201,8 +204,8 @@ export const VaultService = {
         const documentId = String(uuidv4());
 
         try {
-            const createdDoc = await database.write(async () => {
-                return await database.get<Document>('documents').create(d => {
+            const createdDoc = await getDatabase().write(async () => {
+                return await getDatabase().get<Document>('documents').create(d => {
                     const now = Date.now();
                     d._raw.id = documentId;
                     d.profileId = profileId;
@@ -234,7 +237,7 @@ export const VaultService = {
 
             cacheLocalUri(documentId, localUri);
 
-            NotificationScheduler.syncDocumentReminders(createdDoc).catch(err =>
+            NotificationScheduler.syncDocumentReminders(createdDoc, { promptForPermission: true }).catch(err =>
                 console.error('Failed to schedule document notifications:', err)
             );
 
@@ -255,8 +258,8 @@ export const VaultService = {
 
         let updatedDoc: Document | null = null;
         try {
-            await database.write(async () => {
-                const doc = await database.get<Document>('documents').find(id);
+            await getDatabase().write(async () => {
+                const doc = await getDatabase().get<Document>('documents').find(id);
                 if (doc.profileId !== profileId) {
                     console.warn('VaultService: refusing to update document that does not belong to active profile');
                     return;
@@ -311,8 +314,8 @@ export const VaultService = {
         }
 
         try {
-            await database.write(async () => {
-                const doc = await database.get<Document>('documents').find(id);
+            await getDatabase().write(async () => {
+                const doc = await getDatabase().get<Document>('documents').find(id);
                 if (doc.profileId !== profileId) {
                     console.warn('VaultService: refusing to delete document that does not belong to active profile');
                     return;
