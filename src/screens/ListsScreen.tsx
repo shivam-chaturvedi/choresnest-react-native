@@ -23,6 +23,7 @@ import { AddShoppingItemModal } from "../components/modals/AddShoppingItemModal"
 import { CategoryIcon, IconLibrary } from "../components/ui/CategoryIcon";
 import { shoppingCategories } from "../constants/shoppingCategories";
 import Config from "react-native-config";
+import { withDeferredScreen } from "../components/layout/DeferredScreen";
 
 const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 
@@ -157,7 +158,7 @@ const GroceryRow = React.memo<GroceryRowProps>(({
   return prev.item.id === next.item.id && prev.item.completed === next.item.completed && prev.onToggle === next.onToggle && prev.onRemove === next.onRemove && prev.isPurchased === next.isPurchased;
 });
 
-export const ListsScreen: React.FC = () => {
+const ListsScreenContent: React.FC = () => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
   const route = useRoute<RouteProp<{ params: { addItems?: any[] } }, 'params'>>();
@@ -1270,4 +1271,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
   },
+});
+
+export const ListsScreen = withDeferredScreen(ListsScreenContent, {
+  title: "Lists",
+  subtitle: "Loading grocery items...",
+  layoutProps: { showNav: false, showAddButton: true },
 });

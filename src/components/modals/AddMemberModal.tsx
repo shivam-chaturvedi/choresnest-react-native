@@ -13,7 +13,7 @@ import { Check } from "lucide-react-native";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { useFamily } from "../../contexts/FamilyContext";
 import { PROFILE_COLORS } from "../../constants/profileColors";
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { AppIcon, AppIconName, isAppIconName } from "../ui/AppIcon";
 
 interface AddMemberModalProps {
   open: boolean;
@@ -21,7 +21,24 @@ interface AddMemberModalProps {
   memberToEdit?: any; // FamilyMember
 }
 
-const AVATARS = ["account", "face-woman", "face-man-profile", "baby-face-outline", "human-child", "human-male", "human-female", "face-man-shimmer", "glasses", "head-lightbulb", "ninja", "robot-outline", "cat", "dog", "alien"];
+const AVATARS: AppIconName[] = [
+  "user",
+  "users",
+  "shield",
+  "sparkles",
+  "smile",
+  "heart",
+  "home",
+  "gift",
+  "party",
+  "sun",
+  "moon",
+  "zap",
+  "trophy",
+  "shoppingCart",
+  "calendar",
+  "checkCircle",
+];
 
 export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, memberToEdit }) => {
   const colors = useThemeColors();
@@ -33,17 +50,17 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, m
 
   const [name, setName] = useState("");
   const [error, setError] = useState("");
-  const [selectedAvatar, setSelectedAvatar] = useState(AVATARS[0]);
+  const [selectedAvatar, setSelectedAvatar] = useState<AppIconName>(AVATARS[0]);
   const [selectedColor, setSelectedColor] = useState(initialColor);
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Initialize form when modal opens or memberToEdit changes
   React.useEffect(() => {
     if (open) {
-      if (memberToEdit) {
-        setName(memberToEdit.name);
-        setSelectedAvatar(memberToEdit.symbol);
-        setSelectedColor(memberToEdit.color);
+        if (memberToEdit) {
+          setName(memberToEdit.name);
+          setSelectedAvatar(isAppIconName(memberToEdit.symbol) ? memberToEdit.symbol : AVATARS[0]);
+          setSelectedColor(memberToEdit.color);
       } else {
         setName("");
         setSelectedAvatar(AVATARS[0]);
@@ -161,7 +178,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, m
           <View style={styles.headerRow}>
             <Text style={[styles.heading, { color: colors.foreground }]}>{memberToEdit ? "Edit Member" : "Add New Member"}</Text>
             <Pressable onPress={onClose} style={({ pressed }) => [styles.closeButton, pressed && { opacity: 0.6 }]}> 
-              <MaterialCommunityIcons name="close" size={20} color={colors.mutedForeground} />
+              <AppIcon name="x" size={20} color={colors.mutedForeground} />
             </Pressable>
           </View>
           {error ? <Text style={{ color: colors.danger, marginBottom: 12 }}>{error}</Text> : null}
@@ -199,7 +216,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, m
                     }
                   ]}
                 >
-                  <MaterialCommunityIcons name={avatar} size={28} color={isSelected ? colors.background : colors.foreground} />
+                  <AppIcon name={avatar} size={28} color={isSelected ? colors.background : colors.foreground} />
                 </Pressable>
               )
             })}

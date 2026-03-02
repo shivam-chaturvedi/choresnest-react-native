@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
     View,
     Text,
@@ -13,10 +13,9 @@ import { theme } from "../theme";
 import { useThemeColors } from "../contexts/ThemeContext";
 import { useFamily } from "../contexts/FamilyContext";
 import { PROFILE_COLORS } from "../constants/profileColors";
-import { AppIcon } from "../components/ui/AppIcon";
+import { AppIcon, AppIconName, isAppIconName } from "../components/ui/AppIcon";
 import { AppSettingsService } from "../services/AppSettingsService";
 import { MemberIcon } from "../components/ui";
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 interface InitialSetupScreenProps {
     onComplete: () => void;
@@ -25,13 +24,15 @@ interface InitialSetupScreenProps {
 export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComplete }) => {
     const colors = useThemeColors();
     const radius = theme.radius;
-    const { setFamilyName, addMember, updateMember, setActiveMember, members, familyName } = useFamily();
+    const { setFamilyName, addMember, updateMember, setActiveMember, removeMember, members, familyName } = useFamily();
 
     const [familyNameInput, setFamilyNameInput] = useState("Family");
     const [memberName, setMemberName] = useState("Admin");
     const [selectedColor, setSelectedColor] = useState(PROFILE_COLORS[0]);
-    const [selectedEmoji, setSelectedEmoji] = useState("account");
+    const [selectedEmoji, setSelectedEmoji] = useState<AppIconName>("user");
     const [familyNameTouched, setFamilyNameTouched] = useState(false);
+    const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
+    const scrollViewRef = useRef<ScrollView | null>(null);
 
     useEffect(() => {
         if (familyNameTouched) return;
@@ -61,7 +62,72 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
         }
     };
 
-    const icons = ["account", "face-woman", "face-man-profile", "baby-face-outline", "human-child", "human-male", "human-female", "face-man-shimmer", "glasses", "head-lightbulb", "ninja", "robot-outline"];
+    const scrollToMemberForm = () => {
+        setTimeout(() => {
+            scrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 120);
+    };
+
+    const handleMemberEdit = (member: any) => {
+        setMemberName(member.name || "");
+        setSelectedEmoji(isAppIconName(member.symbol) ? member.symbol : "user");
+        const matchingColor = PROFILE_COLORS.find((color) => color.value === member.color);
+        setSelectedColor(matchingColor || PROFILE_COLORS[0]);
+        setEditingMemberId(member.id);
+        scrollToMemberForm();
+    };
+
+    const handleDeleteMember = (member: any) => {
+        Alert.alert(
+            "Delete Member",
+            `Are you sure you want to remove ${member.name || "this member"}? This cannot be undone.`,
+            [
+                {
+                    text: "Cancel",
+                    style: "cancel",
+                },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            await removeMember(member.id);
+                            if (editingMemberId === member.id) {
+                                setEditingMemberId(null);
+                                setMemberName("");
+                                setSelectedEmoji("user");
+                                setSelectedColor(PROFILE_COLORS[0]);
+                            }
+                        } catch (error) {
+                            console.error("Failed to delete member:", error);
+                            Alert.alert("Error", "Unable to remove member right now.");
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
+    const icons: AppIconName[] = [
+        "user",
+        "users",
+        "shield",
+        "sparkles",
+        "smile",
+        "heart",
+        "home",
+        "gift",
+        "party",
+        "sun",
+        "moon",
+        "zap",
+        "trophy",
+        "shoppingCart",
+        "calendar",
+        "checkCircle",
+    ];
+
+    const currentEditingMember = editingMemberId ? members.find((member: any) => member.id === editingMemberId) : null;
 
     const handleComplete = async () => {
         try {
@@ -82,22 +148,36 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
 
             // Add or Update first member (main user) — prevents duplicate profiles
             // when the setup screen is visited more than once (e.g. in guest mode).
-            if (members.length > 0) {
+            const payload = {
+                name: memberName.trim(),
+                symbol: selectedEmoji,
+                color: selectedColor.value,
+                isActive: true,
+            };
+
+            if (editingMemberId) {
+                await updateMember(editingMemberId, payload);
+                await setActiveMember({
+                    id: editingMemberId,
+                    name: payload.name,
+                    symbol: payload.symbol,
+                    color: payload.color,
+                    isActive: true,
+                });
+            } else if (members.length > 0) {
                 const primaryMember = members[0];
-                await updateMember(primaryMember.id, {
-                    name: memberName.trim(),
-                    symbol: selectedEmoji,
-                    color: selectedColor.value,
+                await updateMember(primaryMember.id, payload);
+                await setActiveMember({
+                    ...primaryMember,
+                    ...payload,
+                    id: primaryMember.id,
+                    name: payload.name,
+                    symbol: payload.symbol,
+                    color: payload.color,
                     isActive: true,
                 });
-                await setActiveMember({ ...primaryMember, isActive: true });
             } else {
-                await addMember({
-                    name: memberName.trim(),
-                    symbol: selectedEmoji,
-                    color: selectedColor.value,
-                    isActive: true,
-                });
+                await addMember(payload);
             }
 
             // Mark onboarding complete and navigate away
@@ -113,6 +193,7 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <ScrollView
+                ref={scrollViewRef}
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
             >
@@ -144,6 +225,52 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
                     />
                 </View>
 
+                {members.length > 0 && (
+                    <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.lg }]}>
+                        <View style={styles.membersSectionHeader}>
+                            <Text style={[styles.sectionLabel, { color: colors.foreground }]}>Family Members</Text>
+                            <Text style={[styles.sectionHint, { color: colors.mutedForeground }]}>Tap the pencil to edit or the trash icon to delete</Text>
+                        </View>
+                        <View style={styles.memberList}>
+                            {members.map((member: any) => (
+                                <View key={member.id} style={[styles.memberRow, { borderColor: colors.border, backgroundColor: colors.background }]}>
+                                    <View style={styles.memberMeta}>
+                                        <View style={[styles.memberAvatar, { backgroundColor: member.color || colors.muted }]}>
+                                            <MemberIcon symbol={member.symbol} size={26} color={colors.foreground} />
+                                        </View>
+                                        <View>
+                                            <Text style={[styles.memberName, { color: colors.foreground }]}>{member.name || "Unnamed"}</Text>
+                                            <Text style={[styles.memberRole, { color: colors.mutedForeground }]}>
+                                                {member.isActive ? "Active profile" : "Member"}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                    <View style={styles.memberActions}>
+                                        <Pressable
+                                            style={({ pressed }) => [
+                                                styles.memberActionButton,
+                                                { opacity: pressed ? 0.6 : 1 }
+                                            ]}
+                                            onPress={() => handleMemberEdit(member)}
+                                        >
+                                            <AppIcon name="edit" size={20} color={member.id === editingMemberId ? colors.primary : colors.foreground} />
+                                        </Pressable>
+                                        <Pressable
+                                            style={({ pressed }) => [
+                                                styles.memberActionButton,
+                                                { opacity: pressed ? 0.6 : 1, marginLeft: theme.spacing.sm }
+                                            ]}
+                                            onPress={() => handleDeleteMember(member)}
+                                        >
+                                            <AppIcon name="trash" size={20} color={colors.danger} />
+                                        </Pressable>
+                                    </View>
+                                </View>
+                            ))}
+                        </View>
+                    </View>
+                )}
+
                 {/* Member Profile Section */}
                 <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.lg }]}>
                     <Text style={[styles.sectionLabel, { color: colors.foreground }]}>
@@ -152,6 +279,11 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
                     <Text style={[styles.sectionHint, { color: colors.mutedForeground }]}>
                         This will be your main profile
                     </Text>
+                    {editingMemberId && (
+                        <Text style={[styles.editingNotice, { color: colors.primary }]}>
+                            Editing {currentEditingMember?.name || "member"} — changes will update this profile.
+                        </Text>
+                    )}
 
                     {/* Name Input */}
                     <TextInput
@@ -175,7 +307,7 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
                                 ]}
                                 onPress={() => setSelectedEmoji(icon)}
                             >
-                                <MaterialCommunityIcons name={icon} size={28} color={selectedEmoji === icon ? colors.primary : colors.foreground} />
+                                <AppIcon name={icon} size={28} color={selectedEmoji === icon ? colors.primary : colors.foreground} />
                             </TouchableOpacity>
                         ))}
                     </View>
@@ -261,6 +393,48 @@ const styles = StyleSheet.create({
         marginBottom: theme.spacing.lg,
         borderWidth: 1,
     },
+    membersSectionHeader: {
+        marginBottom: theme.spacing.sm,
+    },
+    memberList: {
+        marginTop: theme.spacing.sm,
+    },
+    memberRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        borderWidth: 1,
+        borderRadius: theme.radius.lg,
+        padding: theme.spacing.sm,
+        marginBottom: theme.spacing.sm,
+    },
+    memberMeta: {
+        flexDirection: "row",
+        alignItems: "center",
+    },
+    memberAvatar: {
+        width: 46,
+        height: 46,
+        borderRadius: theme.radius.lg,
+        alignItems: "center",
+        justifyContent: "center",
+        marginRight: theme.spacing.sm,
+    },
+    memberName: {
+        fontSize: 16,
+        fontWeight: "600",
+    },
+    memberRole: {
+        fontSize: 12,
+        marginTop: 2,
+    },
+    memberActions: {
+        flexDirection: "row",
+    },
+    memberActionButton: {
+        padding: theme.spacing.sm,
+        borderRadius: theme.radius.md,
+    },
     sectionLabel: {
         fontSize: 18,
         fontWeight: "700",
@@ -268,6 +442,10 @@ const styles = StyleSheet.create({
     },
     sectionHint: {
         fontSize: 14,
+        marginBottom: theme.spacing.md,
+    },
+    editingNotice: {
+        fontSize: 12,
         marginBottom: theme.spacing.md,
     },
     input: {

@@ -36,6 +36,7 @@ import { toZonedTime } from "date-fns-tz";
 import { useObservableValue } from "../hooks/useObservableValue";
 import { TaskService } from "../services/TaskService";
 import type { Observable } from "rxjs";
+import { withDeferredScreen } from "../components/layout/DeferredScreen";
 
 type CalendarListEntry = (CalendarEvent & { type: 'event'; isVirtual?: boolean; originalDate?: string; timeZone?: string }) | (Pick<Task, 'id' | 'icon' | 'date' | 'priority'> & { type: 'task'; title: string; time: string; memberId?: string; timeZone?: string });
 type UpcomingEntry = CalendarListEntry & { nextDate: Date };
@@ -443,7 +444,7 @@ const DraggableEvent: React.FC<{
   );
 };
 
-export const CalendarScreen: React.FC = () => {
+const CalendarScreenContent: React.FC = () => {
   const {
     members, activeMember, addEvent, updateEvent, updateTask, profileId,
   } = useFamily();
@@ -1825,4 +1826,10 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "700",
   },
+});
+
+export const CalendarScreen = withDeferredScreen(CalendarScreenContent, {
+  title: "Calendar",
+  subtitle: "Gathering events...",
+  layoutProps: { showNav: false, showAddButton: true },
 });
