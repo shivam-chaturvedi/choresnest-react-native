@@ -42,6 +42,7 @@ import { getEventsForDate } from "../utils/EventUtils";
 import Config from "react-native-config";
 import { SyncService } from "../services/SyncService";
 import { supabase } from "../config/supabase";
+import { GUEST_PROFILE_ID } from "../database";
 
 const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 import ReactNativeHapticFeedback from "react-native-haptic-feedback";
@@ -65,7 +66,7 @@ const MEAL_TYPES: { key: MealType; label: string; icon: string }[] = [
 export const HomeScreen: React.FC = () => {
   const colors = useThemeColors();
   const radius = theme.radius; // Dynamic radius
-  const { members, activeMember, events, groceryList, setActiveMember, addGroceryItem, tasks, globalVault, memberVaults, familyName, profileId } = useFamily();
+  const { members, activeMember, events, groceryList, setActiveMember, addGroceryItem, tasks, globalVault, memberVaults, familyName, profileId, reloadLocalData } = useFamily();
   const { isGuest, logout } = useAuth();
   const { getMealsForDay, getRecipeById } = useMealPlan();
   const navigation = useNavigation<any>();
@@ -154,7 +155,7 @@ export const HomeScreen: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!profileId) {
+    if (!profileId || profileId === GUEST_PROFILE_ID) {
       return;
     }
 
@@ -560,6 +561,26 @@ export const HomeScreen: React.FC = () => {
               })()}, {activeMember?.name || "Me"} 👋
             </Text>
           </View>
+
+          {!isGuest && (members || []).length === 0 && (
+            <View style={[styles.reloadBanner, { borderColor: colors.border, backgroundColor: colors.card }]}>
+              <Text style={[styles.reloadBannerText, { color: colors.foreground }]}>
+                No members are loaded locally yet. Tap refresh to re-read the database.
+              </Text>
+              <Pressable
+                onPress={reloadLocalData}
+                style={({ pressed }) => [
+                  styles.reloadButton,
+                  {
+                    backgroundColor: pressed ? `${colors.primary}cc` : colors.primary,
+                    borderRadius: radius.sm,
+                  },
+                ]}
+              >
+                <Text style={[styles.reloadButtonText, { color: colors.primaryForeground }]}>Reload local data</Text>
+              </Pressable>
+            </View>
+          )}
 
           {/* Family Card */}
           <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.foreground, borderRadius: radius.card }]}>
@@ -1081,6 +1102,24 @@ const styles = StyleSheet.create({
     gap: 8,
     flexWrap: "wrap",
     justifyContent: "flex-start",
+  },
+  reloadBanner: {
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 16,
+    borderRadius: 10,
+  },
+  reloadBannerText: {
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  reloadButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  reloadButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
   memberCard: {
     alignItems: "center",

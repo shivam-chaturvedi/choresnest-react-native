@@ -76,6 +76,7 @@ const AppNavigatorInner = () => {
   const { user, isAuthenticated, isLoading, isGuest, hasCompletedOnboarding, completeOnboarding } = useAuth();
   const [showSplash, setShowSplash] = React.useState(true);
   const [hasMembersInDB, setHasMembersInDB] = React.useState<boolean | null>(null);
+  const [membersReady, setMembersReady] = React.useState(false);
   const [hasLocalOnboarding, setHasLocalOnboarding] = React.useState<boolean | null>(null);
   const [localOnboardingLoaded, setLocalOnboardingLoaded] = React.useState(false);
   const [isBootChecking, setIsBootChecking] = React.useState(true);
@@ -98,7 +99,7 @@ const AppNavigatorInner = () => {
     });
 
     const rescueTimeout = setTimeout(() => {
-      const needsRescue = showSplash || !localOnboardingLoaded || isBootChecking || !isCacheReady || (isAuthenticated && hasMembersInDB === null);
+      const needsRescue = showSplash || isBootChecking || !isCacheReady;
       if (needsRescue) {
         console.warn('AppNavigator: RESCUE TIMEOUT TRIGGERED - Forcing boot sequence', {
           showSplash, localOnboardingLoaded, isBootChecking, isCacheReady, hasMembersInDB
@@ -212,6 +213,29 @@ const AppNavigatorInner = () => {
       }
     };
   }, [isAuthenticated, isGuest, isLoading]);
+
+  React.useEffect(() => {
+    if (!isAuthenticated && !isLoading) {
+      if (hasMembersInDB !== false) {
+        setHasMembersInDB(false);
+      }
+      if (showSplash) {
+        setShowSplash(false);
+      }
+      if (isBootChecking) {
+        setIsBootChecking(false);
+      }
+      if (!localOnboardingLoaded) {
+        setLocalOnboardingLoaded(true);
+      }
+      if (!isCacheReady) {
+        setIsCacheReady(true);
+      }
+      if (hasLocalOnboarding !== false) {
+        setHasLocalOnboarding(false);
+      }
+    }
+  }, [isAuthenticated, isLoading, hasMembersInDB, showSplash, isBootChecking]);
 
   React.useEffect(() => {
     if (!SyncService.isEnabled()) {
@@ -418,8 +442,8 @@ const AppNavigatorInner = () => {
 
   // Release isBootChecking once all checks are settled and auth is not loading
   React.useEffect(() => {
-    const allChecksDone = !isLoading && localOnboardingLoaded && hasMembersInDB !== null && isCacheReady;
-    if (allChecksDone && isBootChecking) {
+    const essentialBootChecksDone = !isLoading && isCacheReady;
+    if (essentialBootChecksDone && isBootChecking) {
       console.log("AppNavigator: All boot checks settled, releasing lock", {
         isAuthenticated,
         isGuest,
@@ -438,17 +462,15 @@ const AppNavigatorInner = () => {
     }
   }, [isLoading, localOnboardingLoaded, hasMembersInDB, isCacheReady, isBootChecking, isAuthenticated, isGuest, hasLocalOnboarding]);
 
-  const shouldShowInitialSetup = !hasMembersInDB && hasLocalOnboarding !== true;
+  const shouldShowInitialSetup = hasMembersInDB === false && hasLocalOnboarding !== true;
 
   // Only show splash on initial load, not during auth operations
-  // Don't wait for sync - show UI immediately once members check completes
+  // Don't wait for the member check; show UI once the essential boot sequence finishes
   if (
     showSplash ||
-    !localOnboardingLoaded ||
     isLoading ||
     isBootChecking ||
-    !isCacheReady ||
-    (isAuthenticated && hasMembersInDB === null)
+    !isCacheReady
   ) {
     if (!showSplash && !isLoading && isBootChecking) {
       // Optional: Add a transition spinner if it takes too long between splash and app

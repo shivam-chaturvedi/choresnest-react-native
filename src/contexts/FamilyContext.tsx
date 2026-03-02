@@ -121,6 +121,7 @@ export interface FamilyContextValue {
   addTask: (task: any) => Promise<void>;
   updateTask: (id: string, updates: any) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
+  reloadLocalData: () => void;
   profileId: string | null;
 }
 
@@ -164,7 +165,7 @@ const normalizeVirtualId = (id: string): string => {
 
 export const FamilyContext = createContext<FamilyContextValue | undefined>(undefined);
 
-const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean; children: ReactNode }> = ({ profileId, isGuest, children }) => {
+const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean; children: ReactNode; reloadLocalData: () => void }> = ({ profileId, isGuest, children, reloadLocalData }) => {
   const [familyName, setFamilyNameState] = useState("Family Chores");
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [rawEvents, setRawEvents] = useState<any[]>([]);
@@ -584,6 +585,7 @@ const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean
         updateTask,
         deleteTask,
 
+        reloadLocalData,
         profileId,
       }}
     >
@@ -595,6 +597,10 @@ const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean
 export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { isGuest, user } = useAuth();
   const [profileId, setProfileId] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const reloadLocalData = useCallback(() => {
+    setReloadKey(prev => prev + 1);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -620,7 +626,12 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   }, [isGuest, user?.id]);
 
   return (
-    <FamilyProviderInner key={String(profileId)} profileId={profileId} isGuest={isGuest}>
+    <FamilyProviderInner
+      key={`${String(profileId ?? 'guest')}:${reloadKey}`}
+      profileId={profileId}
+      isGuest={isGuest}
+      reloadLocalData={reloadLocalData}
+    >
       {children}
     </FamilyProviderInner>
   );
@@ -656,6 +667,9 @@ const FALLBACK_FAMILY_CONTEXT: FamilyContextValue = {
   addTask: fallbackVoidAsync as (task: any) => Promise<void>,
   updateTask: fallbackVoidAsync as (id: string, updates: any) => Promise<void>,
   deleteTask: fallbackVoidAsync as (id: string) => Promise<void>,
+  reloadLocalData: () => {
+    console.warn("FamilyContext: reloadLocalData called before provider was ready");
+  },
   profileId: null,
 };
 

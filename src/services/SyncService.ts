@@ -43,6 +43,7 @@ let lastSyncFinishedAt = 0;
 let realtimeChannel: RealtimeChannel | null = null;
 let lastRealtimeAttempt = 0;
 let realtimeRetryCount = 0;
+let isRealtimeConnecting = false;
 
 const getRealtimeBackoff = () => {
     const base = Math.min(5000 * Math.pow(2, realtimeRetryCount), 60000);
@@ -51,7 +52,7 @@ const getRealtimeBackoff = () => {
 };
 
 const ensureRealtimeSubscription = (triggerSync: () => void) => {
-    if (realtimeChannel) {
+    if (realtimeChannel || isRealtimeConnecting) {
         return;
     }
     const now = Date.now();
@@ -62,6 +63,7 @@ const ensureRealtimeSubscription = (triggerSync: () => void) => {
     lastRealtimeAttempt = now;
 
     try {
+        isRealtimeConnecting = true;
         realtimeChannel = supabase.channel('realtime_sync');
         const watchTables = REALTIME_WATCH_TABLES;
         watchTables.forEach((table) => {
@@ -72,19 +74,25 @@ const ensureRealtimeSubscription = (triggerSync: () => void) => {
         realtimeChannel.subscribe((status) => {
             if (status === 'SUBSCRIBED') {
                 realtimeRetryCount = 0;
+                isRealtimeConnecting = false;
             } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
                 console.warn(`Realtime sync subscription failed with status: ${status}. Attempting backoff retry...`);
                 realtimeRetryCount++;
                 teardownRealtimeSubscription();
+                isRealtimeConnecting = false;
             } else if (status === 'TIMED_OUT') {
                 console.warn('Realtime sync subscription timed out.');
                 teardownRealtimeSubscription();
+                isRealtimeConnecting = false;
+            } else {
+                isRealtimeConnecting = false;
             }
         });
     } catch (e) {
         console.error('Failed to initialize realtime channel:', e);
         realtimeChannel = null;
         realtimeRetryCount++;
+        isRealtimeConnecting = false;
     }
 };
 
@@ -94,6 +102,7 @@ const teardownRealtimeSubscription = () => {
     }
     realtimeChannel.unsubscribe();
     realtimeChannel = null;
+    isRealtimeConnecting = false;
 };
 
 type SyncMode = 'manual' | 'periodic' | 'debounced' | 'force_full' | 'unknown';
