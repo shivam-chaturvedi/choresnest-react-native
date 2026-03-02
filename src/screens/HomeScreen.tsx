@@ -43,6 +43,7 @@ import Config from "react-native-config";
 import { SyncService } from "../services/SyncService";
 import { supabase } from "../config/supabase";
 import { GUEST_PROFILE_ID } from "../database";
+import { withDeferredScreen } from "../components/layout/DeferredScreen";
 
 const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 import ReactNativeHapticFeedback from "react-native-haptic-feedback";
@@ -63,7 +64,7 @@ const MEAL_TYPES: { key: MealType; label: string; icon: string }[] = [
 
 // Alerts will be generated inside component to use dynamic colors
 
-export const HomeScreen: React.FC = () => {
+const HomeScreenContent: React.FC = () => {
   const colors = useThemeColors();
   const radius = theme.radius; // Dynamic radius
   const { members, activeMember, events, groceryList, setActiveMember, addGroceryItem, tasks, globalVault, memberVaults, familyName, profileId, reloadLocalData } = useFamily();
@@ -1330,4 +1331,12 @@ const styles = StyleSheet.create({
   },
 });
 
-export default HomeScreen;
+export const HomeScreen = HomeScreenContent;
+
+const DeferredHomeScreen = withDeferredScreen(HomeScreenContent, {
+  title: "Home",
+  subtitle: "Preparing your day...",
+  layoutProps: { showNav: false, showAddButton: true },
+});
+
+export default DeferredHomeScreen;

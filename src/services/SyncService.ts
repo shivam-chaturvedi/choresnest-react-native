@@ -43,6 +43,20 @@ let lastSyncFinishedAt = 0;
 let realtimeChannel: RealtimeChannel | null = null;
 let lastRealtimeAttempt = 0;
 let realtimeRetryCount = 0;
+let realtimeRetryTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingRealtimeTrigger: (() => void) | null = null;
+
+const scheduleRealtimeRetry = (triggerSync: () => void, delay?: number) => {
+    if (realtimeRetryTimer) {
+        clearTimeout(realtimeRetryTimer);
+    }
+    const wait = typeof delay === 'number' ? delay : getRealtimeBackoff();
+    lastRealtimeAttempt = Date.now();
+    realtimeRetryTimer = setTimeout(() => {
+        realtimeRetryTimer = null;
+        ensureRealtimeSubscription(triggerSync);
+    }, wait);
+};
 let isRealtimeConnecting = false;
 
 const getRealtimeBackoff = () => {
@@ -52,15 +66,11 @@ const getRealtimeBackoff = () => {
 };
 
 const ensureRealtimeSubscription = (triggerSync: () => void) => {
-    if (realtimeChannel || isRealtimeConnecting) {
+    if (realtimeChannel || isRealtimeConnecting || realtimeRetryTimer) {
         return;
     }
-    const now = Date.now();
-    const delay = getRealtimeBackoff();
-    if (now - lastRealtimeAttempt < delay) {
-        return; // Prevent recursive or frequent websocket handshake spam
-    }
-    lastRealtimeAttempt = now;
+    lastRealtimeAttempt = Date.now();
+    pendingRealtimeTrigger = triggerSync;
 
     try {
         isRealtimeConnecting = true;
@@ -80,10 +90,12 @@ const ensureRealtimeSubscription = (triggerSync: () => void) => {
                 realtimeRetryCount++;
                 teardownRealtimeSubscription();
                 isRealtimeConnecting = false;
+                scheduleRealtimeRetry(triggerSync);
             } else if (status === 'TIMED_OUT') {
                 console.warn('Realtime sync subscription timed out.');
                 teardownRealtimeSubscription();
                 isRealtimeConnecting = false;
+                scheduleRealtimeRetry(triggerSync);
             } else {
                 isRealtimeConnecting = false;
             }
@@ -93,6 +105,7 @@ const ensureRealtimeSubscription = (triggerSync: () => void) => {
         realtimeChannel = null;
         realtimeRetryCount++;
         isRealtimeConnecting = false;
+        scheduleRealtimeRetry(triggerSync);
     }
 };
 

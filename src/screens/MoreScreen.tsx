@@ -19,6 +19,7 @@ import { PROFILE_COLORS } from "../constants/profileColors";
 import { useAuth } from "../contexts/AuthContext";
 import { MemberIcon } from "../components/ui";
 import Config from "react-native-config";
+import { withDeferredScreen } from "../components/layout/DeferredScreen";
 
 const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 
@@ -37,7 +38,7 @@ interface MenuSection {
   items: MenuItem[];
 }
 
-export const MoreScreen: React.FC = () => {
+const MoreScreenContent: React.FC = () => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
   const navigation = useNavigation<NavigationProp<Record<string, undefined>>>();
@@ -578,4 +579,10 @@ const styles = StyleSheet.create({
   optionName: {
     fontSize: 16
   }
+});
+
+export const MoreScreen = withDeferredScreen(MoreScreenContent, {
+  title: "More",
+  subtitle: "Loading options...",
+  layoutProps: { showNav: false, showAddButton: false },
 });
