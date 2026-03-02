@@ -127,7 +127,10 @@ export const VaultService = {
      * If a download occurs, WatermelonDB is updated and the URI is cached.
      * Returns null if the file is unavailable (no remote path and no valid local file).
      */
-    ensureLocalUri: async (document: { id: string; localUri?: string | null; remotePath?: string | null; uploadStatus?: string }): Promise<string | null> => {
+    ensureLocalUri: async (
+        document: { id: string; localUri?: string | null; remotePath?: string | null; uploadStatus?: string },
+        onDownloadProgress?: (bytesWritten: number, contentLength: number) => void
+    ): Promise<string | null> => {
         // Step 1: In-memory cache
         const cached = localUriCache.get(document.id);
         if (cached) {
@@ -164,7 +167,7 @@ export const VaultService = {
 
         try {
             console.log(`VaultService: Downloading document ${document.id} from remote...`);
-            const localUri = await VaultStorageService.downloadToLocalCache(document.remotePath, document.id);
+            const localUri = await VaultStorageService.downloadToLocalCache(document.remotePath, document.id, onDownloadProgress);
 
             // Update WatermelonDB so future boots use the local file path directly
             await getDatabase().write(async () => {

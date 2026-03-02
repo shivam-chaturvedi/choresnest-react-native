@@ -360,21 +360,31 @@ const AppNavigatorInner = () => {
         }
 
         // 2. REMOTE BOOTSTRAP (with timeout) — only for authenticated, non-guest users
-        let remoteBootstrapSuccess = false;
         if (!cancelled && pid && !isGuest) {
-          try {
-            console.log("AppNavigator: Attempting profile bootstrap with timeout...");
-            const bootstrapPromise = ProfileBootstrapService.bootstrap(pid);
-            const timeoutPromise = new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('Bootstrap Timeout')), 4000)
-            );
+          console.log("AppNavigator: Attempting profile bootstrap with timeout...");
+          const bootstrapPromise = ProfileBootstrapService.bootstrap(pid);
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Bootstrap Timeout')), 4000)
+          );
 
+          void bootstrapPromise
+            .then(bootstrapResult => {
+              if (cancelled || hasMembersInDB) {
+                return;
+              }
+              if (bootstrapResult.memberCount > 0) {
+                console.log(`AppNavigator: Backend bootstrap resolved with ${bootstrapResult.memberCount} members`);
+                setHasMembersInDB(true);
+              }
+            })
+            .catch(error => {
+              console.warn('AppNavigator: Background bootstrap failed', error);
+            });
+
+          try {
             const bootstrapResult = await Promise.race([bootstrapPromise, timeoutPromise]) as any;
 
             if (!cancelled) {
-              if (bootstrapResult.membersFetchSuccess) {
-                remoteBootstrapSuccess = true;
-              }
               if (bootstrapResult.memberCount > 0) {
                 console.log(`AppNavigator: Bootstrap succeeded with ${bootstrapResult.memberCount} members`);
                 setHasMembersInDB(true);

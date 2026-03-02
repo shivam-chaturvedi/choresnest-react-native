@@ -641,16 +641,21 @@ export const CalendarScreen: React.FC = () => {
   }, []);
 
   const focusScrollRef = useRef(false);
+  const previousActiveViewRef = useRef(activeView);
   useEffect(() => {
-    if (isFocused && !focusScrollRef.current) {
-      const nowZoned = toZonedTime(new Date(), timeZone);
-      scrollToCurrentTime(nowZoned);
-      focusScrollRef.current = true;
-    }
-    if (!isFocused) {
+    if (isFocused) {
+      const viewChanged = previousActiveViewRef.current !== activeView;
+      const isTimelineView = activeView === "Day" || activeView === "Week";
+      if (!focusScrollRef.current || (viewChanged && isTimelineView)) {
+        const nowZoned = toZonedTime(new Date(), timeZone);
+        requestAnimationFrame(() => scrollToCurrentTime(nowZoned));
+        focusScrollRef.current = true;
+      }
+      previousActiveViewRef.current = activeView;
+    } else {
       focusScrollRef.current = false;
     }
-  }, [isFocused, scrollToCurrentTime, timeZone]);
+  }, [activeView, isFocused, scrollToCurrentTime, timeZone]);
 
   useEffect(() => {
     return () => {

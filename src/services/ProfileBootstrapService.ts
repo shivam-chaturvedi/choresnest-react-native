@@ -67,10 +67,10 @@ const writeFamilyName = async (profileId: string, familySetting: SupabaseSetting
   });
 };
 
-const writeMembers = async (profileId: string, remoteMembers: SupabaseMemberRecord[]) => {
-  if (remoteMembers.length === 0) {
-    return 0;
-  }
+  const writeMembers = async (profileId: string, remoteMembers: SupabaseMemberRecord[]) => {
+    if (remoteMembers.length === 0) {
+      return 0;
+    }
   const now = Date.now();
   const membersCollection = getDatabase().collections.get<Member>('members');
   const existing = await membersCollection.query(

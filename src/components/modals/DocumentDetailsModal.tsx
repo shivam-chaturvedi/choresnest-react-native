@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-    ActivityIndicator,
     Modal,
     View,
     Text,
@@ -29,7 +28,7 @@ import {
     VaultReminderRule,
 } from "../../utils/VaultReminderUtils";
 import FileViewer from 'react-native-file-viewer';
-import RNFS from "react-native-fs";
+import NetInfo from '@react-native-community/netinfo';
 import { AppIcon } from "../ui/AppIcon";
 
 interface DocumentDetailsModalProps {
@@ -86,6 +85,9 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
     const [isDownloading, setIsDownloading] = useState(false);
     const [showViewerModal, setShowViewerModal] = useState(false);
     const [viewerErrorMessage, setViewerErrorMessage] = useState<string | null>(null);
+    const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+    const [downloadStatus, setDownloadStatus] = useState<'idle' | 'pending' | 'error'>('idle');
+    const [downloadError, setDownloadError] = useState<string | null>(null);
     // Priority: resolved+verified local file > Supabase signed URL
     const viewUri = resolvedLocalUri ?? signedUrl ?? undefined;
 
@@ -161,38 +163,84 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
         if (!visible || !document) {
             setResolvedLocalUri(null);
             setSignedUrl(null);
+            setDownloadStatus('idle');
+            setDownloadProgress(null);
+            setDownloadError(null);
             return;
         }
 
         let active = true;
         const resolve = async () => {
-            // Try to resolve a valid local file URI (validates disk existence, downloads if needed)
-            const localUri = await VaultService.ensureLocalUri(document);
-            if (!active) return;
-
-            if (localUri) {
-                setResolvedLocalUri(localUri);
+            if (resolvedLocalUri) {
+                setDownloadStatus('idle');
+                setDownloadProgress(null);
                 setSignedUrl(null);
                 return;
             }
 
-            // No valid local file — fall back to a signed URL for streaming
+            const canDownload = Boolean(document.remotePath && document.uploadStatus === 'uploaded');
+            if (canDownload) {
+                setDownloadError(null);
+                setDownloadStatus('pending');
+                setDownloadProgress(0);
+                try {
+                    const localUri = await VaultService.ensureLocalUri(document, (bytesWritten, contentLength) => {
+                        if (!active || contentLength <= 0) {
+                            return;
+                        }
+                        const ratio = Math.min(Math.max(bytesWritten / contentLength, 0), 1);
+                        setDownloadProgress(ratio);
+                    });
+                    if (!active) {
+                        return;
+                    }
+                    if (localUri) {
+                        setResolvedLocalUri(localUri);
+                        setSignedUrl(null);
+                        setDownloadStatus('idle');
+                        setDownloadProgress(null);
+                        return;
+                    }
+                    setDownloadStatus('error');
+                    setDownloadError('Unable to download this file at the moment.');
+                } catch (error) {
+                    if (!active) {
+                        return;
+                    }
+                    console.error('DocumentDetailsModal: failed to download document', error);
+                    setDownloadStatus('error');
+                    setDownloadError(extractErrorMessage(error));
+                } finally {
+                    if (active) {
+                        setDownloadProgress(null);
+                        setDownloadStatus(prev => (prev === 'error' ? 'error' : 'idle'));
+                    }
+                }
+            }
+
+            if (!active) {
+                return;
+            }
+
             if (!document.remotePath) {
                 setSignedUrl(null);
                 return;
             }
 
-            VaultStorageService.getSignedUrl(document.remotePath, 3600)
-                .then(url => { if (active) { setSignedUrl(url); } })
-                .catch(err => {
-                    console.error('Failed to fetch signed URL for document modal:', err);
-                    if (active) setSignedUrl(null);
-                });
+            try {
+                const url = await VaultStorageService.getSignedUrl(document.remotePath, 3600);
+                if (active) {
+                    setSignedUrl(url);
+                }
+            } catch (err) {
+                console.error('Failed to fetch signed URL for document modal:', err);
+                if (active) setSignedUrl(null);
+            }
         };
 
         resolve();
         return () => { active = false; };
-    }, [visible, document?.id, document?.localUri, document?.remotePath, document?.uploadStatus]);
+    }, [visible, document?.id, document?.localUri, document?.remotePath, document?.uploadStatus, resolvedLocalUri]);
 
     if (!document) return null;
 
@@ -321,45 +369,46 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
 
         let uriToOpen = viewUri;
 
-        // If we still have no URI, try fetching a signed URL on demand
-        if (!uriToOpen && document.remotePath) {
+        if (!uriToOpen && document.remotePath && document.uploadStatus === 'uploaded') {
+            setDownloadProgress(0);
+            setIsDownloading(true);
+            setDownloadStatus('pending');
+            setDownloadError(null);
             try {
-                uriToOpen = await VaultStorageService.getSignedUrl(document.remotePath, 3600);
-                setSignedUrl(uriToOpen);
+                const netState = await NetInfo.fetch();
+                const connected = Boolean(netState.isConnected && netState.isInternetReachable !== false);
+                if (!connected) {
+                    setDownloadStatus('error');
+                    setDownloadError("No internet connection");
+                    setIsDownloading(false);
+                    setDownloadProgress(null);
+                    return;
+                }
+                uriToOpen = await VaultService.ensureLocalUri(document, (bytesWritten, contentLength) => {
+                    if (contentLength > 0) {
+                        setDownloadProgress(Math.min(bytesWritten / contentLength, 1));
+                    }
+                });
+                if (uriToOpen) {
+                    setResolvedLocalUri(uriToOpen);
+                    setSignedUrl(null);
+                }
             } catch (error) {
-                console.error('Error fetching signed URL for document:', error);
-                pushNotification("Error", "Could not load this file. Please try again.", "warning");
-                return;
+                console.error('Error downloading remote file to view:', error);
+                const message = extractErrorMessage(error) || "Could not download file for viewing.";
+                setDownloadStatus('error');
+                setDownloadError(message);
+                pushNotification("Error", message, "warning");
+            } finally {
+                setIsDownloading(false);
+                setDownloadProgress(null);
+                setDownloadStatus(prev => (prev === 'error' ? 'error' : 'idle'));
             }
         }
 
         if (!uriToOpen) {
             pushNotification("Error", "No file available to show.", "warning");
             return;
-        }
-
-        // react-native-file-viewer requires local file paths.
-        // If the URL is remote (like a Supabase signed URL), download to cache first.
-        if (uriToOpen.startsWith('http')) {
-            setIsDownloading(true);
-            try {
-                const extensionMatch = uriToOpen.match(/\.([a-zA-Z0-9]+)(\?|$)/);
-                const ext = extensionMatch ? extensionMatch[1] : 'jpg';
-                const localPath = `${RNFS.CachesDirectoryPath}/vault_temp_${document.id}_${Date.now()}.${ext}`;
-
-                await RNFS.downloadFile({
-                    fromUrl: uriToOpen,
-                    toFile: localPath,
-                }).promise;
-
-                uriToOpen = `file://${localPath}`;
-            } catch (e) {
-                console.error('Error downloading remote file to view:', e);
-                pushNotification("Error", "Could not download file for viewing.", "warning");
-                setIsDownloading(false);
-                return;
-            }
-            setIsDownloading(false);
         }
 
         if (!isImageUri(uriToOpen)) {
@@ -417,6 +466,10 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
     };
 
     const getViewButtonLabel = () => {
+        if (downloadProgress !== null) {
+            const percent = Math.min(100, Math.max(0, Math.round(downloadProgress * 100)));
+            return `Downloading ${percent}%`;
+        }
         const sourceForLabel = viewUri ?? document?.remotePath ?? '';
         if (!sourceForLabel) return 'View File';
         const clean = stripUri(sourceForLabel).toLowerCase();
@@ -742,36 +795,53 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                                         ]}
                                         onPress={handleViewFile}
                                     >
-                                        <Text style={[
-                                            styles.viewFileButtonText,
-                                { color: isDownloading ? colors.mutedForeground : colors.primaryForeground }
-                            ]}>
-                                {isDownloading ? 'Downloading...' : getViewButtonLabel()}
+                                <Text style={[
+                                    styles.viewFileButtonText,
+                        { color: isDownloading ? colors.mutedForeground : colors.primaryForeground }
+                    ]}>
+                                {getViewButtonLabel()}
                             </Text>
                         </Pressable>
                     )}
                     {!viewUri && (
                         <View style={[styles.viewUnavailableBox, { borderColor: colors.border, backgroundColor: colors.background }]}>
                             <View style={styles.viewUnavailableRow}>
-                                <Text style={[styles.viewUnavailableText, { color: colors.mutedForeground }]}>
-                                    {(() => {
-                                        if (document.uploadStatus && ['pending_upload', 'uploading'].includes(document.uploadStatus)) {
-                                            return 'Document is still uploading. Please try again after the upload finishes.';
-                                        }
-                                        if (document.uploadStatus === 'failed') {
-                                            return 'Upload failed. Please retry the document upload before viewing.';
-                                        }
-                                        if (!document.remotePath && !document.localUri) {
-                                            return 'No file has been attached to this document yet.';
-                                        }
-                                        return 'Unable to load this file at the moment.';
-                                    })()}
-                                </Text>
-                                {(document.remotePath && document.uploadStatus !== 'failed') && (
-                                    <View style={styles.syncHint}>
-                                        <ActivityIndicator size="small" color={colors.foreground} />
-                                        <Text style={[styles.syncHintText, { color: colors.foreground }]}>Syncing…</Text>
+                                {downloadStatus === 'pending' && downloadProgress !== null ? (
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={[styles.viewUnavailableText, { color: colors.mutedForeground }]}>
+                                            Downloading document… ({Math.min(100, Math.max(0, Math.round(downloadProgress * 100)))}%)
+                                        </Text>
+                                        <View style={styles.downloadProgressBar}>
+                                            <View
+                                                style={[
+                                                    styles.downloadProgressFill,
+                                                    {
+                                                        width: `${Math.min(100, Math.max(0, Math.round(downloadProgress * 100)))}%`,
+                                                        backgroundColor: colors.primary,
+                                                    },
+                                                ]}
+                                            />
+                                        </View>
                                     </View>
+                                ) : downloadStatus === 'error' ? (
+                                    <Text style={[styles.viewUnavailableText, { color: colors.warning }]}>
+                                        {downloadError ?? "Unable to download this file at the moment."}
+                                    </Text>
+                                ) : (
+                                    <Text style={[styles.viewUnavailableText, { color: colors.mutedForeground }]}>
+                                        {(() => {
+                                            if (document.uploadStatus && ['pending_upload', 'uploading'].includes(document.uploadStatus)) {
+                                                return 'Document is still uploading. Please try again after the upload finishes.';
+                                            }
+                                            if (document.uploadStatus === 'failed') {
+                                                return 'Upload failed. Please retry the document upload before viewing.';
+                                            }
+                                            if (!document.remotePath && !document.localUri) {
+                                                return 'No file has been attached to this document yet.';
+                                            }
+                                            return 'Unable to load this file at the moment.';
+                                        })()}
+                                    </Text>
                                 )}
                             </View>
                         </View>
@@ -929,23 +999,24 @@ const styles = StyleSheet.create({
         marginTop: 12,
     },
     viewUnavailableRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 8,
+        flexDirection: 'column',
+        alignItems: 'flex-start',
     },
     viewUnavailableText: {
         fontSize: 13,
         lineHeight: 18,
     },
-    syncHint: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
+    downloadProgressBar: {
+        marginTop: 8,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: 'rgba(0,0,0,0.06)',
+        width: '100%',
+        overflow: 'hidden',
     },
-    syncHintText: {
-        fontSize: 12,
-        fontWeight: '500',
+    downloadProgressFill: {
+        height: '100%',
+        borderRadius: 2,
     },
     viewerModalOverlay: {
         ...StyleSheet.absoluteFillObject,
