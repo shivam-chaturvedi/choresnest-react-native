@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   TextInput,
 } from "react-native";
 import { AppLayout } from "../components/layout";
-import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
+import { useThemeColors, useThemeRadius, useTheme } from '../contexts/ThemeContext';
 import { useSidebar } from "../contexts/SidebarContext";
 import { useNavigation } from "@react-navigation/native";
 import { useToast } from "../components/ui/Toast";
@@ -220,7 +220,90 @@ const featureGuides = [
       'File sizes are calculated live before export',
     ]
   },
+  {
+    id: 'profiles',
+    icon: Users,
+    title: 'Profiles & Members',
+    path: 'Family',
+    description: 'Control who is part of this profile, assign colors, and manage their permissions.',
+    howToUse: [
+      'Open the profiles switcher in the sidebar to view every member',
+      'Tap a member to make them active and personalize reminders/tasks',
+      'Edit colors, symbols, and roles from the member detail screen',
+      'Add or remove members — at least one member is required per profile',
+    ],
+    tips: [
+      'Recycle colors by clearing unused members before reassigning',
+      'Active member drives the “You” perspective across the app',
+    ],
+  },
+  {
+    id: 'notes',
+    icon: Book,
+    title: 'Notes & Journal',
+    path: 'Notes',
+    description: 'Notes keep track of ideas, receipts, and family checklists.',
+    howToUse: [
+      'Tap "+" to add a note and pick a category (Personal, Family, etc.)',
+      'Pin important notes to keep them at the top',
+      'Use keywords to search within note contents instantly',
+    ],
+    tips: [
+      'Draft recurring reminders in Notes before turning them into tasks',
+      'Tag a note with a member for quick filtering later',
+    ],
+  },
 ];
+
+const SEARCH_ALIAS_MAP: Record<string, { features?: string[]; faqCategories?: string[] }> = {
+  auth: { features: ['privacy'], faqCategories: ['General & Security'] },
+  login: { features: ['privacy'], faqCategories: ['General & Security'] },
+  signup: { features: ['privacy'], faqCategories: ['General & Security'] },
+  vault: { features: ['vault'], faqCategories: ['Features'] },
+  warranty: { features: ['vault'], faqCategories: ['Features'] },
+  notifications: { features: ['notifications'], faqCategories: ['Notifications'] },
+  budgets: { features: ['finance'], faqCategories: ['Finance & Budget'] },
+  finance: { features: ['finance'], faqCategories: ['Data & Backup'] },
+  backup: { features: ['dataexport'], faqCategories: ['Data & Backup'] },
+  events: { features: ['calendar'], faqCategories: ['Notifications'] },
+  tasks: { features: ['tasks'], faqCategories: ['Notifications'] },
+  lists: { features: ['lists'], faqCategories: ['Features'] },
+  recipes: { features: ['recipes'], faqCategories: ['Features'] },
+  notes: { features: ['notes'], faqCategories: ['Features'] },
+  profiles: { features: ['profiles'], faqCategories: ['Accounts & Profiles'] },
+  members: { features: ['profiles'], faqCategories: ['Accounts & Profiles'] },
+  profile: { features: ['profiles'], faqCategories: ['Accounts & Profiles'] },
+  account: { features: ['profiles'], faqCategories: ['Accounts & Profiles', 'General & Security'] },
+  delete: { features: ['profiles'], faqCategories: ['General & Security'] },
+  remove: { features: ['profiles'], faqCategories: ['General & Security'] },
+};
+
+const resolveAlias = (token: string) => {
+  if (!token) return undefined;
+  if (token.startsWith('acc')) {
+    return SEARCH_ALIAS_MAP['account'];
+  }
+  if (token.startsWith('prof')) {
+    return SEARCH_ALIAS_MAP['profiles'];
+  }
+  if (token.startsWith('mem')) {
+    return SEARCH_ALIAS_MAP['members'];
+  }
+  return SEARCH_ALIAS_MAP[token];
+};
+
+const FEATURE_SEARCH_INDEX = featureGuides.map(item => ({
+  id: item.id,
+  text: [
+    item.title,
+    item.description,
+    item.howToUse.join(" "),
+    item.tips.join(" "),
+  ].join(" ").toLowerCase(),
+}));
+
+const FEATURE_SEARCH_TEXT_MAP = new Map<string, string>();
+FEATURE_SEARCH_INDEX.forEach(entry => FEATURE_SEARCH_TEXT_MAP.set(entry.id, entry.text));
 
 const faqItems = [
   {
@@ -235,8 +318,33 @@ const faqItems = [
         a: "Your data is primarily stored locally on your device for privacy. We do not mine or sell your family data.",
       },
       {
+        q: "Can I delete my account?",
+        a: "Yes. Visit Settings > Privacy > Delete Account. This erases local data and removes your profile from our backend.",
+      },
+      {
+        q: "How do I update my profile photo or name?",
+        a: "Open the profile menu, tap the avatar, and choose a new symbol or name. Changes sync across every device on your account.",
+      },
+      {
         q: "What if I forget my App Lock PIN?",
         a: "For security, there is no 'forgot password' backdoor. You would need to reinstall the app, which resets secure data.",
+      },
+    ],
+  },
+  {
+    category: "Accounts & Profiles",
+    questions: [
+      {
+        q: "How do I switch between family members?",
+        a: "Expand the profiles dropdown in the sidebar and tap the member you want to act as. The app then shows that member’s events, tasks, and reminders.",
+      },
+      {
+        q: "Can multiple people use the same account?",
+        a: "Yes, but we recommend assigning each person a dedicated profile. That keeps reminders, tasks, and documents clearly separated.",
+      },
+      {
+        q: "My member colors disappeared. How do I restore them?",
+        a: "Edit the member from the Profiles dropdown, pick a new color, then tap Save. Colors are stored per profile and sync automatically.",
       },
     ],
   },
@@ -291,6 +399,19 @@ const faqItems = [
       },
     ],
   },
+  {
+    category: "Notes & Documents",
+    questions: [
+      {
+        q: "How do I search for an old note or document?",
+        a: "Use the search bar at the top of the Help screen or Vault/Notes pages. You can type keywords from the title, body, or tags, and suggestions appear instantly.",
+      },
+      {
+        q: "Can I set alarms for documents?",
+        a: "Yes. When saving a document, create reminder rules (30/14/7 days) and we’ll send alerts per the schedule. You can also view them in the Notification Center.",
+      },
+    ],
+  },
 ];
 
 
@@ -300,28 +421,78 @@ export const HelpScreen: React.FC = () => {
   const { showToast } = useToast();
   const colors = useThemeColors();
   const radius = useThemeRadius();
+  const { appearanceMode } = useTheme();
+  const isMidnight = appearanceMode === "midnight";
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"features" | "faq">("features");
 
   const [expandedFeature, setExpandedFeature] = useState<string | null>(null);
   const [showTutorial, setShowTutorial] = useState(false);
 
-  const filteredFeatures = useMemo(() =>
-    featureGuides.filter(f =>
-      f.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      f.description.toLowerCase().includes(searchQuery.toLowerCase())
-    ), [searchQuery]
-  );
+  const normalizedQuery = searchQuery.trim().toLowerCase();
 
-  const filteredFaqs = useMemo(() =>
-    faqItems.map(cat => ({
-      ...cat,
-      questions: cat.questions.filter(q =>
-        q.q.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        q.a.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    })).filter(c => c.questions.length > 0), [searchQuery]
-  );
+  const filteredFeatures = useMemo(() => {
+    if (!normalizedQuery) {
+      return featureGuides;
+    }
+
+    const tokens = normalizedQuery.split(/\s+/).filter(Boolean);
+    const aliasHits = new Set<string>();
+    tokens.forEach(token => {
+      const alias = resolveAlias(token);
+      alias?.features?.forEach(id => aliasHits.add(id));
+    });
+
+    return featureGuides.filter(item => {
+      if (aliasHits.has(item.id)) {
+        return true;
+      }
+      const haystack = FEATURE_SEARCH_TEXT_MAP.get(item.id) ?? "";
+      return haystack.includes(normalizedQuery);
+    });
+  }, [normalizedQuery]);
+
+  const filteredFaqs = useMemo(() => {
+    if (!normalizedQuery) {
+      return faqItems;
+    }
+
+    const tokens = normalizedQuery.split(/\s+/).filter(Boolean);
+    const aliasCategories = new Set<string>();
+    tokens.forEach(token => {
+      const alias = resolveAlias(token);
+      alias?.faqCategories?.forEach(cat => aliasCategories.add(cat));
+    });
+
+    return faqItems.map(cat => {
+      if (aliasCategories.has(cat.category)) {
+        return cat;
+      }
+
+      const matchedQuestions = cat.questions.filter(q => {
+        const haystack = [q.q, q.a, q.category ?? ""].join(" ").toLowerCase();
+        return haystack.includes(normalizedQuery);
+      });
+
+      return {
+        ...cat,
+        questions: matchedQuestions,
+      };
+    }).filter(c => c.questions.length > 0);
+  }, [normalizedQuery]);
+
+  useEffect(() => {
+    if (!normalizedQuery) return;
+    const featureCount = filteredFeatures.length;
+    const faqCount = filteredFaqs.length;
+    if (faqCount > featureCount && activeTab !== 'faq') {
+      setActiveTab('faq');
+      return;
+    }
+    if (featureCount > 0 && featureCount >= faqCount && activeTab !== 'features') {
+      setActiveTab('features');
+    }
+  }, [normalizedQuery, filteredFeatures.length, filteredFaqs.length, activeTab]);
 
   return (
     <>
@@ -333,16 +504,16 @@ export const HelpScreen: React.FC = () => {
               <ChevronLeft size={24} color={colors.foreground} />
             </Pressable>
             <View>
-              <Text style={[styles.title, { color: colors.foreground }]}>Help & Support</Text>
+              <Text style={[styles.title, { color: colors.foreground }]}>Help Center</Text>
               <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Learn how to use every feature</Text>
             </View>
           </View>
 
           {/* Hero */}
-          <View style={[styles.heroCard, { backgroundColor: colors.primary, shadowColor: colors.primary, borderRadius: radius.lg }]}>
-            <View style={[styles.heroIconBox, { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: radius.full }]}>
-              <Book size={32} color={colors.primaryForeground} />
-            </View>
+            <View style={[styles.heroCard, { backgroundColor: colors.primary, shadowColor: colors.primary, borderRadius: radius.lg }]}>
+              <View style={[styles.heroIconBox, { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: radius.full }]}>
+                <Book size={32} color={colors.primaryForeground} />
+              </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.heroTitle, { color: colors.primaryForeground }]}>Complete User Guide</Text>
               <Text style={[styles.heroSubtitle, { color: colors.primaryForeground, opacity: 0.9 }]}>Everything you need to manage your family</Text>
@@ -388,7 +559,9 @@ export const HelpScreen: React.FC = () => {
             >
               <Text style={[
                 styles.tabText,
-                activeTab === 'features' ? [styles.activeTabText, { color: colors.primary }] : { color: colors.mutedForeground }
+                activeTab === 'features'
+                  ? [styles.activeTabText, { color: isMidnight ? "#fff" : colors.primary }]
+                  : { color: colors.mutedForeground }
               ]}>
                 📚 Feature Guide
               </Text>
@@ -403,7 +576,9 @@ export const HelpScreen: React.FC = () => {
             >
               <Text style={[
                 styles.tabText,
-                activeTab === 'faq' ? [styles.activeTabText, { color: colors.primary }] : { color: colors.mutedForeground }
+                activeTab === 'faq'
+                  ? [styles.activeTabText, { color: isMidnight ? "#fff" : colors.primary }]
+                  : { color: colors.mutedForeground }
               ]}>
                 ❓ FAQ
               </Text>
@@ -421,7 +596,7 @@ export const HelpScreen: React.FC = () => {
                     onPress={() => setExpandedFeature(expandedFeature === item.id ? null : item.id)}
                   >
                     <View style={[styles.featureIconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
-                      <item.icon size={24} color={colors.primary} />
+                      <item.icon size={24} color={isMidnight ? "#fff" : colors.primary} />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.featureTitle, { color: colors.foreground }]}>{item.title}</Text>

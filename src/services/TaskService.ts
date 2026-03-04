@@ -144,7 +144,7 @@ const handleTaskNotificationJob = async (taskId: string, options: TaskNotificati
                     {
                         notifyCenter: true,
                         promptForPermission: options.promptForPermission ?? false,
-                        promptForAlarm: true,
+                        promptForAlarm: options.promptForPermission ?? false,
                     }
                 );
 
@@ -330,7 +330,7 @@ const handleEventNotificationJob = async (eventId: string, options: EventNotific
                         repeatType: 'none',
                         notifyCenter: true,
                         promptForPermission: options.promptForPermission ?? false,
-                        promptForAlarm: true,
+                        promptForAlarm: options.promptForPermission ?? false,
                     }
                 );
                 if (newId) {
@@ -378,7 +378,7 @@ const handleEventNotificationJob = async (eventId: string, options: EventNotific
                             repeatMeta,
                             notifyCenter: true,
                             promptForPermission: options.promptForPermission ?? false,
-                            promptForAlarm: true,
+                            promptForAlarm: options.promptForPermission ?? false,
                         }
             );
 

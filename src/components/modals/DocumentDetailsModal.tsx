@@ -29,7 +29,7 @@ import {
 } from "../../utils/VaultReminderUtils";
 import FileViewer from 'react-native-file-viewer';
 import NetInfo from '@react-native-community/netinfo';
-import { AppIcon } from "../ui/AppIcon";
+import { AppIcon, CustomDateTimePicker } from "../ui";
 
 interface DocumentDetailsModalProps {
     visible: boolean;
@@ -48,6 +48,22 @@ const CATEGORIES = [
     { id: 'receipt', name: 'Receipt', icon: '🧾' },
     { id: 'other', name: 'Other', icon: '📄' },
 ];
+
+const parseReminderTimeString = (value?: string): Date => {
+    const fallback = "09:00";
+    const match = (value || fallback).match(/^(\d{1,2}):(\d{2})$/);
+    const hours = match ? Math.min(Math.max(Number(match[1]), 0), 23) : 9;
+    const minutes = match ? Math.min(Math.max(Number(match[2]), 0), 59) : 0;
+    const date = new Date();
+    date.setHours(hours, minutes, 0, 0);
+    return date;
+};
+
+const formatDateToTimeString = (date: Date): string => {
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    return `${hours}:${minutes}`;
+};
 
 export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
     visible,
@@ -303,6 +319,11 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
         }];
     };
 
+    const reminderTimeDate = parseReminderTimeString(reminderTime);
+    const handleReminderTimeChange = (next: Date) => {
+        setReminderTime(formatDateToTimeString(next));
+    };
+
     const toggleReminderOffset = (value: number) => {
         setReminderOffsets(prev => {
             if (prev.includes(value)) {
@@ -339,15 +360,12 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                         );
                     })}
                 </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12 }}>
-                    <Text style={{ color: colors.foreground }}>Time</Text>
-                    <TextInput
-                        style={[styles.input, { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.background }]}
-                        value={reminderTime}
-                        onChangeText={setReminderTime}
-                        placeholder="HH:MM"
-                        placeholderTextColor={colors.mutedForeground}
-                        keyboardType="numbers-and-punctuation"
+                <View style={{ marginTop: 12 }}>
+                    <Text style={{ color: colors.foreground, marginBottom: 6 }}>Time</Text>
+                    <CustomDateTimePicker
+                        mode="time"
+                        value={reminderTimeDate}
+                        onChange={handleReminderTimeChange}
                     />
                 </View>
                 <Text style={[styles.reminderSummary, { color: colors.mutedForeground }]}>{summary}</Text>

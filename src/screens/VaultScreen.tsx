@@ -193,7 +193,7 @@ export const VaultScreen: React.FC = () => {
     const label = update?.detail ? `${baseLabel} (${update.detail})` : baseLabel;
     return (
       <View style={{ marginTop: 4 }}>
-        <Text style={[styles.docMetaText, { color: colors.primary }]}>
+        <Text style={[styles.docMetaText, { color: colors.primaryLight }]}>
           {label}
           {percent !== undefined ? ` • ${percent}%` : ''}
         </Text>
@@ -224,7 +224,7 @@ export const VaultScreen: React.FC = () => {
       <View style={{ marginTop: 4 }}>
         {statusText ? <Text style={[styles.docMetaText, { color: colors.mutedForeground }]}>{statusText}</Text> : null}
         {reminderText ? (
-          <Text style={[styles.docMetaText, { color: colors.primary }]} numberOfLines={2}>
+          <Text style={[styles.docMetaText, { color: colors.primaryLight }]} numberOfLines={2}>
             {reminderText}
           </Text>
         ) : null}

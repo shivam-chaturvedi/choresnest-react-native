@@ -1,10 +1,11 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   RefreshControl,
   ScrollView,
   View,
   StyleSheet,
   Pressable,
+  StatusBar,
 } from "react-native";
 import { NavigationProp, useNavigation } from "@react-navigation/native";
 import { theme } from "../../theme";
@@ -42,7 +43,15 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   disableScroll = false,
 }) => {
   const navigation = useNavigation<NavigationProp<{ MainTabs: { screen?: BottomNavRoute } }>>();
-  const { themeVersion } = useTheme();
+  const { themeVersion, appearanceMode } = useTheme();
+  useEffect(() => {
+    StatusBar.setBackgroundColor(
+      appearanceMode === "midnight" ? "#03040A" : theme.colors.background
+    );
+    StatusBar.setBarStyle(
+      appearanceMode === "midnight" ? "light-content" : "dark-content"
+    );
+  }, [appearanceMode, theme.colors.background]);
   const radius = useThemeRadius();
   const { openSidebar } = useSidebar();
   const { refreshing, refreshNow } = useManualSync();
@@ -83,6 +92,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       failOffsetY={[-10, 10]}
     >
       <View style={[styles.container, { backgroundColor: theme.colors.background }, style]}>
+        <StatusBar translucent={false} />
         {disableScroll ? (
           <View style={[styles.scrollView, styles.content]}>{children}</View>
         ) : (

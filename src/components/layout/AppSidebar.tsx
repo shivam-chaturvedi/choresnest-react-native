@@ -22,6 +22,7 @@ import { MemberIcon } from "../../components/ui/MemberIcon";
 import { DEFAULT_MEMBER_ICON } from "../../constants/memberIcons";
 import { checkPermission, requestPermission, resetPermissionPrompt } from "../../utils/permissions";
 import Config from "react-native-config";
+import { useThemeColors, useTheme } from "../../contexts/ThemeContext";
 
 const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 import {
@@ -45,6 +46,11 @@ import {
   Bell,
 } from "lucide-react-native";
 
+const resolveMemberColorHex = (colorValue?: string): string => {
+  const entry = PROFILE_COLORS.find(color => color.value === colorValue);
+  return entry?.hex ?? theme.colors.primary;
+};
+
 interface AppSidebarProps {
   open: boolean;
   onClose: () => void;
@@ -56,6 +62,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   onClose,
   onNavigate,
 }) => {
+  const colors = useThemeColors();
+  const { appearanceMode } = useTheme();
+  const isMidnight = appearanceMode === "midnight";
   const { width } = useWindowDimensions();
   const sidebarWidth = Math.min(width * 0.85, 360);
   const [mounted, setMounted] = useState(open);
@@ -271,7 +280,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
 
   const bottomLinks = [
     { icon: Shield, label: 'Privacy & Security', route: 'Privacy' },
-    { icon: HelpCircle, label: 'Help & Support', route: 'Help' },
+    { icon: HelpCircle, label: 'Help Center', route: 'Help' },
   ];
 
   // Find current member being edited
@@ -286,12 +295,12 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         <Animated.View
           style={[
             styles.sidebar,
-            { width: sidebarWidth, transform: [{ translateX }] },
+            { width: sidebarWidth, transform: [{ translateX }], backgroundColor: colors.background },
           ]}
         >
           {/* Profile Section (Gradient Header) */}
           {/* Profile Section (Gradient Header) */}
-          <View style={[styles.headerGradient, { backgroundColor: theme.colors.primary }]}>
+          <View style={[styles.headerGradient, { backgroundColor: isMidnight ? colors.card : theme.colors.primary }]}>
             <Pressable onPress={onClose} style={styles.closeIcon}>
               <X size={24} color="#f5f8ff" />
             </Pressable>
@@ -376,22 +385,46 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                       key={member.id}
                       style={[
                         styles.profileRow,
-                        member.isActive && styles.profileRowActive
+                        member.isActive && styles.profileRowActive,
+                        member.isActive &&
+                          isMidnight && {
+                            backgroundColor: colors.background,
+                          },
                       ]}
                     >
                       <Pressable
                         style={styles.profileSelectArea}
                         onPress={() => handleSwitchMember(member)}
                       >
-                        <View style={[
-                          styles.profileAvatar,
-                          { backgroundColor: member.isActive ? '#dbeafe' : '#f3f4f6' }
-                        ]}>
-                          <MemberIcon symbol={member.symbol} size={24} />
+                        <View
+                          style={[
+                            styles.profileAvatar,
+                            {
+                              backgroundColor: member.isActive
+                                ? isMidnight
+                                  ? colors.background
+                                  : '#dbeafe'
+                                : '#f3f4f6',
+                            },
+                          ]}
+                        >
+                          <MemberIcon
+                            symbol={member.symbol}
+                            size={24}
+                            color={member.isActive ? theme.colors.primary : '#050505'}
+                          />
                         </View>
-                        <Text style={[styles.profileText, member.isActive && styles.profileTextActive]}>
-                          {member.name}
-                        </Text>
+                        <View style={styles.profileNameSection}>
+                          <Text style={[styles.profileText, member.isActive && styles.profileTextActive]} numberOfLines={1}>
+                            {member.name}
+                          </Text>
+                          <View
+                            style={[
+                              styles.memberColorBadge,
+                              { backgroundColor: resolveMemberColorHex(member.color) },
+                            ]}
+                          />
+                        </View>
                         {member.isActive && <Check size={20} color={theme.colors.primary} style={{ marginRight: 8 }} />}
                       </Pressable>
 
@@ -413,7 +446,16 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             {/* Logged-in user summary card */}
             {!isGuest && (
               <View style={styles.userCardContainer}>
-                <View style={[styles.userCard, { backgroundColor: '#F4F7FF' }]}>
+                <View
+                  style={[
+                    styles.userCard,
+                    {
+                      backgroundColor: isMidnight ? colors.card : "#F4F7FF",
+                      borderColor: isMidnight ? colors.border : "#DDE7FF",
+                      borderWidth: 1,
+                    },
+                  ]}
+                >
                       <View style={[styles.userCardIcon, { backgroundColor: theme.colors.primary }]}>
                         <MemberIcon symbol={activeMember?.symbol || DEFAULT_MEMBER_ICON} size={20} color="#fff" />
                   </View>
@@ -422,10 +464,13 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                     <Text style={styles.userCardSubtitle}>{user?.email || 'Logged in user'}</Text>
                   </View>
                   <Pressable
-                    style={[styles.userCardAction, { backgroundColor: '#E0F2FF' }]}
+                    style={[
+                      styles.userCardAction,
+                      { backgroundColor: isMidnight ? "#fff" : "#E0F2FF" },
+                    ]}
                     onPress={() => handleNavigate('Privacy')}
                   >
-                    <Text style={[styles.userCardActionText, { color: theme.colors.primary }]}>Account Details</Text>
+                  <Text style={[styles.userCardActionText, { color: theme.colors.primary }]}>Account Details</Text>
                   </Pressable>
                 </View>
               </View>
@@ -434,7 +479,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             {/* Guest Mode Badge */}
             {isGuest && (
               <View style={styles.guestBadgeContainer}>
-                <View style={styles.guestBadge}>
+                <View style={[styles.guestBadge, { backgroundColor: isMidnight ? '#0b1220' : '#EFF6FF' }]}>
                   <View style={styles.guestBadgeHeader}>
                     <User size={16} color={theme.colors.primary} />
                     <Text style={styles.guestBadgeTitle}>Guest</Text>
@@ -711,6 +756,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  profileNameSection: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 12,
+  },
   colorTrigger: {
     padding: 8,
     borderRadius: 8,
@@ -726,13 +777,21 @@ const styles = StyleSheet.create({
   profileText: {
     flex: 1,
     fontSize: 16,
-    marginLeft: 12,
     fontWeight: '500',
     color: theme.colors.foreground,
   },
   profileTextActive: {
     color: theme.colors.primary,
     fontWeight: '600',
+  },
+  memberColorBadge: {
+    width: 16,
+    height: 16,
+    borderRadius: 4,
+    marginLeft: 8,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.14)",
+    backgroundColor: theme.colors.primary,
   },
   separator: {
     height: 1,

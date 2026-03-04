@@ -71,7 +71,7 @@ const MoreScreenContent: React.FC = () => {
     const url = `mailto:${contactEmail}?subject=${encodedSubject}&body=${encodedBody}`;
     await Linking.openURL(url);
   };
-  const feedbackOptions = ["Bug Found", "Feature Request", "General Feedback", "Account Issue", "Other"];
+  const feedbackOptions = ["Bug Found", "Feature Request", "General Feedback", "Account Issue", "Theme & UI", "Other"];
   const [feedbackModalVisible, setFeedbackModalVisible] = useState(false);
   const [feedbackCategory, setFeedbackCategory] = useState(feedbackOptions[0]);
   const [feedbackDescription, setFeedbackDescription] = useState("");

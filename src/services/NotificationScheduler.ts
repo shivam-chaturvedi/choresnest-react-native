@@ -500,7 +500,7 @@ const ensureAlarmPermission = async (promptToOpenSettings = false): Promise<bool
         alarmPermissionChecked = true;
         alarmPermissionGranted = enabled;
 
-        if (!enabled && promptToOpenSettings) {
+        if (!enabled && promptToOpenSettings === true) {
             if (!alarmSettingsNotificationSent) {
                 alarmSettingsNotificationSent = true;
                 NotificationCenter.addNotification({
@@ -791,7 +791,7 @@ export const NotificationScheduler = {
                 return null;
             }
 
-            const promptForAlarm = options?.promptForAlarm ?? false;
+            const promptForAlarm = options?.promptForAlarm === true;
             if (Platform.OS === 'android') {
                 const hasAlarm = await ensureAlarmPermission(promptForAlarm);
                 if (!hasAlarm) {
@@ -1204,12 +1204,12 @@ export const NotificationScheduler = {
                                 },
                             },
                             triggerDate,
-                            {
-                                notifyCenter: options?.notifyCenter ?? false, // Configurable, default to false
-                                promptForPermission: options?.promptForPermission ?? false,
-                                promptForAlarm: true,
-                            }
-                        );
+                        {
+                            notifyCenter: options?.notifyCenter ?? false, // Configurable, default to false
+                            promptForPermission: options?.promptForPermission ?? false,
+                            promptForAlarm: false,
+                        }
+                    );
 
                         if (notificationId) scheduledIds.push(notificationId);
                     }
@@ -1376,21 +1376,21 @@ export const NotificationScheduler = {
                 if (!manualRepeat && triggerDate <= new Date() && !event.isRecurring) continue;
                 if (manualRepeat && triggerDate <= new Date()) continue;
 
-                const notificationId = await this.scheduleNotification(
-                    'events',
-                    {
-                        title: `Event: ${event.title}`,
+                    const notificationId = await this.scheduleNotification(
+                        'events',
+                        {
+                            title: `Event: ${event.title}`,
                         body: event.location ? `at ${event.location}` : `Starting soon`,
                         data: { eventId: event.id },
                     },
                     triggerDate,
-                    {
-                        repeatType,
-                        repeatMeta,
-                        notifyCenter: true, // Visible in Bell icon list
-                        promptForAlarm: true // Explicitly ensure exact alarm permission
-                    }
-                );
+                        {
+                            repeatType,
+                            repeatMeta,
+                            notifyCenter: true, // Visible in Bell icon list
+                            promptForAlarm: false // Background reschedules should not force settings
+                        }
+                    );
 
                 if (notificationId) {
                     await getDatabase().write(async () => {
@@ -1438,19 +1438,19 @@ export const NotificationScheduler = {
                 const triggerDate = new Date(taskDate.getTime() - defaultTaskReminder * 60000);
                 if (triggerDate <= new Date()) continue;
 
-                const notificationId = await this.scheduleNotification(
-                    'tasks',
-                    {
-                        title: `Task: ${task.name}`,
+                    const notificationId = await this.scheduleNotification(
+                        'tasks',
+                        {
+                            title: `Task: ${task.name}`,
                         body: `Due ${task.dueDisplay || 'today'}! Priority: ${task.priority}`,
                         data: { taskId: task.id }
                     },
                     triggerDate,
-                    {
-                        notifyCenter: true, // Visible in Bell icon list
-                        promptForAlarm: true // Explicitly ensure exact alarm permission
-                    }
-                );
+                        {
+                            notifyCenter: true, // Visible in Bell icon list
+                            promptForAlarm: false // Background reschedules should not force settings
+                        }
+                    );
 
                 if (notificationId) {
                     await getDatabase().write(async () => {

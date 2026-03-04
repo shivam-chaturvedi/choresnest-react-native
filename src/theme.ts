@@ -52,19 +52,19 @@ export const createThemeColors = (paletteKey: PaletteKey, mode: AppearanceMode) 
   const cardPalette: Record<AppearanceMode, string> = {
     light: "#FFFFFF",
     cream: "#FCF7EE",
-    midnight: "#10111A",
+    midnight: "#262737ff",
   };
 
   const borderPalette: Record<AppearanceMode, string> = {
     light: "#E2E8F0",
     cream: "#E6D7C7",
-    midnight: "#27272A",
+    midnight: "#363640ff",
   };
 
   const shadowPalette: Record<AppearanceMode, string> = {
     light: "#E2E8F0",
     cream: "#C8A97F",
-    midnight: "#000000",
+    midnight: "#171616ff",
   };
 
   return {
@@ -80,7 +80,7 @@ export const createThemeColors = (paletteKey: PaletteKey, mode: AppearanceMode) 
     secondaryForeground: p.dark,
     accent: p.mediumLight,
     accentForeground: p.dark,
-    muted: isDark ? "#1F2937" : p.light,
+    muted: isDark ? "#31445eff" : p.light,
     mutedForeground: isDark ? "#CBD5F5" : "#64748B",
 
     card: cardPalette[mode],

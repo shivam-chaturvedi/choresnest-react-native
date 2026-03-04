@@ -55,7 +55,7 @@ export const ThemeScreen: React.FC = () => {
             ]}
             onPress={() => setAppearanceMode(mode.mode)}
           >
-            <AppIcon name={mode.icon} size={28} color={colors.primary} style={{ marginBottom: 12 }} />
+            <AppIcon name={mode.icon} size={28} color={appearanceMode === 'midnight' ? colors.foreground : colors.primary} style={{ marginBottom: 12 }} />
             <View style={styles.shapeInfo}>
               <Text style={[styles.shapeLabel, { color: colors.foreground }]}>{mode.label}</Text>
               {appearanceMode === mode.mode && <Check size={18} color={colors.success} />}
@@ -82,7 +82,7 @@ export const ThemeScreen: React.FC = () => {
             >
               {/* Visual Preview of Shape */}
               <View style={[styles.shapePreview, {
-                backgroundColor: colors.primary + '20',
+                backgroundColor: appearanceMode === 'midnight' ? colors.foreground + '15' : colors.primary + '20',
                 borderRadius: shape.mode === 'rounded' ? 12 : 2
               }]}
               />

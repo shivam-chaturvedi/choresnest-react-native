@@ -13,7 +13,7 @@ import { useRoute, RouteProp } from "@react-navigation/native";
 import { AppLayout } from "../components/layout";
 import { useFamily, GroceryItem } from "../contexts/FamilyContext";
 import { useMealPlan } from "../contexts/MealPlanContext";
-import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
+import { useTheme, useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { GlobalSearch } from "../components/search/GlobalSearch";
 import { useSidebar } from "../contexts/SidebarContext";
 import { AppIcon, CustomDateTimePicker } from "../components/ui";
@@ -161,6 +161,7 @@ const GroceryRow = React.memo<GroceryRowProps>(({
 const ListsScreenContent: React.FC = () => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
+  const { currentPalette } = useTheme();
   const route = useRoute<RouteProp<{ params: { addItems?: any[] } }, 'params'>>();
   const { groceryList, addGroceryItem, toggleGroceryItem, removeGroceryItem, activeMember, members } = useFamily();
   const { generateGroceryList } = useMealPlan();
@@ -179,6 +180,17 @@ const ListsScreenContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"current" | "purchased">("current");
   const { openSidebar } = useSidebar();
   const [mealPlanItems, setMealPlanItems] = useState<ReturnType<typeof generateGroceryList>>([]);
+
+  const filterAccentColor = useMemo(() => {
+    switch (currentPalette) {
+      case "amber":
+        return "#B45309";
+      case "obsidian":
+        return "#DC2626";
+      default:
+        return "#1E40AF";
+    }
+  }, [currentPalette]);
 
   // Purchase history filters
   const [historyCategoryFilter, setHistoryCategoryFilter] = useState<string | null>(null);
@@ -498,17 +510,27 @@ const ListsScreenContent: React.FC = () => {
               <View style={[styles.tabContainer, { backgroundColor: colors.card, borderRadius: radius.md, marginBottom: 20 }]}>
                 <Pressable
                   onPress={() => setActiveTab("current")}
-                  style={[styles.tab, activeTab === "current" && { backgroundColor: colors.primary, borderRadius: radius.sm }]}
+                  style={[
+                    styles.tab,
+                    activeTab === "current"
+                      ? { backgroundColor: colors.primary, borderRadius: radius.sm }
+                      : { backgroundColor: colors.background, borderRadius: radius.sm },
+                  ]}
                 >
-                  <Text style={[styles.tabText, { color: activeTab === "current" ? colors.primaryForeground : colors.mutedForeground }]}>
+                  <Text style={[styles.tabText, { color: activeTab === "current" ? colors.primaryForeground : colors.foreground }]}>
                     Current Bag ({todoItems.length})
                   </Text>
                 </Pressable>
                 <Pressable
                   onPress={() => setActiveTab("purchased")}
-                  style={[styles.tab, activeTab === "purchased" && { backgroundColor: colors.primary, borderRadius: radius.sm }]}
+                  style={[
+                    styles.tab,
+                    activeTab === "purchased"
+                      ? { backgroundColor: colors.primary, borderRadius: radius.sm }
+                      : { backgroundColor: colors.background, borderRadius: radius.sm },
+                  ]}
                 >
-                  <Text style={[styles.tabText, { color: activeTab === "purchased" ? colors.primaryForeground : colors.mutedForeground }]}>
+                  <Text style={[styles.tabText, { color: activeTab === "purchased" ? colors.primaryForeground : colors.foreground }]}>
                     Purchased
                   </Text>
                 </Pressable>
@@ -525,46 +547,52 @@ const ListsScreenContent: React.FC = () => {
                         onPress={() => setMemberFilterId(null)}
                         style={[
                           styles.memberFilterChip,
-                          !memberFilterId && { backgroundColor: colors.primary + '10', borderColor: colors.primary },
+                          !memberFilterId
+                            ? { backgroundColor: colors.primary + '10', borderColor: colors.primary }
+                            : { backgroundColor: colors.background, borderColor: colors.border },
                         ]}
                       >
                         <AppIcon
                           name="users"
                           size={14}
-                          color={memberFilterId ? colors.mutedForeground : colors.primary}
+                          color={!memberFilterId ? colors.primary : colors.foreground}
                           style={{ marginRight: 6 }}
                         />
                         <Text style={[
                           styles.memberFilterChipText,
-                          !memberFilterId && { color: colors.primary },
-                          memberFilterId && { color: colors.mutedForeground }
+                          !memberFilterId ? { color: colors.primary } : { color: colors.foreground }
                         ]}>
                           All members
                         </Text>
                       </Pressable>
-                      {members.map(member => (
-                        <Pressable
-                          key={member.id}
-                          onPress={() => setMemberFilterId(member.id)}
-                          style={[
-                            styles.memberFilterChip,
-                            memberFilterId === member.id && { backgroundColor: colors.primary + '10', borderColor: colors.primary },
-                          ]}
-                        >
-                          <MemberIcon
-                            symbol={member.symbol}
-                            size={14}
-                            color={memberFilterId === member.id ? colors.primary : colors.mutedForeground}
-                            style={{ marginRight: 6 }}
-                          />
-                          <Text style={[
-                            styles.memberFilterChipText,
-                            memberFilterId === member.id ? { color: colors.primary } : { color: colors.mutedForeground }
-                          ]}>
-                            {member.name}
-                          </Text>
-                        </Pressable>
-                      ))}
+                      {members.map(member => {
+                        const isMemberActive = memberFilterId === member.id;
+                        return (
+                          <Pressable
+                            key={member.id}
+                            onPress={() => setMemberFilterId(member.id)}
+                            style={[
+                              styles.memberFilterChip,
+                              isMemberActive
+                                ? { backgroundColor: colors.primary + '10', borderColor: colors.primary }
+                                : { backgroundColor: colors.background, borderColor: colors.border },
+                            ]}
+                          >
+                            <MemberIcon
+                              symbol={member.symbol}
+                              size={14}
+                              color={isMemberActive ? colors.primary : colors.foreground}
+                              style={{ marginRight: 6 }}
+                            />
+                            <Text style={[
+                              styles.memberFilterChipText,
+                              isMemberActive ? { color: colors.primary } : { color: colors.foreground }
+                            ]}>
+                              {member.name}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
                     </ScrollView>
                   </View>
                   <View style={styles.dateFilterRow}>
@@ -588,49 +616,55 @@ const ListsScreenContent: React.FC = () => {
                         onPress={() => setCategoryFilterId(null)}
                         style={[
                           styles.memberHistoryChip,
-                          !categoryFilterId && { borderColor: colors.primary, backgroundColor: colors.primary + '10' },
                           { minHeight: 38 },
+                          !categoryFilterId
+                            ? { borderColor: colors.primary, backgroundColor: colors.primary + '10' }
+                            : { borderColor: colors.border, backgroundColor: colors.background },
                         ]}
                       >
                         <CategoryIcon
                           icon="package"
                           size={14}
-                          color={categoryFilterId ? colors.mutedForeground : colors.primary}
+                          color={!categoryFilterId ? colors.primary : colors.foreground}
                           style={{ marginRight: 6 }}
                         />
                         <Text style={[
                           styles.memberFilterChipText,
-                          !categoryFilterId && { color: colors.primary },
-                          categoryFilterId && { color: colors.mutedForeground }
+                          !categoryFilterId ? { color: colors.primary } : { color: colors.foreground }
                         ]}>
                           All categories
                         </Text>
                       </Pressable>
-                      {shoppingCategories.map(cat => (
-                        <Pressable
-                          key={cat.id}
-                          onPress={() => setCategoryFilterId(cat.id)}
-                          style={[
-                            styles.memberHistoryChip,
-                            categoryFilterId === cat.id && { borderColor: colors.primary, backgroundColor: colors.primary + '10' },
-                            { minHeight: 38 },
-                          ]}
-                        >
-                          <CategoryIcon
-                            icon={cat.icon}
-                            library={cat.library}
-                            size={14}
-                            color={categoryFilterId === cat.id ? colors.primary : colors.mutedForeground}
-                            style={{ marginRight: 6 }}
-                          />
-                          <Text style={[
-                            styles.memberFilterChipText,
-                            categoryFilterId === cat.id ? { color: colors.primary } : { color: colors.mutedForeground }
-                          ]}>
-                            {cat.name}
-                          </Text>
-                        </Pressable>
-                      ))}
+                      {shoppingCategories.map(cat => {
+                        const isCategoryActive = categoryFilterId === cat.id;
+                        return (
+                          <Pressable
+                            key={cat.id}
+                            onPress={() => setCategoryFilterId(cat.id)}
+                            style={[
+                              styles.memberHistoryChip,
+                              { minHeight: 38 },
+                              isCategoryActive
+                                ? { borderColor: colors.primary, backgroundColor: colors.primary + '10' }
+                                : { borderColor: colors.border, backgroundColor: colors.background },
+                            ]}
+                          >
+                            <CategoryIcon
+                              icon={cat.icon}
+                              library={cat.library}
+                              size={14}
+                              color={isCategoryActive ? colors.primary : colors.foreground}
+                              style={{ marginRight: 6 }}
+                            />
+                            <Text style={[
+                              styles.memberFilterChipText,
+                              isCategoryActive ? { color: colors.primary } : { color: colors.foreground }
+                            ]}>
+                              {cat.name}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
                     </ScrollView>
                   </View>
                 </View>
@@ -724,34 +758,41 @@ const ListsScreenContent: React.FC = () => {
                       {members.length > 0 && (
                         <View style={styles.memberHistoryFilterRow}>
                           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                            <Pressable
-                              style={[
-                                styles.memberHistoryChip,
-                                !memberFilterId && { borderColor: colors.primary, backgroundColor: colors.primary + '10' },
-                              ]}
-                              onPress={() => setMemberFilterId(null)}
-                            >
-                              <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>All</Text>
-                            </Pressable>
-                            {members.map(member => (
+                          <Pressable
+                            style={[
+                              styles.memberHistoryChip,
+                              !memberFilterId
+                                ? { borderColor: colors.primary, backgroundColor: colors.primary + '10' }
+                                : { borderColor: colors.border, backgroundColor: colors.background },
+                            ]}
+                            onPress={() => setMemberFilterId(null)}
+                          >
+                            <Text style={{ fontSize: 12, fontWeight: '600', color: !memberFilterId ? filterAccentColor : colors.foreground }}>All</Text>
+                          </Pressable>
+                          {members.map(member => {
+                            const isMemberActive = memberFilterId === member.id;
+                            return (
                               <Pressable
                                 key={member.id}
                                 style={[
                                   styles.memberHistoryChip,
-                                  memberFilterId === member.id && { borderColor: colors.primary, backgroundColor: colors.primary + '10' },
+                                  isMemberActive
+                                    ? { borderColor: colors.primary, backgroundColor: colors.primary + '10' }
+                                    : { borderColor: colors.border, backgroundColor: colors.background },
                                 ]}
                                 onPress={() => setMemberFilterId(member.id)}
                               >
-                                <MemberIcon symbol={member.symbol} size={14} color={colors.foreground} />
-                                <Text style={{ marginLeft: 6, fontSize: 12, color: colors.foreground }}>
+                                <MemberIcon symbol={member.symbol} size={14} color={isMemberActive ? colors.primary : colors.foreground} />
+                                <Text style={{ marginLeft: 6, fontSize: 12, color: isMemberActive ? colors.primary : colors.foreground }}>
                                   {member.name}
                                 </Text>
                               </Pressable>
-                            ))}
+                            );
+                          })}
                           </ScrollView>
                         </View>
                       )}
-                      <Text style={[styles.filterLabel, { color: colors.mutedForeground, marginBottom: 8 }]}>Category</Text>
+                      <Text style={[styles.filterLabel, { color: filterAccentColor, marginBottom: 8 }]}>Category</Text>
                       <ScrollView
                         horizontal
                         showsHorizontalScrollIndicator={false}
@@ -760,26 +801,39 @@ const ListsScreenContent: React.FC = () => {
                       >
                         <Pressable
                           onPress={() => setHistoryCategoryFilter(null)}
-                          style={[styles.miniChip, !historyCategoryFilter && { backgroundColor: colors.primary, borderColor: colors.primary }]}
+                          style={[
+                            styles.miniChip,
+                            !historyCategoryFilter
+                              ? { backgroundColor: colors.primary, borderColor: colors.primary }
+                              : { backgroundColor: colors.background, borderColor: colors.border },
+                          ]}
                         >
-                          <Text style={[styles.miniChipText, !historyCategoryFilter && { color: colors.primaryForeground }]}>All</Text>
+                          <Text style={[styles.miniChipText, { color: historyCategoryFilter ? filterAccentColor : colors.foreground }]}>All</Text>
                         </Pressable>
-                        {shoppingCategories.map((cat) => (
-                          <Pressable
-                            key={cat.id}
-                            onPress={() => setHistoryCategoryFilter(cat.id)}
-                            style={[styles.miniChip, historyCategoryFilter === cat.id && { backgroundColor: colors.primary, borderColor: colors.primary }]}
-                          >
-                            <CategoryIcon
-                              icon={cat.icon}
-                              library={cat.library}
-                              size={12}
-                              color={historyCategoryFilter === cat.id ? colors.primary : colors.mutedForeground}
-                              style={{ marginRight: 4 }}
-                            />
-                            <Text style={[styles.miniChipText, historyCategoryFilter === cat.id && { color: colors.primaryForeground }]}>{cat.name}</Text>
-                          </Pressable>
-                        ))}
+                        {shoppingCategories.map((cat) => {
+                          const isCategoryActive = historyCategoryFilter === cat.id;
+                          return (
+                            <Pressable
+                              key={cat.id}
+                              onPress={() => setHistoryCategoryFilter(cat.id)}
+                              style={[
+                                styles.miniChip,
+                                isCategoryActive
+                                  ? { backgroundColor: colors.primary, borderColor: colors.primary }
+                                  : { backgroundColor: colors.background, borderColor: colors.border },
+                              ]}
+                            >
+                              <CategoryIcon
+                                icon={cat.icon}
+                                library={cat.library}
+                                size={12}
+                                color={isCategoryActive ? colors.primary : filterAccentColor}
+                                style={{ marginRight: 4 }}
+                              />
+                              <Text style={[styles.miniChipText, { color: isCategoryActive ? colors.primaryForeground : colors.foreground }]}>{cat.name}</Text>
+                            </Pressable>
+                          );
+                        })}
                       </ScrollView>
 
                       <View style={styles.dateTimeFilterRow}>
