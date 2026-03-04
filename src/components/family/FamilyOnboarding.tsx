@@ -14,34 +14,13 @@ import { useFamily, FamilyMember } from "../../contexts/FamilyContext";
 import { useAuth } from "../../contexts/AuthContext";
 import {
   AppIcon,
-  AppIconName,
-  isAppIconName,
 } from "../ui/AppIcon";
 import { MemberIcon } from "../ui/MemberIcon";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { PROFILE_COLORS } from "../../constants/profileColors";
+import { MEMBER_ICON_OPTIONS, DEFAULT_MEMBER_ICON } from "../../constants/memberIcons";
 import { useCountry } from "../../contexts/CountryContext";
 import { listCountries, CountryConfiguration } from "../../config/countries";
-
-const ICON_OPTIONS: AppIconName[] = [
-    "user",
-    "users",
-    "shield",
-    "sparkles",
-    "smile",
-    "heart",
-    "home",
-    "gift",
-    "party",
-    "sun",
-    "moon",
-    "zap",
-    "trophy",
-    "shoppingCart",
-    "calendar",
-    "checkCircle",
-];
-const DEFAULT_ICON: AppIconName = "user";
 
 const permissionOptions = [
     { id: "calendar", label: "Calendar", icon: "calendar" as const, description: "View and add events" },
@@ -77,7 +56,7 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
     const scrollViewRef = useRef<ScrollView | null>(null);
     const [currentMember, setCurrentMember] = useState<NewMember>({
         name: "",
-        avatar: DEFAULT_ICON,
+        avatar: DEFAULT_MEMBER_ICON,
         color: PROFILE_COLORS[0].value,
     });
     const countries = listCountries();
@@ -102,7 +81,7 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
             setLocalMembers(members.map((m: any) => ({
                 id: m.id,
                 name: m.name,
-                avatar: isAppIconName(m.symbol) ? m.symbol : DEFAULT_ICON,
+                avatar: m.symbol || DEFAULT_MEMBER_ICON,
                 color: m.color
             })));
             setNewFamilyName(familyName);
@@ -176,7 +155,7 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
 
         setCurrentMember({
             name: "",
-            avatar: DEFAULT_ICON,
+            avatar: DEFAULT_MEMBER_ICON,
             color:
                 PROFILE_COLORS.find(c => !localMembers.some(lm => lm.color === c.value))?.value ||
                 PROFILE_COLORS[0].value,
@@ -185,12 +164,12 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
 
     const handleEditMember = (index: number) => {
         setEditingIndex(index);
-        const member = localMembers[index];
-        setCurrentMember({
-            name: member.name,
-            avatar: isAppIconName(member.avatar) ? member.avatar : DEFAULT_ICON,
-            color: member.color,
-        });
+            const member = localMembers[index];
+            setCurrentMember({
+                name: member.name,
+                avatar: member.avatar || DEFAULT_MEMBER_ICON,
+                color: member.color,
+            });
         setTimeout(() => {
             scrollViewRef.current?.scrollToEnd({ animated: true });
         }, 120);
@@ -221,10 +200,10 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
                     onPress: () => {
                         setLocalMembers(localMembers.filter((_, i) => i !== index));
                         if (editingIndex === index) {
-                            setEditingIndex(null);
+                        setEditingIndex(null);
                         setCurrentMember({
                             name: "",
-                            avatar: DEFAULT_ICON,
+                            avatar: DEFAULT_MEMBER_ICON,
                             color: PROFILE_COLORS[0].value,
                         });
                         }
@@ -448,7 +427,7 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
 
                                 <Text style={[styles.label, { color: colors.mutedForeground }]}>Avatar</Text>
                                 <View style={styles.grid}>
-                                    {ICON_OPTIONS.map(icon => {
+                                    {MEMBER_ICON_OPTIONS.map(icon => {
                                         const isSelected = currentMember.avatar === icon;
                                         return (
                                             <Pressable
@@ -503,7 +482,7 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
                                     <Text style={[styles.outlineButtonText, { color: colors.foreground }]}>{editingIndex !== null ? "Save Changes" : "Add Member"}</Text>
                                 </Pressable>
                                 {(editingIndex !== null || currentMember.name.trim() !== "") && (
-                                    <Pressable style={{ marginTop: 12, alignItems: 'center' }} onPress={() => { setEditingIndex(null); setCurrentMember({ name: "", avatar: DEFAULT_ICON, color: PROFILE_COLORS[0].value }); }}>
+                                    <Pressable style={{ marginTop: 12, alignItems: 'center' }} onPress={() => { setEditingIndex(null); setCurrentMember({ name: "", avatar: DEFAULT_MEMBER_ICON, color: PROFILE_COLORS[0].value }); }}>
                                         <Text style={{ color: colors.mutedForeground }}>{editingIndex !== null ? "Cancel Edit" : "Clear Form"}</Text>
                                     </Pressable>
                                 )}

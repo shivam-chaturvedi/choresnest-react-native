@@ -61,5 +61,16 @@
 	<array>
 		<string>MaterialCommunityIcons.ttf</string>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.familychores</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.familychores</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

@@ -16,6 +16,7 @@ import { PROFILE_COLORS } from "../constants/profileColors";
 import { AppIcon, AppIconName, isAppIconName } from "../components/ui/AppIcon";
 import { AppSettingsService } from "../services/AppSettingsService";
 import { MemberIcon } from "../components/ui";
+import { MEMBER_ICON_OPTIONS, DEFAULT_MEMBER_ICON } from "../constants/memberIcons";
 
 interface InitialSetupScreenProps {
     onComplete: () => void;
@@ -29,7 +30,7 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
     const [familyNameInput, setFamilyNameInput] = useState("Family");
     const [memberName, setMemberName] = useState("Admin");
     const [selectedColor, setSelectedColor] = useState(PROFILE_COLORS[0]);
-    const [selectedEmoji, setSelectedEmoji] = useState<AppIconName>("user");
+    const [selectedEmoji, setSelectedEmoji] = useState<string>(DEFAULT_MEMBER_ICON);
     const [familyNameTouched, setFamilyNameTouched] = useState(false);
     const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
     const scrollViewRef = useRef<ScrollView | null>(null);
@@ -70,7 +71,7 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
 
     const handleMemberEdit = (member: any) => {
         setMemberName(member.name || "");
-        setSelectedEmoji(isAppIconName(member.symbol) ? member.symbol : "user");
+        setSelectedEmoji(member.symbol || DEFAULT_MEMBER_ICON);
         const matchingColor = PROFILE_COLORS.find((color) => color.value === member.color);
         setSelectedColor(matchingColor || PROFILE_COLORS[0]);
         setEditingMemberId(member.id);
@@ -95,7 +96,7 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
                             if (editingMemberId === member.id) {
                                 setEditingMemberId(null);
                                 setMemberName("");
-                                setSelectedEmoji("user");
+                                setSelectedEmoji(DEFAULT_MEMBER_ICON);
                                 setSelectedColor(PROFILE_COLORS[0]);
                             }
                         } catch (error) {
@@ -107,25 +108,6 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
             ]
         );
     };
-
-    const icons: AppIconName[] = [
-        "user",
-        "users",
-        "shield",
-        "sparkles",
-        "smile",
-        "heart",
-        "home",
-        "gift",
-        "party",
-        "sun",
-        "moon",
-        "zap",
-        "trophy",
-        "shoppingCart",
-        "calendar",
-        "checkCircle",
-    ];
 
     const currentEditingMember = editingMemberId ? members.find((member: any) => member.id === editingMemberId) : null;
 
@@ -298,7 +280,7 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
                     {/* Icon Selection */}
                     <Text style={[styles.label, { color: colors.foreground }]}>Choose a Profile Icon</Text>
                     <View style={styles.emojiGrid}>
-                        {icons.map((icon) => (
+                        {MEMBER_ICON_OPTIONS.map((icon) => (
                             <TouchableOpacity
                                 key={icon}
                                 style={[
@@ -307,7 +289,7 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
                                 ]}
                                 onPress={() => setSelectedEmoji(icon)}
                             >
-                                <AppIcon name={icon} size={28} color={selectedEmoji === icon ? colors.primary : colors.foreground} />
+                                <AppIcon source={icon} size={28} color={selectedEmoji === icon ? colors.primary : colors.foreground} />
                             </TouchableOpacity>
                         ))}
                     </View>

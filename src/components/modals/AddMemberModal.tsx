@@ -13,32 +13,14 @@ import { Check } from "lucide-react-native";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { useFamily } from "../../contexts/FamilyContext";
 import { PROFILE_COLORS } from "../../constants/profileColors";
-import { AppIcon, AppIconName, isAppIconName } from "../ui/AppIcon";
+import { AppIcon } from "../ui/AppIcon";
+import { MEMBER_ICON_OPTIONS, DEFAULT_MEMBER_ICON } from "../../constants/memberIcons";
 
 interface AddMemberModalProps {
   open: boolean;
   onClose: () => void;
   memberToEdit?: any; // FamilyMember
 }
-
-const AVATARS: AppIconName[] = [
-  "user",
-  "users",
-  "shield",
-  "sparkles",
-  "smile",
-  "heart",
-  "home",
-  "gift",
-  "party",
-  "sun",
-  "moon",
-  "zap",
-  "trophy",
-  "shoppingCart",
-  "calendar",
-  "checkCircle",
-];
 
 export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, memberToEdit }) => {
   const colors = useThemeColors();
@@ -50,7 +32,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, m
 
   const [name, setName] = useState("");
   const [error, setError] = useState("");
-  const [selectedAvatar, setSelectedAvatar] = useState<AppIconName>(AVATARS[0]);
+  const [selectedAvatar, setSelectedAvatar] = useState<string>(DEFAULT_MEMBER_ICON);
   const [selectedColor, setSelectedColor] = useState(initialColor);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -59,11 +41,11 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, m
     if (open) {
         if (memberToEdit) {
           setName(memberToEdit.name);
-          setSelectedAvatar(isAppIconName(memberToEdit.symbol) ? memberToEdit.symbol : AVATARS[0]);
+          setSelectedAvatar(memberToEdit.symbol || DEFAULT_MEMBER_ICON);
           setSelectedColor(memberToEdit.color);
       } else {
         setName("");
-        setSelectedAvatar(AVATARS[0]);
+        setSelectedAvatar(DEFAULT_MEMBER_ICON);
         setSelectedColor(initialColor);
       }
       setError("");
@@ -202,7 +184,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, m
           {/* Avatar Selection */}
           <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>Avatar</Text>
           <View style={styles.grid}>
-            {AVATARS.map((avatar) => {
+            {MEMBER_ICON_OPTIONS.map((avatar) => {
               const isSelected = selectedAvatar === avatar;
               return (
                 <Pressable
@@ -216,7 +198,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, m
                     }
                   ]}
                 >
-                  <AppIcon name={avatar} size={28} color={isSelected ? colors.background : colors.foreground} />
+                  <AppIcon source={avatar} size={28} color={isSelected ? colors.background : colors.foreground} />
                 </Pressable>
               )
             })}

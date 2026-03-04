@@ -8,6 +8,8 @@ import {
   Alert,
   Modal,
   ActivityIndicator,
+  Linking,
+  TextInput,
 } from "react-native";
 import { useNavigation, NavigationProp } from "@react-navigation/native";
 import { AppLayout } from "../components/layout";
@@ -20,6 +22,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { MemberIcon } from "../components/ui";
 import Config from "react-native-config";
 import { withDeferredScreen } from "../components/layout/DeferredScreen";
+import { SupabaseService } from "../services/SupabaseService";
 
 const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 
@@ -30,7 +33,9 @@ interface MenuItem {
   color: string;
   iconColor: string;
   route: string;
+  action?: () => void;
   badge?: string;
+  logo?: AppIconName;
 }
 
 interface MenuSection {
@@ -44,10 +49,62 @@ const MoreScreenContent: React.FC = () => {
   const navigation = useNavigation<NavigationProp<Record<string, undefined>>>();
   const { openSidebar } = useSidebar();
   const { logout, isGuest } = useAuth();
-  const { activeMember, members, setActiveMember } = useFamily();
+  const { activeMember, members, setActiveMember, profileId } = useFamily();
   const [showProfileSwitcher, setShowProfileSwitcher] = useState(false);
 
   const debugToolsEnabled = (Config.ENABLE_DEBUG_TOOLS ?? '').trim().toLowerCase() === 'true';
+  const contactEmail = "a@g.c";
+  const contactSubject = "Contact Request";
+  const contactMessage = "Hi Family Chores Team,\n\nI’d love some help with...";
+  const bugSubject = "Report a Bug / Feature Request";
+  const bugMessage =
+    "Hi Team,\n\nI discovered an issue or feature idea:\n- Summary:\n- Steps:\n- Expected:\n- Actual:\n\nThanks!";
+  const handleEmail = async (subject: string, body: string) => {
+    const query = new URLSearchParams({ subject, body }).toString();
+    const url = `mailto:${contactEmail}?${query}`;
+    await Linking.openURL(url);
+  };
+  const feedbackOptions = ["Bug Found", "Feature Request", "General Feedback", "Account Issue", "Other"];
+  const [feedbackModalVisible, setFeedbackModalVisible] = useState(false);
+  const [feedbackCategory, setFeedbackCategory] = useState(feedbackOptions[0]);
+  const [feedbackDescription, setFeedbackDescription] = useState("");
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
+  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
+  const openFeedbackForm = () => {
+    setFeedbackCategory(feedbackOptions[0]);
+    setFeedbackDescription("");
+    setFeedbackToast(null);
+    setFeedbackModalVisible(true);
+  };
+  const handleSubmitFeedback = async () => {
+    if (!feedbackDescription.trim()) {
+      Alert.alert("Missing description", "Please describe your request before submitting.");
+      return;
+    }
+    const pid = profileId ?? "guest";
+    try {
+      setFeedbackSubmitting(true);
+      const { error } = await SupabaseService.from("feedback").insert({
+        profile_id: pid,
+        category: feedbackCategory,
+        description: feedbackDescription.trim(),
+      });
+      if (error) {
+        Alert.alert("Submission failed", "Unable to save your feedback right now. Please try again.");
+        return;
+      }
+      setFeedbackToast("Thanks for your message! We’ll review it shortly.");
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!feedbackToast) return;
+    const timeout = setTimeout(() => setFeedbackToast(null), 3500);
+    return () => clearTimeout(timeout);
+  }, [feedbackToast]);
 
   // Safe access to profile color
   const activeProfileColor = activeMember?.color
@@ -154,12 +211,36 @@ const MoreScreenContent: React.FC = () => {
           route: "Settings"
         },
         {
-          label: "Help & Support",
-          description: "FAQ & contact us",
+          label: "Help Center",
+          description: "FAQ & Feature Guide",
           icon: "help",
           color: colors.info + '25',
           iconColor: colors.info,
           route: "Help"
+        },
+      ],
+    },
+    {
+      title: "CONTACT",
+      items: [
+        {
+          label: "Contact Us",
+          description: "Email our support team",
+          icon: "mail",
+          color: colors.primary + '15',
+          iconColor: colors.primary,
+          route: "Contact",
+          action: () => handleEmail(contactSubject, contactMessage),
+        },
+        {
+          label: "Feedback & Support",
+          description: "Share feedback or issues",
+          icon: "alertCircle",
+          color: colors.warning + '15',
+          iconColor: colors.warning,
+          route: "Contact",
+          action: openFeedbackForm,
+          logo: "sparkles",
         },
       ],
     },
@@ -314,7 +395,7 @@ const MoreScreenContent: React.FC = () => {
                         { borderRadius: radius.md },
                         index !== section.items.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }
                       ]}
-                      onPress={() => handleNavigate(item.route)}
+                      onPress={() => item.action ? item.action() : handleNavigate(item.route)}
                     >
                       <View style={[styles.itemIcon, { backgroundColor: item.color, borderRadius: radius.md }]}>
                         <AppIcon name={item.icon} size={20} color={item.iconColor} />
@@ -328,6 +409,11 @@ const MoreScreenContent: React.FC = () => {
                       {item.badge && (
                         <View style={[styles.badge, { backgroundColor: colors.primary }]}>
                           <Text style={[styles.badgeText, { color: colors.primaryForeground }]}>{item.badge}</Text>
+                        </View>
+                      )}
+                      {item.logo && (
+                        <View style={styles.itemLogo}>
+                          <AppIcon name={item.logo} size={16} color={item.iconColor} />
                         </View>
                       )}
                       <AppIcon name="chevronRight" size={20} color={colors.mutedForeground} />
@@ -396,6 +482,103 @@ const MoreScreenContent: React.FC = () => {
                 );
               }}
             />
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={feedbackModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => {
+          setFeedbackModalVisible(false);
+          setFeedbackThanksVisible(false);
+          setCategoryMenuOpen(false);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => {
+              setFeedbackModalVisible(false);
+              setCategoryMenuOpen(false);
+            }}
+          />
+          <View style={[styles.modalContent, { backgroundColor: colors.card, borderRadius: radius.xl }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.foreground }]}>Feedback & Support</Text>
+              <Pressable onPress={() => setFeedbackModalVisible(false)}>
+                <AppIcon name="x" size={24} color={colors.mutedForeground} />
+              </Pressable>
+            </View>
+            {feedbackToast && (
+              <View style={[styles.feedbackToast, { backgroundColor: colors.success + "10", borderColor: colors.success }]}>
+                <Text style={[styles.feedbackToastText, { color: colors.success }]}>{feedbackToast}</Text>
+              </View>
+            )}
+            <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Category</Text>
+            <View style={{ position: "relative", marginBottom: 12 }}>
+              <Pressable
+                style={[
+                  styles.feedbackDropdown,
+                  {
+                    borderColor: colors.border,
+                    backgroundColor: colors.background,
+                  },
+                ]}
+                onPress={() => setCategoryMenuOpen(prev => !prev)}
+              >
+                <Text style={[styles.feedbackOptionText, { color: colors.foreground }]}>{feedbackCategory}</Text>
+                <AppIcon name={categoryMenuOpen ? "chevronUp" : "chevronDown"} size={16} color={colors.mutedForeground} />
+              </Pressable>
+              {categoryMenuOpen && (
+                <View style={[styles.categoryMenu, { borderColor: colors.border, backgroundColor: colors.card }]}>
+                  {feedbackOptions.map(option => (
+                    <Pressable
+                      key={option}
+                      style={[
+                        styles.categoryOption,
+                        {
+                          backgroundColor: option === feedbackCategory ? colors.primary + "15" : colors.background,
+                        },
+                      ]}
+                      onPress={() => {
+                        setFeedbackCategory(option);
+                        setCategoryMenuOpen(false);
+                      }}
+                    >
+                      <Text style={{ color: colors.foreground }}>{option}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </View>
+            <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Description</Text>
+            <TextInput
+              style={[styles.feedbackInput, { borderColor: colors.border, color: colors.foreground }]}
+              placeholder="Tell us what happened or what you'd like to see"
+              placeholderTextColor={colors.mutedForeground}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              value={feedbackDescription}
+              onChangeText={setFeedbackDescription}
+            />
+            <Pressable
+              style={[
+                styles.feedbackSubmit,
+                { backgroundColor: colors.primary, borderRadius: radius.md },
+                feedbackSubmitting && { opacity: 0.6 },
+              ]}
+              onPress={handleSubmitFeedback}
+              disabled={feedbackSubmitting}
+            >
+              {feedbackSubmitting ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={[styles.feedbackSubmitText]}>Submit feedback</Text>
+              )}
+            </Pressable>
           </View>
         </View>
       </Modal>
@@ -520,6 +703,78 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 12,
     fontWeight: "700",
+  },
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  feedbackOption: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  feedbackOptionText: {
+    fontSize: 14,
+  },
+  feedbackInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    minHeight: 100,
+  },
+  feedbackSubmit: {
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  feedbackSubmitText: {
+    color: "#fff",
+    fontWeight: "700",
+  },
+  feedbackToast: {
+    width: "100%",
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  feedbackToastText: {
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  feedbackDropdown: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderRadius: 12,
+  },
+  categoryMenu: {
+    position: "absolute",
+    top: 54,
+    left: 0,
+    right: 0,
+    borderWidth: 1,
+    borderRadius: 12,
+    overflow: "hidden",
+    zIndex: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  categoryOption: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  itemLogo: {
+    marginRight: 8,
+    marginLeft: 4,
   },
   logoutButton: {
     flexDirection: "row",

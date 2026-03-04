@@ -1,16 +1,20 @@
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from "react";
+import { Linking } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Config from "react-native-config";
 import { supabase } from "../config/supabase";
 import { SupabaseService } from "../services/SupabaseService";
 import { AppSettingsService } from "../services/AppSettingsService";
 import { ProfileBootstrapService } from "../services/ProfileBootstrapService";
 import { Session, User as SupabaseUser } from "@supabase/supabase-js";
 import { getHumanReadableMessage } from "../utils/SupabaseErrorHandler";
+import { ErrorLogger } from "../utils/ErrorLogger";
 import { DocumentUploadScheduler } from "../services/sync/DocumentUploadScheduler";
 import { getDatabase } from "../database";
 import UserRecord from "../database/models/User";
 import { Q } from "@nozbe/watermelondb";
 import { ProfileService } from "../services/ProfileService";
+import { loginUser as proxyLoginUser, registerUser as proxyRegisterUser } from "../services/proxyAuthService";
 
 interface User {
     id: string;
@@ -33,10 +37,13 @@ interface AuthContextType {
     sessionEpoch: number;
     login: (email: string, pass: string) => Promise<boolean>;
     signup: (email: string, pass: string, name: string) => Promise<boolean>;
+    signInWithGoogle: () => Promise<boolean>;
     loginAsGuest: () => Promise<void>;
     logout: () => Promise<void>;
     completeOnboarding: () => Promise<void>;
     deleteAccount: () => Promise<void>;
+    isPasswordRecoveryFlow: boolean;
+    completePasswordRecoveryFlow: () => void;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -46,12 +53,27 @@ interface AuthProviderProps {
     onError?: (title: string, message: string) => void;
 }
 
+const GOOGLE_OAUTH_SCHEME = "com.familychores";
+const GOOGLE_OAUTH_HOST = "auth-callback";
+const GOOGLE_OAUTH_REDIRECT_URI = `${GOOGLE_OAUTH_SCHEME}://${GOOGLE_OAUTH_HOST}`;
+
+async function proxyLogin(email: string, pass: string) {
+  await proxyLoginUser(email, pass);
+  return { data: null, error: null };
+}
+
+async function proxyRegister(email: string, pass: string) {
+  await proxyRegisterUser(email, pass);
+  return { data: null, error: null };
+}
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError }) => {
     const [user, setUser] = useState<User | null>(null);
     const [isGuest, setIsGuest] = useState(false);
     const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [sessionEpoch, setSessionEpoch] = useState(0);
+    const [isPasswordRecoveryFlow, setIsPasswordRecoveryFlow] = useState(false);
 
     // Ref copy so async callbacks can read the latest epoch without closure capture
     const epochRef = useRef(0);
@@ -59,6 +81,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
         epochRef.current += 1;
         setSessionEpoch(epochRef.current);
     };
+    const onErrorRef = useRef(onError);
+    useEffect(() => {
+        onErrorRef.current = onError;
+    }, [onError]);
 
     useEffect(() => {
         const initializeAuth = async () => {
@@ -224,6 +250,111 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
         };
     }, []);
 
+    const completePasswordRecoveryFlow = () => {
+        setIsPasswordRecoveryFlow(false);
+    };
+
+    useEffect(() => {
+        const setSessionFromFragment = async (fragment: string) => {
+            const trimmed = fragment.startsWith("#") ? fragment.slice(1) : fragment;
+            if (!trimmed) {
+                return;
+            }
+
+            const params = new URLSearchParams(trimmed);
+            const accessToken = params.get("access_token");
+            const refreshToken = params.get("refresh_token");
+            const flowType = params.get("type")?.toLowerCase();
+            const isRecoveryFlow = flowType === "recovery";
+            if (!accessToken || !refreshToken) {
+                return;
+            }
+
+            try {
+                const { error } = await supabase.auth.setSession({
+                    access_token: accessToken,
+                    refresh_token: refreshToken,
+                });
+                if (error) {
+                    const message = getHumanReadableMessage(error, "oauth");
+                    onErrorRef.current?.("Google Sign-In Failed", message);
+                    ErrorLogger.logError(error, {
+                        component: "AuthContext",
+                        action: "setSessionFromOAuth",
+                        additionalData: { fragment: trimmed },
+                    });
+                    setIsPasswordRecoveryFlow(false);
+                    return;
+                }
+
+                setIsPasswordRecoveryFlow(isRecoveryFlow);
+                const { data } = await supabase.auth.getUser();
+                console.log("[AuthContext] Google OAuth session restored for", data?.user?.id);
+            } catch (error) {
+                ErrorLogger.logError(error, {
+                    component: "AuthContext",
+                    action: "setSessionFromOAuth",
+                    additionalData: { fragment: trimmed },
+                });
+            }
+        };
+
+        const processOAuthCallback = async (rawUrl?: string) => {
+            if (!rawUrl) {
+                return;
+            }
+
+            try {
+                const parsed = new URL(rawUrl);
+                if (parsed.protocol !== `${GOOGLE_OAUTH_SCHEME}:` || parsed.host !== GOOGLE_OAUTH_HOST) {
+                    return;
+                }
+
+                const providerError = parsed.searchParams.get("error_description") ?? parsed.searchParams.get("error");
+                if (providerError) {
+                    const decodedMessage = decodeURIComponent(providerError);
+                    onErrorRef.current?.("Google Sign-In Failed", decodedMessage);
+                    return;
+                }
+
+                const hashFragment = parsed.hash?.slice(1);
+                if (hashFragment) {
+                    await setSessionFromFragment(hashFragment);
+                }
+            } catch (error) {
+                ErrorLogger.logError(error, {
+                    component: "AuthContext",
+                    action: "processGoogleOAuthRedirect",
+                    additionalData: { url: rawUrl },
+                });
+            }
+        };
+
+        const handleUrlEvent = ({ url }: { url: string }) => {
+            void processOAuthCallback(url);
+        };
+
+        void Linking.getInitialURL()
+            .then((initialUrl) => {
+                if (initialUrl) {
+                    void processOAuthCallback(initialUrl);
+                }
+            })
+            .catch((error) => {
+                ErrorLogger.logError(error, {
+                    component: "AuthContext",
+                    action: "getInitialURL",
+                });
+            });
+
+        const subscription = Linking.addEventListener("url", handleUrlEvent);
+        return () => {
+            subscription.remove();
+        };
+    }, []);
+
+    const USE_PROXY_AUTH = Config.USE_PROXY_AUTH === 'true';
+
     const login = async (email: string, pass: string): Promise<boolean> => {
         ProfileBootstrapService.resetCache();
         try {
@@ -235,7 +366,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
                     10000
                 )
             );
-            const { error } = await Promise.race([SupabaseService.signIn(email, pass), timeoutPromise]);
+            const loginPromise = USE_PROXY_AUTH
+                ? proxyLogin(email, pass)
+                : SupabaseService.signIn(email, pass);
+            const { error } = await Promise.race([loginPromise, timeoutPromise]);
             if (error) {
                 const message = getHumanReadableMessage(error, 'login');
                 onError?.('Login Failed', message);
@@ -258,7 +392,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
     const signup = async (email: string, pass: string, name: string): Promise<boolean> => {
         ProfileBootstrapService.resetCache();
         try {
-            const { error } = await SupabaseService.signUp(email, pass, name);
+            const signupPromise = USE_PROXY_AUTH
+                ? proxyRegister(email, pass)
+                : SupabaseService.signUp(email, pass, name);
+            const { error } = await signupPromise;
             if (error) {
                 const message = getHumanReadableMessage(error, 'signup');
                 onError?.('Signup Failed', message);
@@ -272,6 +409,38 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
         } catch (error: any) {
             const message = getHumanReadableMessage(error, 'signup');
             onError?.('Signup Failed', message);
+            return false;
+        }
+    };
+
+    const signInWithGoogle = async (): Promise<boolean> => {
+        try {
+            const { data, error } = await supabase.auth.signInWithOAuth({
+                provider: "google",
+                options: {
+                    redirectTo: GOOGLE_OAUTH_REDIRECT_URI,
+                    skipBrowserRedirect: true,
+                },
+            });
+
+            if (error) {
+                throw error;
+            }
+
+            const oauthUrl = data?.url;
+            if (!oauthUrl) {
+                throw new Error("Google OAuth did not return a redirect URL.");
+            }
+
+            await Linking.openURL(oauthUrl);
+            return true;
+        } catch (error: any) {
+            const message = getHumanReadableMessage(error, 'oauth');
+            ErrorLogger.logError(error, {
+                component: "AuthContext",
+                action: "signInWithGoogle",
+            });
+            onError?.("Google Sign-In Failed", message);
             return false;
         }
     };
@@ -380,10 +549,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onError })
             sessionEpoch,
             login,
             signup,
+            signInWithGoogle,
             loginAsGuest,
             logout,
             completeOnboarding,
-            deleteAccount
+            deleteAccount,
+            isPasswordRecoveryFlow,
+            completePasswordRecoveryFlow
         }}>
             {children}
         </AuthContext.Provider>

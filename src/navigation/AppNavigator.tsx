@@ -10,6 +10,7 @@ import { AuthScreen } from "../screens/AuthScreen";
 import { ForgotPasswordScreen } from "../screens/ForgotPasswordScreen";
 import { PrivacyScreen } from "../screens/PrivacyScreen";
 import { InitialSetupScreen } from "../screens/InitialSetupScreen";
+import { ResetPasswordScreen } from "../screens/ResetPasswordScreen";
 import { TabNavigator } from "./TabNavigator";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { useSidebar } from "../contexts/SidebarContext";
@@ -73,7 +74,15 @@ export const AppNavigator = () => {
 
 const AppNavigatorInner = () => {
   const { isSidebarOpen, closeSidebar } = useSidebar();
-  const { user, isAuthenticated, isLoading, isGuest, hasCompletedOnboarding, completeOnboarding } = useAuth();
+  const {
+    user,
+    isAuthenticated,
+    isLoading,
+    isGuest,
+    hasCompletedOnboarding,
+    completeOnboarding,
+    isPasswordRecoveryFlow,
+  } = useAuth();
   const [showSplash, setShowSplash] = React.useState(true);
   const [hasMembersInDB, setHasMembersInDB] = React.useState<boolean | null>(null);
   const [membersReady, setMembersReady] = React.useState(false);
@@ -490,7 +499,9 @@ const AppNavigatorInner = () => {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {isAuthenticated ? (
           <>
-            {shouldShowInitialSetup ? (
+            {isPasswordRecoveryFlow ? (
+              <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+            ) : shouldShowInitialSetup ? (
               <Stack.Screen name="InitialSetup">
                 {() => (
                   <InitialSetupScreen

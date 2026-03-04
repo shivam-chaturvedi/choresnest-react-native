@@ -27,7 +27,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   onForgotPassword,
   onPrivacy,
 }) => {
-  const { login, signup, loginAsGuest } = useAuth();
+  const { login, signup, loginAsGuest, signInWithGoogle } = useAuth();
   const { showToast } = useToast();
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
@@ -122,6 +122,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         title: 'Guest Mode Failed',
         description: 'Could not start guest session. Please try again.'
       });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      setIsSubmitting(true);
+      await signInWithGoogle();
     } finally {
       setIsSubmitting(false);
     }
@@ -294,7 +303,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             <View style={[styles.line, { backgroundColor: theme.colors.border }]} />
           </View>
 
-          <Pressable style={[styles.googleButton, {
+          <Pressable
+            onPress={handleGoogleSignIn}
+            style={[styles.googleButton, {
             backgroundColor: theme.colors.card,
             borderColor: theme.colors.border,
             shadowColor: theme.colors.shadow,
