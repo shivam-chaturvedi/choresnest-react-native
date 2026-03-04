@@ -6,7 +6,7 @@ export const palettes = {
     colors: ["#d6e5f6ff", "#719dcdff", "#356aaaff", "#092342ff"], // Light -> Dark
     palette: {
       light: "#c4dbf1ff",
-      mediumLight: "#7497bcff",
+      mediumLight: "#0c4684ff",
       mediumDark: "#265084ff",
       dark: "#07182dff",
     }
@@ -40,12 +40,11 @@ export type AppearanceMode = 'light' | 'cream' | 'midnight';
 export const createThemeColors = (paletteKey: PaletteKey, mode: AppearanceMode) => {
   const safePaletteKey = palettes[paletteKey] ? paletteKey : 'sapphire';
   const p = palettes[safePaletteKey].palette;
-  const isDark = mode !== 'light';
   const isMidnight = mode === 'midnight';
 
   const backgroundPalette: Record<AppearanceMode, string> = {
     light: "#FFFFFF",
-    cream: "#F5F2E8",
+    cream: "#efede4ff",
     midnight: "#03040A",
   };
 
@@ -80,8 +79,8 @@ export const createThemeColors = (paletteKey: PaletteKey, mode: AppearanceMode) 
     secondaryForeground: p.dark,
     accent: p.mediumLight,
     accentForeground: p.dark,
-    muted: isDark ? "#31445eff" : p.light,
-    mutedForeground: isDark ? "#CBD5F5" : "#64748B",
+    muted: isMidnight ? "#31445eff" : p.light,
+    mutedForeground: isMidnight ? "#CBD5F5" : "#64748B",
 
     card: cardPalette[mode],
 
@@ -139,9 +138,9 @@ export const theme = {
     },
     blue: {
       50: "#EFF6FF",
-      100: "#DBEAFE",
-      200: "#BFDBFE",
-      500: "#3B82F6",
+      100: "#acc8ecff",
+      200: "#a1c3edff",
+      500: "#2f75e6ff",
       600: "#2563EB",
       800: "#1E40AF",
       900: "#1E3A8A",

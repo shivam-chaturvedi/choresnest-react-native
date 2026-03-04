@@ -27,6 +27,8 @@ import { useFinance, Transaction } from '../contexts/FinanceContext';
 import { ScreenErrorView } from '../components/ui/ScreenErrorView';
 import { useCountry } from '../contexts/CountryContext';
 import { SyncService } from '../services/SyncService';
+import { CategoryColorService } from '../services/CategoryColorService';
+import { CATEGORY_COLOR_FALLBACK } from '../constants/categoryColors';
 import { IconGlyph } from '../components/ui/IconGlyph';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -182,11 +184,13 @@ const AreaChart = ({ dailyData, viewDate, onPrevMonth, onNextMonth }: { dailyDat
 const DonutChart = ({ categories }: { categories: Category[] }) => {
   const colors = useThemeColors();
   const { formatCurrency } = useCountry();
-  const size = 180;
+  const size = Math.min(SCREEN_WIDTH - 48, 280);
   const chartRadius = size / 2;
-  const strokeWidth = 35;
+  const strokeWidth = 48;
   const center = size / 2;
-  const innerRadius = chartRadius - strokeWidth;
+  const innerRadius = Math.max(chartRadius - strokeWidth, 32);
+
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
   let startAngle = 0;
   const total = categories.reduce((sum, cat) => sum + cat.numAmount, 0);
@@ -254,6 +258,7 @@ const DonutChart = ({ categories }: { categories: Category[] }) => {
                 fill={cat.color}
                 stroke={colors.card}
                 strokeWidth={1}
+                onPress={() => setActiveCategory(cat.name)}
               />
             );
           })}
@@ -279,6 +284,11 @@ const DonutChart = ({ categories }: { categories: Category[] }) => {
           {formatCurrency(total)}
         </SvgText>
       </Svg>
+      {activeCategory && (
+        <Text style={{ marginTop: 8, color: colors.primary, fontWeight: '600', textAlign: 'center' }}>
+          {activeCategory}
+        </Text>
+      )}
     </View>
   );
 };
@@ -400,6 +410,8 @@ export const ExpensesScreen: React.FC = () => {
   const categories = useMemo(() => {
     return Object.entries(categorySpending).map(([name, amount]) => {
       const budgetValue = budgets[name] || 0;
+      const normalizedKey = CategoryColorService.normalizeCategoryKey(name);
+      const displayColor = categoryColors[normalizedKey] ?? CATEGORY_COLOR_FALLBACK;
       return {
         name: name.charAt(0).toUpperCase() + name.slice(1),
         id: name,
@@ -407,7 +419,7 @@ export const ExpensesScreen: React.FC = () => {
         numAmount: amount,
         percent: totalExpenses > 0 ? Math.round((amount / totalExpenses) * 100) : 0,
         icon: categoryIcons[name] || '📦',
-        color: categoryColors[name] || categoryColors.other,
+        color: displayColor,
         budget: budgetValue,
         formattedBudget: budgetValue > 0 ? formatCurrency(budgetValue) : null,
       };
@@ -731,7 +743,7 @@ export const ExpensesScreen: React.FC = () => {
                       <View key={cat.id}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
                           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            <Text style={{ marginRight: 8, fontSize: 16 }}>{cat.icon}</Text>
+                            <IconGlyph icon={cat.icon} size={18} color={cat.color} style={{ marginRight: 8 }} />
                             <Text style={[styles.catName, { color: colors.foreground }]}>{cat.name}</Text>
                           </View>
                           <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
@@ -838,6 +850,7 @@ export const ExpensesScreen: React.FC = () => {
         onAdd={handleAddExpense}
         budgets={budgets}
         currentSpending={categorySpending} // Now dynamic
+        categoryColors={categoryColors}
       />
 
       <EditBudgetsModal

@@ -3,6 +3,7 @@ import { getDatabase } from '../database';
 import { Transaction as DbTransaction, Budget as DbBudget } from '../database/models/Finance';
 import { Q } from '@nozbe/watermelondb';
 import { SyncService } from '../services/SyncService';
+import { CategoryColorService } from '../services/CategoryColorService';
 import { useActiveProfileId } from '../hooks/useActiveProfileId';
 
 export interface Transaction {
@@ -35,34 +36,33 @@ interface FinanceContextType {
     deleteBudget: (category: string) => void;
     categoryColors: Record<string, string>;
     categoryIcons: Record<string, string>;
+    setCategoryColor: (category: string, colorHex: string) => Promise<void>;
 }
 
-const defaultCategoryColors: Record<string, string> = {
-    groceries: '#10b981',
-    utilities: '#f59e0b',
-    transport: '#3b82f6',
-    food: '#f97316',
-    shopping: '#ec4899',
-    healthcare: '#ef4444',
-    entertainment: '#8b5cf6',
-    education: '#6366f1',
-    other: '#6b7280',
-    salary: '#10b981',
-    freelance: '#3b82f6',
-};
-
 const defaultCategoryIcons: Record<string, string> = {
-    groceries: '🛒',
-    utilities: '⚡',
-    transport: '🚗',
-    food: '🍽️',
-    shopping: '🛍️',
-    healthcare: '🏥',
-    entertainment: '🎬',
-    education: '📚',
-    salary: '💼',
-    freelance: '💻',
-    other: '📦'
+    groceries: 'cart-outline',
+    utilities: 'flash',
+    transport: 'car',
+    food: 'silverware-fork-knife',
+    shopping: 'tshirt-crew',
+    healthcare: 'hospital-box',
+    entertainment: 'ticket-confirmation',
+    education: 'school',
+    bills: 'file-document',
+    maintenance: 'tools',
+    alimony: 'hand-heart',
+    insurance: 'shield-check',
+    subscriptions: 'bookmark-outline',
+    travel: 'airplane',
+    gifts: 'gift-outline',
+    savings: 'piggy-bank',
+    rent: 'home-outline',
+    home: 'home-city-outline',
+    kids: 'baby-face-outline',
+    pets: 'paw',
+    other: 'dots-horizontal',
+    salary: 'briefcase',
+    freelance: 'laptop'
 };
 
 const defaultBudgets: Budget = {
@@ -74,9 +74,21 @@ const defaultBudgets: Budget = {
     healthcare: 3000,
     entertainment: 2000,
     education: 5000,
+    bills: 12000,
+    maintenance: 4000,
+    insurance: 3000,
+    service: 3500,
     salary: 0,
     freelance: 0,
     other: 2000,
+};
+
+const convertColorMap = (map: Map<string, string>): Record<string, string> => {
+    const record: Record<string, string> = {};
+    map.forEach((value, key) => {
+        record[key] = value;
+    });
+    return record;
 };
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
@@ -85,7 +97,11 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [budgets, setBudgets] = useState<Budget>(defaultBudgets);
     const [budgetMeta, setBudgetMeta] = useState<Record<string, BudgetMeta>>({});
+    const [categoryColors, setCategoryColors] = useState<Record<string, string>>({});
     const profileId = useActiveProfileId();
+    const syncAfterWrite = useCallback(() => {
+        void SyncService.requestSyncSoon();
+    }, []);
 
     useEffect(() => {
         if (!profileId) {
@@ -169,9 +185,71 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
         return () => subscription.unsubscribe();
     }, [profileId]);
 
-    const syncAfterWrite = useCallback(() => {
-        void SyncService.requestSyncSoon();
-    }, []);
+    useEffect(() => {
+        let isMounted = true;
+        if (!profileId) {
+            setCategoryColors({});
+            return () => {
+                isMounted = false;
+            };
+        }
+
+        const loadCategoryColors = async () => {
+            try {
+                const candidates = new Set<string>();
+                Object.keys(budgets).forEach(cat => candidates.add(cat));
+                transactions.forEach(tx => {
+                    if (tx.category) {
+                        candidates.add(tx.category);
+                    }
+                });
+                candidates.add('other');
+
+                const result = await CategoryColorService.ensureMappingsForCategories(
+                    profileId,
+                    Array.from(candidates)
+                );
+
+                if (!isMounted) {
+                    return;
+                }
+
+                setCategoryColors(convertColorMap(result.map));
+                if (result.created > 0) {
+                    syncAfterWrite();
+                }
+            } catch (error) {
+                console.error('CategoryColorService failed to load mappings', error);
+            }
+        };
+
+        void loadCategoryColors();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [profileId, budgets, transactions, syncAfterWrite]);
+
+    const setCategoryColor = useCallback(
+        async (category: string, colorHex: string) => {
+            if (!profileId) {
+                console.warn('Skipping category color write until profile is known');
+                return;
+            }
+
+            try {
+                await CategoryColorService.setCategoryColor(profileId, category, colorHex);
+                setCategoryColors(prev => ({
+                    ...prev,
+                    [CategoryColorService.normalizeCategoryKey(category)]: colorHex,
+                }));
+                syncAfterWrite();
+            } catch (error) {
+                console.error('Failed to persist category color locally', error);
+            }
+        },
+        [profileId, syncAfterWrite]
+    );
 
     const addTransaction = (transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>) => {
         const timestamp = Date.now();
@@ -395,8 +473,9 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({ children })
                 budgets,
                 updateBudget,
                 deleteBudget,
-                categoryColors: defaultCategoryColors,
-                categoryIcons: defaultCategoryIcons
+                categoryColors,
+                categoryIcons: defaultCategoryIcons,
+                setCategoryColor,
             }}
         >
             {children}

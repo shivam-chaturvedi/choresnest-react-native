@@ -26,7 +26,6 @@ import { getDatabase } from "../database";
 import { SyncService } from "../services/SyncService";
 import NetInfo from "@react-native-community/netinfo";
 import { AppState, AppStateStatus } from "react-native";
-import { SyncIndicator } from "../components/SyncIndicator";
 import { AppSettingsService } from "../services/AppSettingsService";
 import Member from "../database/models/Member";
 import { ProfileBootstrapService } from "../services/ProfileBootstrapService";
@@ -554,7 +553,6 @@ const AppNavigatorInner = () => {
           </>
         )}
       </Stack.Navigator>
-      <SyncIndicator />
       <AppLockOverlay />
       <AppSidebar open={isSidebarOpen} onClose={closeSidebar} />
     </>

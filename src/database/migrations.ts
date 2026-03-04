@@ -455,5 +455,109 @@ export default schemaMigrations({
                 `),
             ],
         },
+        {
+            toVersion: 18,
+            steps: [
+                createTable({
+                    name: 'category_color_mappings',
+                    columns: [
+                        { name: 'profile_id', type: 'string', isIndexed: true },
+                        { name: 'category_key', type: 'string', isIndexed: true },
+                        { name: 'color_hex', type: 'string' },
+                        { name: 'created_at', type: 'number' },
+                        { name: 'updated_at', type: 'number' },
+                        { name: 'deleted', type: 'boolean' },
+                        { name: 'version', type: 'number' },
+                    ],
+                }),
+            ],
+        },
+        {
+            toVersion: 19,
+            steps: [
+                unsafeExecuteSql(`
+                    ALTER TABLE category_color_mappings RENAME TO budget_category_color_mappings;
+                `),
+                unsafeExecuteSql(`
+                    DROP INDEX IF EXISTS idx_category_color_mappings_profile_category;
+                `),
+                unsafeExecuteSql(`
+                    DROP INDEX IF EXISTS idx_category_color_mappings_profile_updated_id;
+                `),
+                unsafeExecuteSql(`
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_budget_category_color_mappings_profile_category
+                    ON budget_category_color_mappings(profile_id, category_key);
+                `),
+                unsafeExecuteSql(`
+                    CREATE INDEX IF NOT EXISTS idx_budget_category_color_mappings_profile_updated_id
+                    ON budget_category_color_mappings(profile_id, updated_at);
+                `),
+            ],
+        },
+        {
+            toVersion: 20,
+            steps: [
+                unsafeExecuteSql(`
+                    CREATE TABLE budget_category_color_mappings_new (
+                        id TEXT PRIMARY KEY,
+                        profile_id TEXT,
+                        category_key TEXT,
+                        color_hex TEXT,
+                        created_at INTEGER,
+                        updated_at INTEGER,
+                        deleted INTEGER,
+                        version INTEGER,
+                        _status TEXT,
+                        _changed TEXT
+                    );
+                `),
+                unsafeExecuteSql(`
+                    INSERT INTO budget_category_color_mappings_new (
+                        id,
+                        profile_id,
+                        category_key,
+                        color_hex,
+                        created_at,
+                        updated_at,
+                        deleted,
+                        version,
+                        _status,
+                        _changed
+                    )
+                    SELECT
+                        lower(
+                            substr(hex(randomblob(16)), 1, 8) || '-' ||
+                            substr(hex(randomblob(16)), 9, 4) || '-' ||
+                            substr(hex(randomblob(16)), 13, 4) || '-' ||
+                            substr(hex(randomblob(16)), 17, 4) || '-' ||
+                            substr(hex(randomblob(16)), 21, 12)
+                        ) AS id,
+                        profile_id,
+                        category_key,
+                        color_hex,
+                        created_at,
+                        updated_at,
+                        deleted,
+                        version,
+                        'synced',
+                        ''
+                    FROM budget_category_color_mappings;
+                `),
+                unsafeExecuteSql(`
+                    DROP TABLE budget_category_color_mappings;
+                `),
+                unsafeExecuteSql(`
+                    ALTER TABLE budget_category_color_mappings_new RENAME TO budget_category_color_mappings;
+                `),
+                unsafeExecuteSql(`
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_budget_category_color_mappings_profile_category
+                    ON budget_category_color_mappings(profile_id, category_key);
+                `),
+                unsafeExecuteSql(`
+                    CREATE INDEX IF NOT EXISTS idx_budget_category_color_mappings_profile_updated_id
+                    ON budget_category_color_mappings(profile_id, updated_at);
+                `),
+            ],
+        },
     ],
 });

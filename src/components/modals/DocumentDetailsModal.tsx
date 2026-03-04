@@ -27,6 +27,7 @@ import {
     REMINDER_OFFSET_OPTIONS,
     VaultReminderRule,
 } from "../../utils/VaultReminderUtils";
+import { IconGlyph } from "../ui/IconGlyph";
 import FileViewer from 'react-native-file-viewer';
 import NetInfo from '@react-native-community/netinfo';
 import { AppIcon, CustomDateTimePicker } from "../ui";
@@ -40,13 +41,13 @@ interface DocumentDetailsModalProps {
 }
 
 const CATEGORIES = [
-    { id: 'warranty', name: 'Warranty', icon: '🛡️' },
-    { id: 'bill', name: 'Bill', icon: '🧾' },
-    { id: 'insurance', name: 'Insurance', icon: '📋' },
-    { id: 'service', name: 'Service', icon: '🔧' },
-    { id: 'certificate', name: 'Certificate', icon: '📜' },
-    { id: 'receipt', name: 'Receipt', icon: '🧾' },
-    { id: 'other', name: 'Other', icon: '📄' },
+    { id: 'warranty', name: 'Warranty', icon: 'shield-check' },
+    { id: 'bill', name: 'Bill', icon: 'file-document-outline' },
+    { id: 'insurance', name: 'Insurance', icon: 'shield-account' },
+    { id: 'service', name: 'Service', icon: 'tools' },
+    { id: 'certificate', name: 'Certificate', icon: 'certificate' },
+    { id: 'receipt', name: 'Receipt', icon: 'receipt' },
+    { id: 'other', name: 'Other', icon: 'dots-horizontal' },
 ];
 
 const parseReminderTimeString = (value?: string): Date => {
@@ -740,7 +741,12 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                                                 ]}
                                                 onPress={() => setSelectedCategory(cat.id)}
                                             >
-                                                <Text style={{ fontSize: 16, marginRight: 4 }}>{cat.icon}</Text>
+                                                <IconGlyph
+                                                    icon={cat.icon}
+                                                    size={18}
+                                                    color={selectedCategory === cat.id ? colors.primaryForeground : colors.foreground}
+                                                    style={{ marginRight: 4 }}
+                                                />
                                                 <Text style={[
                                                     styles.categoryChipText,
                                                     { color: selectedCategory === cat.id ? colors.primaryForeground : colors.foreground }

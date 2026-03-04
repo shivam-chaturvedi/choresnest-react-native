@@ -19,6 +19,7 @@ interface ThemeContextType {
     isDark: boolean;
     appearanceMode: AppearanceMode;
     themeVersion: number;
+    theme: typeof theme;
     setPalette: (key: ThemeKey) => void;
     setShapeMode: (mode: ShapeMode) => void;
     toggleThemeMode: () => void;
@@ -32,6 +33,7 @@ const ThemeContext = createContext<ThemeContextType>({
     isDark: false,
     appearanceMode: 'cream',
     themeVersion: 0,
+    theme,
     setPalette: () => { },
     setShapeMode: () => { },
     toggleThemeMode: () => { },
@@ -136,7 +138,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             const { radii } = require('../theme');
             Object.assign(theme.radius, radii[shapeMode]);
 
-            setThemeVersion(v => v + 1);
+        setThemeVersion(v => v + 1);
         } catch (error) {
             console.error("Failed to update theme:", error);
             try {
@@ -159,6 +161,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             isDark: isDarkMode,
             appearanceMode,
             themeVersion,
+            theme,
             setPalette: setCurrentPalette,
             setShapeMode: setShapeMode,
             toggleThemeMode,
