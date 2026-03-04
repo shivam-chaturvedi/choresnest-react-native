@@ -6,13 +6,16 @@ import {
   StyleSheet,
   Text,
   View,
+  Linking,
+  AppState,
 } from "react-native";
 
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { AppIcon } from "../ui/AppIcon";
-import { X, Trash2, Check, Clock } from "lucide-react-native";
+import { X, Trash2, Check, Clock, Bell } from "lucide-react-native";
 import { AppNotification } from "../../services/NotificationCenter";
 import { NotificationScheduler } from "../../services/NotificationScheduler";
+import { checkPermission, requestPermission, resetPermissionPrompt } from "../../utils/permissions";
 
 interface NotificationPanelProps {
   open: boolean;
@@ -36,6 +39,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
 
   const unreadCount = notifications.filter((n) => !n.read).length;
   const [exactAlarmEnabled, setExactAlarmEnabled] = useState(NotificationScheduler.isExactAlarmEnabled());
+  const [notificationsEnabled, setNotificationsEnabled] = useState<boolean | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -55,6 +59,34 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
     const enabled = await NotificationScheduler.ensureExactAlarm(true);
     setExactAlarmEnabled(enabled);
   };
+
+  const handleEnableNotifications = async () => {
+    await resetPermissionPrompt("notification");
+    const granted = await requestPermission("notification", { showSettingsPrompt: false });
+    setNotificationsEnabled(granted);
+    Linking.openSettings().catch((err) => {
+      console.error("Failed to open settings after enabling notifications:", err);
+    });
+  };
+
+  useEffect(() => {
+    let active = true;
+    const refresh = () => {
+      void checkPermission("notification").then((granted) => {
+        if (active) setNotificationsEnabled(granted);
+      });
+    };
+    refresh();
+    const subscription = AppState.addEventListener("change", (next) => {
+      if (next === "active") {
+        refresh();
+      }
+    });
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, []);
 
   const groups = useMemo(() => {
     const today: AppNotification[] = [];
@@ -180,6 +212,20 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
                 </View>
                 <Pressable style={[styles.permissionButton, { borderRadius: radius.full, borderColor: colors.primary }]} onPress={handleEnableExactAlarm}>
                   <Text style={[styles.permissionButtonText, { color: colors.primary }]}>Enable</Text>
+                </Pressable>
+              </View>
+            )}
+            {notificationsEnabled === false && (
+              <View style={[styles.notificationCard, { borderColor: colors.border }]}>
+                <View style={styles.notificationCardHeader}>
+                  <Bell size={20} color={colors.primary} />
+                  <Text style={[styles.notificationCardTitle, { color: colors.foreground }]}>Notifications disabled</Text>
+                </View>
+                <Text style={[styles.notificationCardBody, { color: colors.mutedForeground }]}>
+                  Enable system notifications so reminders and alerts can reach you.
+                </Text>
+                <Pressable style={[styles.notificationCardButton, { borderRadius: radius.full }]} onPress={handleEnableNotifications}>
+                  <Text style={[styles.notificationCardButtonText, { color: "#fff" }]}>Enable Notifications</Text>
                 </Pressable>
               </View>
             )}
@@ -401,6 +447,39 @@ const styles = StyleSheet.create({
   },
   permissionButtonText: {
     fontWeight: "600",
+  },
+  notificationCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    backgroundColor: "#FFF7ED",
+    marginVertical: 12,
+    gap: 8,
+  },
+  notificationCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4,
+  },
+  notificationCardTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  notificationCardBody: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  notificationCardButton: {
+    backgroundColor: "#F97316",
+    marginTop: 8,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  notificationCardButtonText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#fff",
   },
   emptyText: {
     fontSize: 14,

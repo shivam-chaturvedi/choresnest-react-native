@@ -97,21 +97,23 @@ const checkNotificationPermission = async (): Promise<boolean> => {
     }
 };
 
-const requestNotificationPermission = async (): Promise<boolean> => {
-    try {
-        const response = await requestNotifications(['alert', 'sound', 'badge']);
-        if (isStatusGranted(response.status)) {
-            return true;
-        }
+const requestNotificationPermission = async (options?: { showSettingsPrompt?: boolean }): Promise<boolean> => {
+  try {
+    const response = await requestNotifications(['alert', 'sound', 'badge']);
+    if (isStatusGranted(response.status)) {
+      return true;
+    }
 
-        if (response.status === RESULTS.DENIED || response.status === RESULTS.BLOCKED) {
+    if (response.status === RESULTS.DENIED || response.status === RESULTS.BLOCKED) {
+        if (options?.showSettingsPrompt ?? true) {
             await maybeShowSettingsPrompt('notification');
         }
-        return false;
-    } catch (error) {
-        console.error("Notification request failed:", error);
-        return false;
     }
+    return false;
+  } catch (error) {
+    console.error("Notification request failed:", error);
+    return false;
+  }
 };
 
 export const checkPermission = async (type: PermissionType): Promise<boolean> => {
@@ -132,10 +134,18 @@ export const checkPermission = async (type: PermissionType): Promise<boolean> =>
 };
 
 
-export const requestPermission = async (type: PermissionType): Promise<boolean> => {
-    if (type === 'notification') {
-        return requestNotificationPermission();
+export const resetPermissionPrompt = async (type: PermissionType): Promise<void> => {
+    try {
+        await AsyncStorage.removeItem(getPromptKey(type));
+    } catch (error) {
+        console.error('Failed to reset permission prompt suppress flag:', error);
     }
+};
+
+export const requestPermission = async (type: PermissionType, options?: { showSettingsPrompt?: boolean }): Promise<boolean> => {
+  if (type === 'notification') {
+        return requestNotificationPermission(options);
+  }
 
     const permission = getPermissionType(type);
     if (!permission) return true;

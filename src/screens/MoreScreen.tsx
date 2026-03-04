@@ -10,6 +10,10 @@ import {
   ActivityIndicator,
   Linking,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Keyboard,
 } from "react-native";
 import { useNavigation, NavigationProp } from "@react-navigation/native";
 import { AppLayout } from "../components/layout";
@@ -23,6 +27,7 @@ import { MemberIcon } from "../components/ui";
 import Config from "react-native-config";
 import { withDeferredScreen } from "../components/layout/DeferredScreen";
 import { SupabaseService } from "../services/SupabaseService";
+import { useToast } from "../components/ui/Toast";
 
 const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 
@@ -50,18 +55,20 @@ const MoreScreenContent: React.FC = () => {
   const { openSidebar } = useSidebar();
   const { logout, isGuest } = useAuth();
   const { activeMember, members, setActiveMember, profileId } = useFamily();
+  const { showToast } = useToast();
   const [showProfileSwitcher, setShowProfileSwitcher] = useState(false);
 
   const debugToolsEnabled = (Config.ENABLE_DEBUG_TOOLS ?? '').trim().toLowerCase() === 'true';
-  const contactEmail = "a@g.c";
+  const contactEmail = Config.SUPPORT_EMAIL ?? "support@familychores.app";
   const contactSubject = "Contact Request";
   const contactMessage = "Hi Family Chores Team,\n\nI’d love some help with...";
   const bugSubject = "Report a Bug / Feature Request";
   const bugMessage =
     "Hi Team,\n\nI discovered an issue or feature idea:\n- Summary:\n- Steps:\n- Expected:\n- Actual:\n\nThanks!";
   const handleEmail = async (subject: string, body: string) => {
-    const query = new URLSearchParams({ subject, body }).toString();
-    const url = `mailto:${contactEmail}?${query}`;
+    const encodedSubject = encodeURIComponent(subject);
+    const encodedBody = encodeURIComponent(body);
+    const url = `mailto:${contactEmail}?subject=${encodedSubject}&body=${encodedBody}`;
     await Linking.openURL(url);
   };
   const feedbackOptions = ["Bug Found", "Feature Request", "General Feedback", "Account Issue", "Other"];
@@ -69,12 +76,10 @@ const MoreScreenContent: React.FC = () => {
   const [feedbackCategory, setFeedbackCategory] = useState(feedbackOptions[0]);
   const [feedbackDescription, setFeedbackDescription] = useState("");
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
-  const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const openFeedbackForm = () => {
     setFeedbackCategory(feedbackOptions[0]);
     setFeedbackDescription("");
-    setFeedbackToast(null);
     setFeedbackModalVisible(true);
   };
   const handleSubmitFeedback = async () => {
@@ -94,17 +99,18 @@ const MoreScreenContent: React.FC = () => {
         Alert.alert("Submission failed", "Unable to save your feedback right now. Please try again.");
         return;
       }
-      setFeedbackToast("Thanks for your message! We’ll review it shortly.");
+      setFeedbackModalVisible(false);
+      setCategoryMenuOpen(false);
+      setFeedbackDescription("");
+      showToast({
+        title: "Thanks for your message!",
+        description: "We’ll review it shortly.",
+        type: "success",
+      });
     } finally {
       setFeedbackSubmitting(false);
     }
   };
-
-  useEffect(() => {
-    if (!feedbackToast) return;
-    const timeout = setTimeout(() => setFeedbackToast(null), 3500);
-    return () => clearTimeout(timeout);
-  }, [feedbackToast]);
 
   // Safe access to profile color
   const activeProfileColor = activeMember?.color
@@ -492,8 +498,8 @@ const MoreScreenContent: React.FC = () => {
         transparent
         onRequestClose={() => {
           setFeedbackModalVisible(false);
-          setFeedbackThanksVisible(false);
           setCategoryMenuOpen(false);
+          Keyboard.dismiss();
         }}
       >
         <View style={styles.modalOverlay}>
@@ -502,84 +508,109 @@ const MoreScreenContent: React.FC = () => {
             onPress={() => {
               setFeedbackModalVisible(false);
               setCategoryMenuOpen(false);
+              Keyboard.dismiss();
             }}
           />
-          <View style={[styles.modalContent, { backgroundColor: colors.card, borderRadius: radius.xl }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.foreground }]}>Feedback & Support</Text>
-              <Pressable onPress={() => setFeedbackModalVisible(false)}>
-                <AppIcon name="x" size={24} color={colors.mutedForeground} />
-              </Pressable>
-            </View>
-            {feedbackToast && (
-              <View style={[styles.feedbackToast, { backgroundColor: colors.success + "10", borderColor: colors.success }]}>
-                <Text style={[styles.feedbackToastText, { color: colors.success }]}>{feedbackToast}</Text>
-              </View>
-            )}
-            <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Category</Text>
-            <View style={{ position: "relative", marginBottom: 12 }}>
-              <Pressable
-                style={[
-                  styles.feedbackDropdown,
-                  {
-                    borderColor: colors.border,
-                    backgroundColor: colors.background,
-                  },
-                ]}
-                onPress={() => setCategoryMenuOpen(prev => !prev)}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 70}
+            style={styles.modalWrapper}
+          >
+            <View style={[styles.modalContent, { backgroundColor: colors.card, borderRadius: radius.xl }]}>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={styles.modalBody}
               >
-                <Text style={[styles.feedbackOptionText, { color: colors.foreground }]}>{feedbackCategory}</Text>
-                <AppIcon name={categoryMenuOpen ? "chevronUp" : "chevronDown"} size={16} color={colors.mutedForeground} />
-              </Pressable>
-              {categoryMenuOpen && (
-                <View style={[styles.categoryMenu, { borderColor: colors.border, backgroundColor: colors.card }]}>
-                  {feedbackOptions.map(option => (
+                <View>
+                  <View style={styles.modalHeader}>
+                    <Text style={[styles.modalTitle, { color: colors.foreground }]}>Feedback & Support</Text>
                     <Pressable
-                      key={option}
-                      style={[
-                        styles.categoryOption,
-                        {
-                          backgroundColor: option === feedbackCategory ? colors.primary + "15" : colors.background,
-                        },
-                      ]}
                       onPress={() => {
-                        setFeedbackCategory(option);
+                        setFeedbackModalVisible(false);
                         setCategoryMenuOpen(false);
+                        Keyboard.dismiss();
                       }}
                     >
-                      <Text style={{ color: colors.foreground }}>{option}</Text>
+                      <AppIcon name="x" size={24} color={colors.mutedForeground} />
                     </Pressable>
-                  ))}
+                  </View>
+                  <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Category</Text>
+                  <View style={{ position: "relative", marginBottom: 12 }}>
+                    <Pressable
+                      style={[
+                        styles.feedbackDropdown,
+                        {
+                          borderColor: colors.border,
+                          backgroundColor: colors.background,
+                          borderRadius: radius.md,
+                        },
+                      ]}
+                      onPress={() => setCategoryMenuOpen(prev => !prev)}
+                    >
+                      <Text style={[styles.feedbackOptionText, { color: colors.foreground }]}>{feedbackCategory}</Text>
+                      <AppIcon name={categoryMenuOpen ? "chevronUp" : "chevronDown"} size={16} color={colors.mutedForeground} />
+                    </Pressable>
+                    {categoryMenuOpen && (
+                      <View style={[styles.categoryMenu, { borderColor: colors.border, backgroundColor: colors.card }]}>
+                        {feedbackOptions.map(option => (
+                          <Pressable
+                            key={option}
+                            style={[
+                              styles.categoryOption,
+                              {
+                                backgroundColor: option === feedbackCategory ? colors.primary + "15" : colors.background,
+                              },
+                            ]}
+                            onPress={() => {
+                              setFeedbackCategory(option);
+                              setCategoryMenuOpen(false);
+                            }}
+                          >
+                            <Text style={{ color: colors.foreground }}>{option}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                  <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Description</Text>
+                  <TextInput
+                    style={[
+                      styles.feedbackInput,
+                      {
+                        borderColor: colors.border,
+                        color: colors.foreground,
+                        borderRadius: radius.md,
+                        backgroundColor: colors.background,
+                      },
+                    ]}
+                    placeholder="Tell us what happened or what you'd like to see"
+                    placeholderTextColor={colors.mutedForeground}
+                    multiline
+                    numberOfLines={4}
+                    textAlignVertical="top"
+                    value={feedbackDescription}
+                    onChangeText={setFeedbackDescription}
+                  />
+                  <Pressable
+                    style={[
+                      styles.feedbackSubmit,
+                      { backgroundColor: colors.primary, borderRadius: radius.md },
+                      feedbackSubmitting && { opacity: 0.6 },
+                    ]}
+                    onPress={handleSubmitFeedback}
+                    disabled={feedbackSubmitting}
+                  >
+                    {feedbackSubmitting ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={[styles.feedbackSubmitText]}>Submit feedback</Text>
+                    )}
+                  </Pressable>
                 </View>
-              )}
+              </ScrollView>
             </View>
-            <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Description</Text>
-            <TextInput
-              style={[styles.feedbackInput, { borderColor: colors.border, color: colors.foreground }]}
-              placeholder="Tell us what happened or what you'd like to see"
-              placeholderTextColor={colors.mutedForeground}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-              value={feedbackDescription}
-              onChangeText={setFeedbackDescription}
-            />
-            <Pressable
-              style={[
-                styles.feedbackSubmit,
-                { backgroundColor: colors.primary, borderRadius: radius.md },
-                feedbackSubmitting && { opacity: 0.6 },
-              ]}
-              onPress={handleSubmitFeedback}
-              disabled={feedbackSubmitting}
-            >
-              {feedbackSubmitting ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={[styles.feedbackSubmitText]}>Submit feedback</Text>
-              )}
-            </Pressable>
-          </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </>
@@ -733,17 +764,6 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "700",
   },
-  feedbackToast: {
-    width: "100%",
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-  },
-  feedbackToastText: {
-    fontWeight: "600",
-    textAlign: "center",
-  },
   feedbackDropdown: {
     flexDirection: "row",
     alignItems: "center",
@@ -805,9 +825,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 20
   },
+  modalWrapper: {
+    width: "100%",
+    alignItems: "center",
+  },
   modalContent: {
+    width: "100%",
+    maxWidth: 520,
+    alignSelf: "center",
     padding: 24,
-    maxHeight: '60%'
+    maxHeight: '90%',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    elevation: 10,
+    minHeight: 400,
+  },
+  modalBody: {
+    paddingBottom: 8,
   },
   modalHeader: {
     flexDirection: 'row',

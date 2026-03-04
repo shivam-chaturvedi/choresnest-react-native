@@ -15,7 +15,7 @@ import { AppIcon } from "../components/ui/AppIcon";
 
 export const ThemeScreen: React.FC = () => {
   const navigation = useNavigation();
-  const { currentPalette, setPalette, shapeMode, setShapeMode, isDark, setThemeMode } = useTheme();
+  const { currentPalette, setPalette, shapeMode, setShapeMode, isDark, appearanceMode, setAppearanceMode } = useTheme();
   const colors = useThemeColors();
   const radius = useThemeRadius();
 
@@ -37,30 +37,31 @@ export const ThemeScreen: React.FC = () => {
 
         <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Appearance</Text>
         <View style={styles.shapeList}>
-          {([
-            { mode: 'light', label: 'Light', icon: 'sun' },
-            { mode: 'dark', label: 'Cream', icon: 'coffee' }
-          ] as const).map((mode) => (
-            <Pressable
-              key={mode.mode}
-              style={[
-                styles.shapeCard,
-                {
-                  backgroundColor: colors.card,
-                  borderColor: (isDark ? 'dark' : 'light') === mode.mode ? colors.success : colors.border,
-                  borderRadius: radius.card
-                },
-                (isDark ? 'dark' : 'light') === mode.mode && { borderWidth: 2 }
-              ]}
-              onPress={() => setThemeMode(mode.mode === 'dark')}
-            >
-              <AppIcon name={mode.icon} size={28} color={colors.primary} style={{ marginBottom: 12 }} />
-              <View style={styles.shapeInfo}>
-                <Text style={[styles.shapeLabel, { color: colors.foreground }]}>{mode.label}</Text>
-                {(isDark ? 'dark' : 'light') === mode.mode && <Check size={18} color={colors.success} />}
-              </View>
-            </Pressable>
-          ))}
+        {([
+          { mode: 'light', label: 'Light', icon: 'sun' },
+          { mode: 'cream', label: 'Cream', icon: 'coffee' },
+          { mode: 'midnight', label: 'Midnight', icon: 'moon' },
+        ] as const).map((mode) => (
+          <Pressable
+            key={mode.mode}
+            style={[
+              styles.shapeCard,
+              {
+                backgroundColor: colors.card,
+                borderColor: appearanceMode === mode.mode ? colors.success : colors.border,
+                borderRadius: radius.card
+              },
+              appearanceMode === mode.mode && { borderWidth: 2 }
+            ]}
+            onPress={() => setAppearanceMode(mode.mode)}
+          >
+            <AppIcon name={mode.icon} size={28} color={colors.primary} style={{ marginBottom: 12 }} />
+            <View style={styles.shapeInfo}>
+              <Text style={[styles.shapeLabel, { color: colors.foreground }]}>{mode.label}</Text>
+              {appearanceMode === mode.mode && <Check size={18} color={colors.success} />}
+            </View>
+          </Pressable>
+        ))}
         </View>
 
         <Text style={[styles.sectionTitle, { color: colors.foreground }]}>UI Shape</Text>

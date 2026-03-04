@@ -10,6 +10,8 @@ import {
   useWindowDimensions,
   TouchableWithoutFeedback,
   Alert,
+  Linking,
+  AppState,
 } from "react-native";
 import { useNavigation, NavigationProp } from "@react-navigation/native";
 import { theme } from "../../theme";
@@ -17,6 +19,8 @@ import { useFamily, FamilyMember } from "../../contexts/FamilyContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { PROFILE_COLORS, ProfileColor } from "../../constants/profileColors";
 import { MemberIcon } from "../../components/ui/MemberIcon";
+import { DEFAULT_MEMBER_ICON } from "../../constants/memberIcons";
+import { checkPermission, requestPermission, resetPermissionPrompt } from "../../utils/permissions";
 import Config from "react-native-config";
 
 const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
@@ -37,7 +41,8 @@ import {
   StickyNote,
   Users,
   Palette,
-  LogOut
+  LogOut,
+  Bell,
 } from "lucide-react-native";
 
 interface AppSidebarProps {
@@ -63,6 +68,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
 
   // Color Picker State
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
+  const [notificationsEnabled, setNotificationsEnabled] = useState<boolean | null>(null);
 
   const navigation = useNavigation<NavigationProp<Record<string, undefined>>>();
   const { members, activeMember, setActiveMember, familyName, updateMemberColor } = useFamily();
@@ -104,6 +110,26 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       });
     }
   }, [open, sidebarWidth, translateX, overlayOpacity]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refreshPermission = async () => {
+      const granted = await checkPermission('notification');
+      if (!cancelled) {
+        setNotificationsEnabled(granted);
+      }
+    };
+    void refreshPermission();
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next === 'active') {
+        void refreshPermission();
+      }
+    });
+    return () => {
+      cancelled = true;
+      subscription.remove();
+    };
+  }, []);
 
   const handleNavigate = (route: string) => {
     try {
@@ -186,6 +212,15 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         }
       ]
     );
+  };
+
+  const handleEnableNotifications = async () => {
+    await resetPermissionPrompt("notification");
+    const granted = await requestPermission("notification", { showSettingsPrompt: false });
+    setNotificationsEnabled(granted);
+    Linking.openSettings().catch((err) => {
+      console.error("Failed to open settings after enabling notifications:", err);
+    });
   };
 
   const handleSwitchMember = (member: FamilyMember) => {
@@ -375,6 +410,27 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
 
             <View style={styles.separator} />
 
+            {/* Logged-in user summary card */}
+            {!isGuest && (
+              <View style={styles.userCardContainer}>
+                <View style={[styles.userCard, { backgroundColor: '#F4F7FF' }]}>
+                      <View style={[styles.userCardIcon, { backgroundColor: theme.colors.primary }]}>
+                        <MemberIcon symbol={activeMember?.symbol || DEFAULT_MEMBER_ICON} size={20} color="#fff" />
+                  </View>
+                  <View style={styles.userCardText}>
+                    <Text style={styles.userCardTitle}>{activeMember?.name || familyName || 'Family'}</Text>
+                    <Text style={styles.userCardSubtitle}>{user?.email || 'Logged in user'}</Text>
+                  </View>
+                  <Pressable
+                    style={[styles.userCardAction, { backgroundColor: '#E0F2FF' }]}
+                    onPress={() => handleNavigate('Privacy')}
+                  >
+                    <Text style={[styles.userCardActionText, { color: theme.colors.primary }]}>Account Details</Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
+
             {/* Guest Mode Badge */}
             {isGuest && (
               <View style={styles.guestBadgeContainer}>
@@ -402,6 +458,22 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             )}
 
             {/* Quick Shortcuts */}
+            {notificationsEnabled === false && (
+              <View style={styles.notificationCardContainer}>
+                <View style={styles.notificationCard}>
+                  <View style={styles.notificationCardHeader}>
+                    <Bell size={20} color="#071234" />
+                    <Text style={styles.notificationCardTitle}>Enable notifications</Text>
+                  </View>
+                  <Text style={styles.notificationCardBody}>
+                    Keep reminders and alerts enabled by allowing notifications in Settings.
+                  </Text>
+                  <Pressable style={styles.notificationCardButton} onPress={handleEnableNotifications}>
+                    <Text style={styles.notificationCardButtonText}>Enable Notifications</Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>Quick Access</Text>
               <View style={{ gap: 4 }}>
@@ -780,5 +852,84 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     fontSize: 13,
+  },
+  userCardContainer: {
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  userCard: {
+    borderRadius: 16,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#F4F7FF',
+    borderWidth: 1,
+    borderColor: '#DDE7FF',
+  },
+  userCardIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  userCardText: {
+    flex: 1,
+  },
+  userCardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.colors.foreground,
+  },
+  userCardSubtitle: {
+    fontSize: 12,
+    color: theme.colors.mutedForeground,
+  },
+  userCardAction: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  userCardActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  notificationCardContainer: {
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  notificationCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E9D7FF',
+    padding: 16,
+    backgroundColor: '#FFF7FB',
+    gap: 8,
+  },
+  notificationCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  notificationCardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  notificationCardBody: {
+    fontSize: 13,
+    color: '#4B5563',
+    lineHeight: 18,
+  },
+  notificationCardButton: {
+    marginTop: 4,
+    borderRadius: 12,
+    backgroundColor: '#123977',
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  notificationCardButtonText: {
+    color: '#fff',
+    fontWeight: '600',
   },
 });

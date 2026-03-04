@@ -444,7 +444,7 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
                                                 ]}
                                             >
                                                 <AppIcon
-                                                    name={icon}
+                                                    source={icon}
                                                     size={24}
                                                     color={isSelected ? colors.primaryForeground : colors.foreground}
                                                 />

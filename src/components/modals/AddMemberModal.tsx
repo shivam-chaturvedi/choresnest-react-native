@@ -15,6 +15,7 @@ import { useFamily } from "../../contexts/FamilyContext";
 import { PROFILE_COLORS } from "../../constants/profileColors";
 import { AppIcon } from "../ui/AppIcon";
 import { MEMBER_ICON_OPTIONS, DEFAULT_MEMBER_ICON } from "../../constants/memberIcons";
+import { MemberIcon } from "../ui/MemberIcon";
 
 interface AddMemberModalProps {
   open: boolean;
