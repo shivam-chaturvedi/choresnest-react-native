@@ -1,4 +1,4 @@
-package com.familychores
+package com.choresnest
 
 import android.app.Application
 import android.content.Context

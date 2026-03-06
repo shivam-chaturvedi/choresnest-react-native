@@ -7,6 +7,7 @@ import {
   Pressable,
   TextInput,
   Image,
+  Linking,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { theme } from "../theme";
@@ -21,6 +22,10 @@ interface AuthScreenProps {
   onForgotPassword?: () => void;
   onPrivacy?: () => void;
 }
+
+const appIcon = require("../assets/app_icon.png");
+const TERMS_URL = "https://choresnest.com/terms";
+const PRIVACY_URL = "https://choresnest.com/privacy-policy";
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({
   onAuthenticated,
@@ -43,6 +48,23 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const radius = theme.radius;
+  const openLink = async (url: string) => {
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        console.warn("Unable to open URL:", url);
+      }
+    } catch (error) {
+      console.error("Failed to open link:", error);
+      showToast({
+        type: "error",
+        title: "Unable to open link",
+        description: "Please try again later."
+      });
+    }
+  };
 
   // ... existing imports
 
@@ -147,21 +169,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         borderBottomLeftRadius: radius.xxl,
         borderBottomRightRadius: radius.xxl
       }]}>
-        <View style={styles.logoWrapper}>
-          <View style={[styles.logoSquare, {
-            backgroundColor: theme.colors.card,
-            shadowColor: theme.colors.shadow,
-            borderRadius: radius.card
-          }]}>
-            <View style={styles.logoContainer}>
-              <AppIcon name="home" size={32} color={theme.colors.primary} />
-              <View style={[styles.shieldBadge, { backgroundColor: theme.colors.card, borderRadius: radius.xs }]}>
-                <AppIcon name="shield" size={16} color={theme.colors.secondary} />
-              </View>
-            </View>
-          </View>
-        </View>
-        <Text style={[styles.title, { color: theme.colors.primaryForeground }]}>Family Chores</Text>
+    
+        <Image source={appIcon} style={styles.authLogoImage} resizeMode="contain" />
+        <Text style={[styles.title, { color: theme.colors.primaryForeground }]}>Chores Nest</Text>
         <Text style={[styles.subtitle, { color: theme.colors.primaryForeground + 'D9' }]}>Organize Your Family Life</Text>
       </View>
 
@@ -358,15 +368,24 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         </View>
       </View>
 
-      <View style={styles.footer}>
-        <Text style={[styles.footerText, { color: theme.colors.mutedForeground }]}>
-          By continuing, you agree to our{" "}
-          <Text style={[styles.linkText, { color: theme.colors.primary }]}>Terms of Service</Text> and{" "}
-          <Text style={[styles.linkText, { color: theme.colors.primary }]} onPress={() => onPrivacy?.()}>
-            Privacy Policy
-          </Text>
-        </Text>
-      </View>
+          <View style={styles.footer}>
+            <Text style={[styles.footerText, { color: theme.colors.mutedForeground }]}>
+              By continuing, you agree to our{" "}
+              <Text
+                style={[styles.linkText, { color: theme.colors.primary }]}
+                onPress={() => openLink(TERMS_URL)}
+              >
+                Terms of Service
+              </Text>{" "}
+              and{" "}
+              <Text
+                style={[styles.linkText, { color: theme.colors.primary }]}
+                onPress={() => openLink(PRIVACY_URL)}
+              >
+                Privacy Policy
+             </Text>
+            </Text>
+          </View>
       <LoadingSpinner overlay visible={isSubmitting} />
     </ScrollView >
   );
@@ -388,6 +407,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   logoWrapper: {
+    marginBottom: theme.spacing.sm,
+  },
+  authLogoImage: {
+    width: 96,
+    height: 96,
     marginBottom: theme.spacing.sm,
   },
   logoSquare: {

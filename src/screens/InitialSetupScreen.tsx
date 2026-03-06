@@ -37,7 +37,7 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
 
     useEffect(() => {
         if (familyNameTouched) return;
-        if (familyName && familyName !== "Family Chores") {
+        if (familyName && familyName !== "Chores Nest") {
             setFamilyNameInput(familyName);
             return;
         }

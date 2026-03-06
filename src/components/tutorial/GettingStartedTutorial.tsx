@@ -21,7 +21,7 @@ const allTutorialSteps = [
   {
     id: 'welcome',
     icon: Sparkles,
-    title: 'Welcome to Family Chores!',
+    title: 'Welcome to Chores Nest!',
     description: 'Your all-in-one family organizer. Let us show you around in just 30 seconds.',
     highlight: 'Manage your entire family life from one app',
     emoji: '👋'

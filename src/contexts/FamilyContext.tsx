@@ -166,7 +166,7 @@ const normalizeVirtualId = (id: string): string => {
 export const FamilyContext = createContext<FamilyContextValue | undefined>(undefined);
 
 const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean; children: ReactNode; reloadLocalData: () => void }> = ({ profileId, isGuest, children, reloadLocalData }) => {
-  const [familyName, setFamilyNameState] = useState("Family Chores");
+  const [familyName, setFamilyNameState] = useState("Chores Nest");
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [rawEvents, setRawEvents] = useState<any[]>([]);
   const [rawTasks, setRawTasks] = useState<any[]>([]);
@@ -233,7 +233,7 @@ const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean
   // --- Family Name Subscription ---
   useEffect(() => {
     if (!profileId) {
-      setFamilyNameState("Family Chores");
+      setFamilyNameState("Chores Nest");
       return;
     }
     try {
@@ -641,7 +641,7 @@ const fallbackVoidAsync = async () => {};
 const fallbackValueAsync = async () => undefined;
 
 const FALLBACK_FAMILY_CONTEXT: FamilyContextValue = {
-  familyName: "Family Chores",
+  familyName: "Chores Nest",
   setFamilyName: fallbackVoidAsync as (name: string) => Promise<void>,
   members: [],
   activeMember: null,

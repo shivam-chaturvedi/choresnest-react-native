@@ -6,6 +6,7 @@ import {
   Pressable,
   TextInput,
   ScrollView,
+  Image,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -19,6 +20,8 @@ import { useToast } from "../components/ui/Toast";
 import { getHumanReadableMessage } from "../utils/SupabaseErrorHandler";
 import { LoadingSpinner } from "../components/ui/LoadingSpinner";
 import { isValidEmail } from "../utils/validators";
+
+const appIcon = require("../assets/app_icon.png");
 
 export const ForgotPasswordScreen: React.FC = () => {
   const navigation = useNavigation<NavProp>();
@@ -105,7 +108,7 @@ export const ForgotPasswordScreen: React.FC = () => {
         </Pressable>
         <View style={styles.logoWrapper}>
           <View style={[styles.logoCircle, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
-            <Text style={styles.logoIcon}>🏠</Text>
+            <Image source={appIcon} style={styles.logoIconImage} resizeMode="contain" />
             <Text style={styles.logoBadge}>🔐</Text>
           </View>
         </View>
@@ -199,8 +202,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
   },
-  logoIcon: {
-    fontSize: 30,
+  logoIconImage: {
+    width: 48,
+    height: 48,
   },
   logoBadge: {
     position: "absolute",

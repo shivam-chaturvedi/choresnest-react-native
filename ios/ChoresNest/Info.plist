@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Family Chores</string>
+	<string>Chores Nest</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -65,10 +65,10 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.familychores</string>
+			<string>com.choresnest</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.familychores</string>
+				<string>com.choresnest</string>
 			</array>
 		</dict>
 	</array>

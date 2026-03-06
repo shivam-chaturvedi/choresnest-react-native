@@ -7,6 +7,8 @@ import { theme, palettes, AppearanceMode } from '../theme';
 export type ShapeMode = 'rounded' | 'squared';
 
 type ThemeKey = keyof typeof palettes;
+const DEFAULT_PALETTE: ThemeKey = 'sapphire';
+const DEFAULT_APPEARANCE: AppearanceMode = 'cream';
 
 const THEME_STORAGE_KEY = '@app_theme_palette';
 const THEME_SHAPE_STORAGE_KEY = '@app_theme_shape';
@@ -28,7 +30,7 @@ interface ThemeContextType {
 }
 
 const ThemeContext = createContext<ThemeContextType>({
-    currentPalette: 'sapphire',
+    currentPalette: DEFAULT_PALETTE,
     shapeMode: 'squared',
     isDark: false,
     appearanceMode: 'cream',
@@ -56,9 +58,9 @@ export const useThemeRadius = () => {
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const systemColorScheme = useColorScheme();
-    const [currentPalette, setCurrentPalette] = useState<ThemeKey>('sapphire');
+    const [currentPalette, setCurrentPalette] = useState<ThemeKey>(DEFAULT_PALETTE);
     const [shapeMode, setShapeMode] = useState<ShapeMode>('squared');
-    const [appearanceMode, setAppearanceMode] = useState<AppearanceMode>('cream');
+    const [appearanceMode, setAppearanceMode] = useState<AppearanceMode>(DEFAULT_APPEARANCE);
     const [themeVersion, setThemeVersion] = useState(0);
     const [isLoaded, setIsLoaded] = useState(false);
 
@@ -74,6 +76,9 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
                 if (savedPalette && savedPalette in palettes) {
                     setCurrentPalette(savedPalette as ThemeKey);
+                } else {
+                    setCurrentPalette(DEFAULT_PALETTE);
+                    AsyncStorage.setItem(THEME_STORAGE_KEY, DEFAULT_PALETTE).catch(console.error);
                 }
 
                 if (savedShape && (savedShape === 'rounded' || savedShape === 'squared')) {
@@ -88,7 +93,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     setAppearanceMode(savedMode as AppearanceMode);
                 } else {
                     // Default to Cream as per prior UX
-                    setAppearanceMode('cream');
+                    setAppearanceMode(DEFAULT_APPEARANCE);
+                    AsyncStorage.setItem(THEME_MODE_STORAGE_KEY, DEFAULT_APPEARANCE).catch(console.error);
                 }
             } catch (error) {
                 console.error('Failed to load theme from storage:', error);

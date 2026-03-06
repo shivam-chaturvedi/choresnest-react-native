@@ -8,15 +8,43 @@ interface SplashScreenProps {
   isLoading?: boolean;
 }
 
+const appIcon = require("../assets/app_icon.png");
+
 export const SplashScreen = ({ onContinue, isLoading }: SplashScreenProps) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
   const [splashColors, setSplashColors] = useState(theme.colors);
   const [splashRadius, setSplashRadius] = useState(theme.radius);
+  const [navigationTarget, setNavigationTarget] = useState<"Onboarding" | "Auth">("Onboarding");
+  const [initComplete, setInitComplete] = useState(false);
+  const iconOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      })
+    ]).start();
+
+    Animated.timing(iconOpacity, {
+      toValue: 1,
+      duration: 400,
+      delay: 200,
+      useNativeDriver: true,
+    }).start();
+  }, [fadeAnim, scaleAnim, iconOpacity]);
+
+  useEffect(() => {
+    let isMounted = true;
     const initSplash = async () => {
-      // 1. Load saved theme preferences in parallel to avoid flash
       try {
         const [savedPalette, savedShape, savedMode, hasSeen] = await Promise.all([
           AsyncStorage.getItem('@app_theme_palette'),
@@ -25,53 +53,39 @@ export const SplashScreen = ({ onContinue, isLoading }: SplashScreenProps) => {
           AsyncStorage.getItem("HAS_SEEN_ONBOARDING")
         ]);
 
-        // Resolve Config
+        if (!isMounted) return;
+
         const palette = (savedPalette && savedPalette in palettes) ? savedPalette : 'sapphire';
         const mode = savedMode === 'dark' ? 'dark' : 'light';
         const shape = (savedShape === 'squared') ? 'squared' : 'rounded';
-
-        // Generate Colors
         const colors = createThemeColors(palette as any, mode);
         const radius = radii[shape as keyof typeof radii] || radii.rounded;
 
         setSplashColors(colors);
         setSplashRadius(radius);
-
-        // 2. Animate In (Fade + Scale)
-        Animated.parallel([
-          Animated.timing(fadeAnim, {
-            toValue: 1,
-            duration: 400,
-            useNativeDriver: true,
-          }),
-          Animated.spring(scaleAnim, {
-            toValue: 1,
-            friction: 8,
-            tension: 40,
-            useNativeDriver: true,
-          })
-        ]).start();
-
-        // 3. Wait for minimum duration removed to load homescreen directly
-        // await new Promise<void>(resolve => {
-        //   setTimeout(() => resolve(), 800);
-        // });
-
-        // 4. Navigate
-        if (hasSeen === "true") {
-          onContinue("Auth");
-        } else {
-          onContinue("Onboarding");
-        }
-
+        setNavigationTarget(hasSeen === "true" ? "Auth" : "Onboarding");
       } catch (error) {
+        if (!isMounted) return;
         console.error("Splash error:", error);
-        onContinue("Onboarding");
+        setNavigationTarget("Onboarding");
+      } finally {
+        if (!isMounted) return;
+        setInitComplete(true);
       }
     };
 
     initSplash();
-  }, [onContinue, fadeAnim, scaleAnim]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (initComplete) {
+      onContinue(navigationTarget);
+    }
+  }, [initComplete, navigationTarget, onContinue]);
 
   return (
     <View style={[styles.container, { backgroundColor: splashColors.background }]}>
@@ -90,13 +104,13 @@ export const SplashScreen = ({ onContinue, isLoading }: SplashScreenProps) => {
         ]}
       >
         <View style={[styles.logoWrapper, { backgroundColor: splashColors.card, borderRadius: splashRadius.xxl }]}>
-          <Text style={styles.logoIcon}>🏠</Text>
+          <Animated.Image source={appIcon} style={[styles.logoIconImage, { opacity: iconOpacity }]} resizeMode="contain" />
           <View style={[styles.badgeContainer, { backgroundColor: splashColors.success, borderRadius: splashRadius.full }]}>
             <Text style={styles.badgeText}>✓</Text>
           </View>
         </View>
 
-        <Text style={[styles.title, { color: splashColors.primary }]}>Family Chores</Text>
+        <Text style={[styles.title, { color: splashColors.primary }]}>Chores Nest</Text>
         <Text style={[styles.subtitle, { color: splashColors.mutedForeground }]}>One app for your entire family</Text>
 
         <View style={styles.dotRow}>
@@ -132,8 +146,9 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
-  logoIcon: {
-    fontSize: 40,
+  logoIconImage: {
+    width: 64,
+    height: 64,
   },
   badgeContainer: {
     position: "absolute",

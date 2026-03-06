@@ -53,7 +53,7 @@ interface AuthProviderProps {
     onError?: (title: string, message: string) => void;
 }
 
-const GOOGLE_OAUTH_SCHEME = "com.familychores";
+const GOOGLE_OAUTH_SCHEME = "com.choresnest";
 const GOOGLE_OAUTH_HOST = "auth-callback";
 const GOOGLE_OAUTH_REDIRECT_URI = `${GOOGLE_OAUTH_SCHEME}://${GOOGLE_OAUTH_HOST}`;
 

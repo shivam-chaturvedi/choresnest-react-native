@@ -54,14 +54,14 @@ const SOUND_NAME = 'reminder';
 const SOUND_CHANNELS = {
     SOUND_ON: {
         id: 'chat_sound_on',
-        name: 'FamilyChores (Sound)',
+        name: 'Chores Nest (Sound)',
         importance: AndroidImportance.HIGH,
         sound: SOUND_NAME,
         vibration: true,
     },
     SOUND_OFF: {
         id: 'chat_sound_off',
-        name: 'FamilyChores (Silent)',
+        name: 'Chores Nest (Silent)',
         importance: AndroidImportance.LOW,
         vibration: false,
     },

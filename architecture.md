@@ -1,4 +1,4 @@
-## Family Chores React Native Architecture Plan
+## Chores Nest React Native Architecture Plan
 
 ### Folder Layout
 - `src/screens/`: one screen per React JS route (Splash, Onboarding, Auth, Forgot Password, Home, Calendar, Tasks, Lists, Vault, More, Recipes, Recipe Detail, Meal Plan, Nutrition, Documents, Expenses, Family, Notifications, Privacy, Theme, Export, Help). Each file mirrors the web screen (`reactjs/src/pages/...`).

@@ -263,7 +263,7 @@ export const exportService = {
             version: 1,
             timestamp: Date.now(),
             date: new Date().toISOString(),
-            app: 'Family Chores',
+            app: 'Chores Nest',
             format: 'json',
             profileId
         };
@@ -310,7 +310,7 @@ export const exportService = {
             // We'll let it save where it wants, then move it if needed.
             const options = {
                 html,
-                fileName: `FamilyChores_Export_${new Date().getTime()}`,
+            fileName: `ChoresNest_Export_${new Date().getTime()}`,
                 directory: 'Documents',
             };
 
@@ -363,7 +363,7 @@ export const exportService = {
             const filename = filePath.split("/").pop();
             const isPdf = filename?.toLowerCase().endsWith('.pdf');
             const mimeType = isPdf ? 'application/pdf' : 'text/plain';
-            const title = isPdf ? "Family Chores PDF Export" : "Family Backup";
+            const title = isPdf ? "Chores Nest PDF Export" : "Chores Nest Backup";
 
             // Ensure path has file:// prefix for proper file sharing
             let shareUrl = filePath;
@@ -389,7 +389,7 @@ export const exportService = {
             // Often adding a message converts it to a "text share" with attachment, 
             // rather than a "file share". For backups, we want clean file sharing.
             if (!isPdf) {
-                shareOptions.message = "Family Chores Data Backup";
+                shareOptions.message = "Chores Nest Data Backup";
             }
 
             console.log("Share options prepared");
@@ -432,7 +432,7 @@ export const exportService = {
             <html>
             <head>${css}</head>
             <body>
-                <h1>Family Chores Export</h1>
+                <h1>Chores Nest Export</h1>
                 <div class="meta">
                     <strong>Generated:</strong> ${date} at ${time}<br/>
                     <strong>Total Items:</strong> ${Object.values(data).reduce((acc, arr) => acc + arr.length, 0)}

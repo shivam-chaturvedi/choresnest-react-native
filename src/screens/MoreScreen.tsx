@@ -59,9 +59,9 @@ const MoreScreenContent: React.FC = () => {
   const [showProfileSwitcher, setShowProfileSwitcher] = useState(false);
 
   const debugToolsEnabled = (Config.ENABLE_DEBUG_TOOLS ?? '').trim().toLowerCase() === 'true';
-  const contactEmail = Config.SUPPORT_EMAIL ?? "support@familychores.app";
+  const contactEmail = Config.SUPPORT_EMAIL ?? "support@choresnest.com";
   const contactSubject = "Contact Request";
-  const contactMessage = "Hi Family Chores Team,\n\nI’d love some help with...";
+  const contactMessage = "Hi Chores Nest Team,\n\nI’d love some help with...";
   const bugSubject = "Report a Bug / Feature Request";
   const bugMessage =
     "Hi Team,\n\nI discovered an issue or feature idea:\n- Summary:\n- Steps:\n- Expected:\n- Actual:\n\nThanks!";
@@ -435,7 +435,7 @@ const MoreScreenContent: React.FC = () => {
             <Text style={[styles.logoutText, { color: colors.danger }]}>Sign Out</Text>
           </Pressable>
 
-          <Text style={[styles.version, { color: colors.mutedForeground }]}>Family Chores v1.0.0 · Made with ❤️ for families</Text>
+          <Text style={[styles.version, { color: colors.mutedForeground }]}>Chores Nest v1.0.0 · Made with ❤️ for families</Text>
         </View>
       </AppLayout>
 
