@@ -25,7 +25,7 @@ interface AuthScreenProps {
 }
 
 const appIcon = require("../assets/app_icon.png");
-const TERMS_URL = "https://choresnest.com/terms";
+const TERMS_URL = "https://choresnest.com/terms-of-use";
 const PRIVACY_URL = "https://choresnest.com/privacy-policy";
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({

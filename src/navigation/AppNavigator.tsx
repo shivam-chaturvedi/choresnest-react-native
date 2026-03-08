@@ -81,6 +81,7 @@ const AppNavigatorInner = () => {
     hasCompletedOnboarding,
     completeOnboarding,
     isPasswordRecoveryFlow,
+    sessionEpoch,
   } = useAuth();
   const [showSplash, setShowSplash] = React.useState(true);
   const [hasMembersInDB, setHasMembersInDB] = React.useState<boolean | null>(null);
@@ -480,6 +481,13 @@ const AppNavigatorInner = () => {
       });
     }
   }, [isLoading, localOnboardingLoaded, hasMembersInDB, isCacheReady, isBootChecking, isAuthenticated, isGuest, hasLocalOnboarding]);
+
+  React.useEffect(() => {
+    if (sessionEpoch > 0 && !isAuthenticated) {
+      setShowSplash(false);
+      setIsBootChecking(false);
+    }
+  }, [sessionEpoch, isAuthenticated]);
 
   const shouldShowInitialSetup = hasMembersInDB === false && hasLocalOnboarding !== true;
 

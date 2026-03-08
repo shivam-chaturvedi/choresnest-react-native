@@ -8,17 +8,22 @@ import {
     Switch,
     Alert,
     Modal,
-    TextInput
+    TextInput,
+    Linking,
+    ActivityIndicator,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { AppLayout } from "../components/layout";
-import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
+import { useThemeColors, useThemeRadius, useTheme } from '../contexts/ThemeContext';
 import { useAuth } from "../contexts/AuthContext";
 import { useAppLock } from "../contexts/AppLockContext";
 import { useFamily } from "../contexts/FamilyContext";
 import { useToast } from "../hooks/useToast";
 import { supabase } from "../config/supabase";
 import notifee from "@notifee/react-native";
+import NetInfo from "@react-native-community/netinfo";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { DeleteAccountService } from "../services/DeleteAccountService";
 import {
     ChevronLeft,
     Shield,
@@ -29,6 +34,10 @@ import {
     Fingerprint
 } from "lucide-react-native";
 import { PROFILE_COLORS } from "../constants/profileColors";
+
+// --- Links ---
+const TERMS_URL = "https://choresnest.com/terms-of-use";
+const SITE_PRIVACY_URL = "https://choresnest.com/privacy-policy";
 
 // --- Data ---
 const securitySettings = [
@@ -57,10 +66,33 @@ export const PrivacyScreen: React.FC = () => {
     const [biometricBusy, setBiometricBusy] = useState(false);
     const colors = useThemeColors();
     const radius = useThemeRadius();
+    const { appearanceMode } = useTheme();
+    const isMidnight = appearanceMode === 'midnight';
     const activeMemberColor =
      PROFILE_COLORS.find(color => color.value === activeMember?.color)?.hex || colors.primary;
 
     const [clearNotifications, setClearNotifications] = useState(false);
+    const openExternalLink = async (url: string) => {
+        try {
+            const supported = await Linking.canOpenURL(url);
+            if (supported) {
+                await Linking.openURL(url);
+            } else {
+                showToast({
+                    type: "error",
+                    title: "Link unavailable",
+                    description: "Unable to open that link on this device.",
+                });
+            }
+        } catch (error) {
+            console.error("Failed to open external link:", error);
+            showToast({
+                type: "error",
+                title: "Link failed",
+                description: "Please try again later.",
+            });
+        }
+    };
 
     useEffect(() => {
         if (!clearNotifications) return;
@@ -148,22 +180,15 @@ export const PrivacyScreen: React.FC = () => {
     const [confirmValue, setConfirmValue] = useState("");
     const [confirmError, setConfirmError] = useState("");
     const [confirmBusy, setConfirmBusy] = useState(false);
+    const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
-    const getRootNavigator = () => {
-        let parent = navigation.getParent();
-        while (parent?.getParent()) {
-            parent = parent.getParent();
-        }
-        return parent;
-    };
-
-    const handleNavigateToAuth = async () => {
-        // Calling logout() clears the guest session flag and sets isAuthenticated=false.
-        // The AppNavigator then automatically switches to the Auth branch — no navigation dispatch needed.
+    const resolveGuestMode = async (): Promise<boolean> => {
+        if (isGuest) return true;
         try {
-            await logout();
-        } catch (error) {
-            console.error('Failed to sign out guest:', error);
+            const stored = await AsyncStorage.getItem("IS_GUEST");
+            return stored === "true";
+        } catch {
+            return false;
         }
     };
 
@@ -172,6 +197,114 @@ export const PrivacyScreen: React.FC = () => {
             setPendingAppLockRequest(null);
         }
     }, [pendingAppLockRequest, isAppLockEnabled]);
+
+    const BOOT_FLAG_KEYS = [
+        "IS_GUEST",
+        "HAS_SEEN_ONBOARDING",
+        "HAS_COMPLETED_ONBOARDING",
+        "@active_profile_id",
+        "@last_sync_time",
+        "ACTIVE_PROFILE_ID",
+    ];
+
+    const clearBootFlags = async () => {
+        try {
+            await AsyncStorage.multiRemove(BOOT_FLAG_KEYS);
+        } catch (error) {
+            console.warn("Failed to clear boot flags during delete", error);
+        }
+    };
+
+    const confirmDeleteAccount = async (deleteFromCloud: boolean) => {
+        setIsDeletingAccount(true);
+        try {
+            const guestMode = await resolveGuestMode();
+
+            if (guestMode) {
+                setClearNotifications(true);
+                await clearBootFlags();
+                await deleteAccount();
+                await logout();
+                return;
+            }
+
+            if (!user) {
+                throw new Error("Unable to resolve account session.");
+            }
+
+            const canDeleteFromCloud = deleteFromCloud && DeleteAccountService.isConfigured();
+            if (deleteFromCloud && !DeleteAccountService.isConfigured()) {
+                showToast({
+                    type: "warning",
+                    title: "Delete Account",
+                    description: "Cloud deletion is disabled in this build, so only local data will be removed.",
+                });
+            }
+
+            if (canDeleteFromCloud) {
+                await DeleteAccountService.deleteAccountFromCloud({
+                    userId: user.id,
+                    email: user.email || undefined,
+                });
+            }
+
+            setClearNotifications(true);
+            await clearBootFlags();
+            await deleteAccount();
+            await logout();
+        } catch (error: any) {
+            showToast({
+                type: "error",
+                title: "Delete Failed",
+                description: error?.message || "Failed to delete your account. Please try again.",
+            });
+        } finally {
+            setIsDeletingAccount(false);
+        }
+    };
+
+    const showDeleteAlert = (deleteFromCloud: boolean, title: string, message: string) => {
+        Alert.alert(title, message, [
+            { text: "Cancel", style: "cancel" },
+            {
+                text: "Delete",
+                style: "destructive",
+                onPress: () => confirmDeleteAccount(deleteFromCloud),
+            },
+        ]);
+    };
+
+    const handleDeleteAccount = async () => {
+        const guestMode = await resolveGuestMode();
+
+        if (guestMode) {
+            showDeleteAlert(
+                false,
+                "Delete Guest Data",
+                "Deleting your guest profile removes all local data from this device."
+            );
+            return;
+        }
+
+        try {
+            const netState = await NetInfo.fetch();
+            if (!netState.isConnected) {
+                Alert.alert(
+                    "Offline",
+                    "Deleting your account from the cloud requires an internet connection. Please reconnect and try again."
+                );
+                return;
+            }
+
+            showDeleteAlert(true, "Delete Account", "This is permanent and removes your profile data from both the cloud and this device.");
+        } catch (error) {
+            showToast({
+                type: "error",
+                title: "Network Error",
+                description: "Unable to verify your connection. Please try again later.",
+            });
+        }
+    };
 
     // Always use the actual database state, only show pending state during transitions
     const appLockSwitchValue = pendingAppLockRequest ?? isAppLockEnabled;
@@ -662,10 +795,13 @@ export const PrivacyScreen: React.FC = () => {
                                 </Pressable>
                                 <Pressable
                                     style={[styles.guestModalButton, { borderRadius: radius.sm }]}
-                                    onPress={() => {
+                                    onPress={async () => {
                                         setShowGuestModal(false);
-                                        // Navigate to login/signup screen
-                                        handleNavigateToAuth();
+                                        try {
+                                            await logout();
+                                        } catch (error) {
+                                            console.error('Failed to sign out guest:', error);
+                                        }
                                     }}
                                 >
                                     <Text style={[styles.guestModalButtonText, { color: colors.primary }]}>LOGIN / SIGN UP</Text>
@@ -728,48 +864,59 @@ export const PrivacyScreen: React.FC = () => {
                 {/* Data Privacy */}
                 <View>
                     <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Data Privacy</Text>
-                    <View style={[styles.softCard, { backgroundColor: colors.muted, borderRadius: radius.card }]}>
-                        <Text style={[styles.privacyText, { color: colors.mutedForeground }]}>
-                            Your data is encrypted and stored securely. We never share your personal information with third parties.
-                        </Text>
-                        <View style={styles.tagsRow}>
-                            <View style={[styles.tag, { backgroundColor: '#dcfce7', borderRadius: radius.full }]}>
-                                <Text style={[styles.tagText, { color: '#166534' }]}>🔐 End-to-end encrypted</Text>
-                            </View>
+                <View style={[styles.softCard, { backgroundColor: colors.muted, borderRadius: radius.card }]}>
+                    <Text style={[styles.privacyText, { color: isMidnight ? colors.mutedForeground : '#000' }]}>
+                        Your data is encrypted and stored securely. We never share your personal information with third parties.
+                    </Text>
+                    <View style={styles.tagsRow}>
+                        <View style={[styles.tag, { backgroundColor: '#dcfce7', borderRadius: radius.full }]}>
+                            <Text style={[styles.tagText, { color: '#166534' }]}>🔐 End-to-end encrypted</Text>
                         </View>
                     </View>
+                    <View style={styles.linkRow}>
+                        <Pressable
+                            style={[
+                                styles.linkButton,
+                                {
+                                    borderColor: isMidnight ? "#fff" : colors.primary,
+                                    backgroundColor: isMidnight ? "#0f111a" : colors.primary + '10',
+                                },
+                            ]}
+                            onPress={() => openExternalLink(TERMS_URL)}
+                        >
+                            <Text style={[styles.linkText, { color: isMidnight ? "#fff" : '#000' }]}>Terms of Use</Text>
+                        </Pressable>
+                        <Pressable
+                            style={[
+                                styles.linkButton,
+                                {
+                                    borderColor: isMidnight ? "#fff" : colors.primary,
+                                    backgroundColor: isMidnight ? "#0f111a" : colors.background,
+                                },
+                            ]}
+                            onPress={() => openExternalLink(SITE_PRIVACY_URL)}
+                        >
+                            <Text style={[styles.linkText, { color: isMidnight ? "#0faae8ff" : '#000' }]}>Privacy Policy</Text>
+                        </Pressable>
+                    </View>
                 </View>
+            </View>
 
                 {/* Danger Zone */}
                 <View style={[styles.dangerCard, { backgroundColor: colors.card, borderColor: '#fee2e2', borderRadius: radius.card }]}>
                     <Text style={[styles.dangerTitle, { color: '#ef4444' }]}>Danger Zone</Text>
                     <Pressable
-                        style={[styles.deleteButton, { borderColor: '#fca5a5', backgroundColor: '#fff', borderRadius: radius.sm }]}
-                        onPress={() => {
-                            Alert.alert(
-                                "Delete Account",
-                                "Are you sure you want to delete your account? This action cannot be undone and all your family data will be permanently lost.",
-                                [
-                                    {
-                                        text: "Cancel",
-                                        style: "cancel"
-                                    },
-                                    {
-                                        text: "Delete",
-                                        style: "destructive",
-                                        onPress: async () => {
-                                            try {
-                                                setClearNotifications(true);
-                                                await deleteAccount();
-                                            } catch (error) {
-                                                console.error("Delete account failed", error);
-                                                Alert.alert("Error", "Failed to delete account. Please try again.");
-                                            }
-                                        }
-                                    }
-                                ]
-                            );
-                        }}
+                        disabled={isDeletingAccount}
+                        style={({ pressed }) => [
+                            styles.deleteButton,
+                            {
+                                borderColor: '#fca5a5',
+                                backgroundColor: '#fff',
+                                borderRadius: radius.sm,
+                                opacity: isDeletingAccount ? 0.6 : pressed ? 0.8 : 1,
+                            },
+                        ]}
+                        onPress={handleDeleteAccount}
                     >
                         <Trash2 size={16} color="#ef4444" />
                         <Text style={[styles.deleteText, { color: "#ef4444" }]}>Delete Account</Text>
@@ -778,6 +925,14 @@ export const PrivacyScreen: React.FC = () => {
 
                 <View style={{ height: 40 }} />
             </ScrollView>
+            {isDeletingAccount && (
+                <View style={styles.loadingOverlay}>
+                    <View style={styles.loadingBox}>
+                        <ActivityIndicator size="large" color="#fff" />
+                        <Text style={styles.loadingText}>Deleting account…</Text>
+                    </View>
+                </View>
+            )}
         </AppLayout>
     );
 };
@@ -891,6 +1046,21 @@ const styles = StyleSheet.create({
     },
     tagText: {
         fontSize: 12,
+        fontWeight: '600',
+    },
+    linkRow: {
+        flexDirection: 'row',
+        gap: 12,
+        marginTop: 16,
+    },
+    linkButton: {
+        flex: 1,
+        paddingVertical: 12,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderRadius: 12,
+    },
+    linkText: {
         fontWeight: '600',
     },
     dangerCard: {
@@ -1038,5 +1208,26 @@ const styles = StyleSheet.create({
         borderRadius: 6,
         borderWidth: 1,
         borderColor: '#fff',
+    },
+    loadingOverlay: {
+        position: 'absolute',
+        inset: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 10,
+    },
+    loadingBox: {
+        padding: 24,
+        borderRadius: 18,
+        backgroundColor: '#0f172a',
+        alignItems: 'center',
+        gap: 12,
+        minWidth: 200,
+    },
+    loadingText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
     },
 });
