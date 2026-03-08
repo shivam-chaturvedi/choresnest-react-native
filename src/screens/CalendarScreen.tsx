@@ -9,6 +9,7 @@ import {
   Animated,
   TextInput,
   InteractionManager,
+  ActivityIndicator,
 } from "react-native";
 import { PanGestureHandler, State, PanGestureHandlerStateChangeEvent, ScrollView } from "react-native-gesture-handler";
 import { AppLayout } from "../components/layout/AppLayout";
@@ -22,6 +23,7 @@ import { PROFILE_COLORS } from "../constants/profileColors";
 import { useSidebar } from "../contexts/SidebarContext";
 import { useCountry } from "../contexts/CountryContext";
 import { useIsFocused } from "@react-navigation/native";
+import NetInfo from "@react-native-community/netinfo";
 import ReactNativeHapticFeedback from "react-native-haptic-feedback";
 
 const hapticOptions = {
@@ -35,6 +37,7 @@ import { parseDateTimeInZone, safeFormatInTimeZone, safeTimeZone } from "../util
 import { toZonedTime } from "date-fns-tz";
 import { useObservableValue } from "../hooks/useObservableValue";
 import { TaskService } from "../services/TaskService";
+import { SyncService } from "../services/SyncService";
 import type { Observable } from "rxjs";
 import { withDeferredScreen } from "../components/layout/DeferredScreen";
 
@@ -464,15 +467,17 @@ const CalendarScreenContent: React.FC = () => {
   const observeEvents = useCallback(() => TaskService.observeEvents(profileId), [profileId]);
   const rawEvents = useObservableValue(
     observeEvents,
-    [],
+    [observeEvents],
     [] as TaskServiceEventRecord
   );
   const observeTasks = useCallback(() => TaskService.observeTasks(profileId), [profileId]);
   const rawTasks = useObservableValue(
     observeTasks,
-    [],
+    [observeTasks],
     [] as TaskServiceTaskRecord
   );
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
   const events = useMemo<CalendarEventWithMeta[]>(() => {
     const fallbackZone = timeZone;
     return rawEvents.reduce<CalendarEventWithMeta[]>((acc, record) => {
@@ -970,6 +975,26 @@ const CalendarScreenContent: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(state => {
+      const connected = Boolean(state.isConnected && (state.isInternetReachable ?? true));
+      setIsOnline(connected);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleManualRefresh = useCallback(async () => {
+    if (!isOnline || isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      await SyncService.sync(false, { mode: "manual" });
+    } catch (error) {
+      console.error("CalendarScreen: Manual sync failed", error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [isOnline, isRefreshing]);
+
   const renderTimeline = (days: Date[]) => {
     const dayColumnWidthPercent = 100;
     const daysToRender = activeView === "Week" ? [selectedDate] : days;
@@ -1331,6 +1356,24 @@ const CalendarScreenContent: React.FC = () => {
             </View>
 
             <View style={styles.headerRight}>
+              {isOnline && (
+                <Pressable
+                  style={[
+                    styles.refreshButton,
+                    { borderColor: "rgba(255,255,255,0.4)" },
+                    isRefreshing && { opacity: 0.7 },
+                  ]}
+                  onPress={handleManualRefresh}
+                  disabled={isRefreshing}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  {isRefreshing ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <AppIcon name="rotateCw" size={20} color="#fff" />
+                  )}
+                </Pressable>
+              )}
               {showSearch ? (
                 <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: radius.sm, paddingHorizontal: 8, marginRight: 8 }}>
                   <TextInput
@@ -1595,6 +1638,15 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.2)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  refreshButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.12)",
   },
   monthSelector: {
     flexDirection: "row",

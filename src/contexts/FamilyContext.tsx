@@ -60,6 +60,7 @@ export interface GroceryItem {
   category?: string;
   purchasedAt?: number;
   updatedAt?: number;
+  createdAt?: number;
 }
 
 import { VaultReminderRule } from "../utils/VaultReminderUtils";
@@ -227,6 +228,7 @@ const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean
       addedBy: item.addedById,
       purchasedAt: item.purchasedAt,
       updatedAt: item.updatedAt,
+      createdAt: item.createdAt,
     }));
   }, [rawGroceryItems]);
 

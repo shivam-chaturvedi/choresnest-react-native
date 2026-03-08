@@ -7,6 +7,7 @@ import {
   Pressable,
   Modal,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { Swipeable, PanGestureHandler, State } from "react-native-gesture-handler";
 import { useRoute, RouteProp } from "@react-navigation/native";
@@ -24,8 +25,20 @@ import { CategoryIcon, IconLibrary } from "../components/ui/CategoryIcon";
 import { shoppingCategories } from "../constants/shoppingCategories";
 import Config from "react-native-config";
 import { withDeferredScreen } from "../components/layout/DeferredScreen";
+import NetInfo from "@react-native-community/netinfo";
+import { SyncService } from "../services/SyncService";
 
 const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
+
+const isSameLocalDay = (timestamp?: number | null, targetDate?: Date | null): boolean => {
+  if (timestamp === undefined || timestamp === null || !targetDate) return false;
+  const date = new Date(timestamp);
+  return (
+    date.getFullYear() === targetDate.getFullYear() &&
+    date.getMonth() === targetDate.getMonth() &&
+    date.getDate() === targetDate.getDate()
+  );
+};
 
 type GroceryRowProps = {
   item: GroceryItem;
@@ -176,6 +189,8 @@ const ListsScreenContent: React.FC = () => {
   const [memberFilterId, setMemberFilterId] = useState<string | null>(null);
   const [updatedDateFilter, setUpdatedDateFilter] = useState<Date | null>(null);
   const [categoryFilterId, setCategoryFilterId] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
 
   // State to track expanded categories. Default all expanded.
   const [activeTab, setActiveTab] = useState<"current" | "purchased">("current");
@@ -200,6 +215,12 @@ const ListsScreenContent: React.FC = () => {
   const [historyDate, setHistoryDate] = useState<Date | null>(null);
   const [historyTime, setHistoryTime] = useState<Date | null>(null);
   const [screenError, setScreenError] = useState<string | null>(null);
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(state => {
+      setIsOnline(Boolean(state.isConnected && (state.isInternetReachable ?? true)));
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Handle addItems from route params
   useEffect(() => {
@@ -292,26 +313,41 @@ const ListsScreenContent: React.FC = () => {
     );
   }, [categoriesById, colors, radius, handleRemoveItem, handleToggleItem, getMemberMeta]);
 
-  const filteredItems = useMemo(() => {
+  const baseItems = useMemo(() => {
     const searchLower = searchQuery.trim().toLowerCase();
     return (groceryList as GroceryItem[]).filter((item) => {
       const matchesSearch = item.name.toLowerCase().includes(searchLower);
       const matchesMember = !memberFilterId || item.addedBy === memberFilterId;
       const matchesCategory = !categoryFilterId || item.category === categoryFilterId;
-      const matchesDate = !updatedDateFilter || (
-        item.updatedAt !== undefined &&
-        item.updatedAt !== null &&
-        new Date(item.updatedAt).toDateString() === updatedDateFilter.toDateString()
-      );
-      return matchesSearch && matchesMember && matchesCategory && matchesDate;
+      return matchesSearch && matchesMember && matchesCategory;
     });
-  }, [groceryList, searchQuery, memberFilterId, updatedDateFilter, categoryFilterId]);
+  }, [groceryList, searchQuery, memberFilterId, categoryFilterId]);
 
-  const todoItems = useMemo(() => filteredItems.filter((item) => !item.completed), [filteredItems]);
-  const doneItems = useMemo(() => filteredItems.filter((item) => item.completed), [filteredItems]);
+  const filterByDate = useCallback((items: GroceryItem[], targetDate?: Date | null) => {
+    if (!targetDate) return items;
+    return items.filter((item) => {
+      const ts = item.updatedAt ?? item.purchasedAt ?? item.createdAt;
+      return isSameLocalDay(ts, targetDate);
+    });
+  }, []);
+
+  const applyDateFilter = useMemo(() => filterByDate, [filterByDate]);
+
+  const baseTodoItems = useMemo(() => baseItems.filter((item) => !item.completed), [baseItems]);
+  const baseDoneItems = useMemo(() => baseItems.filter((item) => item.completed), [baseItems]);
+
+  const currentTodoItems = useMemo(
+    () => applyDateFilter(baseTodoItems, updatedDateFilter),
+    [baseTodoItems, updatedDateFilter, applyDateFilter]
+  );
+  const currentDoneItems = useMemo(
+    () => applyDateFilter(baseDoneItems, updatedDateFilter),
+    [baseDoneItems, updatedDateFilter, applyDateFilter]
+  );
+  const filteredItems = useMemo(() => [...currentTodoItems, ...currentDoneItems], [currentTodoItems, currentDoneItems]);
 
   const historyItems = useMemo(() => {
-    let items = doneItems;
+    let items = baseDoneItems;
     if (historyCategoryFilter) {
       items = items.filter(i => i.category === historyCategoryFilter);
     }
@@ -337,10 +373,10 @@ const ListsScreenContent: React.FC = () => {
     }
     // Sort by date descending
     return [...items].sort((a, b) => (b.purchasedAt || 0) - (a.purchasedAt || 0));
-  }, [doneItems, historyCategoryFilter, historyDate, historyTime]);
+  }, [baseDoneItems, historyCategoryFilter, historyDate, historyTime]);
 
   const progress = filteredItems.length > 0
-    ? Math.round((doneItems.length / filteredItems.length) * 100)
+    ? Math.round((currentDoneItems.length / filteredItems.length) * 100)
     : 0;
 
   const handleAddItem = (item: { name: string; quantity: number; unit: string; category: string }) => {
@@ -410,7 +446,7 @@ const ListsScreenContent: React.FC = () => {
   // The callbacks above already expose optimized handler hooks.
 
   const handleBulkDelete = () => {
-    const targetItems = activeTab === "current" ? todoItems : doneItems;
+    const targetItems = activeTab === "current" ? currentTodoItems : baseDoneItems;
     if (targetItems.length === 0) {
       Alert.alert("Empty List", "No items to delete.");
       return;
@@ -439,6 +475,19 @@ const ListsScreenContent: React.FC = () => {
       ]
     );
   };
+
+  const handleManualRefresh = useCallback(async () => {
+    if (!isOnline || isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      await SyncService.sync(false, { mode: "manual" });
+    } catch (error) {
+      console.error("ListsScreen: Manual sync failed", error);
+      Alert.alert("Refresh failed", "Could not sync right now. Please try again.");
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [isOnline, isRefreshing]);
 
   const handleGestureEvent = (event: any) => {
     if (event.nativeEvent.state === State.END) {
@@ -496,13 +545,26 @@ const ListsScreenContent: React.FC = () => {
                   <Text style={[styles.title, { color: colors.foreground }]}>Grocery List</Text>
                   <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Your family's shopping list</Text>
                 </View>
-                <View style={[styles.headerActions, { gap: 8, flexDirection: 'row' }]}>
-                  <Pressable style={[styles.roundButton, { backgroundColor: colors.card, borderRadius: radius.md }]} onPress={() => setShowSearch(true)}>
-                    <AppIcon name="search" size={18} color={colors.foreground} />
-                  </Pressable>
+              <View style={[styles.headerActions, { gap: 8, flexDirection: 'row' }]}>
+                <Pressable style={[styles.roundButton, { backgroundColor: colors.card, borderRadius: radius.md }]} onPress={() => setShowSearch(true)}>
+                  <AppIcon name="search" size={18} color={colors.foreground} />
+                </Pressable>
+                {isOnline && (
                   <Pressable
-                    style={[styles.roundButton, { backgroundColor: colors.danger + '15', borderRadius: radius.md }]}
-                    onPress={handleBulkDelete}
+                    style={[styles.refreshButton, { backgroundColor: colors.card, borderRadius: radius.md }]}
+                    onPress={handleManualRefresh}
+                    disabled={isRefreshing}
+                  >
+                    {isRefreshing ? (
+                      <ActivityIndicator size="small" color={colors.foreground} />
+                    ) : (
+                      <AppIcon name="rotateCw" size={18} color={colors.foreground} />
+                    )}
+                  </Pressable>
+                )}
+                <Pressable
+                  style={[styles.roundButton, { backgroundColor: colors.danger + '15', borderRadius: radius.md }]}
+                  onPress={handleBulkDelete}
                   >
                     <AppIcon name="trash" size={18} color={colors.danger} />
                   </Pressable>
@@ -521,7 +583,7 @@ const ListsScreenContent: React.FC = () => {
                   ]}
                 >
                   <Text style={[styles.tabText, { color: activeTab === "current" ? colors.primaryForeground : colors.foreground }]}>
-                    Current Bag ({todoItems.length})
+                    Current Bag ({currentTodoItems.length})
                   </Text>
                 </Pressable>
                 <Pressable
@@ -597,15 +659,6 @@ const ListsScreenContent: React.FC = () => {
                         );
                       })}
                     </ScrollView>
-                  </View>
-                  <View style={styles.dateFilterRow}>
-                    <CustomDateTimePicker
-                      mode="date"
-                      value={updatedDateFilter ?? new Date()}
-                      onChange={(value) => setUpdatedDateFilter(value)}
-                      label="Updated Date"
-                      placeholder="Any date"
-                    />
                   </View>
                   <View style={{ marginTop: 12, width: '100%' }}>
                     <Text style={[styles.filterLabel, { color: colors.mutedForeground, marginBottom: 8 }]}>Category</Text>
@@ -684,8 +737,8 @@ const ListsScreenContent: React.FC = () => {
                       </View>
                       <View style={{ flex: 1 }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4 }}>
-                          <Text style={[styles.heroTitle, { color: colors.foreground }]}>{todoItems.length} items to buy</Text>
-                          <Text style={[styles.heroSubtitle, { color: colors.mutedForeground }]}>{doneItems.length}/{filteredItems.length} purchased</Text>
+                          <Text style={[styles.heroTitle, { color: colors.foreground }]}>{currentTodoItems.length} items to buy</Text>
+                          <Text style={[styles.heroSubtitle, { color: colors.mutedForeground }]}>{currentDoneItems.length}/{filteredItems.length} purchased</Text>
                         </View>
                         <View style={[styles.progressBar, { backgroundColor: colors.muted, borderRadius: radius.full }]}>
                           <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: colors.success, borderRadius: radius.full }]} />
@@ -706,7 +759,7 @@ const ListsScreenContent: React.FC = () => {
 
 
                   {/* Pro Tip Card */}
-                  {todoItems.length > 0 && (
+                  {currentTodoItems.length > 0 && (
                     <View style={[styles.guideCard, { backgroundColor: colors.info + '10', borderColor: colors.info + '20', borderRadius: radius.md }]}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                         <AppIcon name="info" size={16} color={colors.info} />
@@ -720,7 +773,7 @@ const ListsScreenContent: React.FC = () => {
                   )}
 
                   {/* Single List for Current Items */}
-                  {todoItems.length === 0 ? (
+                  {currentTodoItems.length === 0 ? (
                     <View style={styles.emptyState}>
                       <View style={[styles.emptyIcon, { backgroundColor: colors.muted, borderRadius: radius.xl }]}>
                         <AppIcon name="shoppingCart" size={32} color={colors.mutedForeground} />
@@ -730,7 +783,7 @@ const ListsScreenContent: React.FC = () => {
                     </View>
                   ) : (
                     <View style={styles.listContainer}>
-                      {todoItems.map((item, index) => renderItemCard(item, index, false))}
+                      {currentTodoItems.map((item, index) => renderItemCard(item, index, false))}
                     </View>
                   )}
                 </>
@@ -761,16 +814,16 @@ const ListsScreenContent: React.FC = () => {
                       {members.length > 0 && (
                         <View style={styles.memberHistoryFilterRow}>
                           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                          <Pressable
-                            style={[
-                              styles.memberHistoryChip,
-                              !memberFilterId
-                                ? { borderColor: colors.primary, backgroundColor: colors.primary + '10' }
-                                : { borderColor: colors.border, backgroundColor: colors.background },
-                            ]}
-                            onPress={() => setMemberFilterId(null)}
-                          >
-                            <Text style={{ fontSize: 12, fontWeight: '600', color: !memberFilterId ? filterAccentColor : colors.foreground }}>All</Text>
+                      <Pressable
+                        style={[
+                          styles.memberHistoryChip,
+                          !memberFilterId
+                            ? { borderColor: colors.primary, backgroundColor: colors.background }
+                            : { borderColor: colors.border, backgroundColor: colors.background },
+                        ]}
+                        onPress={() => setMemberFilterId(null)}
+                      >
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: !memberFilterId ? filterAccentColor : colors.foreground }}>All</Text>
                           </Pressable>
                           {members.map(member => {
                             const isMemberActive = memberFilterId === member.id;
@@ -981,6 +1034,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  refreshButton: {
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "transparent",
+    borderRadius: 12,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
     shadowRadius: 4,
     elevation: 3,
   },

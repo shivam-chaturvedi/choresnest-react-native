@@ -33,9 +33,37 @@ import { SyncIndicator } from "./src/components/SyncIndicator";
 import { SyncService } from "./src/services/SyncService";
 import NetInfo from "@react-native-community/netinfo";
 import { PermissionPromptRenderer } from "./src/components/ui/PermissionPrompt";
+import { bootService } from "./src/services/BootService";
 
 const App = () => {
+  const [bootCompleted, setBootCompleted] = useState(false);
+
   useEffect(() => {
+    let mounted = true;
+
+    const restore = async () => {
+      try {
+        await bootService.restoreLastActiveProfile();
+      } catch (error) {
+        console.error("[App] BootService failed", error);
+      } finally {
+        if (mounted) {
+          setBootCompleted(true);
+        }
+      }
+    };
+
+    restore();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!bootCompleted) {
+      return;
+    }
+
     const initDB = async () => {
       try {
         await databaseService.init();
@@ -46,7 +74,7 @@ const App = () => {
       }
     };
     initDB();
-  }, []);
+  }, [bootCompleted]);
 
   useEffect(() => {
     const unsubscribe = notifee.onForegroundEvent(async ({ type, detail }) => {
@@ -132,6 +160,10 @@ const App = () => {
 
     return () => unsubscribe();
   }, []);
+
+  if (!bootCompleted) {
+    return null;
+  }
 
   // Note: Sync setup is handled in AppNavigatorInner where we have access to auth context
   // This ensures sync only runs when user is authenticated

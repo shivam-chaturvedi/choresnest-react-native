@@ -7,7 +7,7 @@ import { useTheme, useThemeColors } from "../../contexts/ThemeContext";
 
 interface DateTimePickerProps {
     mode: "date" | "time";
-    value: Date;
+    value?: Date | null;
     onChange: (date: Date) => void;
     label?: string;
     placeholder?: string;
@@ -90,7 +90,7 @@ export const CustomDateTimePicker: React.FC<DateTimePickerProps> = ({
 
             {show && (
                 <DateTimePicker
-                    value={value}
+                    value={value ?? new Date()}
                     mode={mode}
                     display={Platform.OS === "ios" ? "spinner" : "default"}
                     onChange={handleChange}
