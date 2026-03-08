@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,44 +6,127 @@ import {
   ScrollView,
   Pressable,
   Alert,
-} from "react-native";
-import { AppLayout } from "../components/layout";
+} from 'react-native';
+import { AppLayout } from '../components/layout';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
-import { AddTaskModal } from "../components/modals/AddTaskModal";
-import { GlobalSearch } from "../components/search/GlobalSearch";
-import { useSidebar } from "../contexts/SidebarContext";
-import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
-import { AppIcon } from "../components/ui/AppIcon";
-import { ChoreRotationSystem } from "../components/chores/ChoreRotationSystem";
-import { useFamily, Task } from "../contexts/FamilyContext";
+import { AddTaskModal } from '../components/modals/AddTaskModal';
+import { GlobalSearch } from '../components/search/GlobalSearch';
+import { useSidebar } from '../contexts/SidebarContext';
+import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
+import { AppIcon } from '../components/ui/AppIcon';
+import { ChoreRotationSystem } from '../components/chores/ChoreRotationSystem';
+import { useFamily, Task } from '../contexts/FamilyContext';
+import { trackScreen } from '../services/analytics';
 
-const tabs = ["My Tasks", "Family Tasks"];
+const tabs = ['My Tasks', 'Family Tasks'];
 
 const initialTasks: Task[] = [
-  { id: "t1", icon: "📝", name: "Complete project report", status: "pending", priority: "high", due: "Today", assignee: "You", tab: "My Tasks", date: new Date().toISOString().split('T')[0] },
-  { id: "t2", icon: "📞", name: "Call insurance company", status: "pending", priority: "medium", due: "Today", assignee: "You", tab: "My Tasks", date: new Date().toISOString().split('T')[0] },
-  { id: "t3", icon: "💊", name: "Pick up medications", status: "done", priority: "high", due: "Done", assignee: "You", tab: "My Tasks", date: new Date().toISOString().split('T')[0] },
-  { id: "t4", icon: "📧", name: "Reply to emails", status: "done", priority: "low", due: "Done", assignee: "You", tab: "My Tasks", date: new Date().toISOString().split('T')[0] },
+  {
+    id: 't1',
+    icon: '📝',
+    name: 'Complete project report',
+    status: 'pending',
+    priority: 'high',
+    due: 'Today',
+    assignee: 'You',
+    tab: 'My Tasks',
+    date: new Date().toISOString().split('T')[0],
+  },
+  {
+    id: 't2',
+    icon: '📞',
+    name: 'Call insurance company',
+    status: 'pending',
+    priority: 'medium',
+    due: 'Today',
+    assignee: 'You',
+    tab: 'My Tasks',
+    date: new Date().toISOString().split('T')[0],
+  },
+  {
+    id: 't3',
+    icon: '💊',
+    name: 'Pick up medications',
+    status: 'done',
+    priority: 'high',
+    due: 'Done',
+    assignee: 'You',
+    tab: 'My Tasks',
+    date: new Date().toISOString().split('T')[0],
+  },
+  {
+    id: 't4',
+    icon: '📧',
+    name: 'Reply to emails',
+    status: 'done',
+    priority: 'low',
+    due: 'Done',
+    assignee: 'You',
+    tab: 'My Tasks',
+    date: new Date().toISOString().split('T')[0],
+  },
 
-  { id: "t5", icon: "🏫", name: "Sign permission slip", status: "done", priority: "high", due: "Tomorrow", assignee: "Mom", tab: "Family Tasks", date: new Date().toISOString().split('T')[0] },
-  { id: "t6", icon: "🛠️", name: "Fix leaky faucet", status: "pending", priority: "medium", due: "This week", assignee: "Dad", tab: "Family Tasks", date: new Date().toISOString().split('T')[0] },
-  { id: "t7", icon: "📦", name: "Order birthday cake", status: "pending", priority: "high", due: "In 2 days", assignee: "You", tab: "Family Tasks", date: new Date().toISOString().split('T')[0] },
+  {
+    id: 't5',
+    icon: '🏫',
+    name: 'Sign permission slip',
+    status: 'done',
+    priority: 'high',
+    due: 'Tomorrow',
+    assignee: 'Mom',
+    tab: 'Family Tasks',
+    date: new Date().toISOString().split('T')[0],
+  },
+  {
+    id: 't6',
+    icon: '🛠️',
+    name: 'Fix leaky faucet',
+    status: 'pending',
+    priority: 'medium',
+    due: 'This week',
+    assignee: 'Dad',
+    tab: 'Family Tasks',
+    date: new Date().toISOString().split('T')[0],
+  },
+  {
+    id: 't7',
+    icon: '📦',
+    name: 'Order birthday cake',
+    status: 'pending',
+    priority: 'high',
+    due: 'In 2 days',
+    assignee: 'You',
+    tab: 'Family Tasks',
+    date: new Date().toISOString().split('T')[0],
+  },
 ];
 
-const getPriorityStyle = (priority: Task["priority"], colors: any) => {
+const getPriorityStyle = (priority: Task['priority'], colors: any) => {
   switch (priority) {
-    case "high":
-      return { label: "High", color: colors.danger, background: colors.danger + '25' };
-    case "medium":
-      return { label: "Medium", color: colors.warning, background: colors.warning + '30' };
+    case 'high':
+      return {
+        label: 'High',
+        color: colors.danger,
+        background: colors.danger + '25',
+      };
+    case 'medium':
+      return {
+        label: 'Medium',
+        color: colors.warning,
+        background: colors.warning + '30',
+      };
     default:
-      return { label: "Low", color: colors.info, background: colors.info + '40' };
+      return {
+        label: 'Low',
+        color: colors.info,
+        background: colors.info + '40',
+      };
   }
 };
 
 export const TasksScreen: React.FC = () => {
-  const [activeTab, setActiveTab] = useState("My Tasks");
+  const [activeTab, setActiveTab] = useState('My Tasks');
   const [showAddTask, setShowAddTask] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | undefined>(undefined);
@@ -53,8 +136,12 @@ export const TasksScreen: React.FC = () => {
   const radius = useThemeRadius();
   const { tasks, addTask, updateTask, members, activeMember } = useFamily();
 
+  useEffect(() => {
+    void trackScreen('TasksScreen');
+  }, []);
+
   const filteredTasks = useMemo(() => {
-    if (activeTab === "My Tasks") {
+    if (activeTab === 'My Tasks') {
       // Show tasks assigned to the currently active member
       return tasks.filter((task: Task) => task.assignee === activeMember?.id);
     } else {
@@ -63,19 +150,25 @@ export const TasksScreen: React.FC = () => {
     }
   }, [activeTab, tasks, activeMember]);
 
-  const completedCount = filteredTasks.filter((task: Task) => task.status === "done").length;
+  const completedCount = filteredTasks.filter(
+    (task: Task) => task.status === 'done',
+  ).length;
   const totalCount = filteredTasks.length;
-  const progress = totalCount ? Math.round((completedCount / totalCount) * 100) : 0;
+  const progress = totalCount
+    ? Math.round((completedCount / totalCount) * 100)
+    : 0;
 
   const toggleTask = (taskId: string) => {
     try {
       if (!taskId) return;
       const task = tasks.find((t: Task) => t.id === taskId);
       if (task) {
-        updateTask(taskId, { status: task.status === "done" ? "pending" : "done" });
+        updateTask(taskId, {
+          status: task.status === 'done' ? 'pending' : 'done',
+        });
       }
     } catch (error) {
-      console.error("Error toggling task:", error);
+      console.error('Error toggling task:', error);
     }
   };
 
@@ -90,9 +183,9 @@ export const TasksScreen: React.FC = () => {
       const formattedDate = taskData.dueDate.toISOString().split('T')[0];
 
       // Format time as HH:MM AM/PM
-      const formattedTime = taskData.dueDate.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
+      const formattedTime = taskData.dueDate.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
       });
 
       const taskPayload = {
@@ -108,15 +201,21 @@ export const TasksScreen: React.FC = () => {
       if (editingTask) {
         updateTask(editingTask.id, taskPayload);
       } else {
-        addTask({
-          ...taskPayload,
-          status: 'pending',
-        });
-        Alert.alert("Success", `Task "${taskData.name}" created successfully!\nDate: ${formattedDate}\nTime: ${formattedTime}`);
+        addTask(
+          {
+            ...taskPayload,
+            status: 'pending',
+          },
+          { source: 'TasksScreen' },
+        );
+        Alert.alert(
+          'Success',
+          `Task "${taskData.name}" created successfully!\nDate: ${formattedDate}\nTime: ${formattedTime}`,
+        );
       }
       setEditingTask(undefined);
     } catch (error) {
-      console.error("Error saving task:", error);
+      console.error('Error saving task:', error);
     }
   };
 
@@ -132,26 +231,55 @@ export const TasksScreen: React.FC = () => {
       >
         <ScrollView contentContainerStyle={styles.container}>
           <View style={styles.header}>
-            <Pressable onPress={openSidebar} style={[styles.menuButton, { backgroundColor: colors.card, borderRadius: radius.md }]}>
+            <Pressable
+              onPress={openSidebar}
+              style={[
+                styles.menuButton,
+                { backgroundColor: colors.card, borderRadius: radius.md },
+              ]}
+            >
               <AppIcon name="menu" size={20} color={colors.foreground} />
             </Pressable>
-            <Text style={[styles.title, { color: colors.foreground }]}>Tasks</Text>
+            <Text style={[styles.title, { color: colors.foreground }]}>
+              Tasks
+            </Text>
             <View style={styles.headerActions}>
-              <Pressable style={[styles.roundAction, { backgroundColor: colors.card, borderRadius: radius.md }]} onPress={() => setShowSearch(true)}>
+              <Pressable
+                style={[
+                  styles.roundAction,
+                  { backgroundColor: colors.card, borderRadius: radius.md },
+                ]}
+                onPress={() => setShowSearch(true)}
+              >
                 <AppIcon source="🔍" size={18} color={colors.foreground} />
               </Pressable>
 
-              <Pressable style={[styles.plusAction, { backgroundColor: colors.primary, borderRadius: radius.lg }]} onPress={() => {
-                setEditingTask(undefined);
-                setShowAddTask(true);
-              }}>
-                <AppIcon name="plus" size={18} color={colors.primaryForeground} />
+              <Pressable
+                style={[
+                  styles.plusAction,
+                  { backgroundColor: colors.primary, borderRadius: radius.lg },
+                ]}
+                onPress={() => {
+                  setEditingTask(undefined);
+                  setShowAddTask(true);
+                }}
+              >
+                <AppIcon
+                  name="plus"
+                  size={18}
+                  color={colors.primaryForeground}
+                />
               </Pressable>
             </View>
           </View>
 
-          <View style={[styles.tabs, { backgroundColor: colors.muted, borderRadius: radius.lg }]}>
-            {tabs.map((tab) => {
+          <View
+            style={[
+              styles.tabs,
+              { backgroundColor: colors.muted, borderRadius: radius.lg },
+            ]}
+          >
+            {tabs.map(tab => {
               const isActive = tab === activeTab;
               return (
                 <Pressable
@@ -160,33 +288,86 @@ export const TasksScreen: React.FC = () => {
                   style={[
                     styles.tab,
                     { borderRadius: radius.md },
-                    isActive && { backgroundColor: colors.card, shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }
+                    isActive && {
+                      backgroundColor: colors.card,
+                      shadowColor: '#000',
+                      shadowOpacity: 0.05,
+                      shadowRadius: 4,
+                      elevation: 2,
+                    },
                   ]}
                 >
-                  <Text style={[styles.tabText, { color: isActive ? colors.foreground : colors.mutedForeground }]}>{tab}</Text>
+                  <Text
+                    style={[
+                      styles.tabText,
+                      {
+                        color: isActive
+                          ? colors.foreground
+                          : colors.mutedForeground,
+                      },
+                    ]}
+                  >
+                    {tab}
+                  </Text>
                 </Pressable>
               );
             })}
           </View>
 
-          {activeTab === "Kids Chores" ? (
+          {activeTab === 'Kids Chores' ? (
             <ChoreRotationSystem />
           ) : (
             <>
-              <View style={[styles.progressCard, { backgroundColor: colors.card, shadowColor: colors.border, borderRadius: radius.card }]}>
+              <View
+                style={[
+                  styles.progressCard,
+                  {
+                    backgroundColor: colors.card,
+                    shadowColor: colors.border,
+                    borderRadius: radius.card,
+                  },
+                ]}
+              >
                 <View style={styles.progressHeader}>
-                  <Text style={[styles.progressLabel, { color: colors.foreground }]}>Progress: {completedCount}/{totalCount}</Text>
-                  <Text style={[styles.progressPercent, { color: colors.mutedForeground }]}>{progress}%</Text>
+                  <Text
+                    style={[styles.progressLabel, { color: colors.foreground }]}
+                  >
+                    Progress: {completedCount}/{totalCount}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.progressPercent,
+                      { color: colors.mutedForeground },
+                    ]}
+                  >
+                    {progress}%
+                  </Text>
                 </View>
-                <View style={[styles.progressBar, { backgroundColor: colors.muted, borderRadius: radius.sm }]}>
-                  <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: colors.primary, borderRadius: radius.sm }]} />
+                <View
+                  style={[
+                    styles.progressBar,
+                    { backgroundColor: colors.muted, borderRadius: radius.sm },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.progressFill,
+                      {
+                        width: `${progress}%`,
+                        backgroundColor: colors.primary,
+                        borderRadius: radius.sm,
+                      },
+                    ]}
+                  />
                 </View>
               </View>
 
               <View style={styles.taskList}>
                 {filteredTasks.map((task: Task) => {
                   const priorityStyle = getPriorityStyle(task.priority, colors);
-                  const assignee = members.find((m: any) => m.id === task.assignee)?.name || "Unassigned";
+                  const assignee =
+                    members.find((m: any) => m.id === task.assignee)?.name ||
+                    'Unassigned';
 
                   return (
                     <Pressable
@@ -194,45 +375,106 @@ export const TasksScreen: React.FC = () => {
                       onPress={() => handleEditTask(task)}
                       style={[
                         styles.taskCard,
-                        { backgroundColor: colors.card, shadowColor: colors.border, borderRadius: radius.card },
-                        task.status === "done" && { opacity: 0.6 }
+                        {
+                          backgroundColor: colors.card,
+                          shadowColor: colors.border,
+                          borderRadius: radius.card,
+                        },
+                        task.status === 'done' && { opacity: 0.6 },
                       ]}
                     >
                       <Pressable
                         style={[
                           styles.checkCircle,
-                          { borderColor: colors.mutedForeground, borderRadius: radius.sm },
-                          task.status === "done" && { backgroundColor: colors.success, borderColor: colors.success }
+                          {
+                            borderColor: colors.mutedForeground,
+                            borderRadius: radius.sm,
+                          },
+                          task.status === 'done' && {
+                            backgroundColor: colors.success,
+                            borderColor: colors.success,
+                          },
                         ]}
                         onPress={() => toggleTask(task.id)}
                       >
-                        {task.status === "done" && <Text style={styles.checkMark}>✓</Text>}
+                        {task.status === 'done' && (
+                          <Text style={styles.checkMark}>✓</Text>
+                        )}
                       </Pressable>
                       <View style={styles.taskDetails}>
                         <View style={styles.taskTitleRow}>
                           <MaterialCommunityIcons
-                            name={task.icon && task.icon.trim() ? task.icon : 'format-list-checks'}
+                            name={
+                              task.icon && task.icon.trim()
+                                ? task.icon
+                                : 'format-list-checks'
+                            }
                             size={22}
                             color={colors.primary}
                             style={{ marginRight: 8 }}
                           />
-                          <Text style={[styles.taskTitle, { color: colors.foreground }, task.status === "done" && { color: colors.mutedForeground }]}>
+                          <Text
+                            style={[
+                              styles.taskTitle,
+                              { color: colors.foreground },
+                              task.status === 'done' && {
+                                color: colors.mutedForeground,
+                              },
+                            ]}
+                          >
                             {task.name}
                           </Text>
                         </View>
                         <View style={styles.metaRow}>
-                          <View style={[styles.priorityBadge, { backgroundColor: priorityStyle.background, borderRadius: radius.full }]}>
-                            <Text style={[styles.priorityText, { color: priorityStyle.color }]}>
+                          <View
+                            style={[
+                              styles.priorityBadge,
+                              {
+                                backgroundColor: priorityStyle.background,
+                                borderRadius: radius.full,
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.priorityText,
+                                { color: priorityStyle.color },
+                              ]}
+                            >
                               {priorityStyle.label}
                             </Text>
                           </View>
                           <View style={styles.metaItem}>
-                            <AppIcon name="clock" size={14} color={colors.mutedForeground} style={styles.metaIcon} />
-                            <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{task.due}</Text>
+                            <AppIcon
+                              name="clock"
+                              size={14}
+                              color={colors.mutedForeground}
+                              style={styles.metaIcon}
+                            />
+                            <Text
+                              style={[
+                                styles.metaText,
+                                { color: colors.mutedForeground },
+                              ]}
+                            >
+                              {task.due}
+                            </Text>
                           </View>
                           <View style={styles.metaItem}>
-                            <AppIcon name="user" size={14} color={colors.mutedForeground} style={styles.metaIcon} />
-                            <Text style={[styles.metaText, { color: colors.mutedForeground }]}>{assignee}</Text>
+                            <AppIcon
+                              name="user"
+                              size={14}
+                              color={colors.mutedForeground}
+                              style={styles.metaIcon}
+                            />
+                            <Text
+                              style={[
+                                styles.metaText,
+                                { color: colors.mutedForeground },
+                              ]}
+                            >
+                              {assignee}
+                            </Text>
                           </View>
                         </View>
                       </View>
@@ -241,12 +483,22 @@ export const TasksScreen: React.FC = () => {
                 })}
               </View>
 
-              <Pressable style={[styles.addNewRow]} onPress={() => {
-                setEditingTask(undefined);
-                setShowAddTask(true);
-              }}>
-                <AppIcon name="plus" size={16} color={colors.primary} style={styles.addNewIcon} />
-                <Text style={[styles.addNewText, { color: colors.primary }]}>Add new task</Text>
+              <Pressable
+                style={[styles.addNewRow]}
+                onPress={() => {
+                  setEditingTask(undefined);
+                  setShowAddTask(true);
+                }}
+              >
+                <AppIcon
+                  name="plus"
+                  size={16}
+                  color={colors.primary}
+                  style={styles.addNewIcon}
+                />
+                <Text style={[styles.addNewText, { color: colors.primary }]}>
+                  Add new task
+                </Text>
               </Pressable>
             </>
           )}
@@ -270,16 +522,16 @@ const styles = StyleSheet.create({
     // Background handled by AppLayout
   },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 16,
   },
   menuButton: {
     width: 40,
     height: 40,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -288,19 +540,19 @@ const styles = StyleSheet.create({
   title: {
     flex: 1,
     fontSize: 26,
-    fontWeight: "700",
+    fontWeight: '700',
     marginLeft: 16,
   },
   headerActions: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
   roundAction: {
     width: 40,
     height: 40,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 6,
@@ -309,25 +561,25 @@ const styles = StyleSheet.create({
   plusAction: {
     width: 48,
     height: 48,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.18,
     shadowRadius: 10,
     elevation: 5,
   },
   tabs: {
-    flexDirection: "row",
+    flexDirection: 'row',
     padding: 4,
     marginBottom: 16,
   },
   tab: {
     flex: 1,
-    alignItems: "center",
+    alignItems: 'center',
     paddingVertical: 8,
   },
   tabText: {
-    fontWeight: "600",
+    fontWeight: '600',
   },
   progressCard: {
     padding: 16,
@@ -338,29 +590,29 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   progressHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     marginBottom: 8,
   },
   progressLabel: {
-    fontWeight: "600",
+    fontWeight: '600',
   },
   progressPercent: {
-    fontWeight: "600",
+    fontWeight: '600',
   },
   progressBar: {
     height: 10,
-    overflow: "hidden",
+    overflow: 'hidden',
   },
   progressFill: {
-    height: "100%",
+    height: '100%',
   },
   taskList: {
     marginBottom: 24,
   },
   taskCard: {
-    flexDirection: "row",
-    alignItems: "flex-start",
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     padding: 16,
     marginBottom: 8,
     shadowOffset: { width: 0, height: 4 },
@@ -372,35 +624,35 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderWidth: 1,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
     marginRight: 16,
   },
   checkMark: {
-    color: "#fff",
-    fontWeight: "bold",
+    color: '#fff',
+    fontWeight: 'bold',
   },
   taskDetails: {
     flex: 1,
   },
   taskTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 6,
   },
   taskTitle: {
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: '700',
     marginBottom: 6,
   },
   metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
   },
   metaItem: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     marginLeft: 8,
   },
   metaIcon: {
@@ -411,23 +663,23 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   priorityText: {
-    fontWeight: "700",
+    fontWeight: '700',
   },
   metaText: {
     fontSize: 12,
   },
   addNewRow: {
     marginTop: 8,
-    alignSelf: "center",
-    flexDirection: "row",
-    alignItems: "center",
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 6,
   },
   addNewIcon: {
     marginRight: 4,
   },
   addNewText: {
-    fontWeight: "700",
+    fontWeight: '700',
     fontSize: 18,
   },
 });

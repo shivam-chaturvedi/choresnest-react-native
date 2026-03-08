@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -6,12 +6,16 @@ import {
   ScrollView,
   Pressable,
   TextInput,
-} from "react-native";
-import { AppLayout } from "../components/layout";
-import { useThemeColors, useThemeRadius, useTheme } from '../contexts/ThemeContext';
-import { useSidebar } from "../contexts/SidebarContext";
-import { useNavigation } from "@react-navigation/native";
-import { useToast } from "../components/ui/Toast";
+} from 'react-native';
+import { AppLayout } from '../components/layout';
+import {
+  useThemeColors,
+  useThemeRadius,
+  useTheme,
+} from '../contexts/ThemeContext';
+import { useSidebar } from '../contexts/SidebarContext';
+import { useNavigation } from '@react-navigation/native';
+import { useToast } from '../components/ui/Toast';
 import {
   ChevronLeft,
   ChevronDown,
@@ -31,159 +35,167 @@ import {
   ChevronRight,
   Shield,
   Download,
-} from "lucide-react-native";
-import { GettingStartedTutorial } from "../components/tutorial/GettingStartedTutorial";
-import Config from "react-native-config";
+} from 'lucide-react-native';
+import { GettingStartedTutorial } from '../components/tutorial/GettingStartedTutorial';
+import Config from 'react-native-config';
+import { trackScreen } from '../services/analytics';
 
 const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 
 // --- Data ---
 const featureGuides = [
   {
-    id: "home",
+    id: 'home',
     icon: Home,
-    title: "Home Dashboard",
-    path: "Home",
-    description: "Your central hub for family activities. View today's schedule, quick actions, and unified notifications.",
+    title: 'Home Dashboard',
+    path: 'Home',
+    description:
+      "Your central hub for family activities. View today's schedule, quick actions, and unified notifications.",
     howToUse: [
       "View today's weather and date at a glance",
-      "See upcoming events and tasks sorted by time",
+      'See upcoming events and tasks sorted by time',
       "Use 'Quick Actions' to add events, tasks, or items instantly",
-      "Access family member profiles to filter views",
-      "Tap the Bell icon to view all History (Events, Tasks, & Docs)",
+      'Access family member profiles to filter views',
+      'Tap the Bell icon to view all History (Events, Tasks, & Docs)',
     ],
     tips: [
-      "Check the dashboard every morning for a daily briefing",
+      'Check the dashboard every morning for a daily briefing',
       "The 'Bell' icon now shows a full history of all alerts",
-      "Unread notifications are marked with a red badge",
+      'Unread notifications are marked with a red badge',
     ],
   },
   {
-    id: "calendar",
+    id: 'calendar',
     icon: Calendar,
-    title: "Family Calendar",
-    path: "Calendar",
-    description: "A shared calendar for events. Color-coded by family member.",
+    title: 'Family Calendar',
+    path: 'Calendar',
+    description: 'A shared calendar for events. Color-coded by family member.',
     howToUse: [
       "Tap '+' to add events with location and notes",
-      "Assign events to specific family members (color-coded)",
-      "Set multiple reminders (e.g., 1 day before, 1 hour before)",
-      "Create recurring events (Daily, Weekly, Monthly, Custom)",
-      "Switch between Timeline, Week, and Month views",
+      'Assign events to specific family members (color-coded)',
+      'Set multiple reminders (e.g., 1 day before, 1 hour before)',
+      'Create recurring events (Daily, Weekly, Monthly, Custom)',
+      'Switch between Timeline, Week, and Month views',
     ],
     tips: [
       "Use 'Custom' repeat for complex schedules (e.g., M-W-F)",
-      "Tap an event to see location maps (if enabled)",
-      "Long-press a date to quickly add an event",
+      'Tap an event to see location maps (if enabled)',
+      'Long-press a date to quickly add an event',
     ],
   },
   {
-    id: "tasks",
+    id: 'tasks',
     icon: CheckSquare,
-    title: "Tasks & Chores",
-    path: "Tasks",
-    description: "Manage household chores, assign tasks, and track completion.",
+    title: 'Tasks & Chores',
+    path: 'Tasks',
+    description: 'Manage household chores, assign tasks, and track completion.',
     howToUse: [
-      "Create tasks and assign them to family members",
+      'Create tasks and assign them to family members',
       "Set 'Chore Rotation' to auto-rotate tasks weekly",
-      "Set deadlines with precise reminder alerts",
-      "Prioritize tasks (High, Medium, Low)",
+      'Set deadlines with precise reminder alerts',
+      'Prioritize tasks (High, Medium, Low)',
       "View 'My Tasks' vs 'Family Tasks' tabs",
     ],
     tips: [
       "Enable 'Exact Alarms' for critical deadlines",
-      "Completed chores are saved in history for review",
-      "Use subtasks for complex projects",
+      'Completed chores are saved in history for review',
+      'Use subtasks for complex projects',
     ],
   },
   {
-    id: "lists",
+    id: 'lists',
     icon: ShoppingCart,
-    title: "Shopping & Todo Lists",
-    path: "Lists",
-    description: "Smart lists for groceries and general todos. Syncs instantly.",
+    title: 'Shopping & Todo Lists',
+    path: 'Lists',
+    description:
+      'Smart lists for groceries and general todos. Syncs instantly.',
     howToUse: [
       "Create 'Grocery' or 'Todo' type lists",
-      "Items in Grocery lists auto-categorize (Produce, Dairy)",
+      'Items in Grocery lists auto-categorize (Produce, Dairy)',
       "Tap '+' to add items; swipe left to delete",
       "Tap 'Generate' in Meal Plan to fill grocery lists",
     ],
     tips: [
-      "Share lists with family for collaborative shopping",
+      'Share lists with family for collaborative shopping',
       "Use the 'Copy' feature to duplicate frequent lists",
-      "Checked items move to the bottom automatically",
+      'Checked items move to the bottom automatically',
     ],
   },
   {
-    id: "vault",
+    id: 'vault',
     icon: FolderLock,
-    title: "Vault & Warranties",
-    path: "Vault",
-    description: "Secure storage for IDs, Insurance, and Warranties with expiry alerts.",
+    title: 'Vault & Warranties',
+    path: 'Vault',
+    description:
+      'Secure storage for IDs, Insurance, and Warranties with expiry alerts.',
     howToUse: [
-      "Upload documents, IDs, or Warranty cards",
-      "Set Expiry Dates to get auto-reminders (30/14/7 days before)",
-      "Tag documents by type (Medical, Financial, Vehicle)",
-      "Use the search bar to find files instantly",
+      'Upload documents, IDs, or Warranty cards',
+      'Set Expiry Dates to get auto-reminders (30/14/7 days before)',
+      'Tag documents by type (Medical, Financial, Vehicle)',
+      'Use the search bar to find files instantly',
     ],
     tips: [
-      "Store warranty receipts to get alerts before they expire",
-      "Keep digital copies of all family Passports/IDs",
-      "Vault alerts now appear in the Notification Center",
+      'Store warranty receipts to get alerts before they expire',
+      'Keep digital copies of all family Passports/IDs',
+      'Vault alerts now appear in the Notification Center',
     ],
   },
-  ...(ENABLE_RECIPE_AND_MEALS ? [{
-    id: "recipes",
-    icon: Utensils,
-    title: "Recipes & Collections",
-    path: "Recipes",
-    description: "Organize family recipes and build weekly meal plans.",
-    howToUse: [
-      "Save recipes with ingredients, steps, and photos",
-      "Organize recipes into custom 'Collections' (e.g., 'Favorites')",
-      "Use 'Cook Mode' for a step-by-step big screen view",
-      "Add recipes directly to the Meal Planner",
-    ],
-    tips: [
-      "Scale ingredients automatically by changing serving size",
-      "Import recipes from supported websites (coming soon)",
-      "Tag recipes by cuisine or dietary restriction",
-    ],
-  }] : []),
+  ...(ENABLE_RECIPE_AND_MEALS
+    ? [
+        {
+          id: 'recipes',
+          icon: Utensils,
+          title: 'Recipes & Collections',
+          path: 'Recipes',
+          description: 'Organize family recipes and build weekly meal plans.',
+          howToUse: [
+            'Save recipes with ingredients, steps, and photos',
+            "Organize recipes into custom 'Collections' (e.g., 'Favorites')",
+            "Use 'Cook Mode' for a step-by-step big screen view",
+            'Add recipes directly to the Meal Planner',
+          ],
+          tips: [
+            'Scale ingredients automatically by changing serving size',
+            'Import recipes from supported websites (coming soon)',
+            'Tag recipes by cuisine or dietary restriction',
+          ],
+        },
+      ]
+    : []),
   {
-    id: "finance",
+    id: 'finance',
     icon: DollarSign,
-    title: "Finance & Budget",
-    path: "Expenses",
-    description: "Track income, expenses, and set category budgets.",
+    title: 'Finance & Budget',
+    path: 'Expenses',
+    description: 'Track income, expenses, and set category budgets.',
     howToUse: [
-      "Log daily transactions (Income/Expense)",
-      "Set monthly budgets for categories (Groceries, Fuel)",
-      "View visual charts of spending habits",
-      "Get alerted when nearing budget limits (80%, 100%)",
+      'Log daily transactions (Income/Expense)',
+      'Set monthly budgets for categories (Groceries, Fuel)',
+      'View visual charts of spending habits',
+      'Get alerted when nearing budget limits (80%, 100%)',
     ],
     tips: [
-      "Log expenses immediately for accurate tracking",
+      'Log expenses immediately for accurate tracking',
       "Review 'Monthly Insights' to find savings",
-      "Export finance data via the Data Export tool",
+      'Export finance data via the Data Export tool',
     ],
   },
   {
-    id: "notifications",
+    id: 'notifications',
     icon: Bell,
-    title: "Notification Center",
-    path: "Notifications",
-    description: "Centralized history of all family alerts and reminders.",
+    title: 'Notification Center',
+    path: 'Notifications',
+    description: 'Centralized history of all family alerts and reminders.',
     howToUse: [
-      "Tap the Bell icon on Home to see everything",
-      "View history of Events, Tasks, and Vault expiries",
+      'Tap the Bell icon on Home to see everything',
+      'View history of Events, Tasks, and Vault expiries',
       "Customize 'Quiet Hours' to silence non-urgent alerts",
-      "Toggle specific categories on/off in Settings",
+      'Toggle specific categories on/off in Settings',
     ],
     tips: [
-      "App Icon badges show unread count",
-      "Clear all to mark everything as read",
-      "Critical alerts (like Alarms) bypass Quiet Hours",
+      'App Icon badges show unread count',
+      'Clear all to mark everything as read',
+      'Critical alerts (like Alarms) bypass Quiet Hours',
     ],
   },
   {
@@ -200,7 +212,7 @@ const featureGuides = [
     tips: [
       'Use a PIN that is not easily guessable',
       'If you forget PIN, you may need to reset app data',
-    ]
+    ],
   },
   {
     id: 'dataexport',
@@ -218,14 +230,15 @@ const featureGuides = [
       'JSON export contains ALL details (best for backup)',
       'CSV is great for viewing finance data in Excel',
       'File sizes are calculated live before export',
-    ]
+    ],
   },
   {
     id: 'profiles',
     icon: Users,
     title: 'Profiles & Members',
     path: 'Family',
-    description: 'Control who is part of this profile, assign colors, and manage their permissions.',
+    description:
+      'Control who is part of this profile, assign colors, and manage their permissions.',
     howToUse: [
       'Open the profiles switcher in the sidebar to view every member',
       'Tap a member to make them active and personalize reminders/tasks',
@@ -255,13 +268,19 @@ const featureGuides = [
   },
 ];
 
-const SEARCH_ALIAS_MAP: Record<string, { features?: string[]; faqCategories?: string[] }> = {
+const SEARCH_ALIAS_MAP: Record<
+  string,
+  { features?: string[]; faqCategories?: string[] }
+> = {
   auth: { features: ['privacy'], faqCategories: ['General & Security'] },
   login: { features: ['privacy'], faqCategories: ['General & Security'] },
   signup: { features: ['privacy'], faqCategories: ['General & Security'] },
   vault: { features: ['vault'], faqCategories: ['Features'] },
   warranty: { features: ['vault'], faqCategories: ['Features'] },
-  notifications: { features: ['notifications'], faqCategories: ['Notifications'] },
+  notifications: {
+    features: ['notifications'],
+    faqCategories: ['Notifications'],
+  },
   budgets: { features: ['finance'], faqCategories: ['Finance & Budget'] },
   finance: { features: ['finance'], faqCategories: ['Data & Backup'] },
   backup: { features: ['dataexport'], faqCategories: ['Data & Backup'] },
@@ -273,7 +292,10 @@ const SEARCH_ALIAS_MAP: Record<string, { features?: string[]; faqCategories?: st
   profiles: { features: ['profiles'], faqCategories: ['Accounts & Profiles'] },
   members: { features: ['profiles'], faqCategories: ['Accounts & Profiles'] },
   profile: { features: ['profiles'], faqCategories: ['Accounts & Profiles'] },
-  account: { features: ['profiles'], faqCategories: ['Accounts & Profiles', 'General & Security'] },
+  account: {
+    features: ['profiles'],
+    faqCategories: ['Accounts & Profiles', 'General & Security'],
+  },
   delete: { features: ['profiles'], faqCategories: ['General & Security'] },
   remove: { features: ['profiles'], faqCategories: ['General & Security'] },
 };
@@ -297,123 +319,126 @@ const FEATURE_SEARCH_INDEX = featureGuides.map(item => ({
   text: [
     item.title,
     item.description,
-    item.howToUse.join(" "),
-    item.tips.join(" "),
-  ].join(" ").toLowerCase(),
+    item.howToUse.join(' '),
+    item.tips.join(' '),
+  ]
+    .join(' ')
+    .toLowerCase(),
 }));
 
 const FEATURE_SEARCH_TEXT_MAP = new Map<string, string>();
-FEATURE_SEARCH_INDEX.forEach(entry => FEATURE_SEARCH_TEXT_MAP.set(entry.id, entry.text));
+FEATURE_SEARCH_INDEX.forEach(entry =>
+  FEATURE_SEARCH_TEXT_MAP.set(entry.id, entry.text),
+);
 
 const faqItems = [
   {
-    category: "General & Security",
+    category: 'General & Security',
     questions: [
       {
-        q: "How do I secure the app?",
+        q: 'How do I secure the app?',
         a: "Go to Settings > Privacy. Enable 'App Lock' and set a PIN.",
       },
       {
-        q: "Is my data stored in the cloud?",
-        a: "Your data is primarily stored locally on your device for privacy. We do not mine or sell your family data.",
+        q: 'Is my data stored in the cloud?',
+        a: 'Your data is primarily stored locally on your device for privacy. We do not mine or sell your family data.',
       },
       {
-        q: "Can I delete my account?",
-        a: "Yes. Visit Settings > Privacy > Delete Account. This erases local data and removes your profile from our backend.",
+        q: 'Can I delete my account?',
+        a: 'Yes. Visit Settings > Privacy > Delete Account. This erases local data and removes your profile from our backend.',
       },
       {
-        q: "How do I update my profile photo or name?",
-        a: "Open the profile menu, tap the avatar, and choose a new symbol or name. Changes sync across every device on your account.",
+        q: 'How do I update my profile photo or name?',
+        a: 'Open the profile menu, tap the avatar, and choose a new symbol or name. Changes sync across every device on your account.',
       },
       {
-        q: "What if I forget my App Lock PIN?",
+        q: 'What if I forget my App Lock PIN?',
         a: "For security, there is no 'forgot password' backdoor. You would need to reinstall the app, which resets secure data.",
       },
     ],
   },
   {
-    category: "Accounts & Profiles",
+    category: 'Accounts & Profiles',
     questions: [
       {
-        q: "How do I switch between family members?",
-        a: "Expand the profiles dropdown in the sidebar and tap the member you want to act as. The app then shows that member’s events, tasks, and reminders.",
+        q: 'How do I switch between family members?',
+        a: 'Expand the profiles dropdown in the sidebar and tap the member you want to act as. The app then shows that member’s events, tasks, and reminders.',
       },
       {
-        q: "Can multiple people use the same account?",
-        a: "Yes, but we recommend assigning each person a dedicated profile. That keeps reminders, tasks, and documents clearly separated.",
+        q: 'Can multiple people use the same account?',
+        a: 'Yes, but we recommend assigning each person a dedicated profile. That keeps reminders, tasks, and documents clearly separated.',
       },
       {
-        q: "My member colors disappeared. How do I restore them?",
-        a: "Edit the member from the Profiles dropdown, pick a new color, then tap Save. Colors are stored per profile and sync automatically.",
+        q: 'My member colors disappeared. How do I restore them?',
+        a: 'Edit the member from the Profiles dropdown, pick a new color, then tap Save. Colors are stored per profile and sync automatically.',
       },
     ],
   },
   {
-    category: "Notifications",
+    category: 'Notifications',
     questions: [
       {
-        q: "Why are my reminders not ringing?",
+        q: 'Why are my reminders not ringing?',
         a: "Ensure you have granted 'Notification' permissions. For critical tasks, the app uses 'Exact Alarms' which ensures delivery even in Doze mode.",
       },
       {
-        q: "Can I stop notifications at night?",
+        q: 'Can I stop notifications at night?',
         a: "Yes! Use 'Quiet Hours' in Notification Settings. You can set a start and end time (e.g., 10 PM to 7 AM) to mute non-urgent alerts.",
       },
       {
-        q: "Where can I see past notifications?",
-        a: "Tap the Bell icon on the Home screen. It shows a unified history of all missed events, tasks, and vault alerts from the last 7 days.",
+        q: 'Where can I see past notifications?',
+        a: 'Tap the Bell icon on the Home screen. It shows a unified history of all missed events, tasks, and vault alerts from the last 7 days.',
       },
     ],
   },
   {
-    category: "Data & Backup",
+    category: 'Data & Backup',
     questions: [
       {
-        q: "How do I backup my data?",
+        q: 'How do I backup my data?',
         a: "Use the 'Data Export' feature in Settings. Select 'JSON' format for a complete backup of all your family info.",
       },
       {
-        q: "Can I view my expenses in Excel?",
+        q: 'Can I view my expenses in Excel?',
         a: "Yes! Select 'Finance' and choose 'CSV' format in the Data Export screen. You can then open the file in Excel or Google Sheets.",
       },
       {
-        q: "Does the export include images?",
-        a: "Currently, the JSON export includes text data and metadata. Heavy media files (images) are not embedded in the JSON to keep it lightweight.",
+        q: 'Does the export include images?',
+        a: 'Currently, the JSON export includes text data and metadata. Heavy media files (images) are not embedded in the JSON to keep it lightweight.',
       },
     ],
   },
   {
-    category: "Features",
+    category: 'Features',
     questions: [
       {
-        q: "How does the Vault work?",
-        a: "Upload important docs (IDs, Warranties). Set an Expiry Date. The app will remind you 30 days, 14 days, and 7 days before it expires.",
+        q: 'How does the Vault work?',
+        a: 'Upload important docs (IDs, Warranties). Set an Expiry Date. The app will remind you 30 days, 14 days, and 7 days before it expires.',
       },
       {
-        q: "Can I rotate chores automatically?",
+        q: 'Can I rotate chores automatically?',
         a: "Yes. In Task Settings, enable 'Chore Rotation'. The app will shuffle assignees for recurring tasks every Monday.",
       },
       {
-        q: "How do I share a shopping list?",
+        q: 'How do I share a shopping list?',
         a: "Since the app is designed for families, all lists created in the 'Family' workspace are instantly visible to all added members.",
       },
     ],
   },
   {
-    category: "Notes & Documents",
+    category: 'Notes & Documents',
     questions: [
       {
-        q: "How do I search for an old note or document?",
-        a: "Use the search bar at the top of the Help screen or Vault/Notes pages. You can type keywords from the title, body, or tags, and suggestions appear instantly.",
+        q: 'How do I search for an old note or document?',
+        a: 'Use the search bar at the top of the Help screen or Vault/Notes pages. You can type keywords from the title, body, or tags, and suggestions appear instantly.',
       },
       {
-        q: "Can I set alarms for documents?",
-        a: "Yes. When saving a document, create reminder rules (30/14/7 days) and we’ll send alerts per the schedule. You can also view them in the Notification Center.",
+        q: 'Can I set alarms for documents?',
+        a: 'Yes. When saving a document, create reminder rules (30/14/7 days) and we’ll send alerts per the schedule. You can also view them in the Notification Center.',
       },
     ],
   },
 ];
-
 
 export const HelpScreen: React.FC = () => {
   const { openSidebar } = useSidebar();
@@ -422,14 +447,29 @@ export const HelpScreen: React.FC = () => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
   const { appearanceMode } = useTheme();
-  const isMidnight = appearanceMode === "midnight";
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<"features" | "faq">("features");
+  const isMidnight = appearanceMode === 'midnight';
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<'features' | 'faq'>('features');
 
   const [expandedFeature, setExpandedFeature] = useState<string | null>(null);
   const [showTutorial, setShowTutorial] = useState(false);
 
+  const handleFeatureToggle = (itemId: string) => {
+    const next = expandedFeature === itemId ? null : itemId;
+    setExpandedFeature(next);
+    if (next) {
+    }
+  };
+
+  useEffect(() => {
+    void trackScreen('HelpScreen');
+  }, []);
+
   const normalizedQuery = searchQuery.trim().toLowerCase();
+
+  const handleHelpSearchSubmit = () => {
+    if (!normalizedQuery) return;
+  };
 
   const filteredFeatures = useMemo(() => {
     if (!normalizedQuery) {
@@ -447,7 +487,7 @@ export const HelpScreen: React.FC = () => {
       if (aliasHits.has(item.id)) {
         return true;
       }
-      const haystack = FEATURE_SEARCH_TEXT_MAP.get(item.id) ?? "";
+      const haystack = FEATURE_SEARCH_TEXT_MAP.get(item.id) ?? '';
       return haystack.includes(normalizedQuery);
     });
   }, [normalizedQuery]);
@@ -464,21 +504,23 @@ export const HelpScreen: React.FC = () => {
       alias?.faqCategories?.forEach(cat => aliasCategories.add(cat));
     });
 
-    return faqItems.map(cat => {
-      if (aliasCategories.has(cat.category)) {
-        return cat;
-      }
+    return faqItems
+      .map(cat => {
+        if (aliasCategories.has(cat.category)) {
+          return cat;
+        }
 
-      const matchedQuestions = cat.questions.filter(q => {
-        const haystack = [q.q, q.a, q.category ?? ""].join(" ").toLowerCase();
-        return haystack.includes(normalizedQuery);
-      });
+        const matchedQuestions = cat.questions.filter(q => {
+          const haystack = [q.q, q.a, q.category ?? ''].join(' ').toLowerCase();
+          return haystack.includes(normalizedQuery);
+        });
 
-      return {
-        ...cat,
-        questions: matchedQuestions,
-      };
-    }).filter(c => c.questions.length > 0);
+        return {
+          ...cat,
+          questions: matchedQuestions,
+        };
+      })
+      .filter(c => c.questions.length > 0);
   }, [normalizedQuery]);
 
   useEffect(() => {
@@ -489,80 +531,180 @@ export const HelpScreen: React.FC = () => {
       setActiveTab('faq');
       return;
     }
-    if (featureCount > 0 && featureCount >= faqCount && activeTab !== 'features') {
+    if (
+      featureCount > 0 &&
+      featureCount >= faqCount &&
+      activeTab !== 'features'
+    ) {
       setActiveTab('features');
     }
-  }, [normalizedQuery, filteredFeatures.length, filteredFaqs.length, activeTab]);
+  }, [
+    normalizedQuery,
+    filteredFeatures.length,
+    filteredFaqs.length,
+    activeTab,
+  ]);
 
   return (
     <>
       <AppLayout>
-        <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={[
+            styles.container,
+            { backgroundColor: colors.background },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
           {/* Header */}
           <View style={styles.headerRow}>
-            <Pressable onPress={() => navigation.goBack()} style={[styles.backButton, { borderRadius: radius.sm }]}>
+            <Pressable
+              onPress={() => navigation.goBack()}
+              style={[styles.backButton, { borderRadius: radius.sm }]}
+            >
               <ChevronLeft size={24} color={colors.foreground} />
             </Pressable>
             <View>
-              <Text style={[styles.title, { color: colors.foreground }]}>Help Center</Text>
-              <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Learn how to use every feature</Text>
+              <Text style={[styles.title, { color: colors.foreground }]}>
+                Help Center
+              </Text>
+              <Text
+                style={[styles.subtitle, { color: colors.mutedForeground }]}
+              >
+                Learn how to use every feature
+              </Text>
             </View>
           </View>
 
           {/* Hero */}
-            <View style={[styles.heroCard, { backgroundColor: colors.primary, shadowColor: colors.primary, borderRadius: radius.lg }]}>
-              <View style={[styles.heroIconBox, { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: radius.full }]}>
-                <Book size={32} color={colors.primaryForeground} />
-              </View>
+          <View
+            style={[
+              styles.heroCard,
+              {
+                backgroundColor: colors.primary,
+                shadowColor: colors.primary,
+                borderRadius: radius.lg,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.heroIconBox,
+                {
+                  backgroundColor: 'rgba(255,255,255,0.2)',
+                  borderRadius: radius.full,
+                },
+              ]}
+            >
+              <Book size={32} color={colors.primaryForeground} />
+            </View>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.heroTitle, { color: colors.primaryForeground }]}>Complete User Guide</Text>
-              <Text style={[styles.heroSubtitle, { color: colors.primaryForeground, opacity: 0.9 }]}>Everything you need to manage your family</Text>
+              <Text
+                style={[styles.heroTitle, { color: colors.primaryForeground }]}
+              >
+                Complete User Guide
+              </Text>
+              <Text
+                style={[
+                  styles.heroSubtitle,
+                  { color: colors.primaryForeground, opacity: 0.9 },
+                ]}
+              >
+                Everything you need to manage your family
+              </Text>
             </View>
           </View>
 
           {/* Tutorial Button */}
           <Pressable
-            style={[styles.tutorialBtn, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}
-            onPress={() => setShowTutorial(true)}
+            style={[
+              styles.tutorialBtn,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderRadius: radius.card,
+              },
+            ]}
+            onPress={() => {
+              setShowTutorial(true);
+            }}
           >
-            <View style={[styles.playIconBox, { backgroundColor: colors.success + '20', borderRadius: radius.full }]}>
+            <View
+              style={[
+                styles.playIconBox,
+                {
+                  backgroundColor: colors.success + '20',
+                  borderRadius: radius.full,
+                },
+              ]}
+            >
               <PlayCircle size={24} color={colors.success} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.tutorialTitle, { color: colors.foreground }]}>Watch Tutorial Again</Text>
-              <Text style={[styles.tutorialSub, { color: colors.mutedForeground }]}>Step-by-step walkthrough of all features</Text>
+              <Text
+                style={[styles.tutorialTitle, { color: colors.foreground }]}
+              >
+                Watch Tutorial Again
+              </Text>
+              <Text
+                style={[styles.tutorialSub, { color: colors.mutedForeground }]}
+              >
+                Step-by-step walkthrough of all features
+              </Text>
             </View>
             <ChevronRight size={20} color={colors.mutedForeground} />
           </Pressable>
 
           {/* Search */}
-          <View style={[styles.searchContainer, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
-            <Search size={20} color={colors.mutedForeground} style={styles.searchIcon} />
+          <View
+            style={[
+              styles.searchContainer,
+              { backgroundColor: colors.muted, borderRadius: radius.md },
+            ]}
+          >
+            <Search
+              size={20}
+              color={colors.mutedForeground}
+              style={styles.searchIcon}
+            />
             <TextInput
               style={[styles.searchInput, { color: colors.foreground }]}
               placeholder="Search features or questions..."
               placeholderTextColor={colors.mutedForeground}
               value={searchQuery}
               onChangeText={setSearchQuery}
+              onSubmitEditing={handleHelpSearchSubmit}
             />
           </View>
 
           {/* Tabs */}
-          <View style={[styles.tabContainer, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
+          <View
+            style={[
+              styles.tabContainer,
+              { backgroundColor: colors.muted, borderRadius: radius.md },
+            ]}
+          >
             <Pressable
               style={[
                 styles.tab,
                 { borderRadius: radius.sm },
-                activeTab === 'features' && [styles.activeTab, { backgroundColor: colors.card }]
+                activeTab === 'features' && [
+                  styles.activeTab,
+                  { backgroundColor: colors.card },
+                ],
               ]}
               onPress={() => setActiveTab('features')}
             >
-              <Text style={[
-                styles.tabText,
-                activeTab === 'features'
-                  ? [styles.activeTabText, { color: isMidnight ? "#fff" : colors.primary }]
-                  : { color: colors.mutedForeground }
-              ]}>
+              <Text
+                style={[
+                  styles.tabText,
+                  activeTab === 'features'
+                    ? [
+                        styles.activeTabText,
+                        { color: isMidnight ? '#fff' : colors.primary },
+                      ]
+                    : { color: colors.mutedForeground },
+                ]}
+              >
                 📚 Feature Guide
               </Text>
             </Pressable>
@@ -570,16 +712,24 @@ export const HelpScreen: React.FC = () => {
               style={[
                 styles.tab,
                 { borderRadius: radius.sm },
-                activeTab === 'faq' && [styles.activeTab, { backgroundColor: colors.card }]
+                activeTab === 'faq' && [
+                  styles.activeTab,
+                  { backgroundColor: colors.card },
+                ],
               ]}
               onPress={() => setActiveTab('faq')}
             >
-              <Text style={[
-                styles.tabText,
-                activeTab === 'faq'
-                  ? [styles.activeTabText, { color: isMidnight ? "#fff" : colors.primary }]
-                  : { color: colors.mutedForeground }
-              ]}>
+              <Text
+                style={[
+                  styles.tabText,
+                  activeTab === 'faq'
+                    ? [
+                        styles.activeTabText,
+                        { color: isMidnight ? '#fff' : colors.primary },
+                      ]
+                    : { color: colors.mutedForeground },
+                ]}
+              >
                 ❓ FAQ
               </Text>
             </Pressable>
@@ -588,19 +738,59 @@ export const HelpScreen: React.FC = () => {
           {/* Content */}
           {activeTab === 'features' && (
             <View style={styles.contentSection}>
-              <Text style={[styles.sectionHint, { color: colors.mutedForeground }]}>Tap any feature to learn how to use it</Text>
+              <Text
+                style={[styles.sectionHint, { color: colors.mutedForeground }]}
+              >
+                Tap any feature to learn how to use it
+              </Text>
               {filteredFeatures.map(item => (
-                <View key={item.id} style={[styles.accordionCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+                <View
+                  key={item.id}
+                  style={[
+                    styles.accordionCard,
+                    {
+                      backgroundColor: colors.card,
+                      borderColor: colors.border,
+                      borderRadius: radius.card,
+                    },
+                  ]}
+                >
                   <Pressable
                     style={styles.accordionHeader}
-                    onPress={() => setExpandedFeature(expandedFeature === item.id ? null : item.id)}
+                    onPress={() => handleFeatureToggle(item.id)}
                   >
-                    <View style={[styles.featureIconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
-                      <item.icon size={24} color={isMidnight ? "#fff" : colors.primary} />
+                    <View
+                      style={[
+                        styles.featureIconBox,
+                        {
+                          backgroundColor: colors.muted,
+                          borderRadius: radius.md,
+                        },
+                      ]}
+                    >
+                      <item.icon
+                        size={24}
+                        color={isMidnight ? '#fff' : colors.primary}
+                      />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.featureTitle, { color: colors.foreground }]}>{item.title}</Text>
-                      <Text numberOfLines={1} style={[styles.featureDesc, { color: colors.mutedForeground }]}>{item.description}</Text>
+                      <Text
+                        style={[
+                          styles.featureTitle,
+                          { color: colors.foreground },
+                        ]}
+                      >
+                        {item.title}
+                      </Text>
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          styles.featureDesc,
+                          { color: colors.mutedForeground },
+                        ]}
+                      >
+                        {item.description}
+                      </Text>
                     </View>
                     {expandedFeature === item.id ? (
                       <ChevronUp size={20} color={colors.mutedForeground} />
@@ -611,31 +801,117 @@ export const HelpScreen: React.FC = () => {
 
                   {expandedFeature === item.id && (
                     <View style={styles.accordionBody}>
-                      <Text style={[styles.fullDesc, { color: colors.mutedForeground }]}>{item.description}</Text>
+                      <Text
+                        style={[
+                          styles.fullDesc,
+                          { color: colors.mutedForeground },
+                        ]}
+                      >
+                        {item.description}
+                      </Text>
 
                       {/* How to use */}
                       <View style={styles.subSection}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 }}>
-                          <View style={[styles.miniIconBox, { backgroundColor: colors.muted, borderRadius: radius.xs }]}><Text>📋</Text></View>
-                          <Text style={[styles.subTitle, { color: colors.foreground }]}>How to Use</Text>
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            marginBottom: 8,
+                            gap: 8,
+                          }}
+                        >
+                          <View
+                            style={[
+                              styles.miniIconBox,
+                              {
+                                backgroundColor: colors.muted,
+                                borderRadius: radius.xs,
+                              },
+                            ]}
+                          >
+                            <Text>📋</Text>
+                          </View>
+                          <Text
+                            style={[
+                              styles.subTitle,
+                              { color: colors.foreground },
+                            ]}
+                          >
+                            How to Use
+                          </Text>
                         </View>
                         {item.howToUse.map((step, idx) => (
                           <View key={idx} style={styles.stepRow}>
-                            <View style={[styles.stepDot, { backgroundColor: colors.primary, borderRadius: radius.full }]} />
-                            <Text style={[styles.stepText, { color: colors.mutedForeground }]}>{step}</Text>
+                            <View
+                              style={[
+                                styles.stepDot,
+                                {
+                                  backgroundColor: colors.primary,
+                                  borderRadius: radius.full,
+                                },
+                              ]}
+                            />
+                            <Text
+                              style={[
+                                styles.stepText,
+                                { color: colors.mutedForeground },
+                              ]}
+                            >
+                              {step}
+                            </Text>
                           </View>
                         ))}
                       </View>
 
                       {/* Tips */}
                       <View style={styles.subSection}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 }}>
-                          <View style={[styles.miniIconBox, { backgroundColor: colors.success + '20', borderRadius: radius.xs }]}><Text>💡</Text></View>
-                          <Text style={[styles.subTitle, { color: colors.foreground }]}>Pro Tips</Text>
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            marginBottom: 8,
+                            gap: 8,
+                          }}
+                        >
+                          <View
+                            style={[
+                              styles.miniIconBox,
+                              {
+                                backgroundColor: colors.success + '20',
+                                borderRadius: radius.xs,
+                              },
+                            ]}
+                          >
+                            <Text>💡</Text>
+                          </View>
+                          <Text
+                            style={[
+                              styles.subTitle,
+                              { color: colors.foreground },
+                            ]}
+                          >
+                            Pro Tips
+                          </Text>
                         </View>
                         {item.tips.map((tip, idx) => (
-                          <View key={idx} style={[styles.tipBox, { backgroundColor: colors.muted, borderRadius: radius.sm }]}>
-                            <Text style={[styles.tipText, { color: colors.mutedForeground }]}>{tip}</Text>
+                          <View
+                            key={idx}
+                            style={[
+                              styles.tipBox,
+                              {
+                                backgroundColor: colors.muted,
+                                borderRadius: radius.sm,
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.tipText,
+                                { color: colors.mutedForeground },
+                              ]}
+                            >
+                              {tip}
+                            </Text>
                           </View>
                         ))}
                       </View>
@@ -650,18 +926,40 @@ export const HelpScreen: React.FC = () => {
             <View style={styles.contentSection}>
               {filteredFaqs.map((cat, idx) => (
                 <View key={idx} style={styles.faqCategory}>
-                  <Text style={[styles.faqCatTitle, { color: colors.primary }]}>{cat.category}</Text>
+                  <Text style={[styles.faqCatTitle, { color: colors.primary }]}>
+                    {cat.category}
+                  </Text>
                   {cat.questions.map((q, qImg) => (
-                    <View key={qImg} style={[styles.faqCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
-                      <Text style={[styles.question, { color: colors.foreground }]}>{q.q}</Text>
-                      <Text style={[styles.answer, { color: colors.mutedForeground }]}>{q.a}</Text>
+                    <View
+                      key={qImg}
+                      style={[
+                        styles.faqCard,
+                        {
+                          backgroundColor: colors.card,
+                          borderColor: colors.border,
+                          borderRadius: radius.card,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[styles.question, { color: colors.foreground }]}
+                      >
+                        {q.q}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.answer,
+                          { color: colors.mutedForeground },
+                        ]}
+                      >
+                        {q.a}
+                      </Text>
                     </View>
                   ))}
                 </View>
               ))}
             </View>
           )}
-
         </ScrollView>
       </AppLayout>
 
@@ -768,7 +1066,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   activeTab: {
-    shadowColor: "#000",
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,

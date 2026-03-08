@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,22 +8,23 @@ import {
   Switch,
   Modal,
   Platform,
-  Alert
-} from "react-native";
-import { useNavigation } from "@react-navigation/native";
-import { AppLayout } from "../components/layout";
-import { theme } from "../theme";
+  Alert,
+} from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { AppLayout } from '../components/layout';
+import { theme } from '../theme';
 import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
-import { useSidebar } from "../contexts/SidebarContext";
-import { Button } from "../components/ui/Button";
-import DateTimePicker from "@react-native-community/datetimepicker";
-import { NotificationPreferencesService } from "../services/NotificationPreferencesService";
+import { useSidebar } from '../contexts/SidebarContext';
+import { Button } from '../components/ui/Button';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { NotificationPreferencesService } from '../services/NotificationPreferencesService';
 import {
   NotificationCategory,
   NotificationScheduler,
-} from "../services/NotificationScheduler";
-import { useToast } from "../components/ui/Toast";
-import { checkPermission, requestPermission } from "../utils/permissions";
+} from '../services/NotificationScheduler';
+import { trackScreen } from '../services/analytics';
+import { useToast } from '../components/ui/Toast';
+import { checkPermission, requestPermission } from '../utils/permissions';
 import {
   Calendar,
   CheckSquare,
@@ -37,21 +38,49 @@ import {
   BellOff,
   Clock,
   ChevronDown,
-  X
-} from "lucide-react-native";
-import Config from "react-native-config";
+  X,
+} from 'lucide-react-native';
+import Config from 'react-native-config';
 
 const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 
 // --- Data & Helpers ---
 
 const notificationSettings = [
-  { id: 'tasks', icon: CheckSquare, label: 'Task Reminders', description: 'Due dates and assignments', enabled: true },
-  { id: 'vault', icon: Bell, label: 'Document Alerts', description: 'Warranty and expiry reminders', enabled: true },
-  ...(ENABLE_RECIPE_AND_MEALS ? [{ id: 'mealprep', icon: ChefHat, label: 'Meal Prep Reminders', description: 'Time to start cooking', enabled: true }] : []),
+  {
+    id: 'tasks',
+    icon: CheckSquare,
+    label: 'Task Reminders',
+    description: 'Due dates and assignments',
+    enabled: true,
+  },
+  {
+    id: 'vault',
+    icon: Bell,
+    label: 'Document Alerts',
+    description: 'Warranty and expiry reminders',
+    enabled: true,
+  },
+  ...(ENABLE_RECIPE_AND_MEALS
+    ? [
+        {
+          id: 'mealprep',
+          icon: ChefHat,
+          label: 'Meal Prep Reminders',
+          description: 'Time to start cooking',
+          enabled: true,
+        },
+      ]
+    : []),
 ];
 
-const DELIVERY_CATEGORIES: NotificationCategory[] = ['events', 'tasks', 'documents', 'meals', 'budgets'];
+const DELIVERY_CATEGORIES: NotificationCategory[] = [
+  'events',
+  'tasks',
+  'documents',
+  'meals',
+  'budgets',
+];
 
 const eventReminderOptions = [
   { label: '5 min before', value: 5 },
@@ -88,7 +117,7 @@ const TimeSelector: React.FC<TimeSelectorProps> = ({
   onSelect,
   visible,
   onOpen,
-  onClose
+  onClose,
 }) => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
@@ -96,8 +125,16 @@ const TimeSelector: React.FC<TimeSelectorProps> = ({
 
   return (
     <>
-      <Pressable style={[styles.selectorButton, { backgroundColor: colors.muted, borderRadius: radius.sm }]} onPress={onOpen}>
-        <Text style={[styles.selectorButtonText, { color: colors.foreground }]}>{selectedOption.label}</Text>
+      <Pressable
+        style={[
+          styles.selectorButton,
+          { backgroundColor: colors.muted, borderRadius: radius.sm },
+        ]}
+        onPress={onOpen}
+      >
+        <Text style={[styles.selectorButtonText, { color: colors.foreground }]}>
+          {selectedOption.label}
+        </Text>
         <ChevronDown size={16} color={colors.mutedForeground} />
       </Pressable>
 
@@ -108,34 +145,50 @@ const TimeSelector: React.FC<TimeSelectorProps> = ({
         onRequestClose={onClose}
       >
         <Pressable style={styles.modalOverlay} onPress={onClose}>
-          <View style={[styles.modalContent, { backgroundColor: colors.card, borderRadius: radius.card }]}>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: colors.card, borderRadius: radius.card },
+            ]}
+          >
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.foreground }]}>{label}</Text>
+              <Text style={[styles.modalTitle, { color: colors.foreground }]}>
+                {label}
+              </Text>
               <Pressable onPress={onClose}>
                 <X size={20} color={colors.mutedForeground} />
               </Pressable>
             </View>
             <ScrollView style={{ maxHeight: 300 }}>
-              {options.map((option) => (
+              {options.map(option => (
                 <Pressable
                   key={option.value}
                   style={[
                     styles.modalOption,
                     { borderRadius: radius.sm },
-                    value === option.value && { backgroundColor: colors.muted }
+                    value === option.value && { backgroundColor: colors.muted },
                   ]}
                   onPress={() => {
                     onSelect(option.value);
                     onClose();
                   }}
                 >
-                  <Text style={[
-                    styles.modalOptionText,
-                    { color: value === option.value ? colors.primary : colors.foreground }
-                  ]}>
+                  <Text
+                    style={[
+                      styles.modalOptionText,
+                      {
+                        color:
+                          value === option.value
+                            ? colors.primary
+                            : colors.foreground,
+                      },
+                    ]}
+                  >
                     {option.label}
                   </Text>
-                  {value === option.value && <Text style={{ color: colors.primary }}>✓</Text>}
+                  {value === option.value && (
+                    <Text style={{ color: colors.primary }}>✓</Text>
+                  )}
                 </Pressable>
               ))}
             </ScrollView>
@@ -176,6 +229,9 @@ export const NotificationsScreen: React.FC = () => {
   const [showEndPicker, setShowEndPicker] = useState(false);
 
   const { showToast } = useToast();
+  useEffect(() => {
+    void trackScreen('NotificationsScreen');
+  }, []);
   const ensureNotificationPermission = async (): Promise<boolean> => {
     const hasPermission = await checkPermission('notification');
     if (hasPermission) return true;
@@ -184,7 +240,8 @@ export const NotificationsScreen: React.FC = () => {
       showToast({
         type: 'warning',
         title: 'Notifications permission required',
-        description: 'Enable notifications in settings to keep reminders active.',
+        description:
+          'Enable notifications in settings to keep reminders active.',
         duration: 3000,
       });
     }
@@ -206,12 +263,15 @@ export const NotificationsScreen: React.FC = () => {
       setMealPrepTime(prefs.mealPrepTime);
 
       // Update settings array
-      setSettings(prev => prev.map(s => {
-        if (s.id === 'tasks') return { ...s, enabled: prefs.taskReminders };
-        if (s.id === 'vault') return { ...s, enabled: prefs.vaultReminders };
-        if (s.id === 'mealprep') return { ...s, enabled: prefs.mealPrepReminders };
-        return s;
-      }));
+      setSettings(prev =>
+        prev.map(s => {
+          if (s.id === 'tasks') return { ...s, enabled: prefs.taskReminders };
+          if (s.id === 'vault') return { ...s, enabled: prefs.vaultReminders };
+          if (s.id === 'mealprep')
+            return { ...s, enabled: prefs.mealPrepReminders };
+          return s;
+        }),
+      );
 
       setPushEnabled(prefs.pushEnabled);
       setSoundEnabled(prefs.soundEnabled);
@@ -219,8 +279,12 @@ export const NotificationsScreen: React.FC = () => {
       // Load quiet hours
       if (prefs.quietHours) {
         setQuietHoursEnabled(prefs.quietHours.enabled);
-        const startHour = prefs.quietHours.startHour.toString().padStart(2, '0');
-        const startMin = prefs.quietHours.startMinute.toString().padStart(2, '0');
+        const startHour = prefs.quietHours.startHour
+          .toString()
+          .padStart(2, '0');
+        const startMin = prefs.quietHours.startMinute
+          .toString()
+          .padStart(2, '0');
         const endHour = prefs.quietHours.endHour.toString().padStart(2, '0');
         const endMin = prefs.quietHours.endMinute.toString().padStart(2, '0');
         setQuietStart(`${startHour}:${startMin}`);
@@ -247,9 +311,15 @@ export const NotificationsScreen: React.FC = () => {
             return;
           }
         }
-        await NotificationPreferencesService.toggleCategory('events', eventReminders);
+        await NotificationPreferencesService.toggleCategory(
+          'events',
+          eventReminders,
+        );
         if (eventReminders) {
-          await NotificationPreferencesService.saveReminderTime('events', eventReminderTime);
+          await NotificationPreferencesService.saveReminderTime(
+            'events',
+            eventReminderTime,
+          );
         }
       } catch (error) {
         console.error('Error saving event preferences:', error);
@@ -267,9 +337,15 @@ export const NotificationsScreen: React.FC = () => {
         return;
       }
       try {
-        await NotificationPreferencesService.toggleCategory('meals', mealPrepReminders);
+        await NotificationPreferencesService.toggleCategory(
+          'meals',
+          mealPrepReminders,
+        );
         if (mealPrepReminders) {
-          await NotificationPreferencesService.saveReminderTime('meals', mealPrepTime);
+          await NotificationPreferencesService.saveReminderTime(
+            'meals',
+            mealPrepTime,
+          );
         }
       } catch (error) {
         console.error('Error saving meal preferences:', error);
@@ -300,6 +376,11 @@ export const NotificationsScreen: React.FC = () => {
     saveQuietHours();
   }, [quietHoursEnabled, quietStart, quietEnd]);
 
+  useEffect(() => {
+    if (quietHoursEnabled) {
+    }
+  }, [quietHoursEnabled]);
+
   const pushPrefsInitialized = useRef(false);
   useEffect(() => {
     const updatePush = async () => {
@@ -317,7 +398,11 @@ export const NotificationsScreen: React.FC = () => {
         }
         await NotificationPreferencesService.setPushEnabled(pushEnabled);
         if (!pushEnabled) {
-          await Promise.all(DELIVERY_CATEGORIES.map(category => NotificationScheduler.cancelAllForCategory(category)));
+          await Promise.all(
+            DELIVERY_CATEGORIES.map(category =>
+              NotificationScheduler.cancelAllForCategory(category),
+            ),
+          );
         } else {
           await NotificationScheduler.rescheduleAllMissing();
         }
@@ -350,7 +435,9 @@ export const NotificationsScreen: React.FC = () => {
         return;
       }
     }
-    const newSettings = settings.map(s => s.id === id ? { ...s, enabled: newEnabled } : s);
+    const newSettings = settings.map(s =>
+      s.id === id ? { ...s, enabled: newEnabled } : s,
+    );
     setSettings(newSettings);
 
     // Save to database
@@ -404,22 +491,49 @@ export const NotificationsScreen: React.FC = () => {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Pressable onPress={() => navigation.goBack()} style={[styles.iconButton, { borderRadius: radius.sm }]}>
+          <Pressable
+            onPress={() => navigation.goBack()}
+            style={[styles.iconButton, { borderRadius: radius.sm }]}
+          >
             <ChevronLeft size={24} color={colors.foreground} />
           </Pressable>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Notifications</Text>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+            Notifications
+          </Text>
         </View>
 
         {/* Push Notification Settings (Main Toggles) */}
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              borderRadius: radius.card,
+            },
+          ]}
+        >
           {/* Event Reminders */}
           <View style={styles.settingSection}>
             <View style={styles.settingHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}
+              >
                 <Calendar size={20} color={colors.primary} />
                 <View>
-                  <Text style={[styles.labelTitle, { color: colors.foreground }]}>Calendar Event Reminders</Text>
-                  <Text style={[styles.labelDesc, { color: colors.mutedForeground }]}>Get notified before events</Text>
+                  <Text
+                    style={[styles.labelTitle, { color: colors.foreground }]}
+                  >
+                    Calendar Event Reminders
+                  </Text>
+                  <Text
+                    style={[
+                      styles.labelDesc,
+                      { color: colors.mutedForeground },
+                    ]}
+                  >
+                    Get notified before events
+                  </Text>
                 </View>
               </View>
               <Switch
@@ -430,9 +544,15 @@ export const NotificationsScreen: React.FC = () => {
             </View>
             {eventReminders && (
               <View style={styles.subSetting}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
+                >
                   <Clock size={16} color={colors.mutedForeground} />
-                  <Text style={[styles.subLabel, { color: colors.mutedForeground }]}>Remind me</Text>
+                  <Text
+                    style={[styles.subLabel, { color: colors.mutedForeground }]}
+                  >
+                    Remind me
+                  </Text>
                 </View>
                 <TimeSelector
                   label="Event Reminder Time"
@@ -453,11 +573,28 @@ export const NotificationsScreen: React.FC = () => {
           {ENABLE_RECIPE_AND_MEALS && (
             <View style={styles.settingSection}>
               <View style={styles.settingHeader}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 12,
+                  }}
+                >
                   <ChefHat size={20} color={colors.primary} />
                   <View>
-                    <Text style={[styles.labelTitle, { color: colors.foreground }]}>Meal Prep Reminders</Text>
-                    <Text style={[styles.labelDesc, { color: colors.mutedForeground }]}>Start cooking on time</Text>
+                    <Text
+                      style={[styles.labelTitle, { color: colors.foreground }]}
+                    >
+                      Meal Prep Reminders
+                    </Text>
+                    <Text
+                      style={[
+                        styles.labelDesc,
+                        { color: colors.mutedForeground },
+                      ]}
+                    >
+                      Start cooking on time
+                    </Text>
                   </View>
                 </View>
                 <Switch
@@ -468,9 +605,22 @@ export const NotificationsScreen: React.FC = () => {
               </View>
               {mealPrepReminders && (
                 <View style={styles.subSetting}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 8,
+                    }}
+                  >
                     <Clock size={16} color={colors.mutedForeground} />
-                    <Text style={[styles.subLabel, { color: colors.mutedForeground }]}>Start prep</Text>
+                    <Text
+                      style={[
+                        styles.subLabel,
+                        { color: colors.mutedForeground },
+                      ]}
+                    >
+                      Start prep
+                    </Text>
                   </View>
                   <TimeSelector
                     label="Meal Prep Time"
@@ -489,17 +639,47 @@ export const NotificationsScreen: React.FC = () => {
 
         {/* Notification Types */}
         <View>
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Notification Types</Text>
-          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+            Notification Types
+          </Text>
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderRadius: radius.card,
+              },
+            ]}
+          >
             {settings.map((setting, index) => (
               <View key={setting.id}>
                 <View style={styles.typeRow}>
-                  <View style={[styles.iconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
+                  <View
+                    style={[
+                      styles.iconBox,
+                      {
+                        backgroundColor: colors.muted,
+                        borderRadius: radius.md,
+                      },
+                    ]}
+                  >
                     <setting.icon size={20} color={colors.mutedForeground} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.labelTitle, { color: colors.foreground }]}>{setting.label}</Text>
-                    <Text style={[styles.labelDesc, { color: colors.mutedForeground }]}>{setting.description}</Text>
+                    <Text
+                      style={[styles.labelTitle, { color: colors.foreground }]}
+                    >
+                      {setting.label}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.labelDesc,
+                        { color: colors.mutedForeground },
+                      ]}
+                    >
+                      {setting.description}
+                    </Text>
                   </View>
                   <Switch
                     value={setting.enabled}
@@ -507,22 +687,47 @@ export const NotificationsScreen: React.FC = () => {
                     trackColor={{ false: colors.muted, true: colors.primary }}
                   />
                 </View>
-                {index !== settings.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
+                {index !== settings.length - 1 && (
+                  <View
+                    style={[styles.divider, { backgroundColor: colors.border }]}
+                  />
+                )}
               </View>
             ))}
           </View>
         </View>
 
         {/* Quiet Hours */}
-        <View style={[styles.card, { backgroundColor: colors.card, borderRadius: radius.card }]}>
+        <View
+          style={[
+            styles.card,
+            { backgroundColor: colors.card, borderRadius: radius.card },
+          ]}
+        >
           <View style={styles.settingHeader}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <View style={[styles.largeIconBox, { backgroundColor: colors.secondary, borderRadius: radius.md }]}>
+            <View
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}
+            >
+              <View
+                style={[
+                  styles.largeIconBox,
+                  {
+                    backgroundColor: colors.secondary,
+                    borderRadius: radius.md,
+                  },
+                ]}
+              >
                 <BellOff size={24} color={colors.secondaryForeground} />
               </View>
               <View>
-                <Text style={[styles.labelTitle, { color: colors.foreground }]}>Quiet Hours</Text>
-                <Text style={[styles.labelDesc, { color: colors.mutedForeground }]}>Pause notifications during set times</Text>
+                <Text style={[styles.labelTitle, { color: colors.foreground }]}>
+                  Quiet Hours
+                </Text>
+                <Text
+                  style={[styles.labelDesc, { color: colors.mutedForeground }]}
+                >
+                  Pause notifications during set times
+                </Text>
               </View>
             </View>
             <Switch
@@ -533,15 +738,40 @@ export const NotificationsScreen: React.FC = () => {
           </View>
 
           {quietHoursEnabled && (
-            <View style={[styles.quietHoursContainer, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
+            <View
+              style={[
+                styles.quietHoursContainer,
+                { backgroundColor: colors.muted, borderRadius: radius.md },
+              ]}
+            >
               <Clock size={20} color={colors.mutedForeground} />
               <View style={styles.timeInputs}>
-                <Pressable onPress={() => setShowStartPicker(true)} style={[styles.timeInputBox, { backgroundColor: colors.card, borderRadius: radius.xs }]}>
-                  <Text style={[styles.timeText, { color: colors.foreground }]}>{quietStart}</Text>
+                <Pressable
+                  onPress={() => setShowStartPicker(true)}
+                  style={[
+                    styles.timeInputBox,
+                    { backgroundColor: colors.card, borderRadius: radius.xs },
+                  ]}
+                >
+                  <Text style={[styles.timeText, { color: colors.foreground }]}>
+                    {quietStart}
+                  </Text>
                 </Pressable>
-                <Text style={[styles.toText, { color: colors.mutedForeground }]}>to</Text>
-                <Pressable onPress={() => setShowEndPicker(true)} style={[styles.timeInputBox, { backgroundColor: colors.card, borderRadius: radius.xs }]}>
-                  <Text style={[styles.timeText, { color: colors.foreground }]}>{quietEnd}</Text>
+                <Text
+                  style={[styles.toText, { color: colors.mutedForeground }]}
+                >
+                  to
+                </Text>
+                <Pressable
+                  onPress={() => setShowEndPicker(true)}
+                  style={[
+                    styles.timeInputBox,
+                    { backgroundColor: colors.card, borderRadius: radius.xs },
+                  ]}
+                >
+                  <Text style={[styles.timeText, { color: colors.foreground }]}>
+                    {quietEnd}
+                  </Text>
                 </Pressable>
               </View>
             </View>
@@ -558,8 +788,20 @@ export const NotificationsScreen: React.FC = () => {
                 onChange={handleStartTimeChange}
               />
               {Platform.OS === 'ios' && (
-                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 }}>
-                  <Button size="sm" variant="ghost" onPress={() => setShowStartPicker(false)}><Text>Done</Text></Button>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'flex-end',
+                    marginTop: 8,
+                  }}
+                >
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onPress={() => setShowStartPicker(false)}
+                  >
+                    <Text>Done</Text>
+                  </Button>
                 </View>
               )}
             </>
@@ -574,8 +816,20 @@ export const NotificationsScreen: React.FC = () => {
                 onChange={handleEndTimeChange}
               />
               {Platform.OS === 'ios' && (
-                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 }}>
-                  <Button size="sm" variant="ghost" onPress={() => setShowEndPicker(false)}><Text>Done</Text></Button>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'flex-end',
+                    marginTop: 8,
+                  }}
+                >
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onPress={() => setShowEndPicker(false)}
+                  >
+                    <Text>Done</Text>
+                  </Button>
                 </View>
               )}
             </>
@@ -584,12 +838,32 @@ export const NotificationsScreen: React.FC = () => {
 
         {/* Delivery Methods */}
         <View>
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Delivery Methods</Text>
-          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+            Delivery Methods
+          </Text>
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderRadius: radius.card,
+              },
+            ]}
+          >
             <View style={styles.deliveryRow}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}
+              >
                 <Smartphone size={20} color={colors.mutedForeground} />
-                <Text style={[styles.labelTitle, { color: colors.foreground, fontSize: 14 }]}>Notifications</Text>
+                <Text
+                  style={[
+                    styles.labelTitle,
+                    { color: colors.foreground, fontSize: 14 },
+                  ]}
+                >
+                  Notifications
+                </Text>
               </View>
               <Switch
                 value={pushEnabled}
@@ -597,11 +871,22 @@ export const NotificationsScreen: React.FC = () => {
                 trackColor={{ false: colors.muted, true: colors.primary }}
               />
             </View>
-            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+            <View
+              style={[styles.divider, { backgroundColor: colors.border }]}
+            />
             <View style={styles.deliveryRow}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}
+              >
                 <Volume2 size={20} color={colors.mutedForeground} />
-                <Text style={[styles.labelTitle, { color: colors.foreground, fontSize: 14 }]}>Sound</Text>
+                <Text
+                  style={[
+                    styles.labelTitle,
+                    { color: colors.foreground, fontSize: 14 },
+                  ]}
+                >
+                  Sound
+                </Text>
               </View>
               <Switch
                 value={soundEnabled}

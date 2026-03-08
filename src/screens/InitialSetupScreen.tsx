@@ -335,10 +335,21 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
                     style={[styles.completeButton, { backgroundColor: colors.primary, borderRadius: radius.lg }]}
                     onPress={handleComplete}
                 >
-                    <Text style={[styles.completeButtonText, { color: colors.primaryForeground }]}>
+                    <Text style={[styles.completeButtonText, { color: colors.primaryForeground }]}> 
                         Complete Setup →
                     </Text>
                 </Pressable>
+                {members.length > 0 && (
+                    <Pressable
+                        style={[
+                            styles.skipButton,
+                            { borderRadius: radius.lg, borderColor: colors.border }
+                        ]}
+                        onPress={onComplete}
+                    >
+                        <Text style={[styles.skipButtonText, { color: colors.foreground }]}>Skip Setup</Text>
+                    </Pressable>
+                )}
             </ScrollView>
         </View>
     );
@@ -509,6 +520,17 @@ const styles = StyleSheet.create({
     },
     completeButtonText: {
         fontSize: 18,
+        fontWeight: "700",
+    },
+    skipButton: {
+        padding: theme.spacing.lg,
+        alignItems: "center",
+        marginTop: theme.spacing.sm,
+        borderWidth: 1,
+        borderColor: "transparent",
+    },
+    skipButtonText: {
+        fontSize: 16,
         fontWeight: "700",
     },
 });

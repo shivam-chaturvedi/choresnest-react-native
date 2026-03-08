@@ -1,6 +1,9 @@
-apply plugin: "com.android.application"
-apply plugin: "org.jetbrains.kotlin.android"
-apply plugin: "com.facebook.react"
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'com.facebook.react'
+    id 'com.google.gms.google-services'
+}
 
 project.ext.envConfigFiles = [
     debug: ".env.development",
@@ -86,6 +89,7 @@ def enableProguardInReleaseBuilds = false
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
+apply from: new File(["node", "--print", "require.resolve('@sentry/react-native/package.json')"].execute().text.trim(), "../sentry.gradle")
 android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -136,6 +140,8 @@ dependencies {
 
     implementation("androidx.lifecycle:lifecycle-process:2.6.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.1")
+    implementation platform("com.google.firebase:firebase-bom:34.10.0")
+    implementation "com.google.firebase:firebase-analytics"
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

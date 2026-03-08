@@ -53,26 +53,30 @@ type ListUpdates = Partial<{ name: string; type: string; icon?: string }>;
 export const ListService = {
   observeLists: (profileId?: string | null) => {
     const effectiveProfileId = profileId ?? '';
-    const query = getDatabase().get<List>('lists').query(
-      Q.where('profile_id', effectiveProfileId),
-      Q.where('deleted', false),
-      Q.sortBy('updated_at', Q.desc)
-    );
-    return query.observeWithColumns(LIST_OBSERVE_COLUMNS).pipe(
-      map(records => records.map(serializeListRecord))
-    );
+    const query = getDatabase()
+      .get<List>('lists')
+      .query(
+        Q.where('profile_id', effectiveProfileId),
+        Q.where('deleted', false),
+        Q.sortBy('updated_at', Q.desc),
+      );
+    return query
+      .observeWithColumns(LIST_OBSERVE_COLUMNS)
+      .pipe(map(records => records.map(serializeListRecord)));
   },
 
   observeShoppingListItems: (profileId?: string | null) => {
     const effectiveProfileId = profileId ?? '';
-    const query = getDatabase().get<ListItem>('list_items').query(
-      Q.where('profile_id', effectiveProfileId),
-      Q.where('deleted', false),
-      Q.sortBy('updated_at', Q.desc)
-    );
-    return query.observeWithColumns(LIST_OBSERVE_COLUMNS).pipe(
-      map(records => records.map(serializeListItemRecord))
-    );
+    const query = getDatabase()
+      .get<ListItem>('list_items')
+      .query(
+        Q.where('profile_id', effectiveProfileId),
+        Q.where('deleted', false),
+        Q.sortBy('updated_at', Q.desc),
+      );
+    return query
+      .observeWithColumns(LIST_OBSERVE_COLUMNS)
+      .pipe(map(records => records.map(serializeListItemRecord)));
   },
 
   addGroceryItem: async (data: GroceryItemPayload) => {
@@ -82,13 +86,17 @@ export const ListService = {
       return;
     }
     const now = Date.now();
+    const addedById = data.addedBy || data.addedById || 'system';
+    let resolvedGroceryListId: string | undefined;
     await getDatabase().write(async () => {
       const listsCollection = getDatabase().get<List>('lists');
-      const groceryLists = await listsCollection.query(
-        Q.where('profile_id', profileId),
-        Q.where('type', 'grocery'),
-        Q.where('deleted', false)
-      ).fetch();
+      const groceryLists = await listsCollection
+        .query(
+          Q.where('profile_id', profileId),
+          Q.where('type', 'grocery'),
+          Q.where('deleted', false),
+        )
+        .fetch();
       let groceryListId = groceryLists[0]?.id;
       if (!groceryListId) {
         const created = await listsCollection.create(list => {
@@ -103,36 +111,39 @@ export const ListService = {
         });
         groceryListId = created.id;
       }
+      resolvedGroceryListId = groceryListId;
 
-      await getDatabase().get<ListItem>('list_items').create(item => {
-        const addedById = data.addedBy || data.addedById || 'system';
-        item.profileId = profileId;
-        item.listId = groceryListId!;
-        item.name = data.name || 'Item';
-        item.quantity = data.quantity ?? 1;
-        item.unit = data.unit || 'pcs';
-        if (data.category) {
-          item.category = data.category;
-        }
-        item.addedById = addedById;
-        item.isCompleted = data.isCompleted ?? false;
-        if (data.purchasedAt) {
-          item.purchasedAt = data.purchasedAt;
-        }
-        item.createdAt = now;
-        item.updatedAt = now;
-        item.version = 1;
-        item.deleted = false;
-      });
+      await getDatabase()
+        .get<ListItem>('list_items')
+        .create(item => {
+          item.profileId = profileId;
+          item.listId = groceryListId!;
+          item.name = data.name || 'Item';
+          item.quantity = data.quantity ?? 1;
+          item.unit = data.unit || 'pcs';
+          if (data.category) {
+            item.category = data.category;
+          }
+          item.addedById = addedById;
+          item.isCompleted = data.isCompleted ?? false;
+          if (data.purchasedAt) {
+            item.purchasedAt = data.purchasedAt;
+          }
+          item.createdAt = now;
+          item.updatedAt = now;
+          item.version = 1;
+          item.deleted = false;
+        });
     });
     syncAfterWrite();
   },
 
   toggleGroceryItem: async (id: string) => {
     const now = Date.now();
+    let nextState = false;
     await getDatabase().write(async () => {
       const item = await getDatabase().get<ListItem>('list_items').find(id);
-      const nextState = !item.isCompleted;
+      nextState = !item.isCompleted;
       await item.update(i => {
         i.isCompleted = nextState;
         i.purchasedAt = nextState ? now : undefined;
@@ -164,16 +175,18 @@ export const ListService = {
     }
     const now = Date.now();
     await getDatabase().write(async () => {
-      await getDatabase().get<List>('lists').create(list => {
-        list.profileId = profileId;
-        list.name = (data.name || 'List').trim();
-        list.type = data.type;
-        list.icon = data.icon || 'list';
-        list.createdAt = now;
-        list.updatedAt = now;
-        list.version = 1;
-        list.deleted = false;
-      });
+      await getDatabase()
+        .get<List>('lists')
+        .create(list => {
+          list.profileId = profileId;
+          list.name = (data.name || 'List').trim();
+          list.type = data.type;
+          list.icon = data.icon || 'list';
+          list.createdAt = now;
+          list.updatedAt = now;
+          list.version = 1;
+          list.deleted = false;
+        });
     });
     syncAfterWrite();
   },

@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from 'react';
 
-import { safeFormat } from "../../utils/SafeDateUtils";
+import { safeFormat } from '../../utils/SafeDateUtils';
 import {
   Modal,
   Pressable,
@@ -12,15 +12,17 @@ import {
   Switch,
   Platform,
   Alert,
-} from "react-native";
-import { useFamily, CalendarEvent } from "../../contexts/FamilyContext";
-import { useThemeColors, useTheme } from "../../contexts/ThemeContext";
-import { useCountry } from "../../contexts/CountryContext";
-import { AppIcon, AppIconName, CustomDateTimePicker } from "../ui";
-import { PROFILE_COLORS } from "../../constants/profileColors";
-import { NotificationPreferencesService } from "../../services/NotificationPreferencesService";
-import { SyncService } from "../../services/SyncService";
+} from 'react-native';
+import { useFamily, CalendarEvent } from '../../contexts/FamilyContext';
+import { useThemeColors, useTheme } from '../../contexts/ThemeContext';
+import { useCountry } from '../../contexts/CountryContext';
+import { AppIcon, AppIconName, CustomDateTimePicker } from '../ui';
+import { PROFILE_COLORS } from '../../constants/profileColors';
+import { NotificationPreferencesService } from '../../services/NotificationPreferencesService';
+import { NotificationScheduler } from '../../services/NotificationScheduler';
+import { SyncService } from '../../services/SyncService';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useExactAlarmPermission } from '../../hooks/useExactAlarmPermission';
 
 interface AddEventModalProps {
   open: boolean;
@@ -32,36 +34,51 @@ interface AddEventModalProps {
 }
 
 const eventIcons: string[] = [
-  "calendar-star", "cake-variant", "school", "briefcase", "hospital-building", "cart", "party-popper", "weight-lifter", "movie", "airplane", "silverware", "home-group", "laptop", "phone", "music", "home"
+  'calendar-star',
+  'cake-variant',
+  'school',
+  'briefcase',
+  'hospital-building',
+  'cart',
+  'party-popper',
+  'weight-lifter',
+  'movie',
+  'airplane',
+  'silverware',
+  'home-group',
+  'laptop',
+  'phone',
+  'music',
+  'home',
 ];
 
 const eventColors = [
-  { name: "Blue", value: "member-blue", dot: "#3b82f6" },
-  { name: "Green", value: "member-green", dot: "#22c55e" },
-  { name: "Orange", value: "member-orange", dot: "#f97316" },
-  { name: "Pink", value: "member-pink", dot: "#ec4899" },
-  { name: "Purple", value: "member-purple", dot: "#8b5cf6" },
-  { name: "Red", value: "member-red", dot: "#ef4444" },
+  { name: 'Blue', value: 'member-blue', dot: '#3b82f6' },
+  { name: 'Green', value: 'member-green', dot: '#22c55e' },
+  { name: 'Orange', value: 'member-orange', dot: '#f97316' },
+  { name: 'Pink', value: 'member-pink', dot: '#ec4899' },
+  { name: 'Purple', value: 'member-purple', dot: '#8b5cf6' },
+  { name: 'Red', value: 'member-red', dot: '#ef4444' },
 ];
 
 const repeatOptions = [
-  { value: "never", label: "Never repeats" },
-  { value: "daily", label: "Every day" },
-  { value: "weekly", label: "Every week" },
-  { value: "biweekly", label: "Every 2 weeks" },
-  { value: "monthly", label: "Every month" },
-  { value: "yearly", label: "Every year" },
-  { value: "weekday", label: "Every weekday (Mon-Fri)" },
+  { value: 'never', label: 'Never repeats' },
+  { value: 'daily', label: 'Every day' },
+  { value: 'weekly', label: 'Every week' },
+  { value: 'biweekly', label: 'Every 2 weeks' },
+  { value: 'monthly', label: 'Every month' },
+  { value: 'yearly', label: 'Every year' },
+  { value: 'weekday', label: 'Every weekday (Mon-Fri)' },
 ];
 
 const reminderOptions = [
-  { value: "0", label: "At time of event" },
-  { value: "5", label: "5 minutes before" },
-  { value: "15", label: "15 minutes before" },
-  { value: "30", label: "30 minutes before" },
-  { value: "60", label: "1 hour before" },
-  { value: "1440", label: "1 day before" },
-  { value: "10080", label: "1 week before" },
+  { value: '0', label: 'At time of event' },
+  { value: '5', label: '5 minutes before' },
+  { value: '15', label: '15 minutes before' },
+  { value: '30', label: '30 minutes before' },
+  { value: '60', label: '1 hour before' },
+  { value: '1440', label: '1 day before' },
+  { value: '10080', label: '1 week before' },
 ];
 
 // Removed visibility and time zone options as requested
@@ -75,25 +92,53 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   onSelectEvent,
 }) => {
   /* Hook and State Setup */
-  const { members, activeMember, events, tasks, addEvent, updateEvent, deleteEvent, addTask, updateTask, deleteTask } = useFamily();
+  const {
+    members,
+    activeMember,
+    events,
+    tasks,
+    addEvent,
+    updateEvent,
+    deleteEvent,
+    addTask,
+    updateTask,
+    deleteTask,
+  } = useFamily();
   const colors = useThemeColors();
   const { appearanceMode } = useTheme();
-  const isMidnight = appearanceMode === "midnight";
+  const isMidnight = appearanceMode === 'midnight';
   const accentColor = isMidnight ? colors.foreground : colors.primary;
   const { currentCountry } = useCountry();
 
-  const getPriorityMeta = (priority: string = "medium") => {
+  const getPriorityMeta = (priority: string = 'medium') => {
     switch (priority) {
-      case "high":
-        return { label: "High", color: colors.danger, background: colors.danger + "20", borderColor: colors.danger };
-      case "medium":
-        return { label: "Medium", color: colors.warning, background: colors.warning + "20", borderColor: colors.warning };
+      case 'high':
+        return {
+          label: 'High',
+          color: colors.danger,
+          background: colors.danger + '20',
+          borderColor: colors.danger,
+        };
+      case 'medium':
+        return {
+          label: 'Medium',
+          color: colors.warning,
+          background: colors.warning + '20',
+          borderColor: colors.warning,
+        };
       default:
-        return { label: "Low", color: colors.info, background: colors.info + "30", borderColor: colors.info };
+        return {
+          label: 'Low',
+          color: colors.info,
+          background: colors.info + '30',
+          borderColor: colors.info,
+        };
     }
   };
 
-  const [activeTab, setActiveTab] = useState<'event' | 'task' | 'existing'>('event');
+  const [activeTab, setActiveTab] = useState<'event' | 'task' | 'existing'>(
+    'event',
+  );
 
   /* Event State */
 
@@ -104,36 +149,41 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
     eventToEdit?.assignee,
     (eventToEdit as any)?.ownerId,
   ];
-  const ownerId = (ownerIdCandidates.find((id) => !!id) || "").trim();
+  const ownerId = (ownerIdCandidates.find(id => !!id) || '').trim();
   const isOwner = !eventToEdit || !ownerId || ownerId === activeMember?.id;
 
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
   const [startDate, setStartDate] = useState(() => new Date());
   const [startTime, setStartTime] = useState(() => new Date());
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [endTime, setEndTime] = useState<Date | null>(null);
-  const [selectedIcon, setSelectedIcon] = useState("calendar-star");
+  const [selectedIcon, setSelectedIcon] = useState('calendar-star');
   const [allDay, setAllDay] = useState(false);
-  const [memberId, setMemberId] = useState("");
-  const [color, setColor] = useState("member-blue");
+  const [memberId, setMemberId] = useState('');
+  const [color, setColor] = useState('member-blue');
 
-  const [repeatType, setRepeatType] = useState("never");
+  const [repeatType, setRepeatType] = useState('never');
   const [repeatEndDate, setRepeatEndDate] = useState<Date | null>(null);
   const [showRepeatOptions, setShowRepeatOptions] = useState(false);
 
   /* Task State */
-  const [taskPriority, setTaskPriority] = useState("medium");
-  const [taskIcon, setTaskIcon] = useState("format-list-checks");
-
+  const [taskPriority, setTaskPriority] = useState('medium');
+  const [taskIcon, setTaskIcon] = useState('format-list-checks');
 
   const [reminder, setReminder] = useState(true);
-  const [reminderTime, setReminderTime] = useState("15");
-  const [defaultEventReminderMinutes, setDefaultEventReminderMinutes] = useState(15);
+  const [reminderTime, setReminderTime] = useState('15');
+  const [defaultEventReminderMinutes, setDefaultEventReminderMinutes] =
+    useState(15);
   const [showReminderOptions, setShowReminderOptions] = useState(false);
 
-  const [notes, setNotes] = useState("");
+  const [notes, setNotes] = useState('');
   // Removed visibility and time zone states as requested
+
+  const { exactAlarmEnabled, refresh: refreshExactAlarm } =
+    useExactAlarmPermission();
+  const openPromptCounter = useRef(0);
+  const [showExactAlarmPrompt, setShowExactAlarmPrompt] = useState(false);
 
   const membersRef = useRef(members);
   useEffect(() => {
@@ -142,14 +192,14 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
   useEffect(() => {
     let isMounted = true;
-    NotificationPreferencesService.getReminderTime("events")
-      .then((minutes) => {
+    NotificationPreferencesService.getReminderTime('events')
+      .then(minutes => {
         if (isMounted) {
           setDefaultEventReminderMinutes(minutes);
         }
       })
-      .catch((error) => {
-        console.error("Failed to load event reminder preference:", error);
+      .catch(error => {
+        console.error('Failed to load event reminder preference:', error);
       });
     return () => {
       isMounted = false;
@@ -162,18 +212,19 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
     }
 
     const membersSnapshot = membersRef.current;
-    const findMember = (id?: string) => membersSnapshot.find((m) => m.id === id);
-    const defaultMember = membersSnapshot.find((m) => m.isActive) || membersSnapshot[0] || null;
+    const findMember = (id?: string) => membersSnapshot.find(m => m.id === id);
+    const defaultMember =
+      membersSnapshot.find(m => m.isActive) || membersSnapshot[0] || null;
 
     if (eventToEdit) {
       setActiveTab((eventToEdit as any).type === 'task' ? 'task' : 'event');
-      const eventName = eventToEdit.title || (eventToEdit as any).name || "";
+      const eventName = eventToEdit.title || (eventToEdit as any).name || '';
       setName(eventName);
-      setDescription(eventToEdit.description || "");
-      setNotes(eventToEdit.notes || "");
+      setDescription(eventToEdit.description || '');
+      setNotes(eventToEdit.notes || '');
       setStartDate(new Date(eventToEdit.date));
 
-      if (eventToEdit.time === "All Day") {
+      if (eventToEdit.time === 'All Day') {
         setAllDay(true);
       } else {
         setAllDay(false);
@@ -181,10 +232,12 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         if (timeParts) {
           let hours = parseInt(timeParts[1]);
           const minutes = parseInt(timeParts[2]);
-          const period = timeParts[3] ? timeParts[3].trim().toUpperCase() : null;
+          const period = timeParts[3]
+            ? timeParts[3].trim().toUpperCase()
+            : null;
 
-          if (period === "PM" && hours !== 12) hours += 12;
-          if (period === "AM" && hours === 12) hours = 0;
+          if (period === 'PM' && hours !== 12) hours += 12;
+          if (period === 'AM' && hours === 12) hours = 0;
 
           const timeDate = new Date();
           timeDate.setHours(hours, minutes, 0, 0);
@@ -193,14 +246,18 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       }
 
       if (eventToEdit.endTime) {
-        const timeParts = eventToEdit.endTime.match(/(\d+):(\d+)(\s*(AM|PM))?/i);
+        const timeParts = eventToEdit.endTime.match(
+          /(\d+):(\d+)(\s*(AM|PM))?/i,
+        );
         if (timeParts) {
           let hours = parseInt(timeParts[1]);
           const minutes = parseInt(timeParts[2]);
-          const period = timeParts[3] ? timeParts[3].trim().toUpperCase() : null;
+          const period = timeParts[3]
+            ? timeParts[3].trim().toUpperCase()
+            : null;
 
-          if (period === "PM" && hours !== 12) hours += 12;
-          if (period === "AM" && hours === 12) hours = 0;
+          if (period === 'PM' && hours !== 12) hours += 12;
+          if (period === 'AM' && hours === 12) hours = 0;
 
           const timeDate = new Date();
           timeDate.setHours(hours, minutes, 0, 0);
@@ -210,16 +267,21 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         setEndTime(null);
       }
 
-      setMemberId(eventToEdit.memberId || (eventToEdit as any).assignee || eventToEdit.assigneeId || "");
+      setMemberId(
+        eventToEdit.memberId ||
+          (eventToEdit as any).assignee ||
+          eventToEdit.assigneeId ||
+          '',
+      );
 
       const anyEvent = eventToEdit as any;
       if (anyEvent.type === 'task') {
         setActiveTab('task');
-        setTaskPriority(anyEvent.priority || "medium");
-        setTaskIcon(anyEvent.icon || "format-list-checks");
+        setTaskPriority(anyEvent.priority || 'medium');
+        setTaskIcon(anyEvent.icon || 'format-list-checks');
       } else {
         setActiveTab('event');
-        setSelectedIcon(eventToEdit.icon || "calendar-star");
+        setSelectedIcon(eventToEdit.icon || 'calendar-star');
       }
 
       const member = findMember(eventToEdit.memberId);
@@ -230,7 +292,8 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       }
 
       if (eventToEdit.recurrenceRule) setRepeatType(eventToEdit.recurrenceRule);
-      if (eventToEdit.recurrenceEndDate) setRepeatEndDate(new Date(eventToEdit.recurrenceEndDate));
+      if (eventToEdit.recurrenceEndDate)
+        setRepeatEndDate(new Date(eventToEdit.recurrenceEndDate));
       if (eventToEdit.endDate) {
         setEndDate(new Date(eventToEdit.endDate));
       } else {
@@ -239,10 +302,16 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       if (eventToEdit.reminderOffsetMinutes !== undefined) {
         if (eventToEdit.reminderOffsetMinutes < 0) {
           setReminder(false);
-          setReminderTime("15");
+          setReminderTime('15');
         } else {
-          const matchOption = reminderOptions.find(o => parseInt(o.value, 10) === eventToEdit.reminderOffsetMinutes);
-          setReminderTime(matchOption ? matchOption.value : eventToEdit.reminderOffsetMinutes.toString());
+          const matchOption = reminderOptions.find(
+            o => parseInt(o.value, 10) === eventToEdit.reminderOffsetMinutes,
+          );
+          setReminderTime(
+            matchOption
+              ? matchOption.value
+              : eventToEdit.reminderOffsetMinutes.toString(),
+          );
           setReminder(true);
         }
       } else {
@@ -251,9 +320,9 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       }
     } else {
       setActiveTab('event');
-      setName("");
-      setDescription("");
-      setNotes("");
+      setName('');
+      setDescription('');
+      setNotes('');
 
       const initDate = initialDate ? new Date(initialDate) : new Date();
       setStartDate(initDate);
@@ -266,8 +335,8 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
           const minutes = parseInt(timeParts[2]);
           const period = timeParts[3].toUpperCase();
 
-          if (period === "PM" && hours !== 12) hours += 12;
-          if (period === "AM" && hours === 12) hours = 0;
+          if (period === 'PM' && hours !== 12) hours += 12;
+          if (period === 'AM' && hours === 12) hours = 0;
 
           initTime.setHours(hours, minutes, 0, 0);
         }
@@ -281,54 +350,83 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       defaultEndTime.setHours(defaultEndTime.getHours() + 1);
       setEndTime(defaultEndTime);
 
-      setSelectedIcon("calendar-star");
+      setSelectedIcon('calendar-star');
       setAllDay(false);
       const fallbackMember = defaultMember;
-      setMemberId(fallbackMember?.id || membersSnapshot[0]?.id || "");
-      setColor(fallbackMember?.color || "member-blue");
+      setMemberId(fallbackMember?.id || membersSnapshot[0]?.id || '');
+      setColor(fallbackMember?.color || 'member-blue');
 
-      setRepeatType("never");
+      setRepeatType('never');
       setRepeatEndDate(null);
       setReminder(true);
       setReminderTime(defaultEventReminderMinutes.toString());
       setShowRepeatOptions(false);
     }
-  }, [open, eventToEdit?.id, initialDate, initialTime, defaultEventReminderMinutes]);
+  }, [
+    open,
+    eventToEdit?.id,
+    initialDate,
+    initialTime,
+    defaultEventReminderMinutes,
+  ]);
 
+  useEffect(() => {
+    if (!open) {
+      setShowExactAlarmPrompt(false);
+      return;
+    }
+    openPromptCounter.current += 1;
+    const shouldShowPrompt =
+      !exactAlarmEnabled &&
+      !isEditing &&
+      openPromptCounter.current % 5 === 0;
+    setShowExactAlarmPrompt(shouldShowPrompt);
+  }, [open, exactAlarmEnabled, isEditing]);
 
+  const handleEnableExactAlarm = async () => {
+    const granted = await NotificationScheduler.ensureExactAlarm(true);
+    if (granted) {
+      refreshExactAlarm();
+      setShowExactAlarmPrompt(false);
+    }
+  };
 
   // Helper to format time range
   const formatTimeRange = (start?: string, end?: string) => {
-    if (!start) return "All Day";
+    if (!start) return 'All Day';
     if (!end) return start;
     return `${start} - ${end}`;
   };
 
   // Helper to get events for the selected start date
   const getExistingItems = () => {
-    const targetDateStr = safeFormat(startDate, "yyyy-MM-dd");
+    const targetDateStr = safeFormat(startDate, 'yyyy-MM-dd');
 
     // Using events and tasks from context (now destructured)
     const allEvents = events || [];
     const allTasks = tasks || [];
 
-    const relevantEvents = allEvents.filter((e: any) => e.date === targetDateStr).map((e: any) => ({ ...e, type: 'event' }));
-    const relevantTasks = allTasks.filter((t: any) => t.date === targetDateStr && t.status !== 'done').map((t: any) => ({
-      id: t.id,
-      title: t.name,
-      icon: t.icon,
-      date: t.date,
-      time: t.due,
-      endTime: undefined, // tasks usually don't have end time displayed same way
-      startTime: t.due,
-      memberId: t.assignee,
-      type: 'task',
-      priority: t.priority
-    }));
+    const relevantEvents = allEvents
+      .filter((e: any) => e.date === targetDateStr)
+      .map((e: any) => ({ ...e, type: 'event' }));
+    const relevantTasks = allTasks
+      .filter((t: any) => t.date === targetDateStr && t.status !== 'done')
+      .map((t: any) => ({
+        id: t.id,
+        title: t.name,
+        icon: t.icon,
+        date: t.date,
+        time: t.due,
+        endTime: undefined, // tasks usually don't have end time displayed same way
+        startTime: t.due,
+        memberId: t.assignee,
+        type: 'task',
+        priority: t.priority,
+      }));
 
     return [...relevantEvents, ...relevantTasks].sort((a, b) => {
-      const timeA = a.time || "00:00";
-      const timeB = b.time || "00:00";
+      const timeA = a.time || '00:00';
+      const timeB = b.time || '00:00';
       return timeA.localeCompare(timeB);
     });
   };
@@ -343,7 +441,8 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
     }
 
     if (!memberId && currentMembers.length > 0) {
-      const active = currentMembers.find((m: any) => m.isActive) || currentMembers[0];
+      const active =
+        currentMembers.find((m: any) => m.isActive) || currentMembers[0];
       if (active) {
         setMemberId(active.id);
         setColor(active.color);
@@ -351,12 +450,13 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
     }
   }, [memberId]);
 
-
-
   const handleSave = async () => {
     try {
       if (!name.trim()) {
-        Alert.alert("Missing Information", `Please enter a ${activeTab === 'event' ? 'event' : 'task'} name.`);
+        Alert.alert(
+          'Missing Information',
+          `Please enter a ${activeTab === 'event' ? 'event' : 'task'} name.`,
+        );
         return;
       }
 
@@ -365,25 +465,25 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       const eventTimeZone = eventToEdit?.timeZone || fallbackTimeZone;
 
       // FIX: Use local time directly instead of converting to UTC to prevent time shifts
-      const formattedDate = safeFormat(startDate, "yyyy-MM-dd");
+      const formattedDate = safeFormat(startDate, 'yyyy-MM-dd');
 
       let formattedTime: string;
       let formattedEndTime: string | undefined;
       let formattedEndDate: string | undefined;
 
       if (allDay) {
-        formattedTime = "12:00 AM";
-        formattedEndTime = "11:59 PM";
+        formattedTime = '12:00 AM';
+        formattedEndTime = '11:59 PM';
       } else {
-        formattedTime = safeFormat(startTime, "hh:mm aa");
+        formattedTime = safeFormat(startTime, 'hh:mm aa');
 
         if (endTime) {
-          formattedEndTime = safeFormat(endTime, "hh:mm aa");
+          formattedEndTime = safeFormat(endTime, 'hh:mm aa');
         }
       }
 
       if (endDate) {
-        formattedEndDate = safeFormat(endDate, "yyyy-MM-dd");
+        formattedEndDate = safeFormat(endDate, 'yyyy-MM-dd');
       }
 
       const reminderOffsetMinutes = reminder ? parseInt(reminderTime, 10) : -1;
@@ -399,44 +499,53 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             assigneeId: memberId,
           });
         } else {
-          await addTask({
-            name: name.trim(),
-            icon: taskIcon,
-            priority: taskPriority as any,
-            dateString: formattedDate,
-            dueDisplay: formattedTime,
-            assigneeId: memberId,
-            tab: "My Tasks",
-            status: 'pending'
-          });
+          await addTask(
+            {
+              name: name.trim(),
+              icon: taskIcon,
+              priority: taskPriority as any,
+              dateString: formattedDate,
+              dueDisplay: formattedTime,
+              assigneeId: memberId,
+              tab: 'My Tasks',
+              status: 'pending',
+            },
+            { source: 'CalendarScreen' },
+          );
         }
       } else {
         if (isEditing && eventToEdit) {
-            await updateEvent(eventToEdit.id, {
-              title: name.trim(),
-              description: description.trim(),
-              notes: notes.trim(),
-              dateString: formattedDate,
-              time: formattedTime,
-              endTime: formattedEndTime,
-              icon: selectedIcon,
-              memberId,
-              endDate: formattedEndDate,
-              isRecurring: repeatType !== 'never',
-              recurrenceRule: repeatType !== 'never' ? repeatType : undefined,
-              recurrenceEndDate: safeFormat(repeatEndDate, "yyyy-MM-dd"),
-              reminderOffsetMinutes,
-              timeZone: eventTimeZone,
-            });
+          await updateEvent(eventToEdit.id, {
+            title: name.trim(),
+            description: description.trim(),
+            notes: notes.trim(),
+            dateString: formattedDate,
+            time: formattedTime,
+            endTime: formattedEndTime,
+            icon: selectedIcon,
+            memberId,
+            endDate: formattedEndDate,
+            isRecurring: repeatType !== 'never',
+            recurrenceRule: repeatType !== 'never' ? repeatType : undefined,
+            recurrenceEndDate: safeFormat(repeatEndDate, 'yyyy-MM-dd'),
+            reminderOffsetMinutes,
+            timeZone: eventTimeZone,
+          });
         } else {
           // Validation for recurring events
           if (repeatType !== 'never') {
             if (!repeatEndDate) {
-              Alert.alert("Missing End Date", "Please select an end date for this recurring event.");
+              Alert.alert(
+                'Missing End Date',
+                'Please select an end date for this recurring event.',
+              );
               return;
             }
             if (repeatEndDate <= new Date()) {
-              Alert.alert("Invalid End Date", "End date must be in the future.");
+              Alert.alert(
+                'Invalid End Date',
+                'End date must be in the future.',
+              );
               return;
             }
           }
@@ -453,7 +562,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             endDate: formattedEndDate,
             isRecurring: repeatType !== 'never',
             recurrenceRule: repeatType !== 'never' ? repeatType : undefined,
-            recurrenceEndDate: safeFormat(repeatEndDate, "yyyy-MM-dd"),
+            recurrenceEndDate: safeFormat(repeatEndDate, 'yyyy-MM-dd'),
             reminderOffsetMinutes,
             timeZone: eventTimeZone,
           });
@@ -467,32 +576,39 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       }
       onOpenChange(false);
     } catch (error) {
-      console.error("Error saving event:", error);
-      Alert.alert("Error", "Failed to save event. Please try again.");
+      console.error('Error saving event:', error);
+      Alert.alert('Error', 'Failed to save event. Please try again.');
     }
   };
 
   const getRepeatLabel = () => {
-    return repeatOptions.find(o => o.value === repeatType)?.label || "Never repeats";
+    return (
+      repeatOptions.find(o => o.value === repeatType)?.label || 'Never repeats'
+    );
   };
 
   const getReminderLabel = () => {
-    if (!reminder) return "Off";
+    if (!reminder) return 'Off';
     const option = reminderOptions.find(o => o.value === reminderTime);
     if (option) return option.label;
     const minutes = parseInt(reminderTime, 10);
     if (!isNaN(minutes)) {
       if (minutes >= 60 && minutes % 60 === 0) {
         const hours = minutes / 60;
-        return `${hours} hour${hours === 1 ? "" : "s"} before`;
+        return `${hours} hour${hours === 1 ? '' : 's'} before`;
       }
       return `${minutes} minutes before`;
     }
-    return "Reminder set";
+    return 'Reminder set';
   };
 
   return (
-    <Modal visible={open} transparent animationType="slide" onRequestClose={() => onOpenChange(false)}>
+    <Modal
+      visible={open}
+      transparent
+      animationType="slide"
+      onRequestClose={() => onOpenChange(false)}
+    >
       <View style={styles.overlay}>
         <View
           style={[styles.container, { backgroundColor: colors.background }]}
@@ -500,73 +616,254 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <View style={styles.titleContainer}>
-              <View style={[styles.headerIconCircle, { backgroundColor: colors.primary + "1A" }]}>
+              <View
+                style={[
+                  styles.headerIconCircle,
+                  { backgroundColor: colors.primary + '1A' },
+                ]}
+              >
                 <AppIcon name="calendar" size={20} color={accentColor} />
               </View>
               <Text style={[styles.headerTitle, { color: colors.foreground }]}>
-                {isEditing ? (activeTab === 'task' ? "Edit Task" : "Edit Event") : (activeTab === 'task' ? "New Task" : "New Event")}
+                {isEditing
+                  ? activeTab === 'task'
+                    ? 'Edit Task'
+                    : 'Edit Event'
+                  : activeTab === 'task'
+                  ? 'New Task'
+                  : 'New Event'}
               </Text>
             </View>
-            <Pressable onPress={() => onOpenChange(false)} style={[styles.closeButton, { backgroundColor: colors.muted }]}>
+            <Pressable
+              onPress={() => onOpenChange(false)}
+              style={[styles.closeButton, { backgroundColor: colors.muted }]}
+            >
               <AppIcon name="x" size={20} color={colors.mutedForeground} />
             </Pressable>
           </View>
 
           {/* Tab Switcher */}
           {!isEditing && (
-            <View style={[styles.tabContainer, { backgroundColor: colors.muted }]}>
+            <View
+              style={[styles.tabContainer, { backgroundColor: colors.muted }]}
+            >
               <Pressable
-                style={[styles.tabButton, activeTab === 'event' && { backgroundColor: colors.card, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 2 }]}
+                style={[
+                  styles.tabButton,
+                  activeTab === 'event' && {
+                    backgroundColor: colors.card,
+                    shadowColor: '#000',
+                    shadowOpacity: 0.1,
+                    shadowRadius: 2,
+                  },
+                ]}
                 onPress={() => setActiveTab('event')}
               >
-                <Text style={[styles.tabText, { color: activeTab === 'event' ? accentColor : colors.mutedForeground }]}>Event</Text>
+                <Text
+                  style={[
+                    styles.tabText,
+                    {
+                      color:
+                        activeTab === 'event'
+                          ? accentColor
+                          : colors.mutedForeground,
+                    },
+                  ]}
+                >
+                  Event
+                </Text>
               </Pressable>
               <Pressable
-                style={[styles.tabButton, activeTab === 'task' && { backgroundColor: colors.card, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 2 }]}
+                style={[
+                  styles.tabButton,
+                  activeTab === 'task' && {
+                    backgroundColor: colors.card,
+                    shadowColor: '#000',
+                    shadowOpacity: 0.1,
+                    shadowRadius: 2,
+                  },
+                ]}
                 onPress={() => setActiveTab('task')}
               >
-                <Text style={[styles.tabText, { color: activeTab === 'task' ? accentColor : colors.mutedForeground }]}>Task</Text>
+                <Text
+                  style={[
+                    styles.tabText,
+                    {
+                      color:
+                        activeTab === 'task'
+                          ? accentColor
+                          : colors.mutedForeground,
+                    },
+                  ]}
+                >
+                  Task
+                </Text>
               </Pressable>
               <Pressable
-                style={[styles.tabButton, activeTab === 'existing' && { backgroundColor: colors.card, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 2 }]}
+                style={[
+                  styles.tabButton,
+                  activeTab === 'existing' && {
+                    backgroundColor: colors.card,
+                    shadowColor: '#000',
+                    shadowOpacity: 0.1,
+                    shadowRadius: 2,
+                  },
+                ]}
                 onPress={() => setActiveTab('existing')}
               >
-                <Text style={[styles.tabText, { color: activeTab === 'existing' ? accentColor : colors.mutedForeground }]}>Existing</Text>
+                <Text
+                  style={[
+                    styles.tabText,
+                    {
+                      color:
+                        activeTab === 'existing'
+                          ? accentColor
+                          : colors.mutedForeground,
+                    },
+                  ]}
+                >
+                  Existing
+                </Text>
               </Pressable>
             </View>
           )}
 
-          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.content}
+            showsVerticalScrollIndicator={false}
+          >
+            {showExactAlarmPrompt && (
+              <View
+                style={[
+                  styles.exactAlarmCard,
+                  {
+                    backgroundColor: colors.warning + '10',
+                    borderColor: colors.warning + '70',
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.exactAlarmIconContainer,
+                    { borderColor: colors.warning + '33' },
+                  ]}
+                >
+                  <AppIcon
+                    name="alertTriangle"
+                    size={20}
+                    color={colors.warning}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[
+                      styles.exactAlarmTitle,
+                      { color: colors.warning },
+                    ]}
+                  >
+                    Exact alarm permission required
+                  </Text>
+                  <Text
+                    style={[
+                      styles.exactAlarmBody,
+                      { color: colors.foreground },
+                    ]}
+                  >
+                    Exact alarm rights ensure reminders fire precisely. You
+                    will not receive time-critical notifications until this
+                    permission is granted.
+                  </Text>
+                  <Pressable
+                    style={[
+                      styles.exactAlarmButton,
+                      {
+                        backgroundColor: colors.primary,
+                        borderRadius: radius.full,
+                      },
+                    ]}
+                    onPress={handleEnableExactAlarm}
+                  >
+                    <Text
+                      style={{
+                        color: colors.primaryForeground,
+                        fontWeight: '600',
+                        fontSize: 12,
+                      }}
+                    >
+                      Enable exact alarms
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
             {activeTab === 'existing' ? (
               <View style={{ gap: 12 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <Text style={{ fontSize: 16, fontWeight: '600', color: colors.foreground }}>
-                    {safeFormat(startDate, "MMMM d, yyyy")}
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: 8,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 16,
+                      fontWeight: '600',
+                      color: colors.foreground,
+                    }}
+                  >
+                    {safeFormat(startDate, 'MMMM d, yyyy')}
                   </Text>
                   <Pressable
                     onPress={() => setActiveTab('event')}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
                   >
                     <AppIcon name="plus" size={16} color={accentColor} />
-                    <Text style={{ color: accentColor, fontWeight: '500' }}>Add New</Text>
+                    <Text style={{ color: accentColor, fontWeight: '500' }}>
+                      Add New
+                    </Text>
                   </Pressable>
                 </View>
 
                 {getExistingItems().length === 0 ? (
                   <View style={{ alignItems: 'center', padding: 24, gap: 12 }}>
                     <Text style={{ fontSize: 40 }}>📅</Text>
-                    <Text style={{ color: colors.mutedForeground, textAlign: 'center' }}>No events or tasks for this day.</Text>
+                    <Text
+                      style={{
+                        color: colors.mutedForeground,
+                        textAlign: 'center',
+                      }}
+                    >
+                      No events or tasks for this day.
+                    </Text>
                     <Pressable
                       onPress={() => setActiveTab('event')}
-                      style={{ marginTop: 8, paddingVertical: 8, paddingHorizontal: 16, backgroundColor: colors.primary, borderRadius: 8 }}
+                      style={{
+                        marginTop: 8,
+                        paddingVertical: 8,
+                        paddingHorizontal: 16,
+                        backgroundColor: colors.primary,
+                        borderRadius: 8,
+                      }}
                     >
-                      <Text style={{ color: '#fff', fontWeight: '600' }}>Create Event</Text>
+                      <Text style={{ color: '#fff', fontWeight: '600' }}>
+                        Create Event
+                      </Text>
                     </Pressable>
                   </View>
                 ) : (
                   getExistingItems().map((item: any, index) => {
-                    const member = members.find((m: any) => m.id === item.memberId);
-                    const profileColor = PROFILE_COLORS.find(c => c.value === member?.color)?.hex || colors.primary;
+                    const member = members.find(
+                      (m: any) => m.id === item.memberId,
+                    );
+                    const profileColor =
+                      PROFILE_COLORS.find(c => c.value === member?.color)
+                        ?.hex || colors.primary;
                     const priorityMeta = getPriorityMeta(item.priority);
 
                     return (
@@ -589,43 +886,109 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                           position: 'relative',
                         }}
                       >
-                        <View style={{
-                          width: 4,
-                          height: 32,
-                          borderRadius: 2,
-                          backgroundColor: item.type === 'task' ? colors.danger : profileColor
-                        }} />
+                        <View
+                          style={{
+                            width: 4,
+                            height: 32,
+                            borderRadius: 2,
+                            backgroundColor:
+                              item.type === 'task'
+                                ? colors.danger
+                                : profileColor,
+                          }}
+                        />
 
-                        <View style={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: 20,
-                          backgroundColor: item.type === 'task' ? colors.danger + '10' : profileColor + '10',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}>
-                          <MaterialCommunityIcons name={item.icon || 'calendar'} size={24} color={item.type === 'task' ? colors.danger : profileColor} />
+                        <View
+                          style={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: 20,
+                            backgroundColor:
+                              item.type === 'task'
+                                ? colors.danger + '10'
+                                : profileColor + '10',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <MaterialCommunityIcons
+                            name={item.icon || 'calendar'}
+                            size={24}
+                            color={
+                              item.type === 'task'
+                                ? colors.danger
+                                : profileColor
+                            }
+                          />
                         </View>
 
                         <View style={{ flex: 1 }}>
-                          <Text style={{ fontSize: 16, fontWeight: '600', color: colors.foreground }}>{item.title}</Text>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <Text style={{ fontSize: 12, color: colors.mutedForeground }}>
+                          <Text
+                            style={{
+                              fontSize: 16,
+                              fontWeight: '600',
+                              color: colors.foreground,
+                            }}
+                          >
+                            {item.title}
+                          </Text>
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              gap: 6,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                color: colors.mutedForeground,
+                              }}
+                            >
                               {item.time}
                             </Text>
-                            <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: colors.mutedForeground }} />
-                            <Text style={{ fontSize: 12, color: colors.mutedForeground }}>
+                            <View
+                              style={{
+                                width: 4,
+                                height: 4,
+                                borderRadius: 2,
+                                backgroundColor: colors.mutedForeground,
+                              }}
+                            />
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                color: colors.mutedForeground,
+                              }}
+                            >
                               {member?.name}
                             </Text>
                           </View>
                         </View>
 
                         <View style={{ padding: 4 }}>
-                          <AppIcon name="chevronRight" size={16} color={colors.mutedForeground} />
+                          <AppIcon
+                            name="chevronRight"
+                            size={16}
+                            color={colors.mutedForeground}
+                          />
                         </View>
                         {item.type === 'task' && (
-                          <View style={[styles.priorityBadge, { backgroundColor: priorityMeta.background, borderColor: priorityMeta.borderColor }]}>
-                            <Text style={[styles.priorityBadgeText, { color: priorityMeta.color }]}>
+                          <View
+                            style={[
+                              styles.priorityBadge,
+                              {
+                                backgroundColor: priorityMeta.background,
+                                borderColor: priorityMeta.borderColor,
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.priorityBadgeText,
+                                { color: priorityMeta.color },
+                              ]}
+                            >
                               {priorityMeta.label}
                             </Text>
                           </View>
@@ -640,10 +1003,20 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
               <>
                 {/* Ownership Notice */}
                 {!isOwner && eventToEdit && (
-                  <View style={[styles.ownerNotice, { backgroundColor: colors.primary + "1A" }]}>
+                  <View
+                    style={[
+                      styles.ownerNotice,
+                      { backgroundColor: colors.primary + '1A' },
+                    ]}
+                  >
                     <AppIcon name="info" size={16} color={accentColor} />
-                    <Text style={[styles.ownerNoticeText, { color: accentColor }]}>
-                      Only {members.find((m: any) => m.id === eventToEdit.memberId)?.name || "the owner"} can update this event
+                    <Text
+                      style={[styles.ownerNoticeText, { color: accentColor }]}
+                    >
+                      Only{' '}
+                      {members.find((m: any) => m.id === eventToEdit.memberId)
+                        ?.name || 'the owner'}{' '}
+                      can update this event
                     </Text>
                   </View>
                 )}
@@ -655,10 +1028,12 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                     {
                       color: colors.foreground,
                       borderBottomWidth: 2,
-                      borderBottomColor: accentColor
-                    }
+                      borderBottomColor: accentColor,
+                    },
                   ]}
-                  placeholder={activeTab === 'event' ? "Event name" : "Task name"}
+                  placeholder={
+                    activeTab === 'event' ? 'Event name' : 'Task name'
+                  }
                   placeholderTextColor={colors.mutedForeground}
                   value={name}
                   onChangeText={setName}
@@ -672,21 +1047,56 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                     {/* Icon Selection - TASK ONLY */}
                     <View style={styles.fieldGroup}>
                       <View style={styles.labelRow}>
-                        <AppIcon name="tag" size={14} color={colors.mutedForeground} />
-                        <Text style={[styles.label, { color: colors.mutedForeground }]}>Icon</Text>
+                        <AppIcon
+                          name="tag"
+                          size={14}
+                          color={colors.mutedForeground}
+                        />
+                        <Text
+                          style={[
+                            styles.label,
+                            { color: colors.mutedForeground },
+                          ]}
+                        >
+                          Icon
+                        </Text>
                       </View>
                       <View style={styles.iconGrid}>
-                        {["format-list-checks", "phone", "pill", "email", "school", "wrench", "package-variant", "broom", "basket", "silverware", "bed", "dog"].map((icon) => (
+                        {[
+                          'format-list-checks',
+                          'phone',
+                          'pill',
+                          'email',
+                          'school',
+                          'wrench',
+                          'package-variant',
+                          'broom',
+                          'basket',
+                          'silverware',
+                          'bed',
+                          'dog',
+                        ].map(icon => (
                           <Pressable
                             key={icon}
                             onPress={() => setTaskIcon(icon)}
                             style={[
                               styles.iconButton,
                               { backgroundColor: colors.card },
-                              taskIcon === icon && { backgroundColor: colors.success, transform: [{ scale: 1.1 }] },
+                              taskIcon === icon && {
+                                backgroundColor: colors.success,
+                                transform: [{ scale: 1.1 }],
+                              },
                             ]}
                           >
-                            <MaterialCommunityIcons name={icon} size={24} color={taskIcon === icon ? colors.background : colors.foreground} />
+                            <MaterialCommunityIcons
+                              name={icon}
+                              size={24}
+                              color={
+                                taskIcon === icon
+                                  ? colors.background
+                                  : colors.foreground
+                              }
+                            />
                           </Pressable>
                         ))}
                       </View>
@@ -695,23 +1105,71 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                     {/* Priority - TASK ONLY */}
                     <View style={styles.fieldGroup}>
                       <View style={styles.labelRow}>
-                        <AppIcon name="alertCircle" size={14} color={colors.mutedForeground} />
-                        <Text style={[styles.label, { color: colors.mutedForeground }]}>Priority</Text>
+                        <AppIcon
+                          name="alertCircle"
+                          size={14}
+                          color={colors.mutedForeground}
+                        />
+                        <Text
+                          style={[
+                            styles.label,
+                            { color: colors.mutedForeground },
+                          ]}
+                        >
+                          Priority
+                        </Text>
                       </View>
                       <View style={{ flexDirection: 'row', gap: 8 }}>
                         {[
-                          { label: "High", value: "high", color: colors.danger, bg: colors.danger + "20" },
-                          { label: "Medium", value: "medium", color: colors.warning, bg: colors.warning + "20" },
-                          { label: "Low", value: "low", color: colors.mutedForeground, bg: colors.muted }
-                        ].map((p) => (
+                          {
+                            label: 'High',
+                            value: 'high',
+                            color: colors.danger,
+                            bg: colors.danger + '20',
+                          },
+                          {
+                            label: 'Medium',
+                            value: 'medium',
+                            color: colors.warning,
+                            bg: colors.warning + '20',
+                          },
+                          {
+                            label: 'Low',
+                            value: 'low',
+                            color: colors.mutedForeground,
+                            bg: colors.muted,
+                          },
+                        ].map(p => (
                           <Pressable
                             key={p.value}
                             onPress={() => setTaskPriority(p.value)}
                             style={[
-                              { flex: 1, backgroundColor: taskPriority === p.value ? p.bg : colors.card, borderColor: taskPriority === p.value ? p.color : colors.border, borderWidth: 1, borderRadius: 8, paddingVertical: 10, alignItems: 'center' }
+                              {
+                                flex: 1,
+                                backgroundColor:
+                                  taskPriority === p.value ? p.bg : colors.card,
+                                borderColor:
+                                  taskPriority === p.value
+                                    ? p.color
+                                    : colors.border,
+                                borderWidth: 1,
+                                borderRadius: 8,
+                                paddingVertical: 10,
+                                alignItems: 'center',
+                              },
                             ]}
                           >
-                            <Text style={{ color: taskPriority === p.value ? p.color : colors.mutedForeground, fontWeight: "600" }}>{p.label}</Text>
+                            <Text
+                              style={{
+                                color:
+                                  taskPriority === p.value
+                                    ? p.color
+                                    : colors.mutedForeground,
+                                fontWeight: '600',
+                              }}
+                            >
+                              {p.label}
+                            </Text>
                           </Pressable>
                         ))}
                       </View>
@@ -724,22 +1182,44 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                     {/* Icon Selection - EVENT ONLY */}
                     <View style={styles.fieldGroup}>
                       <View style={styles.labelRow}>
-                        <AppIcon name="tag" size={14} color={colors.mutedForeground} />
-                        <Text style={[styles.label, { color: colors.mutedForeground }]}>Icon</Text>
+                        <AppIcon
+                          name="tag"
+                          size={14}
+                          color={colors.mutedForeground}
+                        />
+                        <Text
+                          style={[
+                            styles.label,
+                            { color: colors.mutedForeground },
+                          ]}
+                        >
+                          Icon
+                        </Text>
                       </View>
                       <View style={styles.iconGrid}>
-                        {eventIcons.map((icon) => (
+                        {eventIcons.map(icon => (
                           <Pressable
                             key={icon}
                             onPress={() => isOwner && setSelectedIcon(icon)}
                             style={[
                               styles.iconButton,
                               { backgroundColor: colors.card },
-                              selectedIcon === icon && { backgroundColor: colors.primary, transform: [{ scale: 1.1 }] },
-                              !isOwner && { opacity: 0.6 }
+                              selectedIcon === icon && {
+                                backgroundColor: colors.primary,
+                                transform: [{ scale: 1.1 }],
+                              },
+                              !isOwner && { opacity: 0.6 },
                             ]}
                           >
-                            <MaterialCommunityIcons name={icon} size={24} color={selectedIcon === icon ? colors.background : colors.foreground} />
+                            <MaterialCommunityIcons
+                              name={icon}
+                              size={24}
+                              color={
+                                selectedIcon === icon
+                                  ? colors.background
+                                  : colors.foreground
+                              }
+                            />
                           </Pressable>
                         ))}
                       </View>
@@ -748,11 +1228,28 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                     {/* Description - EVENT ONLY */}
                     <View style={styles.fieldGroup}>
                       <View style={styles.labelRow}>
-                        <AppIcon name="file" size={14} color={colors.mutedForeground} />
-                        <Text style={[styles.label, { color: colors.mutedForeground }]}>Description</Text>
+                        <AppIcon
+                          name="file"
+                          size={14}
+                          color={colors.mutedForeground}
+                        />
+                        <Text
+                          style={[
+                            styles.label,
+                            { color: colors.mutedForeground },
+                          ]}
+                        >
+                          Description
+                        </Text>
                       </View>
                       <TextInput
-                        style={[styles.textArea, { backgroundColor: colors.card, color: colors.foreground }]}
+                        style={[
+                          styles.textArea,
+                          {
+                            backgroundColor: colors.card,
+                            color: colors.foreground,
+                          },
+                        ]}
                         placeholder="Add description..."
                         placeholderTextColor={colors.mutedForeground}
                         multiline
@@ -763,17 +1260,37 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                     </View>
 
                     {/* All Day Toggle - EVENT ONLY */}
-                    <View style={[styles.toggleRow, { backgroundColor: colors.card }]}>
+                    <View
+                      style={[
+                        styles.toggleRow,
+                        { backgroundColor: colors.card },
+                      ]}
+                    >
                       <View style={styles.toggleLabelContainer}>
-                        <View style={[styles.iconBox, { backgroundColor: "#f973161A" }]}>
+                        <View
+                          style={[
+                            styles.iconBox,
+                            { backgroundColor: '#f973161A' },
+                          ]}
+                        >
                           <AppIcon name="clock" size={18} color="#f97316" />
                         </View>
-                        <Text style={[styles.toggleLabel, { color: colors.foreground }]}>All-day event</Text>
+                        <Text
+                          style={[
+                            styles.toggleLabel,
+                            { color: colors.foreground },
+                          ]}
+                        >
+                          All-day event
+                        </Text>
                       </View>
                       <Switch
                         value={allDay}
                         onValueChange={setAllDay}
-                        trackColor={{ false: colors.muted, true: colors.primary }}
+                        trackColor={{
+                          false: colors.muted,
+                          true: colors.primary,
+                        }}
                         disabled={!isOwner}
                       />
                     </View>
@@ -782,7 +1299,14 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
                 {/* Schedule */}
                 <View style={styles.fieldGroup}>
-                  <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>{activeTab === 'task' ? 'Due Date' : 'Schedule'}</Text>
+                  <Text
+                    style={[
+                      styles.sectionLabel,
+                      { color: colors.mutedForeground },
+                    ]}
+                  >
+                    {activeTab === 'task' ? 'Due Date' : 'Schedule'}
+                  </Text>
                   <View style={styles.row}>
                     <View style={styles.halfField}>
                       <CustomDateTimePicker
@@ -799,7 +1323,9 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                           mode="time"
                           value={startTime}
                           onChange={setStartTime}
-                          label={activeTab === 'task' ? "Due Time" : "Start Time"}
+                          label={
+                            activeTab === 'task' ? 'Due Time' : 'Start Time'
+                          }
                           disabled={!isOwner}
                         />
                       </View>
@@ -836,45 +1362,87 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                 {activeTab === 'event' && (
                   <View style={styles.fieldGroup}>
                     <Pressable
-                      style={[styles.expandableHeader, { backgroundColor: colors.card }]}
-                      onPress={() => isOwner && setShowRepeatOptions(!showRepeatOptions)}
+                      style={[
+                        styles.expandableHeader,
+                        { backgroundColor: colors.card },
+                      ]}
+                      onPress={() =>
+                        isOwner && setShowRepeatOptions(!showRepeatOptions)
+                      }
                     >
                       <View style={styles.toggleLabelContainer}>
-                        <View style={[styles.iconBox, { backgroundColor: "#3b82f61A" }]}>
+                        <View
+                          style={[
+                            styles.iconBox,
+                            { backgroundColor: '#3b82f61A' },
+                          ]}
+                        >
                           <AppIcon name="repeat" size={18} color="#3b82f6" />
                         </View>
                         <View>
-                          <Text style={[styles.toggleLabel, { color: colors.foreground }]}>Repeat</Text>
-                          <Text style={[styles.valueLabel, { color: colors.mutedForeground }]}>{getRepeatLabel()}</Text>
+                          <Text
+                            style={[
+                              styles.toggleLabel,
+                              { color: colors.foreground },
+                            ]}
+                          >
+                            Repeat
+                          </Text>
+                          <Text
+                            style={[
+                              styles.valueLabel,
+                              { color: colors.mutedForeground },
+                            ]}
+                          >
+                            {getRepeatLabel()}
+                          </Text>
                         </View>
                       </View>
                       <AppIcon
                         name="chevronDown"
                         size={20}
                         color={colors.mutedForeground}
-                        style={{ transform: [{ rotate: showRepeatOptions ? '180deg' : '0deg' }] }}
+                        style={{
+                          transform: [
+                            { rotate: showRepeatOptions ? '180deg' : '0deg' },
+                          ],
+                        }}
                       />
                     </Pressable>
 
                     {showRepeatOptions && (
-                      <View style={[styles.expandableContent, { backgroundColor: colors.card }]}>
+                      <View
+                        style={[
+                          styles.expandableContent,
+                          { backgroundColor: colors.card },
+                        ]}
+                      >
                         <View style={styles.chipsContainer}>
-                          {repeatOptions.map((option) => (
+                          {repeatOptions.map(option => (
                             <Pressable
                               key={option.value}
-                              onPress={() => isOwner && setRepeatType(option.value)}
+                              onPress={() =>
+                                isOwner && setRepeatType(option.value)
+                              }
                               style={[
                                 styles.chip,
                                 { backgroundColor: colors.background },
-                                repeatType === option.value && { backgroundColor: colors.primary },
-                                !isOwner && { opacity: 0.6 }
+                                repeatType === option.value && {
+                                  backgroundColor: colors.primary,
+                                },
+                                !isOwner && { opacity: 0.6 },
                               ]}
                             >
-                              <Text style={[
-                                styles.chipText,
-                                { color: colors.foreground },
-                                repeatType === option.value && { color: colors.primaryForeground, fontWeight: "600" }
-                              ]}>
+                              <Text
+                                style={[
+                                  styles.chipText,
+                                  { color: colors.foreground },
+                                  repeatType === option.value && {
+                                    color: colors.primaryForeground,
+                                    fontWeight: '600',
+                                  },
+                                ]}
+                              >
                                 {option.label}
                               </Text>
                             </Pressable>
@@ -883,10 +1451,28 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                         {repeatType !== 'never' && (
                           <View style={{ marginTop: 12 }}>
                             <View style={styles.labelRow}>
-                              <AppIcon name="calendar" size={14} color={colors.mutedForeground} />
-                              <Text style={[styles.label, { color: colors.mutedForeground }]}>Repeat Until</Text>
+                              <AppIcon
+                                name="calendar"
+                                size={14}
+                                color={colors.mutedForeground}
+                              />
+                              <Text
+                                style={[
+                                  styles.label,
+                                  { color: colors.mutedForeground },
+                                ]}
+                              >
+                                Repeat Until
+                              </Text>
                             </View>
-                            <Text style={{ fontSize: 12, color: colors.mutedForeground, marginBottom: 8, marginLeft: 2 }}>
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                color: colors.mutedForeground,
+                                marginBottom: 8,
+                                marginLeft: 2,
+                              }}
+                            >
                               Select when this recurring event should stop
                             </Text>
                             <CustomDateTimePicker
@@ -908,53 +1494,116 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                 {activeTab === 'event' && (
                   <View style={styles.fieldGroup}>
                     <Pressable
-                      style={[styles.expandableHeader, { backgroundColor: colors.card }]}
-                      onPress={() => isOwner && setShowReminderOptions(!showReminderOptions)}
+                      style={[
+                        styles.expandableHeader,
+                        { backgroundColor: colors.card },
+                      ]}
+                      onPress={() =>
+                        isOwner && setShowReminderOptions(!showReminderOptions)
+                      }
                     >
                       <View style={styles.toggleLabelContainer}>
-                        <View style={[styles.iconBox, { backgroundColor: reminder ? "#22c55e1A" : colors.muted }]}>
-                          <AppIcon name="bell" size={18} color={reminder ? "#22c55e" : colors.mutedForeground} />
+                        <View
+                          style={[
+                            styles.iconBox,
+                            {
+                              backgroundColor: reminder
+                                ? '#22c55e1A'
+                                : colors.muted,
+                            },
+                          ]}
+                        >
+                          <AppIcon
+                            name="bell"
+                            size={18}
+                            color={
+                              reminder ? '#22c55e' : colors.mutedForeground
+                            }
+                          />
                         </View>
                         <View>
-                          <Text style={[styles.toggleLabel, { color: colors.foreground }]}>Reminder</Text>
-                          <Text style={[styles.valueLabel, { color: colors.mutedForeground }]}>{getReminderLabel()}</Text>
+                          <Text
+                            style={[
+                              styles.toggleLabel,
+                              { color: colors.foreground },
+                            ]}
+                          >
+                            Reminder
+                          </Text>
+                          <Text
+                            style={[
+                              styles.valueLabel,
+                              { color: colors.mutedForeground },
+                            ]}
+                          >
+                            {getReminderLabel()}
+                          </Text>
                         </View>
                       </View>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 8,
+                        }}
+                      >
                         <Switch
                           value={reminder}
                           onValueChange={setReminder}
-                          trackColor={{ false: colors.muted, true: colors.primary }}
+                          trackColor={{
+                            false: colors.muted,
+                            true: colors.primary,
+                          }}
                           disabled={!isOwner}
                         />
                         <AppIcon
                           name="chevronDown"
                           size={20}
                           color={colors.mutedForeground}
-                          style={{ transform: [{ rotate: showReminderOptions ? '180deg' : '0deg' }] }}
+                          style={{
+                            transform: [
+                              {
+                                rotate: showReminderOptions ? '180deg' : '0deg',
+                              },
+                            ],
+                          }}
                         />
                       </View>
                     </Pressable>
 
                     {showReminderOptions && reminder && (
-                      <View style={[styles.expandableContent, { backgroundColor: colors.card }]}>
+                      <View
+                        style={[
+                          styles.expandableContent,
+                          { backgroundColor: colors.card },
+                        ]}
+                      >
                         <View style={styles.chipsContainer}>
-                          {reminderOptions.map((option) => (
+                          {reminderOptions.map(option => (
                             <Pressable
                               key={option.value}
-                              onPress={() => isOwner && setReminderTime(option.value)}
+                              onPress={() =>
+                                isOwner && setReminderTime(option.value)
+                              }
                               style={[
                                 styles.chip,
                                 { backgroundColor: colors.background },
-                                reminderTime === option.value && { backgroundColor: colors.primary },
-                                !isOwner && { opacity: 0.6 }
+                                reminderTime === option.value && {
+                                  backgroundColor: colors.primary,
+                                },
+                                !isOwner && { opacity: 0.6 },
                               ]}
                             >
-                              <Text style={[
-                                styles.chipText,
-                                { color: colors.foreground },
-                                reminderTime === option.value && { color: colors.primaryForeground, fontWeight: "600" }
-                              ]}>
+                              <Text
+                                style={[
+                                  styles.chipText,
+                                  { color: colors.foreground },
+                                  reminderTime === option.value && {
+                                    color: colors.primaryForeground,
+                                    fontWeight: '600',
+                                  },
+                                ]}
+                              >
                                 {option.label}
                               </Text>
                             </Pressable>
@@ -996,12 +1645,22 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                 {/* Assign To */}
                 <View style={styles.fieldGroup}>
                   <View style={styles.labelRow}>
-                    <AppIcon name="user" size={14} color={colors.mutedForeground} />
-                    <Text style={[styles.label, { color: colors.mutedForeground }]}>Assign to</Text>
+                    <AppIcon
+                      name="user"
+                      size={14}
+                      color={colors.mutedForeground}
+                    />
+                    <Text
+                      style={[styles.label, { color: colors.mutedForeground }]}
+                    >
+                      Assign to
+                    </Text>
                   </View>
                   <View style={styles.chipsContainer}>
                     {members.map((member: any) => {
-                      const profileColor = PROFILE_COLORS.find(c => c.value === member.color)?.hex || colors.primary;
+                      const profileColor =
+                        PROFILE_COLORS.find(c => c.value === member.color)
+                          ?.hex || colors.primary;
                       return (
                         <Pressable
                           key={member.id}
@@ -1009,29 +1668,53 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                           style={[
                             styles.memberChip,
                             { backgroundColor: colors.card },
-                            memberId === member.id && { backgroundColor: profileColor },
-                            !isOwner && { opacity: 0.6 }
+                            memberId === member.id && {
+                              backgroundColor: profileColor,
+                            },
+                            !isOwner && { opacity: 0.6 },
                           ]}
                         >
-                          <MaterialCommunityIcons name={member.symbol || 'account'} size={20} color={memberId === member.id ? '#fff' : colors.mutedForeground} style={{ marginRight: 6 }} />
-                          <Text style={[
-                            styles.memberChipText,
-                            { color: colors.mutedForeground },
-                            memberId === member.id && { color: "#fff" }
-                          ]}>{member.name}</Text>
+                          <MaterialCommunityIcons
+                            name={member.symbol || 'account'}
+                            size={20}
+                            color={
+                              memberId === member.id
+                                ? '#fff'
+                                : colors.mutedForeground
+                            }
+                            style={{ marginRight: 6 }}
+                          />
+                          <Text
+                            style={[
+                              styles.memberChipText,
+                              { color: colors.mutedForeground },
+                              memberId === member.id && { color: '#fff' },
+                            ]}
+                          >
+                            {member.name}
+                          </Text>
                         </Pressable>
                       );
                     })}
-
                   </View>
                 </View>
 
                 {/* Notes - EVENT ONLY */}
                 {activeTab === 'event' && (
                   <View style={styles.fieldGroup}>
-                    <Text style={[styles.label, { color: colors.mutedForeground }]}>Notes</Text>
+                    <Text
+                      style={[styles.label, { color: colors.mutedForeground }]}
+                    >
+                      Notes
+                    </Text>
                     <TextInput
-                      style={[styles.textArea, { backgroundColor: colors.card, color: colors.foreground }]}
+                      style={[
+                        styles.textArea,
+                        {
+                          backgroundColor: colors.card,
+                          color: colors.foreground,
+                        },
+                      ]}
                       placeholder="Add any additional notes..."
                       placeholderTextColor={colors.mutedForeground}
                       multiline
@@ -1048,28 +1731,47 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
           {/* Footer */}
           {activeTab !== 'existing' && (
-            <View style={[styles.footer, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
+            <View
+              style={[
+                styles.footer,
+                {
+                  borderTopColor: colors.border,
+                  backgroundColor: colors.background,
+                },
+              ]}
+            >
               <Pressable
                 style={[styles.cancelButton, { backgroundColor: colors.muted }]}
                 onPress={() => onOpenChange(false)}
               >
-                <Text style={[styles.cancelButtonText, { color: colors.foreground }]}>Cancel</Text>
+                <Text
+                  style={[
+                    styles.cancelButtonText,
+                    { color: colors.foreground },
+                  ]}
+                >
+                  Cancel
+                </Text>
               </Pressable>
               {isEditing && isOwner && (
                 <Pressable
-                  style={[styles.deleteButton, { backgroundColor: colors.muted }]}
+                  style={[
+                    styles.deleteButton,
+                    { backgroundColor: colors.muted },
+                  ]}
                   onPress={() => {
-                    const itemType = (eventToEdit as any).type === 'task' ? 'task' : 'event';
+                    const itemType =
+                      (eventToEdit as any).type === 'task' ? 'task' : 'event';
                     const itemName = itemType === 'task' ? 'Task' : 'Event';
 
                     Alert.alert(
                       `Delete ${itemName}`,
                       `Are you sure you want to delete this ${itemType}?`,
                       [
-                        { text: "Cancel", style: "cancel" },
+                        { text: 'Cancel', style: 'cancel' },
                         {
-                          text: "Delete",
-                          style: "destructive",
+                          text: 'Delete',
+                          style: 'destructive',
                           onPress: () => {
                             if (itemType === 'task') {
                               deleteTask(eventToEdit.id);
@@ -1077,22 +1779,38 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                               deleteEvent(eventToEdit.id);
                             }
                             onOpenChange(false);
-                          }
-                        }
-                      ]
+                          },
+                        },
+                      ],
                     );
                   }}
                 >
-                  <Text style={[styles.deleteButtonText, { color: colors.danger }]}>Delete</Text>
+                  <Text
+                    style={[styles.deleteButtonText, { color: colors.danger }]}
+                  >
+                    Delete
+                  </Text>
                 </Pressable>
               )}
               {isOwner && (
                 <Pressable
-                  style={[styles.saveButton, { backgroundColor: colors.primary }]}
+                  style={[
+                    styles.saveButton,
+                    { backgroundColor: colors.primary },
+                  ]}
                   onPress={handleSave}
                 >
-                  <Text style={[styles.saveButtonText, { color: colors.primaryForeground }]}>
-                    {isEditing ? "Save Changes" : (activeTab === 'event' ? "Add Event" : "Add Task")}
+                  <Text
+                    style={[
+                      styles.saveButtonText,
+                      { color: colors.primaryForeground },
+                    ]}
+                  >
+                    {isEditing
+                      ? 'Save Changes'
+                      : activeTab === 'event'
+                      ? 'Add Event'
+                      : 'Add Task'}
                   </Text>
                 </Pressable>
               )}
@@ -1100,24 +1818,24 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
           )}
         </View>
       </View>
-    </Modal >
+    </Modal>
   );
 };
 
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "flex-start", // Changed back to top-aligned
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-start', // Changed back to top-aligned
   },
   container: {
     padding: 0,
     backgroundColor: 'white',
     flex: 1, // Full height
-    maxHeight: "100%", // Cover entire screen
+    maxHeight: '100%', // Cover entire screen
     ...Platform.select({
       ios: {
-        shadowColor: "#000",
+        shadowColor: '#000',
         shadowOffset: { width: 0, height: 0 },
         shadowOpacity: 0.1,
         shadowRadius: 10,
@@ -1146,28 +1864,28 @@ const styles = StyleSheet.create({
   priorityButton: {},
 
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     padding: 20,
     paddingTop: Platform.OS === 'ios' ? 60 : 20, // Account for status bar
     borderBottomWidth: 1,
   },
   titleContainer: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
   },
   headerIconCircle: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: "700",
+    fontWeight: '700',
   },
   closeButton: {
     padding: 8,
@@ -1178,9 +1896,41 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 10,
   },
+  exactAlarmCard: {
+    flexDirection: 'row',
+    padding: 12,
+    borderWidth: 1,
+    borderRadius: 12,
+    marginBottom: 16,
+    gap: 12,
+  },
+  exactAlarmIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  exactAlarmTitle: {
+    fontWeight: '700',
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  exactAlarmBody: {
+    fontSize: 12,
+    marginBottom: 6,
+    lineHeight: 18,
+  },
+  exactAlarmButton: {
+    alignSelf: 'flex-start',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginTop: 4,
+  },
   nameInput: {
     fontSize: 22, // Reduced from 24
-    fontWeight: "700",
+    fontWeight: '700',
     marginBottom: 16, // Reduced from 24
     paddingVertical: 4, // Reduced from 8
   },
@@ -1188,68 +1938,68 @@ const styles = StyleSheet.create({
     marginBottom: 16, // Reduced from 24
   },
   labelRow: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 6,
     marginBottom: 6, // Reduced from 8
   },
   label: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: '600',
   },
   textArea: {
     borderRadius: 12,
     padding: 12,
     minHeight: 80,
-    textAlignVertical: "top",
+    textAlignVertical: 'top',
     fontSize: 16,
   },
   iconGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8, // Reduced from 10
   },
   iconButton: {
     width: 40, // Reduced from 44
     height: 40, // Reduced from 44
     borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   iconText: {
     fontSize: 18, // Reduced from 20
   },
   toggleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     padding: 12, // Reduced from 16
     borderRadius: 12, // Reduced from 16
     marginBottom: 16, // Reduced from 24
   },
   toggleLabelContainer: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
   },
   iconBox: {
     width: 36,
     height: 36,
     borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   toggleLabel: {
     fontSize: 16,
-    fontWeight: "500",
+    fontWeight: '500',
   },
   sectionLabel: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: '600',
     marginBottom: 12,
   },
   row: {
-    flexDirection: "row",
+    flexDirection: 'row',
     gap: 12,
     marginBottom: 12,
   },
@@ -1262,9 +2012,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   expandableHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     padding: 12, // Reduced from 16
     borderRadius: 12, // Reduced from 16
   },
@@ -1277,8 +2027,8 @@ const styles = StyleSheet.create({
     borderRadius: 12, // Reduced from 16
   },
   chipsContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
   },
   chip: {
@@ -1290,7 +2040,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   colorRow: {
-    flexDirection: "row",
+    flexDirection: 'row',
     gap: 12,
     marginTop: 8,
   },
@@ -1300,8 +2050,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
   },
   memberChip: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
@@ -1312,12 +2062,12 @@ const styles = StyleSheet.create({
   },
   memberChipText: {
     fontSize: 14,
-    fontWeight: "500",
+    fontWeight: '500',
   },
   footer: {
     padding: 16, // Reduced from 20
     borderTopWidth: 1,
-    flexDirection: "row",
+    flexDirection: 'row',
     gap: 12, // Reduced from 16
     paddingBottom: Platform.OS === 'ios' ? 34 : 16, // Safe area
   },
@@ -1325,35 +2075,35 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 14, // Reduced from 16
     borderRadius: 12, // Reduced from 16
-    alignItems: "center",
+    alignItems: 'center',
   },
   cancelButtonText: {
     fontSize: 14, // Reduced from 16
-    fontWeight: "600",
+    fontWeight: '600',
   },
   saveButton: {
     flex: 2, // Give more space to save button
     padding: 14, // Reduced from 16
     borderRadius: 12, // Reduced from 16
-    alignItems: "center",
+    alignItems: 'center',
   },
   saveButtonText: {
     fontSize: 14, // Reduced from 16
-    fontWeight: "600",
+    fontWeight: '600',
   },
   deleteButton: {
     padding: 16,
     borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   destructive: {
-    color: "#ef4444",
+    color: '#ef4444',
   },
   optionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     padding: 12,
     borderRadius: 8,
   },
@@ -1361,11 +2111,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   deleteButtonText: {
-    fontWeight: "600",
+    fontWeight: '600',
   },
   ownerNotice: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
     padding: 12,
     borderRadius: 12,
@@ -1373,7 +2123,7 @@ const styles = StyleSheet.create({
   },
   ownerNoticeText: {
     fontSize: 13,
-    fontWeight: "500",
+    fontWeight: '500',
     flex: 1,
   },
   existingEventsContainer: {

@@ -18,7 +18,7 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-    <!-- <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" /> -->
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
 
     <!-- Notifications -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -56,6 +56,20 @@
                 <data
                     android:scheme="com.choresnest"
                     android:host="auth-callback" />
+            </intent-filter>
+
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="choresnest.com"
+                    android:pathPrefix="/auth" />
+                <data
+                    android:scheme="https"
+                    android:host="choresnest.com"
+                    android:pathPrefix="/reset-password" />
             </intent-filter>
 
         </activity>

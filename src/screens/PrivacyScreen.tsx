@@ -1,1233 +1,1712 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from 'react';
 import {
-    View,
-    Text,
-    StyleSheet,
-    ScrollView,
-    Pressable,
-    Switch,
-    Alert,
-    Modal,
-    TextInput,
-    Linking,
-    ActivityIndicator,
-} from "react-native";
-import { useNavigation } from "@react-navigation/native";
-import { AppLayout } from "../components/layout";
-import { useThemeColors, useThemeRadius, useTheme } from '../contexts/ThemeContext';
-import { useAuth } from "../contexts/AuthContext";
-import { useAppLock } from "../contexts/AppLockContext";
-import { useFamily } from "../contexts/FamilyContext";
-import { useToast } from "../hooks/useToast";
-import { supabase } from "../config/supabase";
-import notifee from "@notifee/react-native";
-import NetInfo from "@react-native-community/netinfo";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { DeleteAccountService } from "../services/DeleteAccountService";
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  Switch,
+  Alert,
+  Modal,
+  TextInput,
+  Linking,
+  ActivityIndicator,
+} from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { AppLayout } from '../components/layout';
 import {
-    ChevronLeft,
-    Shield,
-    Lock,
-    Key,
-    Trash2,
-    ChevronRight,
-    Fingerprint
-} from "lucide-react-native";
-import { PROFILE_COLORS } from "../constants/profileColors";
+  useThemeColors,
+  useThemeRadius,
+  useTheme,
+} from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import { useAppLock } from '../contexts/AppLockContext';
+import { useFamily } from '../contexts/FamilyContext';
+import { useToast } from '../hooks/useToast';
+import { supabase } from '../config/supabase';
+import notifee from '@notifee/react-native';
+import NetInfo from '@react-native-community/netinfo';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DeleteAccountService } from '../services/DeleteAccountService';
+import {
+  ChevronLeft,
+  Shield,
+  Lock,
+  Key,
+  Trash2,
+  ChevronRight,
+  Fingerprint,
+} from 'lucide-react-native';
+import { PROFILE_COLORS } from '../constants/profileColors';
+import { trackScreen } from '../services/analytics';
 
 // --- Links ---
-const TERMS_URL = "https://choresnest.com/terms-of-use";
-const SITE_PRIVACY_URL = "https://choresnest.com/privacy-policy";
+const TERMS_URL = 'https://choresnest.com/terms-of-use';
+const SITE_PRIVACY_URL = 'https://choresnest.com/privacy-policy';
 
 // --- Data ---
 const securitySettings = [
-    { id: 'app', icon: Lock, label: 'App Lock' },
-    { id: 'biometric', icon: Fingerprint, label: 'Biometric Lock' },
+  { id: 'app', icon: Lock, label: 'App Lock' },
+  { id: 'biometric', icon: Fingerprint, label: 'Biometric Lock' },
 ];
 
 export const PrivacyScreen: React.FC = () => {
-    const navigation = useNavigation();
-    const { deleteAccount, isGuest, user, logout } = useAuth();
-    const { activeMember } = useFamily();
-    const {
-        isAppLockEnabled,
-        isBiometricEnabled,
-        hasPin,
-        enableAppLock,
-        disableAppLock,
-        enableBiometric,
-        disableBiometric,
-        setPin: persistPin,
-        unlockWithPin,
-    } = useAppLock();
-    const { showToast } = useToast();
-    const [pendingAppLockRequest, setPendingAppLockRequest] = useState<boolean | null>(null);
-    const [pendingBiometricRequest, setPendingBiometricRequest] = useState<boolean | null>(null);
-    const [biometricBusy, setBiometricBusy] = useState(false);
-    const colors = useThemeColors();
-    const radius = useThemeRadius();
-    const { appearanceMode } = useTheme();
-    const isMidnight = appearanceMode === 'midnight';
-    const activeMemberColor =
-     PROFILE_COLORS.find(color => color.value === activeMember?.color)?.hex || colors.primary;
+  const navigation = useNavigation();
+  const { deleteAccount, isGuest, user, logout } = useAuth();
+  const { activeMember } = useFamily();
+  const {
+    isAppLockEnabled,
+    isBiometricEnabled,
+    hasPin,
+    enableAppLock,
+    disableAppLock,
+    enableBiometric,
+    disableBiometric,
+    setPin: persistPin,
+    unlockWithPin,
+  } = useAppLock();
+  const { showToast } = useToast();
+  useEffect(() => {
+    void trackScreen('PrivacyScreen');
+  }, []);
+  const [pendingAppLockRequest, setPendingAppLockRequest] = useState<
+    boolean | null
+  >(null);
+  const [pendingBiometricRequest, setPendingBiometricRequest] = useState<
+    boolean | null
+  >(null);
+  const [biometricBusy, setBiometricBusy] = useState(false);
+  const colors = useThemeColors();
+  const radius = useThemeRadius();
+  const { appearanceMode } = useTheme();
+  const isMidnight = appearanceMode === 'midnight';
+  const activeMemberColor =
+    PROFILE_COLORS.find(color => color.value === activeMember?.color)?.hex ||
+    colors.primary;
 
-    const [clearNotifications, setClearNotifications] = useState(false);
-    const openExternalLink = async (url: string) => {
-        try {
-            const supported = await Linking.canOpenURL(url);
-            if (supported) {
-                await Linking.openURL(url);
-            } else {
-                showToast({
-                    type: "error",
-                    title: "Link unavailable",
-                    description: "Unable to open that link on this device.",
-                });
-            }
-        } catch (error) {
-            console.error("Failed to open external link:", error);
+  const [clearNotifications, setClearNotifications] = useState(false);
+  const openExternalLink = async (url: string) => {
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        showToast({
+          type: 'error',
+          title: 'Link unavailable',
+          description: 'Unable to open that link on this device.',
+        });
+      }
+    } catch (error) {
+      console.error('Failed to open external link:', error);
+      showToast({
+        type: 'error',
+        title: 'Link failed',
+        description: 'Please try again later.',
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (!clearNotifications) return;
+    let active = true;
+    notifee
+      .cancelAllNotifications()
+      .then(() => {
+        if (active) console.log('🔥 Cleared legacy notifications');
+      })
+      .catch(error => {
+        if (active) console.warn('Failed to clear notifications', error);
+      })
+      .finally(() => {
+        if (active) setClearNotifications(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [clearNotifications]);
+
+  // Modal States
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [showGuestModal, setShowGuestModal] = useState(false);
+  const [profileData, setProfileData] = useState<{
+    id: string;
+    email: string;
+    name: string;
+  } | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(false);
+
+  // Fetch profile data from Supabase
+  useEffect(() => {
+    if (!isGuest && user) {
+      fetchProfileData();
+    }
+  }, [isGuest, user]);
+
+  const fetchProfileData = async () => {
+    try {
+      setLoadingProfile(true);
+      const { data: session } = await supabase.auth.getSession();
+
+      if (session?.session?.user) {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, email, name')
+          .eq('id', session.session.user.id)
+          .single();
+
+        if (error) {
+          if (error.code === 'PGRST116') {
+            // Profile doesn't exist yet (or 0 rows returned)
             showToast({
-                type: "error",
-                title: "Link failed",
-                description: "Please try again later.",
+              title: 'Profile Error',
+              description: "The Profile Doesn't exists",
+              type: 'error',
             });
+          } else {
+            console.error('Error fetching profile:', error);
+          }
+        } else if (data) {
+          setProfileData({
+            id: data.id,
+            email: data.email || '',
+            name: data.name || 'User',
+          });
         }
-    };
+      }
+    } catch (error) {
+      console.error('Failed to fetch profile:', error);
+    } finally {
+      setLoadingProfile(false);
+    }
+  };
 
-    useEffect(() => {
-        if (!clearNotifications) return;
-        let active = true;
-        notifee.cancelAllNotifications()
-            .then(() => {
-                if (active) console.log("🔥 Cleared legacy notifications");
-            })
-            .catch((error) => {
-                if (active) console.warn("Failed to clear notifications", error);
-            })
-            .finally(() => {
-                if (active) setClearNotifications(false);
-            });
-        return () => {
-            active = false;
-        };
-    }, [clearNotifications]);
+  // Form States
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [pin, setPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [appLockBusy, setAppLockBusy] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmValue, setConfirmValue] = useState('');
+  const [confirmError, setConfirmError] = useState('');
+  const [confirmBusy, setConfirmBusy] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
-    // Modal States
-    const [showPasswordModal, setShowPasswordModal] = useState(false);
-    const [showPinModal, setShowPinModal] = useState(false);
-    const [showGuestModal, setShowGuestModal] = useState(false);
-    const [profileData, setProfileData] = useState<{
-        id: string;
-        email: string;
-        name: string;
-    } | null>(null);
-    const [loadingProfile, setLoadingProfile] = useState(false);
+  const resolveGuestMode = async (): Promise<boolean> => {
+    if (isGuest) return true;
+    try {
+      const stored = await AsyncStorage.getItem('IS_GUEST');
+      return stored === 'true';
+    } catch {
+      return false;
+    }
+  };
 
-    // Fetch profile data from Supabase
-    useEffect(() => {
-        if (!isGuest && user) {
-            fetchProfileData();
-        }
-    }, [isGuest, user]);
+  useEffect(() => {
+    if (
+      pendingAppLockRequest !== null &&
+      pendingAppLockRequest === isAppLockEnabled
+    ) {
+      setPendingAppLockRequest(null);
+    }
+  }, [pendingAppLockRequest, isAppLockEnabled]);
 
-    const fetchProfileData = async () => {
+  const BOOT_FLAG_KEYS = [
+    'IS_GUEST',
+    'HAS_SEEN_ONBOARDING',
+    'HAS_COMPLETED_ONBOARDING',
+    '@active_profile_id',
+    '@last_sync_time',
+    'ACTIVE_PROFILE_ID',
+  ];
+
+  const clearBootFlags = async () => {
+    try {
+      await AsyncStorage.multiRemove(BOOT_FLAG_KEYS);
+    } catch (error) {
+      console.warn('Failed to clear boot flags during delete', error);
+    }
+  };
+
+  const confirmDeleteAccount = async (deleteFromCloud: boolean) => {
+    setIsDeletingAccount(true);
+    try {
+      const guestMode = await resolveGuestMode();
+
+      if (guestMode) {
+        setClearNotifications(true);
+        await clearBootFlags();
+        await deleteAccount();
+        await logout();
+        return;
+      }
+
+      if (!user) {
+        throw new Error('Unable to resolve account session.');
+      }
+
+      const canDeleteFromCloud =
+        deleteFromCloud && DeleteAccountService.isConfigured();
+      if (deleteFromCloud && !DeleteAccountService.isConfigured()) {
+        showToast({
+          type: 'warning',
+          title: 'Delete Account',
+          description:
+            'Cloud deletion is disabled in this build, so only local data will be removed.',
+        });
+      }
+
+      if (canDeleteFromCloud) {
+        await DeleteAccountService.deleteAccountFromCloud({
+          userId: user.id,
+          email: user.email || undefined,
+        });
+      }
+
+      setClearNotifications(true);
+      await clearBootFlags();
+      await deleteAccount();
+      await logout();
+    } catch (error: any) {
+      showToast({
+        type: 'error',
+        title: 'Delete Failed',
+        description:
+          error?.message || 'Failed to delete your account. Please try again.',
+      });
+    } finally {
+      setIsDeletingAccount(false);
+    }
+  };
+
+  const showDeleteAlert = (
+    deleteFromCloud: boolean,
+    title: string,
+    message: string,
+  ) => {
+    Alert.alert(title, message, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => confirmDeleteAccount(deleteFromCloud),
+      },
+    ]);
+  };
+
+  const handleDeleteAccount = async () => {
+    const guestMode = await resolveGuestMode();
+
+    if (guestMode) {
+      showDeleteAlert(
+        false,
+        'Delete Guest Data',
+        'Deleting your guest profile removes all local data from this device.',
+      );
+      return;
+    }
+
+    try {
+      const netState = await NetInfo.fetch();
+      if (!netState.isConnected) {
+        Alert.alert(
+          'Offline',
+          'Deleting your account from the cloud requires an internet connection. Please reconnect and try again.',
+        );
+        return;
+      }
+
+      showDeleteAlert(
+        true,
+        'Delete Account',
+        'This is permanent and removes your profile data from both the cloud and this device.',
+      );
+    } catch (error) {
+      showToast({
+        type: 'error',
+        title: 'Network Error',
+        description:
+          'Unable to verify your connection. Please try again later.',
+      });
+    }
+  };
+
+  // Always use the actual database state, only show pending state during transitions
+  const appLockSwitchValue = pendingAppLockRequest ?? isAppLockEnabled;
+
+  const handleSavePassword = async () => {
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      Alert.alert('Error', 'Please fill in all fields.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      Alert.alert('Error', 'New passwords do not match.');
+      return;
+    }
+    if (newPassword.length < 8) {
+      Alert.alert(
+        'Security Tip',
+        'Use at least 8 characters for your password.',
+      );
+      return;
+    }
+    if (!user?.email) {
+      Alert.alert('Error', 'Unable to determine you are signed in right now.');
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+    try {
+      const { error: reauthError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword,
+      });
+
+      if (reauthError) {
+        Alert.alert(
+          'Authentication failed',
+          'The current password is incorrect.',
+        );
+        return;
+      }
+
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (updateError) {
+        console.error('Password update failed', updateError);
+        Alert.alert(
+          'Update failed',
+          "We couldn't update your password right now. Please try again later.",
+        );
+        return;
+      }
+
+      setShowPasswordModal(false);
+      Alert.alert(
+        'Success',
+        'Your password has been updated. Please use the new password the next time you sign in.',
+      );
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } finally {
+      setIsUpdatingPassword(false);
+    }
+  };
+
+  const handleSavePin = async () => {
+    if (!pin || !confirmPin) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+    if (pin.length !== 4) {
+      Alert.alert('Error', 'PIN must be 4 digits');
+      return;
+    }
+    if (pin !== confirmPin) {
+      Alert.alert('Error', 'PINs do not match');
+      return;
+    }
+    // Save pin and enable app lock
+    try {
+      await persistPin(pin);
+      setShowPinModal(false);
+      Alert.alert('Success', 'PIN code saved and app lock is now enabled.');
+      setPendingAppLockRequest(null);
+    } catch (error) {
+      console.error('Failed to save PIN', error);
+      Alert.alert('Error', "We couldn't save your PIN. Please try again.");
+    } finally {
+      setPin('');
+      setConfirmPin('');
+    }
+  };
+
+  const handleAppLockToggle = async (value: boolean) => {
+    if (value && !hasPin) {
+      setPendingAppLockRequest(null);
+      setShowPinModal(true);
+      return;
+    }
+
+    if (value) {
+      setPendingAppLockRequest(null);
+      setShowConfirmModal(true);
+      return;
+    }
+
+    setPendingAppLockRequest(false);
+    setAppLockBusy(true);
+    try {
+      await disableAppLock();
+    } catch (error) {
+      console.error('App lock toggle failed', error);
+      Alert.alert('App Lock', 'Unable to update app lock. Please try again.');
+      setPendingAppLockRequest(true);
+    } finally {
+      setAppLockBusy(false);
+    }
+  };
+
+  const handleBiometricToggle = async (value: boolean) => {
+    setPendingBiometricRequest(value);
+    setBiometricBusy(true);
+    try {
+      if (value) {
+        // Check if biometric is available
         try {
-            setLoadingProfile(true);
-            const { data: session } = await supabase.auth.getSession();
+          const ReactNativeBiometrics = require('react-native-biometrics');
+          const rnBiometrics = new ReactNativeBiometrics.default();
+          const { available } = await rnBiometrics.isSensorAvailable();
 
-            if (session?.session?.user) {
-                const { data, error } = await supabase
-                    .from('profiles')
-                    .select('id, email, name')
-                    .eq('id', session.session.user.id)
-                    .single();
-
-                if (error) {
-                    if (error.code === 'PGRST116') {
-                        // Profile doesn't exist yet (or 0 rows returned)
-                        showToast({
-                            title: "Profile Error",
-                            description: "The Profile Doesn't exists",
-                            type: "error"
-                        });
-                    } else {
-                        console.error('Error fetching profile:', error);
-                    }
-                } else if (data) {
-                    setProfileData({
-                        id: data.id,
-                        email: data.email || '',
-                        name: data.name || 'User',
-                    });
-                }
-            }
-        } catch (error) {
-            console.error('Failed to fetch profile:', error);
-        } finally {
-            setLoadingProfile(false);
-        }
-    };
-
-    // Form States
-    const [currentPassword, setCurrentPassword] = useState("");
-    const [newPassword, setNewPassword] = useState("");
-    const [confirmPassword, setConfirmPassword] = useState("");
-    const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
-    const [pin, setPin] = useState("");
-    const [confirmPin, setConfirmPin] = useState("");
-    const [appLockBusy, setAppLockBusy] = useState(false);
-    const [showConfirmModal, setShowConfirmModal] = useState(false);
-    const [confirmValue, setConfirmValue] = useState("");
-    const [confirmError, setConfirmError] = useState("");
-    const [confirmBusy, setConfirmBusy] = useState(false);
-    const [isDeletingAccount, setIsDeletingAccount] = useState(false);
-
-    const resolveGuestMode = async (): Promise<boolean> => {
-        if (isGuest) return true;
-        try {
-            const stored = await AsyncStorage.getItem("IS_GUEST");
-            return stored === "true";
-        } catch {
-            return false;
-        }
-    };
-
-    useEffect(() => {
-        if (pendingAppLockRequest !== null && pendingAppLockRequest === isAppLockEnabled) {
-            setPendingAppLockRequest(null);
-        }
-    }, [pendingAppLockRequest, isAppLockEnabled]);
-
-    const BOOT_FLAG_KEYS = [
-        "IS_GUEST",
-        "HAS_SEEN_ONBOARDING",
-        "HAS_COMPLETED_ONBOARDING",
-        "@active_profile_id",
-        "@last_sync_time",
-        "ACTIVE_PROFILE_ID",
-    ];
-
-    const clearBootFlags = async () => {
-        try {
-            await AsyncStorage.multiRemove(BOOT_FLAG_KEYS);
-        } catch (error) {
-            console.warn("Failed to clear boot flags during delete", error);
-        }
-    };
-
-    const confirmDeleteAccount = async (deleteFromCloud: boolean) => {
-        setIsDeletingAccount(true);
-        try {
-            const guestMode = await resolveGuestMode();
-
-            if (guestMode) {
-                setClearNotifications(true);
-                await clearBootFlags();
-                await deleteAccount();
-                await logout();
-                return;
-            }
-
-            if (!user) {
-                throw new Error("Unable to resolve account session.");
-            }
-
-            const canDeleteFromCloud = deleteFromCloud && DeleteAccountService.isConfigured();
-            if (deleteFromCloud && !DeleteAccountService.isConfigured()) {
-                showToast({
-                    type: "warning",
-                    title: "Delete Account",
-                    description: "Cloud deletion is disabled in this build, so only local data will be removed.",
-                });
-            }
-
-            if (canDeleteFromCloud) {
-                await DeleteAccountService.deleteAccountFromCloud({
-                    userId: user.id,
-                    email: user.email || undefined,
-                });
-            }
-
-            setClearNotifications(true);
-            await clearBootFlags();
-            await deleteAccount();
-            await logout();
-        } catch (error: any) {
-            showToast({
-                type: "error",
-                title: "Delete Failed",
-                description: error?.message || "Failed to delete your account. Please try again.",
-            });
-        } finally {
-            setIsDeletingAccount(false);
-        }
-    };
-
-    const showDeleteAlert = (deleteFromCloud: boolean, title: string, message: string) => {
-        Alert.alert(title, message, [
-            { text: "Cancel", style: "cancel" },
-            {
-                text: "Delete",
-                style: "destructive",
-                onPress: () => confirmDeleteAccount(deleteFromCloud),
-            },
-        ]);
-    };
-
-    const handleDeleteAccount = async () => {
-        const guestMode = await resolveGuestMode();
-
-        if (guestMode) {
-            showDeleteAlert(
-                false,
-                "Delete Guest Data",
-                "Deleting your guest profile removes all local data from this device."
-            );
-            return;
-        }
-
-        try {
-            const netState = await NetInfo.fetch();
-            if (!netState.isConnected) {
-                Alert.alert(
-                    "Offline",
-                    "Deleting your account from the cloud requires an internet connection. Please reconnect and try again."
-                );
-                return;
-            }
-
-            showDeleteAlert(true, "Delete Account", "This is permanent and removes your profile data from both the cloud and this device.");
-        } catch (error) {
-            showToast({
-                type: "error",
-                title: "Network Error",
-                description: "Unable to verify your connection. Please try again later.",
-            });
-        }
-    };
-
-    // Always use the actual database state, only show pending state during transitions
-    const appLockSwitchValue = pendingAppLockRequest ?? isAppLockEnabled;
-
-    const handleSavePassword = async () => {
-        if (!currentPassword || !newPassword || !confirmPassword) {
-            Alert.alert("Error", "Please fill in all fields.");
-            return;
-        }
-        if (newPassword !== confirmPassword) {
-            Alert.alert("Error", "New passwords do not match.");
-            return;
-        }
-        if (newPassword.length < 8) {
-            Alert.alert("Security Tip", "Use at least 8 characters for your password.");
-            return;
-        }
-        if (!user?.email) {
-            Alert.alert("Error", "Unable to determine you are signed in right now.");
-            return;
-        }
-
-        setIsUpdatingPassword(true);
-        try {
-            const { error: reauthError } = await supabase.auth.signInWithPassword({
-                email: user.email,
-                password: currentPassword,
-            });
-
-            if (reauthError) {
-                Alert.alert("Authentication failed", "The current password is incorrect.");
-                return;
-            }
-
-            const { error: updateError } = await supabase.auth.updateUser({
-                password: newPassword,
-            });
-
-            if (updateError) {
-                console.error("Password update failed", updateError);
-                Alert.alert("Update failed", "We couldn't update your password right now. Please try again later.");
-                return;
-            }
-
-            setShowPasswordModal(false);
+          if (!available) {
             Alert.alert(
-                "Success",
-                "Your password has been updated. Please use the new password the next time you sign in."
+              'Biometric Not Available',
+              'Biometric authentication is not available on this device. Please enable it in your device settings.',
             );
-            setCurrentPassword("");
-            setNewPassword("");
-            setConfirmPassword("");
-        } finally {
-            setIsUpdatingPassword(false);
-        }
-    };
+            setPendingBiometricRequest(false);
+            return;
+          }
 
-    const handleSavePin = async () => {
-        if (!pin || !confirmPin) {
-            Alert.alert("Error", "Please fill in all fields");
-            return;
-        }
-        if (pin.length !== 4) {
-            Alert.alert("Error", "PIN must be 4 digits");
-            return;
-        }
-        if (pin !== confirmPin) {
-            Alert.alert("Error", "PINs do not match");
-            return;
-        }
-        // Save pin and enable app lock
-        try {
-            await persistPin(pin);
-            setShowPinModal(false);
-            Alert.alert("Success", "PIN code saved and app lock is now enabled.");
-            setPendingAppLockRequest(null);
+          await enableBiometric();
+          Alert.alert('Success', 'Biometric lock is now enabled.');
         } catch (error) {
-            console.error("Failed to save PIN", error);
-            Alert.alert("Error", "We couldn't save your PIN. Please try again.");
-        } finally {
-            setPin("");
-            setConfirmPin("");
+          console.error('Biometric enable failed', error);
+          Alert.alert(
+            'Biometric Lock',
+            'Unable to enable biometric lock. Please try again.',
+          );
+          setPendingBiometricRequest(false);
         }
-    };
+      } else {
+        await disableBiometric();
+        Alert.alert('Success', 'Biometric lock has been disabled.');
+      }
+    } catch (error) {
+      console.error('Biometric toggle failed', error);
+      Alert.alert(
+        'Biometric Lock',
+        'Unable to update biometric lock. Please try again.',
+      );
+      setPendingBiometricRequest(!value);
+    } finally {
+      setBiometricBusy(false);
+    }
+  };
 
-    const handleAppLockToggle = async (value: boolean) => {
-        if (value && !hasPin) {
-            setPendingAppLockRequest(null);
-            setShowPinModal(true);
-            return;
-        }
+  const biometricSwitchValue = pendingBiometricRequest ?? isBiometricEnabled;
 
-        if (value) {
-            setPendingAppLockRequest(null);
-            setShowConfirmModal(true);
-            return;
-        }
+  const handleConfirmSubmit = async () => {
+    if (confirmValue.length !== 4) {
+      setConfirmError('Enter your 4-digit PIN');
+      return;
+    }
 
-        setPendingAppLockRequest(false);
-        setAppLockBusy(true);
-        try {
-            await disableAppLock();
-        } catch (error) {
-            console.error("App lock toggle failed", error);
-            Alert.alert("App Lock", "Unable to update app lock. Please try again.");
-            setPendingAppLockRequest(true);
-        } finally {
-            setAppLockBusy(false);
-        }
-    };
+    setConfirmBusy(true);
+    setConfirmError('');
+    try {
+      const success = await unlockWithPin(confirmValue);
+      if (!success) {
+        setConfirmError('PIN did not match');
+        return;
+      }
+      await enableAppLock({ keepSessionAuthenticated: true });
+      setConfirmError('');
+      setShowConfirmModal(false);
+      setConfirmValue('');
+      setPendingAppLockRequest(null);
+    } catch (error) {
+      console.error('Confirm PIN failed', error);
+      setConfirmError('Failed to verify PIN.');
+    } finally {
+      setConfirmBusy(false);
+    }
+  };
 
-    const handleBiometricToggle = async (value: boolean) => {
-        setPendingBiometricRequest(value);
-        setBiometricBusy(true);
-        try {
-            if (value) {
-                // Check if biometric is available
-                try {
-                    const ReactNativeBiometrics = require('react-native-biometrics');
-                    const rnBiometrics = new ReactNativeBiometrics.default();
-                    const { available } = await rnBiometrics.isSensorAvailable();
+  const handleConfirmCancel = () => {
+    setShowConfirmModal(false);
+    setConfirmValue('');
+    setConfirmError('');
+    setPendingAppLockRequest(null);
+  };
+  return (
+    <AppLayout>
+      <ScrollView
+        contentContainerStyle={[
+          styles.container,
+          { backgroundColor: colors.background },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <Pressable
+            onPress={() => navigation.goBack()}
+            style={[styles.iconButton, { borderRadius: radius.sm }]}
+          >
+            <ChevronLeft size={24} color={colors.foreground} />
+          </Pressable>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+            Privacy & Security
+          </Text>
+        </View>
 
-                    if (!available) {
-                        Alert.alert(
-                            "Biometric Not Available",
-                            "Biometric authentication is not available on this device. Please enable it in your device settings."
-                        );
-                        setPendingBiometricRequest(false);
-                        return;
-                    }
-
-                    await enableBiometric();
-                    Alert.alert("Success", "Biometric lock is now enabled.");
-                } catch (error) {
-                    console.error("Biometric enable failed", error);
-                    Alert.alert("Biometric Lock", "Unable to enable biometric lock. Please try again.");
-                    setPendingBiometricRequest(false);
-                }
-            } else {
-                await disableBiometric();
-                Alert.alert("Success", "Biometric lock has been disabled.");
-            }
-        } catch (error) {
-            console.error("Biometric toggle failed", error);
-            Alert.alert("Biometric Lock", "Unable to update biometric lock. Please try again.");
-            setPendingBiometricRequest(!value);
-        } finally {
-            setBiometricBusy(false);
-        }
-    };
-
-    const biometricSwitchValue = pendingBiometricRequest ?? isBiometricEnabled;
-
-
-
-    const handleConfirmSubmit = async () => {
-        if (confirmValue.length !== 4) {
-            setConfirmError("Enter your 4-digit PIN");
-            return;
-        }
-
-        setConfirmBusy(true);
-        setConfirmError("");
-        try {
-            const success = await unlockWithPin(confirmValue);
-            if (!success) {
-                setConfirmError("PIN did not match");
-                return;
-            }
-            await enableAppLock({ keepSessionAuthenticated: true });
-            setConfirmError("");
-            setShowConfirmModal(false);
-            setConfirmValue("");
-            setPendingAppLockRequest(null);
-        } catch (error) {
-            console.error("Confirm PIN failed", error);
-            setConfirmError("Failed to verify PIN.");
-        } finally {
-            setConfirmBusy(false);
-        }
-    };
-
-    const handleConfirmCancel = () => {
-        setShowConfirmModal(false);
-        setConfirmValue("");
-        setConfirmError("");
-        setPendingAppLockRequest(null);
-    };
-    return (
-        <AppLayout>
-            <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
-                {/* Header */}
-                <View style={styles.header}>
-                    <Pressable onPress={() => navigation.goBack()} style={[styles.iconButton, { borderRadius: radius.sm }]}>
-                        <ChevronLeft size={24} color={colors.foreground} />
-                    </Pressable>
-                    <Text style={[styles.headerTitle, { color: colors.foreground }]}>Privacy & Security</Text>
-                </View>
-
-                {/* Security Status */}
-                <View style={[styles.statusCard, { backgroundColor: colors.primary, borderRadius: radius.card }]}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-                        <View style={[styles.statusIconBg, { borderRadius: radius.card }]}>
-                            <Shield size={28} color={colors.primaryForeground} />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                            <Text style={[styles.statusTitle, { color: colors.primaryForeground }]}>Security Status</Text>
-                            <Text style={[styles.statusSubtitle, { color: colors.primaryForeground }]}>Your data is protected</Text>
-                        </View>
-                        <Text style={{ fontSize: 24 }}>🔒</Text>
-                    </View>
-                </View>
-
-                <View style={{ marginTop: 24 }}>
-                    <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Account Details</Text>
-                    {isGuest ? (
-                        <View style={[styles.guestCard, { backgroundColor: colors.muted, borderRadius: radius.card }]}>
-                            <Text style={[styles.guestCardTitle, { color: colors.foreground }]}>Guest</Text>
-                            <Text style={[styles.guestCardText, { color: colors.mutedForeground }]}>
-                                You are using the app in guest mode. Create an account to sync your data.
-                            </Text>
-                        </View>
-                    ) : (
-                        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
-                            {loadingProfile ? (
-                                <View style={{ padding: 20, alignItems: 'center' }}>
-                                    <Text style={{ color: colors.mutedForeground }}>Loading...</Text>
-                                </View>
-                            ) : (
-                                <>
-                                    <View style={styles.profileRow}>
-                                        <Text style={[styles.profileLabel, { color: colors.mutedForeground }]}>Name</Text>
-                                        <Text style={[styles.profileValue, { color: colors.foreground }]} numberOfLines={1}>
-                                            {profileData?.name || user?.name || '—'}
-                                        </Text>
-                                    </View>
-                                    <View style={[styles.divider, { backgroundColor: colors.border }]} />
-                                    <View style={styles.profileRow}>
-                                        <Text style={[styles.profileLabel, { color: colors.mutedForeground }]}>Email</Text>
-                                        <Text style={[styles.profileValue, { color: colors.foreground }]} numberOfLines={1}>
-                                            {profileData?.email || user?.email || '—'}
-                                        </Text>
-                                    </View>
-                                    <View style={[styles.divider, { backgroundColor: colors.border }]} />
-                                    <View style={styles.profileRow}>
-                                        <Text style={[styles.profileLabel, { color: colors.mutedForeground }]}>User ID</Text>
-                                        <Text style={[styles.profileValue, { color: colors.foreground }]} numberOfLines={1}>
-                                            {(() => {
-                                                const id = profileData?.id || user?.id;
-                                                if (!id) return '—';
-                                                return `${id.substring(0, 8)}...${id.substring(id.length - 8)}`;
-                                            })()}
-                                        </Text>
-                                    </View>
-                                    <View style={[styles.divider, { backgroundColor: colors.border }]} />
-                                    <View style={styles.profileRow}>
-                                        <Text style={[styles.profileLabel, { color: colors.mutedForeground }]}>Current Active Member</Text>
-                                        <View style={styles.memberInfo}>
-                                            <View style={[styles.memberDot, { backgroundColor: activeMemberColor }]} />
-                                            <Text style={[styles.profileValueCompact, { color: colors.foreground }]}>
-                                                {activeMember?.name || 'Not assigned'}
-                                            </Text>
-                                        </View>
-                                    </View>
-                                </>
-                            )}
-                        </View>
-                    )}
-                </View>
-
-                <View style={{ marginTop: 24 }}>
-                    <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Security</Text>
-                    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
-                        {securitySettings.map((item, index) => {
-                            const isAppLock = item.id === 'app';
-                            const description = isAppLock
-                                ? 'Require a PIN when opening the app'
-                                : 'Use fingerprint or face recognition to unlock';
-                            const switchValue = isAppLock ? appLockSwitchValue : biometricSwitchValue;
-                            const onToggle = isAppLock ? handleAppLockToggle : handleBiometricToggle;
-                            const isDisabled = isAppLock
-                                ? (appLockBusy || showConfirmModal || showPinModal)
-                                : (biometricBusy || isAppLockEnabled);
-
-                            return (
-                                <View key={item.id}>
-                                    <View style={styles.settingRow}>
-                                        <View style={[styles.iconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
-                                            <item.icon size={20} color={colors.mutedForeground} />
-                                        </View>
-                                        <View style={{ flex: 1 }}>
-                                            <Text style={[styles.settingLabel, { color: colors.foreground }]}>{item.label}</Text>
-                                            <Text style={[styles.settingDesc, { color: colors.mutedForeground }]}>{description}</Text>
-                                        </View>
-                                        <Switch
-                                            value={switchValue}
-                                            onValueChange={onToggle}
-                                            trackColor={{ false: colors.muted, true: colors.primary }}
-                                            disabled={isDisabled}
-                                        />
-                                    </View>
-                                    {index !== securitySettings.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
-                                </View>
-                            );
-                        })}
-                    </View>
-                </View>
-
-                <View style={{ marginTop: 24 }}>
-                    <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Access</Text>
-                    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
-                        <Pressable style={styles.accessRow} onPress={() => {
-                            if (isGuest) {
-                                setShowGuestModal(true);
-                            } else {
-                                setShowPasswordModal(true);
-                            }
-                        }}>
-                            <View style={[styles.iconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
-                                <Key size={20} color={colors.mutedForeground} />
-                            </View>
-                            <View style={{ flex: 1 }}>
-                                <Text style={[styles.settingLabel, { color: colors.foreground }]}>Change Password</Text>
-                                <Text style={[styles.settingDesc, { color: colors.mutedForeground }]}>Last changed 30 days ago</Text>
-                            </View>
-                            <ChevronRight size={20} color={colors.mutedForeground} />
-                        </Pressable>
-                        <View style={[styles.divider, { backgroundColor: colors.border }]} />
-                        <Pressable style={styles.accessRow} onPress={() => setShowPinModal(true)}>
-                            <View style={[styles.iconBox, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
-                                <Lock size={20} color={colors.mutedForeground} />
-                            </View>
-                            <View style={{ flex: 1 }}>
-                                <Text style={[styles.settingLabel, { color: colors.foreground }]}>Set PIN Code</Text>
-                                <Text style={[styles.settingDesc, { color: colors.mutedForeground }]}>4-digit PIN for quick access</Text>
-                            </View>
-                            <ChevronRight size={20} color={colors.mutedForeground} />
-                        </Pressable>
-                    </View>
-                </View>
-
-                {/* Change Password Modal */}
-                <Modal
-                    visible={showPasswordModal}
-                    transparent
-                    animationType="slide"
-                    onRequestClose={() => setShowPasswordModal(false)}
-                >
-                    <View style={styles.modalOverlay}>
-                        <View style={[styles.modalContent, { backgroundColor: colors.card, borderRadius: radius.card }]}>
-                            <View style={styles.modalHeader}>
-                                <Text style={[styles.modalTitle, { color: colors.foreground }]}>Change Password</Text>
-                                <Pressable onPress={() => setShowPasswordModal(false)}>
-                                    <Text style={{ color: colors.mutedForeground, padding: 4 }}>✕</Text>
-                                </Pressable>
-                            </View>
-
-                            <View style={{ gap: 16 }}>
-                                <View>
-                                    <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Current Password</Text>
-                                    <TextInput
-                                        style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.sm }]}
-                                        secureTextEntry
-                                        value={currentPassword}
-                                        onChangeText={setCurrentPassword}
-                                        placeholder="Enter current password"
-                                        placeholderTextColor={colors.mutedForeground}
-                                    />
-                                </View>
-                                <View>
-                                    <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>New Password</Text>
-                                    <TextInput
-                                        style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.sm }]}
-                                        secureTextEntry
-                                        value={newPassword}
-                                        onChangeText={setNewPassword}
-                                        placeholder="Enter new password"
-                                        placeholderTextColor={colors.mutedForeground}
-                                    />
-                                </View>
-                                <View>
-                                    <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Confirm New Password</Text>
-                                    <TextInput
-                                        style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.sm }]}
-                                        secureTextEntry
-                                        value={confirmPassword}
-                                        onChangeText={setConfirmPassword}
-                                        placeholder="Confirm new password"
-                                        placeholderTextColor={colors.mutedForeground}
-                                    />
-                                </View>
-
-                                <Pressable
-                                    onPress={handleSavePassword}
-                                    disabled={isUpdatingPassword}
-                                    style={[
-                                        styles.saveButton,
-                                        {
-                                            backgroundColor: colors.primary,
-                                            borderRadius: radius.sm,
-                                            opacity: isUpdatingPassword ? 0.75 : 1,
-                                        },
-                                    ]}
-                                >
-                                    <Text style={{ color: colors.primaryForeground, fontWeight: '600' }}>
-                                        {isUpdatingPassword ? "Updating…" : "Update Password"}
-                                    </Text>
-                                </Pressable>
-                            </View>
-                        </View>
-                    </View>
-                </Modal>
-
-                {/* Set PIN Modal */}
-                <Modal
-                    visible={showPinModal}
-                    transparent
-                    animationType="slide"
-                    onRequestClose={() => setShowPinModal(false)}
-                >
-                    <View style={styles.modalOverlay}>
-                        <View style={[styles.modalContent, { backgroundColor: colors.card, borderRadius: radius.card }]}>
-                            <View style={styles.modalHeader}>
-                                <Text style={[styles.modalTitle, { color: colors.foreground }]}>Set PIN Code</Text>
-                                <Pressable onPress={() => setShowPinModal(false)}>
-                                    <Text style={{ color: colors.mutedForeground, padding: 4 }}>✕</Text>
-                                </Pressable>
-                            </View>
-
-                            <View style={{ gap: 16 }}>
-                                <View>
-                                    <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Enter 4-digit PIN</Text>
-                                    <TextInput
-                                        style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.sm, letterSpacing: 8, fontSize: 20, textAlign: 'center' }]}
-                                        secureTextEntry
-                                        keyboardType="numeric"
-                                        maxLength={4}
-                                        value={pin}
-                                        onChangeText={setPin}
-                                        placeholder="••••"
-                                        placeholderTextColor={colors.mutedForeground}
-                                    />
-                                </View>
-                                <View>
-                                    <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Confirm PIN</Text>
-                                    <TextInput
-                                        style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.sm, letterSpacing: 8, fontSize: 20, textAlign: 'center' }]}
-                                        secureTextEntry
-                                        keyboardType="numeric"
-                                        maxLength={4}
-                                        value={confirmPin}
-                                        onChangeText={setConfirmPin}
-                                        placeholder="••••"
-                                        placeholderTextColor={colors.mutedForeground}
-                                    />
-                                </View>
-
-                                <Pressable
-                                    onPress={handleSavePin}
-                                    style={[styles.saveButton, { backgroundColor: colors.primary, borderRadius: radius.sm }]}
-                                >
-                                    <Text style={{ color: colors.primaryForeground, fontWeight: '600' }}>Set PIN</Text>
-                                </Pressable>
-                            </View>
-                        </View>
-                    </View>
-                </Modal>
-
-                {/* Guest Mode Modal */}
-                <Modal
-                    visible={showGuestModal}
-                    transparent
-                    animationType="fade"
-                    onRequestClose={() => setShowGuestModal(false)}
-                >
-                    <View style={styles.modalOverlay}>
-                        <View style={[styles.guestModalContent, { backgroundColor: colors.card, borderRadius: radius.card }]}>
-                            <Text style={[styles.guestModalTitle, { color: colors.foreground }]}>Guest Mode</Text>
-                            <Text style={[styles.guestModalText, { color: colors.mutedForeground }]}>
-                                You are currently using the app as a guest.
-                            </Text>
-                            <View style={styles.guestModalButtons}>
-                                <Pressable
-                                    style={[styles.guestModalButton, { borderRadius: radius.sm }]}
-                                    onPress={() => setShowGuestModal(false)}
-                                >
-                                    <Text style={[styles.guestModalButtonText, { color: colors.mutedForeground }]}>CANCEL</Text>
-                                </Pressable>
-                                <Pressable
-                                    style={[styles.guestModalButton, { borderRadius: radius.sm }]}
-                                    onPress={async () => {
-                                        setShowGuestModal(false);
-                                        try {
-                                            await logout();
-                                        } catch (error) {
-                                            console.error('Failed to sign out guest:', error);
-                                        }
-                                    }}
-                                >
-                                    <Text style={[styles.guestModalButtonText, { color: colors.primary }]}>LOGIN / SIGN UP</Text>
-                                </Pressable>
-                            </View>
-                        </View>
-                    </View>
-                </Modal>
-
-                {/* Confirm PIN Before Enabling App Lock */}
-                <Modal
-                    visible={showConfirmModal}
-                    transparent
-                    animationType="slide"
-                    onRequestClose={handleConfirmCancel}
-                >
-                    <View style={styles.modalOverlay}>
-                        <View style={[styles.modalContent, { backgroundColor: colors.card, borderRadius: radius.card }]}>
-                            <View style={styles.modalHeader}>
-                                <Text style={[styles.modalTitle, { color: colors.foreground }]}>Secure Access</Text>
-                                <Pressable onPress={handleConfirmCancel}>
-                                    <Text style={{ color: colors.mutedForeground, padding: 4 }}>Cancel</Text>
-                                </Pressable>
-                            </View>
-
-                            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>
-                                Enter your existing PIN to enable App Lock
-                            </Text>
-                            <TextInput
-                                style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground, borderRadius: radius.sm, letterSpacing: 8, fontSize: 20, textAlign: 'center' }]}
-                                secureTextEntry
-                                keyboardType="numeric"
-                                maxLength={4}
-                                value={confirmValue}
-                                onChangeText={value => setConfirmValue(value.replace(/[^0-9]/g, ''))}
-                                placeholder="••••"
-                                placeholderTextColor={colors.mutedForeground}
-                            />
-                            {confirmError ? <Text style={[styles.error, { color: colors.danger }]}>{confirmError}</Text> : null}
-                            <Pressable
-                                onPress={handleConfirmSubmit}
-                                disabled={confirmBusy}
-                                style={({ pressed }) => [
-                                    styles.saveButton,
-                                    {
-                                        backgroundColor: pressed ? `${colors.primary}cc` : colors.primary,
-                                        borderRadius: radius.sm,
-                                        opacity: confirmBusy ? 0.6 : 1,
-                                    },
-                                ]}
-                            >
-                                <Text style={{ color: colors.primaryForeground, fontWeight: '600' }}>
-                                    {confirmBusy ? 'Verifying…' : 'Confirm PIN'}
-                                </Text>
-                            </Pressable>
-                        </View>
-                    </View>
-                </Modal>
-
-                {/* Data Privacy */}
-                <View>
-                    <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Data Privacy</Text>
-                <View style={[styles.softCard, { backgroundColor: colors.muted, borderRadius: radius.card }]}>
-                    <Text style={[styles.privacyText, { color: isMidnight ? colors.mutedForeground : '#000' }]}>
-                        Your data is encrypted and stored securely. We never share your personal information with third parties.
-                    </Text>
-                    <View style={styles.tagsRow}>
-                        <View style={[styles.tag, { backgroundColor: '#dcfce7', borderRadius: radius.full }]}>
-                            <Text style={[styles.tagText, { color: '#166534' }]}>🔐 End-to-end encrypted</Text>
-                        </View>
-                    </View>
-                    <View style={styles.linkRow}>
-                        <Pressable
-                            style={[
-                                styles.linkButton,
-                                {
-                                    borderColor: isMidnight ? "#fff" : colors.primary,
-                                    backgroundColor: isMidnight ? "#0f111a" : colors.primary + '10',
-                                },
-                            ]}
-                            onPress={() => openExternalLink(TERMS_URL)}
-                        >
-                            <Text style={[styles.linkText, { color: isMidnight ? "#fff" : '#000' }]}>Terms of Use</Text>
-                        </Pressable>
-                        <Pressable
-                            style={[
-                                styles.linkButton,
-                                {
-                                    borderColor: isMidnight ? "#fff" : colors.primary,
-                                    backgroundColor: isMidnight ? "#0f111a" : colors.background,
-                                },
-                            ]}
-                            onPress={() => openExternalLink(SITE_PRIVACY_URL)}
-                        >
-                            <Text style={[styles.linkText, { color: isMidnight ? "#0faae8ff" : '#000' }]}>Privacy Policy</Text>
-                        </Pressable>
-                    </View>
-                </View>
+        {/* Security Status */}
+        <View
+          style={[
+            styles.statusCard,
+            { backgroundColor: colors.primary, borderRadius: radius.card },
+          ]}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+            <View style={[styles.statusIconBg, { borderRadius: radius.card }]}>
+              <Shield size={28} color={colors.primaryForeground} />
             </View>
+            <View style={{ flex: 1 }}>
+              <Text
+                style={[
+                  styles.statusTitle,
+                  { color: colors.primaryForeground },
+                ]}
+              >
+                Security Status
+              </Text>
+              <Text
+                style={[
+                  styles.statusSubtitle,
+                  { color: colors.primaryForeground },
+                ]}
+              >
+                Your data is protected
+              </Text>
+            </View>
+            <Text style={{ fontSize: 24 }}>🔒</Text>
+          </View>
+        </View>
 
-                {/* Danger Zone */}
-                <View style={[styles.dangerCard, { backgroundColor: colors.card, borderColor: '#fee2e2', borderRadius: radius.card }]}>
-                    <Text style={[styles.dangerTitle, { color: '#ef4444' }]}>Danger Zone</Text>
-                    <Pressable
-                        disabled={isDeletingAccount}
-                        style={({ pressed }) => [
-                            styles.deleteButton,
-                            {
-                                borderColor: '#fca5a5',
-                                backgroundColor: '#fff',
-                                borderRadius: radius.sm,
-                                opacity: isDeletingAccount ? 0.6 : pressed ? 0.8 : 1,
-                            },
-                        ]}
-                        onPress={handleDeleteAccount}
+        <View style={{ marginTop: 24 }}>
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+            Account Details
+          </Text>
+          {isGuest ? (
+            <View
+              style={[
+                styles.guestCard,
+                { backgroundColor: colors.muted, borderRadius: radius.card },
+              ]}
+            >
+              <Text
+                style={[styles.guestCardTitle, { color: colors.foreground }]}
+              >
+                Guest
+              </Text>
+              <Text
+                style={[
+                  styles.guestCardText,
+                  { color: colors.mutedForeground },
+                ]}
+              >
+                You are using the app in guest mode. Create an account to sync
+                your data.
+              </Text>
+            </View>
+          ) : (
+            <View
+              style={[
+                styles.card,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  borderRadius: radius.card,
+                },
+              ]}
+            >
+              {loadingProfile ? (
+                <View style={{ padding: 20, alignItems: 'center' }}>
+                  <Text style={{ color: colors.mutedForeground }}>
+                    Loading...
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  <View style={styles.profileRow}>
+                    <Text
+                      style={[
+                        styles.profileLabel,
+                        { color: colors.mutedForeground },
+                      ]}
                     >
-                        <Trash2 size={16} color="#ef4444" />
-                        <Text style={[styles.deleteText, { color: "#ef4444" }]}>Delete Account</Text>
-                    </Pressable>
+                      Name
+                    </Text>
+                    <Text
+                      style={[
+                        styles.profileValue,
+                        { color: colors.foreground },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {profileData?.name || user?.name || '—'}
+                    </Text>
+                  </View>
+                  <View
+                    style={[styles.divider, { backgroundColor: colors.border }]}
+                  />
+                  <View style={styles.profileRow}>
+                    <Text
+                      style={[
+                        styles.profileLabel,
+                        { color: colors.mutedForeground },
+                      ]}
+                    >
+                      Email
+                    </Text>
+                    <Text
+                      style={[
+                        styles.profileValue,
+                        { color: colors.foreground },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {profileData?.email || user?.email || '—'}
+                    </Text>
+                  </View>
+                  <View
+                    style={[styles.divider, { backgroundColor: colors.border }]}
+                  />
+                  <View style={styles.profileRow}>
+                    <Text
+                      style={[
+                        styles.profileLabel,
+                        { color: colors.mutedForeground },
+                      ]}
+                    >
+                      User ID
+                    </Text>
+                    <Text
+                      style={[
+                        styles.profileValue,
+                        { color: colors.foreground },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {(() => {
+                        const id = profileData?.id || user?.id;
+                        if (!id) return '—';
+                        return `${id.substring(0, 8)}...${id.substring(
+                          id.length - 8,
+                        )}`;
+                      })()}
+                    </Text>
+                  </View>
+                  <View
+                    style={[styles.divider, { backgroundColor: colors.border }]}
+                  />
+                  <View style={styles.profileRow}>
+                    <Text
+                      style={[
+                        styles.profileLabel,
+                        { color: colors.mutedForeground },
+                      ]}
+                    >
+                      Current Active Member
+                    </Text>
+                    <View style={styles.memberInfo}>
+                      <View
+                        style={[
+                          styles.memberDot,
+                          { backgroundColor: activeMemberColor },
+                        ]}
+                      />
+                      <Text
+                        style={[
+                          styles.profileValueCompact,
+                          { color: colors.foreground },
+                        ]}
+                      >
+                        {activeMember?.name || 'Not assigned'}
+                      </Text>
+                    </View>
+                  </View>
+                </>
+              )}
+            </View>
+          )}
+        </View>
+
+        <View style={{ marginTop: 24 }}>
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+            Security
+          </Text>
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderRadius: radius.card,
+              },
+            ]}
+          >
+            {securitySettings.map((item, index) => {
+              const isAppLock = item.id === 'app';
+              const description = isAppLock
+                ? 'Require a PIN when opening the app'
+                : 'Use fingerprint or face recognition to unlock';
+              const switchValue = isAppLock
+                ? appLockSwitchValue
+                : biometricSwitchValue;
+              const onToggle = isAppLock
+                ? handleAppLockToggle
+                : handleBiometricToggle;
+              const isDisabled = isAppLock
+                ? appLockBusy || showConfirmModal || showPinModal
+                : biometricBusy || isAppLockEnabled;
+
+              return (
+                <View key={item.id}>
+                  <View style={styles.settingRow}>
+                    <View
+                      style={[
+                        styles.iconBox,
+                        {
+                          backgroundColor: colors.muted,
+                          borderRadius: radius.md,
+                        },
+                      ]}
+                    >
+                      <item.icon size={20} color={colors.mutedForeground} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[
+                          styles.settingLabel,
+                          { color: colors.foreground },
+                        ]}
+                      >
+                        {item.label}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.settingDesc,
+                          { color: colors.mutedForeground },
+                        ]}
+                      >
+                        {description}
+                      </Text>
+                    </View>
+                    <Switch
+                      value={switchValue}
+                      onValueChange={onToggle}
+                      trackColor={{ false: colors.muted, true: colors.primary }}
+                      disabled={isDisabled}
+                    />
+                  </View>
+                  {index !== securitySettings.length - 1 && (
+                    <View
+                      style={[
+                        styles.divider,
+                        { backgroundColor: colors.border },
+                      ]}
+                    />
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={{ marginTop: 24 }}>
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+            Access
+          </Text>
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderRadius: radius.card,
+              },
+            ]}
+          >
+            <Pressable
+              style={styles.accessRow}
+              onPress={() => {
+                if (isGuest) {
+                  setShowGuestModal(true);
+                } else {
+                  setShowPasswordModal(true);
+                }
+              }}
+            >
+              <View
+                style={[
+                  styles.iconBox,
+                  { backgroundColor: colors.muted, borderRadius: radius.md },
+                ]}
+              >
+                <Key size={20} color={colors.mutedForeground} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={[styles.settingLabel, { color: colors.foreground }]}
+                >
+                  Change Password
+                </Text>
+                <Text
+                  style={[
+                    styles.settingDesc,
+                    { color: colors.mutedForeground },
+                  ]}
+                >
+                  Last changed 30 days ago
+                </Text>
+              </View>
+              <ChevronRight size={20} color={colors.mutedForeground} />
+            </Pressable>
+            <View
+              style={[styles.divider, { backgroundColor: colors.border }]}
+            />
+            <Pressable
+              style={styles.accessRow}
+              onPress={() => setShowPinModal(true)}
+            >
+              <View
+                style={[
+                  styles.iconBox,
+                  { backgroundColor: colors.muted, borderRadius: radius.md },
+                ]}
+              >
+                <Lock size={20} color={colors.mutedForeground} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={[styles.settingLabel, { color: colors.foreground }]}
+                >
+                  Set PIN Code
+                </Text>
+                <Text
+                  style={[
+                    styles.settingDesc,
+                    { color: colors.mutedForeground },
+                  ]}
+                >
+                  4-digit PIN for quick access
+                </Text>
+              </View>
+              <ChevronRight size={20} color={colors.mutedForeground} />
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Change Password Modal */}
+        <Modal
+          visible={showPasswordModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowPasswordModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View
+              style={[
+                styles.modalContent,
+                { backgroundColor: colors.card, borderRadius: radius.card },
+              ]}
+            >
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: colors.foreground }]}>
+                  Change Password
+                </Text>
+                <Pressable onPress={() => setShowPasswordModal(false)}>
+                  <Text style={{ color: colors.mutedForeground, padding: 4 }}>
+                    ✕
+                  </Text>
+                </Pressable>
+              </View>
+
+              <View style={{ gap: 16 }}>
+                <View>
+                  <Text
+                    style={[
+                      styles.inputLabel,
+                      { color: colors.mutedForeground },
+                    ]}
+                  >
+                    Current Password
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: colors.muted,
+                        color: colors.foreground,
+                        borderRadius: radius.sm,
+                      },
+                    ]}
+                    secureTextEntry
+                    value={currentPassword}
+                    onChangeText={setCurrentPassword}
+                    placeholder="Enter current password"
+                    placeholderTextColor={colors.mutedForeground}
+                  />
+                </View>
+                <View>
+                  <Text
+                    style={[
+                      styles.inputLabel,
+                      { color: colors.mutedForeground },
+                    ]}
+                  >
+                    New Password
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: colors.muted,
+                        color: colors.foreground,
+                        borderRadius: radius.sm,
+                      },
+                    ]}
+                    secureTextEntry
+                    value={newPassword}
+                    onChangeText={setNewPassword}
+                    placeholder="Enter new password"
+                    placeholderTextColor={colors.mutedForeground}
+                  />
+                </View>
+                <View>
+                  <Text
+                    style={[
+                      styles.inputLabel,
+                      { color: colors.mutedForeground },
+                    ]}
+                  >
+                    Confirm New Password
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: colors.muted,
+                        color: colors.foreground,
+                        borderRadius: radius.sm,
+                      },
+                    ]}
+                    secureTextEntry
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    placeholder="Confirm new password"
+                    placeholderTextColor={colors.mutedForeground}
+                  />
                 </View>
 
-                <View style={{ height: 40 }} />
-            </ScrollView>
-            {isDeletingAccount && (
-                <View style={styles.loadingOverlay}>
-                    <View style={styles.loadingBox}>
-                        <ActivityIndicator size="large" color="#fff" />
-                        <Text style={styles.loadingText}>Deleting account…</Text>
-                    </View>
+                <Pressable
+                  onPress={handleSavePassword}
+                  disabled={isUpdatingPassword}
+                  style={[
+                    styles.saveButton,
+                    {
+                      backgroundColor: colors.primary,
+                      borderRadius: radius.sm,
+                      opacity: isUpdatingPassword ? 0.75 : 1,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={{
+                      color: colors.primaryForeground,
+                      fontWeight: '600',
+                    }}
+                  >
+                    {isUpdatingPassword ? 'Updating…' : 'Update Password'}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Set PIN Modal */}
+        <Modal
+          visible={showPinModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowPinModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View
+              style={[
+                styles.modalContent,
+                { backgroundColor: colors.card, borderRadius: radius.card },
+              ]}
+            >
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: colors.foreground }]}>
+                  Set PIN Code
+                </Text>
+                <Pressable onPress={() => setShowPinModal(false)}>
+                  <Text style={{ color: colors.mutedForeground, padding: 4 }}>
+                    ✕
+                  </Text>
+                </Pressable>
+              </View>
+
+              <View style={{ gap: 16 }}>
+                <View>
+                  <Text
+                    style={[
+                      styles.inputLabel,
+                      { color: colors.mutedForeground },
+                    ]}
+                  >
+                    Enter 4-digit PIN
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: colors.muted,
+                        color: colors.foreground,
+                        borderRadius: radius.sm,
+                        letterSpacing: 8,
+                        fontSize: 20,
+                        textAlign: 'center',
+                      },
+                    ]}
+                    secureTextEntry
+                    keyboardType="numeric"
+                    maxLength={4}
+                    value={pin}
+                    onChangeText={setPin}
+                    placeholder="••••"
+                    placeholderTextColor={colors.mutedForeground}
+                  />
                 </View>
-            )}
-        </AppLayout>
-    );
+                <View>
+                  <Text
+                    style={[
+                      styles.inputLabel,
+                      { color: colors.mutedForeground },
+                    ]}
+                  >
+                    Confirm PIN
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: colors.muted,
+                        color: colors.foreground,
+                        borderRadius: radius.sm,
+                        letterSpacing: 8,
+                        fontSize: 20,
+                        textAlign: 'center',
+                      },
+                    ]}
+                    secureTextEntry
+                    keyboardType="numeric"
+                    maxLength={4}
+                    value={confirmPin}
+                    onChangeText={setConfirmPin}
+                    placeholder="••••"
+                    placeholderTextColor={colors.mutedForeground}
+                  />
+                </View>
+
+                <Pressable
+                  onPress={handleSavePin}
+                  style={[
+                    styles.saveButton,
+                    {
+                      backgroundColor: colors.primary,
+                      borderRadius: radius.sm,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={{
+                      color: colors.primaryForeground,
+                      fontWeight: '600',
+                    }}
+                  >
+                    Set PIN
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Guest Mode Modal */}
+        <Modal
+          visible={showGuestModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowGuestModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View
+              style={[
+                styles.guestModalContent,
+                { backgroundColor: colors.card, borderRadius: radius.card },
+              ]}
+            >
+              <Text
+                style={[styles.guestModalTitle, { color: colors.foreground }]}
+              >
+                Guest Mode
+              </Text>
+              <Text
+                style={[
+                  styles.guestModalText,
+                  { color: colors.mutedForeground },
+                ]}
+              >
+                You are currently using the app as a guest.
+              </Text>
+              <View style={styles.guestModalButtons}>
+                <Pressable
+                  style={[styles.guestModalButton, { borderRadius: radius.sm }]}
+                  onPress={() => setShowGuestModal(false)}
+                >
+                  <Text
+                    style={[
+                      styles.guestModalButtonText,
+                      { color: colors.mutedForeground },
+                    ]}
+                  >
+                    CANCEL
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.guestModalButton, { borderRadius: radius.sm }]}
+                  onPress={async () => {
+                    setShowGuestModal(false);
+                    try {
+                      await logout();
+                    } catch (error) {
+                      console.error('Failed to sign out guest:', error);
+                    }
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.guestModalButtonText,
+                      { color: colors.primary },
+                    ]}
+                  >
+                    LOGIN / SIGN UP
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Confirm PIN Before Enabling App Lock */}
+        <Modal
+          visible={showConfirmModal}
+          transparent
+          animationType="slide"
+          onRequestClose={handleConfirmCancel}
+        >
+          <View style={styles.modalOverlay}>
+            <View
+              style={[
+                styles.modalContent,
+                { backgroundColor: colors.card, borderRadius: radius.card },
+              ]}
+            >
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: colors.foreground }]}>
+                  Secure Access
+                </Text>
+                <Pressable onPress={handleConfirmCancel}>
+                  <Text style={{ color: colors.mutedForeground, padding: 4 }}>
+                    Cancel
+                  </Text>
+                </Pressable>
+              </View>
+
+              <Text
+                style={[styles.inputLabel, { color: colors.mutedForeground }]}
+              >
+                Enter your existing PIN to enable App Lock
+              </Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: colors.muted,
+                    color: colors.foreground,
+                    borderRadius: radius.sm,
+                    letterSpacing: 8,
+                    fontSize: 20,
+                    textAlign: 'center',
+                  },
+                ]}
+                secureTextEntry
+                keyboardType="numeric"
+                maxLength={4}
+                value={confirmValue}
+                onChangeText={value =>
+                  setConfirmValue(value.replace(/[^0-9]/g, ''))
+                }
+                placeholder="••••"
+                placeholderTextColor={colors.mutedForeground}
+              />
+              {confirmError ? (
+                <Text style={[styles.error, { color: colors.danger }]}>
+                  {confirmError}
+                </Text>
+              ) : null}
+              <Pressable
+                onPress={handleConfirmSubmit}
+                disabled={confirmBusy}
+                style={({ pressed }) => [
+                  styles.saveButton,
+                  {
+                    backgroundColor: pressed
+                      ? `${colors.primary}cc`
+                      : colors.primary,
+                    borderRadius: radius.sm,
+                    opacity: confirmBusy ? 0.6 : 1,
+                  },
+                ]}
+              >
+                <Text
+                  style={{ color: colors.primaryForeground, fontWeight: '600' }}
+                >
+                  {confirmBusy ? 'Verifying…' : 'Confirm PIN'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Data Privacy */}
+        <View>
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+            Data Privacy
+          </Text>
+          <View
+            style={[
+              styles.softCard,
+              { backgroundColor: colors.muted, borderRadius: radius.card },
+            ]}
+          >
+            <Text
+              style={[
+                styles.privacyText,
+                { color: isMidnight ? colors.mutedForeground : '#000' },
+              ]}
+            >
+              Your data is encrypted and stored securely. We never share your
+              personal information with third parties.
+            </Text>
+            <View style={styles.tagsRow}>
+              <View
+                style={[
+                  styles.tag,
+                  { backgroundColor: '#dcfce7', borderRadius: radius.full },
+                ]}
+              >
+                <Text style={[styles.tagText, { color: '#166534' }]}>
+                  🔐 End-to-end encrypted
+                </Text>
+              </View>
+            </View>
+            <View style={styles.linkRow}>
+              <Pressable
+                style={[
+                  styles.linkButton,
+                  {
+                    borderColor: isMidnight ? '#fff' : colors.primary,
+                    backgroundColor: isMidnight
+                      ? '#0f111a'
+                      : colors.primary + '10',
+                  },
+                ]}
+                onPress={() => openExternalLink(TERMS_URL)}
+              >
+                <Text
+                  style={[
+                    styles.linkText,
+                    { color: isMidnight ? '#fff' : '#000' },
+                  ]}
+                >
+                  Terms of Use
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.linkButton,
+                  {
+                    borderColor: isMidnight ? '#fff' : colors.primary,
+                    backgroundColor: isMidnight ? '#0f111a' : colors.background,
+                  },
+                ]}
+                onPress={() => openExternalLink(SITE_PRIVACY_URL)}
+              >
+                <Text
+                  style={[
+                    styles.linkText,
+                    { color: isMidnight ? '#0faae8ff' : '#000' },
+                  ]}
+                >
+                  Privacy Policy
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+
+        {/* Danger Zone */}
+        <View
+          style={[
+            styles.dangerCard,
+            {
+              backgroundColor: colors.card,
+              borderColor: '#fee2e2',
+              borderRadius: radius.card,
+            },
+          ]}
+        >
+          <Text style={[styles.dangerTitle, { color: '#ef4444' }]}>
+            Danger Zone
+          </Text>
+          <Pressable
+            disabled={isDeletingAccount}
+            style={({ pressed }) => [
+              styles.deleteButton,
+              {
+                borderColor: '#fca5a5',
+                backgroundColor: '#fff',
+                borderRadius: radius.sm,
+                opacity: isDeletingAccount ? 0.6 : pressed ? 0.8 : 1,
+              },
+            ]}
+            onPress={handleDeleteAccount}
+          >
+            <Trash2 size={16} color="#ef4444" />
+            <Text style={[styles.deleteText, { color: '#ef4444' }]}>
+              Delete Account
+            </Text>
+          </Pressable>
+        </View>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+      {isDeletingAccount && (
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="large" color="#fff" />
+            <Text style={styles.loadingText}>Deleting account…</Text>
+          </View>
+        </View>
+      )}
+    </AppLayout>
+  );
 };
 
 const styles = StyleSheet.create({
-    container: {
-        padding: 16,
-        paddingTop: 8,
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        marginBottom: 20,
-    },
-    iconButton: {
-        padding: 8,
-    },
-    headerTitle: {
-        fontSize: 20,
-        fontWeight: '700',
-    },
-    statusCard: {
-        padding: 16,
-        marginBottom: 24,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 4,
-    },
-    statusIconBg: {
-        width: 56,
-        height: 56,
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    statusTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        marginBottom: 2,
-    },
-    statusSubtitle: {
-        fontSize: 14,
-        opacity: 0.9,
-    },
-    sectionTitle: {
-        fontSize: 14,
-        fontWeight: '600',
-        marginBottom: 10,
-        marginTop: 4,
-    },
-    card: {
-        padding: 12,
-        marginBottom: 20,
-        borderWidth: 1,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 2,
-    },
-    settingRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        padding: 12,
-    },
-    accessRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        padding: 12,
-    },
-    iconBox: {
-        width: 40,
-        height: 40,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    settingLabel: {
-        fontSize: 15,
-        fontWeight: '500',
-        marginBottom: 2,
-    },
-    settingDesc: {
-        fontSize: 12,
-    },
-    divider: {
-        height: 1,
-        marginLeft: 64, // Align with text
-    },
-    softCard: {
-        padding: 16,
-        marginBottom: 20,
-    },
-    privacyText: {
-        fontSize: 14,
-        lineHeight: 20,
-        marginBottom: 12,
-    },
-    tagsRow: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 8,
-    },
-    tag: {
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-    },
-    tagText: {
-        fontSize: 12,
-        fontWeight: '600',
-    },
-    linkRow: {
-        flexDirection: 'row',
-        gap: 12,
-        marginTop: 16,
-    },
-    linkButton: {
-        flex: 1,
-        paddingVertical: 12,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderRadius: 12,
-    },
-    linkText: {
-        fontWeight: '600',
-    },
-    dangerCard: {
-        padding: 16,
-        marginBottom: 20,
-        borderWidth: 1,
-    },
-    dangerTitle: {
-        fontSize: 14,
-        fontWeight: '600',
-        marginBottom: 12,
-    },
-    deleteButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 12,
-        borderWidth: 1,
-        gap: 8,
-    },
-    deleteText: {
-        fontWeight: '500',
-        fontSize: 14,
-    },
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        justifyContent: 'center',
-        padding: 20,
-    },
-    modalContent: {
-        padding: 24,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-        elevation: 8,
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 24,
-    },
-    modalTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-    },
-    inputLabel: {
-        fontSize: 13,
-        fontWeight: '500',
-        marginBottom: 8,
-    },
-    input: {
-        paddingHorizontal: 12,
-        paddingVertical: 12,
-        fontSize: 16,
-    },
-    error: {
-        fontSize: 14,
-        marginTop: 8,
-        textAlign: 'center',
-    },
-    saveButton: {
-        paddingVertical: 14,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginTop: 8,
-    },
-    guestModalContent: {
-        padding: 24,
-        marginHorizontal: 20,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-        elevation: 8,
-    },
-    guestModalTitle: {
-        fontSize: 20,
-        fontWeight: '700',
-        marginBottom: 16,
-    },
-    guestModalText: {
-        fontSize: 14,
-        lineHeight: 22,
-        marginBottom: 24,
-    },
-    guestModalButtons: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-        gap: 16,
-    },
-    guestModalButton: {
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-    },
-    guestModalButtonText: {
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    guestCard: {
-        padding: 20,
-        marginBottom: 20,
-    },
-    guestCardTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        marginBottom: 8,
-    },
-    guestCardText: {
-        fontSize: 14,
-        lineHeight: 20,
-    },
-    profileRow: {
-        padding: 16,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    profileLabel: {
-        fontSize: 14,
-        fontWeight: '500',
-    },
-    profileValue: {
-        fontSize: 14,
-        fontWeight: '400',
-        flex: 1,
-        textAlign: 'right',
-        marginLeft: 16,
-    },
-    profileValueCompact: {
-        fontSize: 14,
-        fontWeight: '400',
-        marginLeft: 8,
-    },
-    memberInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'flex-end',
-    },
-    memberDot: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-        borderWidth: 1,
-        borderColor: '#fff',
-    },
-    loadingOverlay: {
-        position: 'absolute',
-        inset: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.6)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: 10,
-    },
-    loadingBox: {
-        padding: 24,
-        borderRadius: 18,
-        backgroundColor: '#0f172a',
-        alignItems: 'center',
-        gap: 12,
-        minWidth: 200,
-    },
-    loadingText: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: '600',
-    },
+  container: {
+    padding: 16,
+    paddingTop: 8,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 20,
+  },
+  iconButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  statusCard: {
+    padding: 16,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  statusIconBg: {
+    width: 56,
+    height: 56,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statusTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  statusSubtitle: {
+    fontSize: 14,
+    opacity: 0.9,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 10,
+    marginTop: 4,
+  },
+  card: {
+    padding: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 12,
+  },
+  accessRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 12,
+  },
+  iconBox: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  settingLabel: {
+    fontSize: 15,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  settingDesc: {
+    fontSize: 12,
+  },
+  divider: {
+    height: 1,
+    marginLeft: 64, // Align with text
+  },
+  softCard: {
+    padding: 16,
+    marginBottom: 20,
+  },
+  privacyText: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  tagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  tag: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  tagText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  linkRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+  },
+  linkButton: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+  },
+  linkText: {
+    fontWeight: '600',
+  },
+  dangerCard: {
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+  },
+  dangerTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderWidth: 1,
+    gap: 8,
+  },
+  deleteText: {
+    fontWeight: '500',
+    fontSize: 14,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  input: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 16,
+  },
+  error: {
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  saveButton: {
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  guestModalContent: {
+    padding: 24,
+    marginHorizontal: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  guestModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 16,
+  },
+  guestModalText: {
+    fontSize: 14,
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  guestModalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 16,
+  },
+  guestModalButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  guestModalButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  guestCard: {
+    padding: 20,
+    marginBottom: 20,
+  },
+  guestCardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  guestCardText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  profileRow: {
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  profileLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  profileValue: {
+    fontSize: 14,
+    fontWeight: '400',
+    flex: 1,
+    textAlign: 'right',
+    marginLeft: 16,
+  },
+  profileValueCompact: {
+    fontSize: 14,
+    fontWeight: '400',
+    marginLeft: 8,
+  },
+  memberInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  memberDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#fff',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    inset: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  loadingBox: {
+    padding: 24,
+    borderRadius: 18,
+    backgroundColor: '#0f172a',
+    alignItems: 'center',
+    gap: 12,
+    minWidth: 200,
+  },
+  loadingText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 });
