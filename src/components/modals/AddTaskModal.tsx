@@ -36,9 +36,10 @@ const taskIcons = ["format-list-checks", "phone", "pill", "email", "school", "wr
 
 export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSave, taskToEdit }) => {
   const colors = useThemeColors();
-  const radius = useThemeRadius();
   const { appearanceMode } = useTheme();
   const isMidnight = appearanceMode === 'midnight';
+  const accentColor = isMidnight ? colors.foreground : colors.primary;
+  const radius = useThemeRadius();
   const { members, activeMember } = useFamily();
   const { currentCountry } = useCountry();
 
@@ -134,7 +135,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
               placeholderTextColor={colors.mutedForeground}
               style={[
                 styles.nameInput,
-                { color: colors.foreground, borderBottomColor: colors.primary }
+                { color: colors.foreground, borderBottomColor: accentColor }
               ]}
               autoFocus
             />

@@ -10,7 +10,7 @@ import {
   AppState,
 } from "react-native";
 
-import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
+import { useThemeColors, useThemeRadius, useTheme } from "../../contexts/ThemeContext";
 import { AppIcon } from "../ui/AppIcon";
 import { X, Trash2, Check, Clock, Bell } from "lucide-react-native";
 import { AppNotification } from "../../services/NotificationCenter";
@@ -36,6 +36,12 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
 }) => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
+  const { appearanceMode } = useTheme();
+  const isMidnight = appearanceMode === "midnight";
+  const notificationIconColor = isMidnight ? "#0F172A" : colors.primary;
+  const notificationCardTitleColor = isMidnight ? "#0F172A" : colors.foreground;
+  const notificationCardBodyColor = isMidnight ? "#1F2937" : colors.mutedForeground;
+  const unreadChipColor = isMidnight ? colors.primaryForeground : colors.primary;
 
   const unreadCount = notifications.filter((n) => !n.read).length;
   const [exactAlarmEnabled, setExactAlarmEnabled] = useState(NotificationScheduler.isExactAlarmEnabled());
@@ -193,43 +199,17 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
               </View>
             </View>
 
-            <View style={styles.chipsRow}>
-              <View style={[styles.chip, { backgroundColor: "rgba(255,255,255,0.2)", borderRadius: radius.full }]}> 
-                <Text style={[styles.chipText, { color: colors.primaryForeground }]}>{notifications.length} total</Text>
+              <View style={styles.chipsRow}>
+                <View style={[styles.chip, { backgroundColor: "rgba(255,255,255,0.2)", borderRadius: radius.full }]}> 
+                  <Text style={[styles.chipText, { color: colors.primaryForeground }]}>{notifications.length} total</Text>
+                </View>
+                <View style={[styles.chip, { backgroundColor: colors.card, borderRadius: radius.full }]}> 
+                  <Text style={[styles.chipText, { color: unreadChipColor, fontWeight: "700" }]}>{unreadCount} unread</Text>
+                </View>
               </View>
-              <View style={[styles.chip, { backgroundColor: colors.card, borderRadius: radius.full }]}> 
-                <Text style={[styles.chipText, { color: colors.primary, fontWeight: "700" }]}>{unreadCount} unread</Text>
-              </View>
-            </View>
           </View>
 
           <View style={{ flex: 1 }}>
-            {!exactAlarmEnabled && (
-              <View style={[styles.permissionRow, { borderColor: colors.border }]}>
-                <View style={{ flex: 1, marginRight: 12 }}>
-                  <Text style={[styles.permissionTitle, { color: colors.foreground }]}>Exact alarm disabled</Text>
-                  <Text style={[styles.permissionBody, { color: colors.mutedForeground }]}>Android 13+/14+ requires Exact Alarm rights so reminders can fire on time.</Text>
-                </View>
-                <Pressable style={[styles.permissionButton, { borderRadius: radius.full, borderColor: colors.primary }]} onPress={handleEnableExactAlarm}>
-                  <Text style={[styles.permissionButtonText, { color: colors.primary }]}>Enable</Text>
-                </Pressable>
-              </View>
-            )}
-            {notificationsEnabled === false && (
-              <View style={[styles.notificationCard, { borderColor: colors.border }]}>
-                <View style={styles.notificationCardHeader}>
-                  <Bell size={20} color={colors.primary} />
-                  <Text style={[styles.notificationCardTitle, { color: colors.foreground }]}>Notifications disabled</Text>
-                </View>
-                <Text style={[styles.notificationCardBody, { color: colors.mutedForeground }]}>
-                  Enable system notifications so reminders and alerts can reach you.
-                </Text>
-                <Pressable style={[styles.notificationCardButton, { borderRadius: radius.full }]} onPress={handleEnableNotifications}>
-                  <Text style={[styles.notificationCardButtonText, { color: "#fff" }]}>Enable Notifications</Text>
-                </Pressable>
-              </View>
-            )}
-
             <SectionList
             sections={sections}
             keyExtractor={(item) => item.id}
@@ -247,6 +227,50 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
             style={styles.sectionList}
             stickySectionHeadersEnabled
             ListFooterComponent={<View style={{ height: 24 }} />}
+            ListHeaderComponent={() => {
+              const hasExactAlarmWarning = !exactAlarmEnabled;
+              const hasNotificationsWarning = notificationsEnabled === false;
+              if (!hasExactAlarmWarning && !hasNotificationsWarning) {
+                return null;
+              }
+              return (
+                <View style={{ marginBottom: 12 }}>
+                  {hasExactAlarmWarning && (
+                    <View style={[styles.permissionRow, { borderColor: colors.border }]}>
+                      <View style={{ flex: 1, marginRight: 12 }}>
+                        <Text style={[styles.permissionTitle, { color: colors.foreground }]}>Exact alarm disabled</Text>
+                        <Text style={[styles.permissionBody, { color: colors.mutedForeground }]}>
+                          Android 13+/14+ requires Exact Alarm rights so reminders can fire on time.
+                        </Text>
+                      </View>
+                      <Pressable
+                        style={[styles.permissionButton, { borderRadius: radius.full, borderColor: colors.primary }]}
+                        onPress={handleEnableExactAlarm}
+                      >
+                        <Text style={[styles.permissionButtonText, { color: colors.primary }]}>Enable</Text>
+                      </Pressable>
+                    </View>
+                  )}
+                  {hasNotificationsWarning && (
+                    <View style={[styles.notificationCard, { borderColor: colors.border }]}>
+                      <View style={styles.notificationCardHeader}>
+                        <Bell size={20} color={notificationIconColor} />
+                        <Text style={[styles.notificationCardTitle, { color: notificationCardTitleColor }]}>Notifications disabled</Text>
+                      </View>
+                      <Text style={[styles.notificationCardBody, { color: notificationCardBodyColor }]}>
+                        Enable system notifications so reminders and alerts can reach you.
+                      </Text>
+                      <Pressable
+                        style={[styles.notificationCardButton, { borderRadius: radius.full }]}
+                        onPress={handleEnableNotifications}
+                      >
+                        <Text style={[styles.notificationCardButtonText, { color: "#fff" }]}>Enable Notifications</Text>
+                      </Pressable>
+                    </View>
+                  )}
+                </View>
+              );
+            }}
           />
           </View>
 

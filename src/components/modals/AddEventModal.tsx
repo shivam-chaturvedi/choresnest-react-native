@@ -14,7 +14,7 @@ import {
   Alert,
 } from "react-native";
 import { useFamily, CalendarEvent } from "../../contexts/FamilyContext";
-import { useThemeColors } from "../../contexts/ThemeContext";
+import { useThemeColors, useTheme } from "../../contexts/ThemeContext";
 import { useCountry } from "../../contexts/CountryContext";
 import { AppIcon, AppIconName, CustomDateTimePicker } from "../ui";
 import { PROFILE_COLORS } from "../../constants/profileColors";
@@ -77,6 +77,9 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   /* Hook and State Setup */
   const { members, activeMember, events, tasks, addEvent, updateEvent, deleteEvent, addTask, updateTask, deleteTask } = useFamily();
   const colors = useThemeColors();
+  const { appearanceMode } = useTheme();
+  const isMidnight = appearanceMode === "midnight";
+  const accentColor = isMidnight ? colors.foreground : colors.primary;
   const { currentCountry } = useCountry();
 
   const getPriorityMeta = (priority: string = "medium") => {
@@ -498,7 +501,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <View style={styles.titleContainer}>
               <View style={[styles.headerIconCircle, { backgroundColor: colors.primary + "1A" }]}>
-                <AppIcon name="calendar" size={20} color={colors.primary} />
+                <AppIcon name="calendar" size={20} color={accentColor} />
               </View>
               <Text style={[styles.headerTitle, { color: colors.foreground }]}>
                 {isEditing ? (activeTab === 'task' ? "Edit Task" : "Edit Event") : (activeTab === 'task' ? "New Task" : "New Event")}
@@ -516,19 +519,19 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                 style={[styles.tabButton, activeTab === 'event' && { backgroundColor: colors.card, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 2 }]}
                 onPress={() => setActiveTab('event')}
               >
-                <Text style={[styles.tabText, { color: activeTab === 'event' ? colors.primary : colors.mutedForeground }]}>Event</Text>
+                <Text style={[styles.tabText, { color: activeTab === 'event' ? accentColor : colors.mutedForeground }]}>Event</Text>
               </Pressable>
               <Pressable
                 style={[styles.tabButton, activeTab === 'task' && { backgroundColor: colors.card, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 2 }]}
                 onPress={() => setActiveTab('task')}
               >
-                <Text style={[styles.tabText, { color: activeTab === 'task' ? colors.primary : colors.mutedForeground }]}>Task</Text>
+                <Text style={[styles.tabText, { color: activeTab === 'task' ? accentColor : colors.mutedForeground }]}>Task</Text>
               </Pressable>
               <Pressable
                 style={[styles.tabButton, activeTab === 'existing' && { backgroundColor: colors.card, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 2 }]}
                 onPress={() => setActiveTab('existing')}
               >
-                <Text style={[styles.tabText, { color: activeTab === 'existing' ? colors.primary : colors.mutedForeground }]}>Existing</Text>
+                <Text style={[styles.tabText, { color: activeTab === 'existing' ? accentColor : colors.mutedForeground }]}>Existing</Text>
               </Pressable>
             </View>
           )}
@@ -544,8 +547,8 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                     onPress={() => setActiveTab('event')}
                     style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
                   >
-                    <AppIcon name="plus" size={16} color={colors.primary} />
-                    <Text style={{ color: colors.primary, fontWeight: '500' }}>Add New</Text>
+                    <AppIcon name="plus" size={16} color={accentColor} />
+                    <Text style={{ color: accentColor, fontWeight: '500' }}>Add New</Text>
                   </Pressable>
                 </View>
 
@@ -638,8 +641,8 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                 {/* Ownership Notice */}
                 {!isOwner && eventToEdit && (
                   <View style={[styles.ownerNotice, { backgroundColor: colors.primary + "1A" }]}>
-                    <AppIcon name="info" size={16} color={colors.primary} />
-                    <Text style={[styles.ownerNoticeText, { color: colors.primary }]}>
+                    <AppIcon name="info" size={16} color={accentColor} />
+                    <Text style={[styles.ownerNoticeText, { color: accentColor }]}>
                       Only {members.find((m: any) => m.id === eventToEdit.memberId)?.name || "the owner"} can update this event
                     </Text>
                   </View>
@@ -652,7 +655,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                     {
                       color: colors.foreground,
                       borderBottomWidth: 2,
-                      borderBottomColor: colors.primary
+                      borderBottomColor: accentColor
                     }
                   ]}
                   placeholder={activeTab === 'event' ? "Event name" : "Task name"}

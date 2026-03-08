@@ -13,7 +13,7 @@ import {
     Linking,
 } from "react-native";
 import { X, Edit2, Save } from "lucide-react-native";
-import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
+import { useThemeColors, useThemeRadius, useTheme } from "../../contexts/ThemeContext";
 import { VaultDocument } from "../../contexts/FamilyContext";
 import { NotificationCenter } from "../../services/NotificationCenter";
 import { VaultStorageService } from "../../services/VaultStorageService";
@@ -75,6 +75,9 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
 }) => {
     const colors = useThemeColors();
     const radius = useThemeRadius();
+    const { appearanceMode } = useTheme();
+    const isMidnight = appearanceMode === "midnight";
+    const accentColor = isMidnight ? colors.success : colors.primary;
     const pushNotification = (title: string, detail: string, severity: "success" | "warning" | "default" = "default") => {
         NotificationCenter.addNotification({
             title,
@@ -344,23 +347,23 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                     {REMINDER_OFFSET_OPTIONS.map(offset => {
                         const selected = reminderOffsets.includes(offset);
                         return (
-                            <Pressable
-                                key={offset}
-                                onPress={() => toggleReminderOffset(offset)}
-                                style={[
-                                    styles.reminderOption,
-                                    {
-                                        borderColor: selected ? colors.primary : colors.border,
-                                        backgroundColor: selected ? colors.primary + "20" : colors.background,
-                                        borderRadius: radius.md,
-                                    },
-                                ]}
-                            >
-                                <Text style={{ color: selected ? colors.primary : colors.foreground }}>{offset}d</Text>
-                            </Pressable>
-                        );
-                    })}
-                </View>
+                                    <Pressable
+                                        key={offset}
+                                        onPress={() => toggleReminderOffset(offset)}
+                                        style={[
+                                            styles.reminderOption,
+                                            {
+                                                borderColor: selected ? accentColor : colors.border,
+                                                backgroundColor: selected ? accentColor + "20" : colors.background,
+                                                borderRadius: radius.md,
+                                            },
+                                        ]}
+                                    >
+                                        <Text style={{ color: selected ? accentColor : colors.foreground }}>{offset}d</Text>
+                                    </Pressable>
+                                );
+                            })}
+                        </View>
                 <View style={{ marginTop: 12 }}>
                     <Text style={{ color: colors.foreground, marginBottom: 6 }}>Time</Text>
                     <CustomDateTimePicker
@@ -688,7 +691,7 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                                     style={styles.editBtn}
                                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                                 >
-                                    <Edit2 size={20} color={colors.primary} />
+                                    <Edit2 size={20} color={accentColor} />
                                 </Pressable>
                             )}
                             <TouchableOpacity

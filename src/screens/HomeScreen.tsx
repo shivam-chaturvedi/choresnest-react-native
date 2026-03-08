@@ -21,7 +21,7 @@ import { useNavigation } from "@react-navigation/native";
 import { useFamily, CalendarEvent, Task } from "../contexts/FamilyContext";
 import { MealType, useMealPlan } from "../contexts/MealPlanContext";
 import { theme } from "../theme";
-import { useThemeColors } from "../contexts/ThemeContext";
+import { useThemeColors, useTheme } from "../contexts/ThemeContext";
 import { useCountry } from "../contexts/CountryContext";
 import { AddEventModal } from "../components/modals/AddEventModal";
 import { AddTaskModal } from "../components/modals/AddTaskModal";
@@ -66,7 +66,11 @@ const MEAL_TYPES: { key: MealType; label: string; icon: string }[] = [
 
 const HomeScreenContent: React.FC = () => {
   const colors = useThemeColors();
+  const { appearanceMode } = useTheme();
+  const isMidnight = appearanceMode === "midnight";
   const radius = theme.radius; // Dynamic radius
+  const accentColor = isMidnight ? colors.foreground : colors.primary;
+  const getIconColor = (base: string) => (isMidnight ? colors.foreground : base);
   const { members, activeMember, events, groceryList, setActiveMember, addGroceryItem, tasks, globalVault, memberVaults, familyName, profileId, reloadLocalData } = useFamily();
   const { isGuest, logout } = useAuth();
   const { getMealsForDay, getRecipeById } = useMealPlan();
@@ -313,7 +317,7 @@ const HomeScreenContent: React.FC = () => {
         title: "Event Today",
         detail: `${e.title} at ${e.time}`,
         tone: colors.primary + '20',
-        textColor: colors.primary,
+        textColor: isMidnight ? colors.foreground : colors.primary,
         icon: "calendar",
         time: "Today",
         read: prevRead ?? false,
@@ -420,7 +424,7 @@ const HomeScreenContent: React.FC = () => {
   const renderDetailRow = (label: string, value?: string | number | null) => (
     <View style={[styles.detailRow, { borderColor: colors.border, backgroundColor: colors.card + "10", borderRadius: radius.md }]}>
       <Text style={[styles.detailLabel, { color: colors.foreground }]}>{label}</Text>
-      <Text style={[styles.detailValue, { color: colors.primary }]} numberOfLines={2}>
+      <Text style={[styles.detailValue, { color: accentColor }]} numberOfLines={2}>
         {value ? value : "No Info Available"}
       </Text>
     </View>
@@ -435,14 +439,14 @@ const HomeScreenContent: React.FC = () => {
     <View style={styles.detailPairRow}>
       <View style={[styles.detailRowHalf, { borderColor: colors.border, backgroundColor: colors.card + "05", borderRadius: radius.md }]}>
         <Text style={[styles.detailLabel, { color: colors.foreground }]}>{leftLabel}</Text>
-        <Text style={[styles.detailValue, { color: colors.primary }]} numberOfLines={2}>
+        <Text style={[styles.detailValue, { color: accentColor }]} numberOfLines={2}>
           {leftValue ? leftValue : "No Info Available"}
         </Text>
       </View>
       {rightLabel && (
         <View style={[styles.detailRowHalf, { borderColor: colors.border, backgroundColor: colors.card + "05", borderRadius: radius.md }]}>
           <Text style={[styles.detailLabel, { color: colors.foreground }]}>{rightLabel}</Text>
-          <Text style={[styles.detailValue, { color: colors.primary }]} numberOfLines={2}>
+          <Text style={[styles.detailValue, { color: accentColor }]} numberOfLines={2}>
             {rightValue ? rightValue : "No Info Available"}
           </Text>
         </View>
@@ -464,13 +468,13 @@ const HomeScreenContent: React.FC = () => {
   };
 
   const quickActions: { label: string; iconName: AppIconName; action: () => void; color: string; bg: string }[] = [
-    { label: "Event", iconName: "calendar", action: () => setShowAddEvent(true), color: colors.info, bg: colors.info + '25' },
-    { label: "Task", iconName: "checkSquare", action: () => setShowAddTask(true), color: colors.success, bg: colors.success + '25' },
+    { label: "Event", iconName: "calendar", action: () => setShowAddEvent(true), color: getIconColor(colors.info), bg: colors.info + '25' },
+    { label: "Finance", iconName: "wallet", action: () => (navigation as any).navigate("Expenses"), color: accentColor, bg: colors.primary + '25' },
     { label: "Item", iconName: "shoppingCart", action: () => setShowAddItem(true), color: colors.warning, bg: colors.warning + '25' },
     ...(ENABLE_RECIPE_AND_MEALS ? [
-      { label: "Recipe", iconName: "utensils" as AppIconName, action: () => (navigation as any).navigate("home", { screen: "Recipes" }), color: colors.primary, bg: colors.muted }
+      { label: "Recipe", iconName: "utensils" as AppIconName, action: () => (navigation as any).navigate("home", { screen: "Recipes" }), color: accentColor, bg: colors.muted }
     ] : [
-      { label: "Vault", iconName: "lock" as AppIconName, action: () => (navigation as any).navigate("home", { screen: "Vault" }), color: colors.primary, bg: colors.muted }
+      { label: "Vault", iconName: "lock" as AppIconName, action: () => (navigation as any).navigate("home", { screen: "Vault" }), color: accentColor, bg: colors.muted }
     ])
   ];
 
@@ -523,8 +527,8 @@ const HomeScreenContent: React.FC = () => {
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={handleRefresh}
-              tintColor={colors.primary}
-              colors={[colors.primary]}
+              tintColor={accentColor}
+              colors={[accentColor]}
             />
           }
         >
@@ -587,13 +591,13 @@ const HomeScreenContent: React.FC = () => {
           <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.foreground, borderRadius: radius.card }]}>
             <View style={styles.cardHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <AppIcon name="users" size={20} color={colors.primary} style={{ marginRight: 8 }} />
+                <AppIcon name="users" size={20} color={accentColor} style={{ marginRight: 8 }} />
                 <Text style={{ fontSize: 18, fontWeight: "700", color: colors.foreground }}>{familyName}</Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Pressable onPress={() => setShowFamilyOnboarding(true)} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 4 }}>
-                  <AppIcon name="user" size={14} color={colors.primary} style={{ marginRight: 4 }} />
-                  <Text style={{ color: colors.primary, fontWeight: "600" }}>Setup</Text>
+                  <AppIcon name="user" size={14} color={accentColor} style={{ marginRight: 4 }} />
+                  <Text style={{ color: accentColor, fontWeight: "600" }}>Setup</Text>
                 </Pressable>
               </View>
             </View>
@@ -663,7 +667,7 @@ const HomeScreenContent: React.FC = () => {
                   borderWidth: 2,
                   borderStyle: 'dashed'
                 }]}>
-                  <AppIcon name="plus" size={24} color={colors.primary} />
+                  <AppIcon name="plus" size={24} color={accentColor} />
                 </View>
                 <Text style={{ fontSize: 12, fontWeight: "600", color: colors.mutedForeground }}>
                   Add
@@ -720,11 +724,11 @@ const HomeScreenContent: React.FC = () => {
           <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.foreground, borderRadius: radius.card }]}>
             <View style={styles.cardHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <AppIcon name="calendar" size={18} color={colors.primary} style={{ marginRight: 8 }} />
+                <AppIcon name="calendar" size={18} color={accentColor} style={{ marginRight: 8 }} />
                 <Text style={{ fontSize: 18, fontWeight: "700", color: colors.foreground }}>Today's Schedule</Text>
               </View>
               <Pressable onPress={() => (navigation as any).navigate('MainTabs', { screen: 'calendar' })}>
-                <Text style={[styles.linkText, { color: colors.primary }]}>View All ›</Text>
+                <Text style={[styles.linkText, { color: accentColor }]}>View All ›</Text>
               </Pressable>
             </View>
             {todaysScheduleItems.length === 0 ? (
@@ -783,11 +787,11 @@ const HomeScreenContent: React.FC = () => {
             <View style={[styles.card, styles.cardSpacing, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: colors.foreground, borderRadius: radius.card }]}>
               <View style={styles.cardHeader}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <AppIcon name="utensils" size={18} color={colors.primary} style={{ marginRight: 8 }} />
+                  <AppIcon name="utensils" size={18} color={accentColor} style={{ marginRight: 8 }} />
                   <Text style={{ fontSize: 18, fontWeight: "700", color: colors.foreground }}>Meals Today</Text>
                 </View>
                 <Pressable onPress={() => (navigation as any).navigate("MealPlan")}>
-                  <Text style={{ color: colors.primary, fontWeight: "600", fontSize: 14 }}>Meal Plan ›</Text>
+                  <Text style={{ color: accentColor, fontWeight: "600", fontSize: 14 }}>Meal Plan ›</Text>
                 </Pressable>
               </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 16 }}>
@@ -826,7 +830,7 @@ const HomeScreenContent: React.FC = () => {
                 <Text style={{ fontSize: 18, fontWeight: "700", color: colors.foreground }}>Alerts & Reminders</Text>
               </View>
               <Pressable onPress={() => setShowNotifications(true)}>
-                <Text style={{ fontSize: 12, color: colors.primary, fontWeight: "600" }}>Show all</Text>
+                <Text style={{ fontSize: 12, color: accentColor, fontWeight: "600" }}>Show all</Text>
               </Pressable>
             </View>
 
@@ -902,7 +906,7 @@ const HomeScreenContent: React.FC = () => {
                 style={{ alignSelf: "flex-start", marginTop: 8 }}
                 onPress={() => setShowNotifications(true)}
               >
-                <Text style={{ fontSize: 14, color: colors.primary }}>Show all alerts</Text>
+                <Text style={{ fontSize: 14, color: accentColor }}>Show all alerts</Text>
               </Pressable>
             )}
           </View>
@@ -914,7 +918,7 @@ const HomeScreenContent: React.FC = () => {
               onPress={() => (navigation as any).navigate("MainTabs", { screen: "lists" })}
             >
               <View style={[styles.statIconCircle, { backgroundColor: colors.info + '25' }]}>
-                <AppIcon name="shoppingCart" size={20} color={colors.info} />
+                <AppIcon name="shoppingCart" size={20} color={getIconColor(colors.info)} />
               </View>
               <Text style={{ fontSize: 16, fontWeight: "600", color: colors.foreground }}>Grocery</Text>
               <Text style={{ fontSize: 28, fontWeight: "700", color: colors.foreground, marginVertical: 4 }}>{pendingGroceries}</Text>
@@ -925,7 +929,7 @@ const HomeScreenContent: React.FC = () => {
               onPress={() => (navigation as any).navigate("Vault")}
             >
               <View style={[styles.statIconCircle, { backgroundColor: colors.primary + '25' }]}>
-                <AppIcon name="shield" size={20} color={colors.primary} />
+                <AppIcon name="shield" size={20} color={accentColor} />
               </View>
               <Text style={{ fontSize: 16, fontWeight: "600", color: colors.foreground }}>Vault</Text>
               <Text style={{ fontSize: 28, fontWeight: "700", color: colors.foreground, marginVertical: 4 }}>{documentsCount}</Text>
@@ -954,7 +958,7 @@ const HomeScreenContent: React.FC = () => {
               <View style={styles.detailModalHeader}>
                 <View style={{ flexDirection: "row", alignItems: "center", flex: 1, gap: 12 }}>
                   <View style={[styles.detailIconBox, { backgroundColor: colors.primary + "15" }]}>
-                    <Text style={[styles.detailIcon, { color: colors.primary }]}>{selectedEvent.icon || "📅"}</Text>
+                    <Text style={[styles.detailIcon, { color: accentColor }]}>{selectedEvent.icon || "📅"}</Text>
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.detailHeaderTitle, { color: colors.foreground }]}>

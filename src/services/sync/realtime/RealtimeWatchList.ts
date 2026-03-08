@@ -9,5 +9,4 @@ export const REALTIME_WATCH_TABLES = [
     'recipes',
     'collections',
     'collection_recipes',
-    'budget_category_color_mappings',
 ];

@@ -50,7 +50,7 @@ export const createThemeColors = (paletteKey: PaletteKey, mode: AppearanceMode) 
 
   const cardPalette: Record<AppearanceMode, string> = {
     light: "#FFFFFF",
-    cream: "#FCF7EE",
+    cream: "#f6f3edff",
     midnight: "#262737ff",
   };
 

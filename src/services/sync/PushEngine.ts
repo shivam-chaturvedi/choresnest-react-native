@@ -155,6 +155,32 @@ const mergeWithServer = (serverRow: any, payload: Record<string, any>): Record<s
     return { ...serverRow, ...payload };
 };
 
+const dedupeByConflictKey = (records: Record<string, any>[], conflictKey: string): Record<string, any>[] => {
+    const trimmed = conflictKey
+        .split(',')
+        .map((field) => field.trim())
+        .filter(Boolean);
+    if (trimmed.length === 0) {
+        return records;
+    }
+
+    const seen = new Map<string, Record<string, any>>();
+    records.forEach((record) => {
+        const key = trimmed.map(field => String(record[field] ?? '')).join('|');
+        const existing = seen.get(key);
+        if (!existing) {
+            seen.set(key, record);
+            return;
+        }
+        const existingVersion = coerceVersion(existing.version);
+        const nextVersion = coerceVersion(record.version);
+        if (nextVersion >= existingVersion) {
+            seen.set(key, record);
+        }
+    });
+    return Array.from(seen.values());
+};
+
 export const pushTableChanges = async ({
     table,
     remoteTable,
@@ -257,12 +283,14 @@ export const pushTableChanges = async ({
     await prepareRecords(created, 'create');
     await prepareRecords(updated, 'update');
 
+    const uniqueRecords = dedupeByConflictKey(recordsToUpsert, conflictKey);
+
     logPushDebug('Records ready to upsert', {
         table: targetTable,
-        recordsToUpsert: recordsToUpsert.length,
+        recordsToUpsert: uniqueRecords.length,
     });
 
-    const upsertChunks = chunkArray(recordsToUpsert, SYNC_UPSERT_BATCH_SIZE);
+    const upsertChunks = chunkArray(uniqueRecords, SYNC_UPSERT_BATCH_SIZE);
     for (const chunk of upsertChunks) {
         try {
             const { error } = await supabase.from(targetTable).upsert(chunk, { onConflict: conflictKey });

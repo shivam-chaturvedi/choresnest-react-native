@@ -16,7 +16,7 @@ import {
   AppIcon,
 } from "../ui/AppIcon";
 import { MemberIcon } from "../ui/MemberIcon";
-import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
+import { useThemeColors, useThemeRadius, useTheme } from "../../contexts/ThemeContext";
 import { PROFILE_COLORS } from "../../constants/profileColors";
 import { MEMBER_ICON_OPTIONS, DEFAULT_MEMBER_ICON } from "../../constants/memberIcons";
 import { useCountry } from "../../contexts/CountryContext";
@@ -48,6 +48,9 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
     const { currentCountry, setCountry } = useCountry();
     const colors = useThemeColors();
     const radius = useThemeRadius();
+    const { appearanceMode } = useTheme();
+    const isMidnight = appearanceMode === "midnight";
+    const accentColor = isMidnight ? colors.foreground : colors.primary;
 
     const [step, setStep] = useState(1);
     const [newFamilyName, setNewFamilyName] = useState(familyName || "");
@@ -251,7 +254,7 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
             <View style={[styles.container, { backgroundColor: colors.background }]}>
                 <View style={styles.header}>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <AppIcon name="users" size={24} color={colors.primary} style={{ marginRight: 8 }} />
+                        <AppIcon name="users" size={24} color={accentColor} style={{ marginRight: 8 }} />
                         <Text style={[styles.title, { color: colors.foreground }]}>Family Setup</Text>
                     </View>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -283,7 +286,7 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
                     {step === 1 && (
                         <View style={styles.stepContainer}>
                             <View style={[styles.iconCircle, { backgroundColor: colors.muted }]}>
-                                <AppIcon name="users" size={40} color={colors.primary} />
+                                <AppIcon name="users" size={40} color={accentColor} />
                             </View>
                             <Text style={[styles.stepTitle, { color: colors.foreground }]}>Name Your Family</Text>
                             <Text style={[styles.stepDesc, { color: colors.mutedForeground }]}>This will be displayed at the top of your home screen</Text>
@@ -338,7 +341,7 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
                                                     <Text style={{ color: colors.foreground, fontWeight: "600" }}>{country.name}</Text>
                                                     <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>{country.timeZone}</Text>
                                                 </View>
-                                                <Text style={{ color: colors.primary }}>{country.code}</Text>
+                                                <Text style={{ color: accentColor }}>{country.code}</Text>
                                             </Pressable>
                                         ))}
                                         {filteredCountries.length === 0 && (
@@ -395,7 +398,7 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
                                         </View>
                                         <View style={{ flexDirection: 'row', gap: 12 }}>
                                             <Pressable onPress={() => handleEditMember(index)}>
-                                                <AppIcon name="edit" size={18} color={colors.primary} />
+                                                <AppIcon name="edit" size={18} color={accentColor} />
                                             </Pressable>
                                             <Pressable onPress={() => handleDeleteMember(index)}>
                                                 <AppIcon name="trash" size={18} color={colors.danger} />
@@ -513,7 +516,7 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
 
                             <View style={[styles.reviewCard, { backgroundColor: colors.card, borderRadius: radius.card, width: '100%', padding: 16, marginBottom: 32 }]}>
                                 <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
-                                    <AppIcon name="users" size={20} color={colors.primary} style={{ marginRight: 8 }} />
+                                    <AppIcon name="users" size={20} color={accentColor} style={{ marginRight: 8 }} />
                                     <Text style={{ fontSize: 18, fontWeight: '700', color: colors.foreground }}>{newFamilyName}</Text>
                                 </View>
                                 <View style={[styles.countrySelector, { marginBottom: 16 }]}>
@@ -522,7 +525,7 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({ open, onClos
                                         <Text style={{ color: colors.foreground, fontWeight: '600' }}>{selectedCountry.name}</Text>
                                         <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>{selectedCountry.timeZone}</Text>
                                     </View>
-                                    <Text style={{ color: colors.primary }}>{selectedCountry.code}</Text>
+                                    <Text style={{ color: accentColor }}>{selectedCountry.code}</Text>
                                 </View>
                                 {localMembers.map((member, index) => (
                                     <View key={index} style={[styles.memberItem, { backgroundColor: colors.muted }]}>

@@ -39,7 +39,14 @@ export const SYNC_TABLES: TableSyncConfig[] = [
     { key: 'lists', remoteTable: 'lists', phase: 1, hasProfileId: true, addProfileId: true },
     { key: 'transactions', phase: 2 },
     { key: 'budgets', phase: 2 },
-    { key: 'budget_category_color_mappings', phase: 2, hasProfileId: true, addProfileId: true },
+    {
+        key: 'budget_category_color_mappings',
+        phase: 2,
+        hasProfileId: true,
+        addProfileId: true,
+        conflictKey: 'profile_id,category_key',
+        localOnly: true,
+    },
     { key: 'meal_plans', hasProfileId: false, phase: 2 },
     { key: 'list_items', remoteTable: 'list_items', hasProfileId: true, addProfileId: true, phase: 2 },
     // list_categories is a deprecated local-only table. It must remain in SYNC_TABLES

@@ -16,6 +16,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../components/ui/Toast";
 import { LoadingSpinner } from "../components/ui/LoadingSpinner";
 import { isValidEmail, isStrongPassword } from "../utils/validators";
+import { useTheme } from "../contexts/ThemeContext";
 
 interface AuthScreenProps {
   onAuthenticated: () => void;
@@ -48,6 +49,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const radius = theme.radius;
+  const { appearanceMode } = useTheme();
+  const isMidnight = appearanceMode === "midnight";
+  const midnightAccentColor = isMidnight ? "#FFFFFF" : theme.colors.primary;
+  const googleBorderColor = isMidnight ? "#FFFFFF" : theme.colors.border;
   const openLink = async (url: string) => {
     try {
       const supported = await Linking.canOpenURL(url);
@@ -293,12 +298,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           </View>
 
           {isLogin && (
-            <Pressable
-              style={styles.forgotButton}
-              onPress={() => onForgotPassword?.()}
-            >
-              <Text style={[styles.forgotText, { color: theme.colors.primary }]}>Forgot Password?</Text>
-            </Pressable>
+          <Pressable
+            style={styles.forgotButton}
+            onPress={() => onForgotPassword?.()}
+          >
+            <Text style={[styles.forgotText, { color: midnightAccentColor }]}>Forgot Password?</Text>
+          </Pressable>
           )}
 
           <Pressable style={[styles.primaryButton, { backgroundColor: theme.colors.primary, borderRadius: radius.lg }]} onPress={handleSubmit}>
@@ -313,14 +318,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             <View style={[styles.line, { backgroundColor: theme.colors.border }]} />
           </View>
 
-          <Pressable
-            onPress={handleGoogleSignIn}
-            style={[styles.googleButton, {
-            backgroundColor: theme.colors.card,
-            borderColor: theme.colors.border,
-            shadowColor: theme.colors.shadow,
-            borderRadius: radius.lg
-          }]}>
+            <Pressable
+              onPress={handleGoogleSignIn}
+              style={[styles.googleButton, {
+              backgroundColor: theme.colors.card,
+              borderColor: googleBorderColor,
+              shadowColor: theme.colors.shadow,
+              borderRadius: radius.lg
+            }]}>
             <View style={styles.googleIconWrapper}>
               <Image
                 source={require('../assets/images/google.png')}
@@ -328,7 +333,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 resizeMode="contain"
               />
             </View>
-            <Text style={[styles.googleButtonText, { color: theme.colors.foreground }]}>Continue with Google</Text>
+            <Text style={[styles.googleButtonText, { color: midnightAccentColor }]}>Continue with Google</Text>
           </Pressable>
 
           <View style={{ marginTop: 24, alignItems: 'center', width: '100%' }}>
@@ -369,17 +374,17 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       </View>
 
           <View style={styles.footer}>
-            <Text style={[styles.footerText, { color: theme.colors.mutedForeground }]}>
-              By continuing, you agree to our{" "}
-              <Text
-                style={[styles.linkText, { color: theme.colors.primary }]}
-                onPress={() => openLink(TERMS_URL)}
-              >
-                Terms of Service
-              </Text>{" "}
-              and{" "}
-              <Text
-                style={[styles.linkText, { color: theme.colors.primary }]}
+              <Text style={[styles.footerText, { color: theme.colors.mutedForeground }]}>
+                By continuing, you agree to our{" "}
+                <Text
+                  style={[styles.linkText, { color: midnightAccentColor }]}
+                  onPress={() => openLink(TERMS_URL)}
+                >
+                  Terms of Service
+                </Text>{" "}
+                and{" "}
+                <Text
+                  style={[styles.linkText, { color: midnightAccentColor }]}
                 onPress={() => openLink(PRIVACY_URL)}
               >
                 Privacy Policy

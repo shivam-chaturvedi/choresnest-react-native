@@ -434,6 +434,12 @@ export const SyncService = {
             console.error('Failed to determine guest mode before sync:', error);
         }
 
+        const onlineBeforeAuth = await this.isOnline();
+        if (!onlineBeforeAuth) {
+            console.log('Device offline before auth check, skipping sync early');
+            return;
+        }
+
         const {
             data: { session },
             error: authError,

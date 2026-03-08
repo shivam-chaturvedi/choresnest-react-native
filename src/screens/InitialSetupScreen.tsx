@@ -10,7 +10,7 @@ import {
     TouchableOpacity,
 } from "react-native";
 import { theme } from "../theme";
-import { useThemeColors } from "../contexts/ThemeContext";
+import { useThemeColors, useTheme } from "../contexts/ThemeContext";
 import { useFamily } from "../contexts/FamilyContext";
 import { PROFILE_COLORS } from "../constants/profileColors";
 import { AppIcon, AppIconName, isAppIconName } from "../components/ui/AppIcon";
@@ -24,6 +24,9 @@ interface InitialSetupScreenProps {
 
 export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComplete }) => {
     const colors = useThemeColors();
+    const { appearanceMode } = useTheme();
+    const isMidnight = appearanceMode === "midnight";
+    const accentColor = isMidnight ? colors.foreground : colors.primary;
     const radius = theme.radius;
     const { setFamilyName, addMember, updateMember, setActiveMember, removeMember, members, familyName } = useFamily();
 
@@ -181,8 +184,8 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
             >
                 {/* Header */}
                 <View style={styles.header}>
-                    <View style={[styles.iconCircle, { backgroundColor: colors.primary + '20', borderRadius: radius.xl }]}>
-                        <AppIcon name="users" size={32} color={colors.primary} />
+                    <View style={[styles.iconCircle, { backgroundColor: accentColor + '20', borderRadius: radius.xl }]}>
+                        <AppIcon name="users" size={32} color={accentColor} />
                     </View>
                     <Text style={[styles.title, { color: colors.foreground }]}>
                         Welcome! Let's Set Up
@@ -262,7 +265,7 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
                         This will be your main profile
                     </Text>
                     {editingMemberId && (
-                        <Text style={[styles.editingNotice, { color: colors.primary }]}>
+                        <Text style={[styles.editingNotice, { color: accentColor }]}>
                             Editing {currentEditingMember?.name || "member"} — changes will update this profile.
                         </Text>
                     )}
@@ -285,11 +288,11 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
                                 key={icon}
                                 style={[
                                     styles.emojiButton,
-                                    { backgroundColor: selectedEmoji === icon ? colors.primary + '20' : colors.muted, borderColor: selectedEmoji === icon ? colors.primary : colors.border, borderRadius: radius.md }
+                                    { backgroundColor: selectedEmoji === icon ? accentColor + '20' : colors.muted, borderColor: selectedEmoji === icon ? accentColor : colors.border, borderRadius: radius.md }
                                 ]}
                                 onPress={() => setSelectedEmoji(icon)}
                             >
-                                <AppIcon source={icon} size={28} color={selectedEmoji === icon ? colors.primary : colors.foreground} />
+                                <AppIcon source={icon} size={28} color={selectedEmoji === icon ? accentColor : colors.foreground} />
                             </TouchableOpacity>
                         ))}
                     </View>
@@ -319,7 +322,7 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
                     {/* Preview */}
                     <View style={[styles.preview, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
                         <View style={[styles.previewAvatar, { backgroundColor: selectedColor.hex, borderRadius: radius.md }]}>
-                            <MemberIcon symbol={selectedEmoji} size={32} color={colors.primary} />
+                            <MemberIcon symbol={selectedEmoji} size={32} color={accentColor} />
                         </View>
                         <Text style={[styles.previewName, { color: colors.foreground }]}>
                             {memberName || "Your Name"}

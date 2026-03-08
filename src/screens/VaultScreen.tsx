@@ -15,7 +15,7 @@ import { useFamily } from "../contexts/FamilyContext";
 import { useAuth } from "../contexts/AuthContext";
 import { useFinance } from "../contexts/FinanceContext";
 import type { VaultDocument } from "../contexts/FamilyContext";
-import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
+import { useThemeColors, useThemeRadius, useTheme } from '../contexts/ThemeContext';
 import { useSidebar } from "../contexts/SidebarContext";
 import { useToast } from "../components/ui/Toast";
 import { useCountry } from "../contexts/CountryContext";
@@ -61,6 +61,9 @@ export const VaultScreen: React.FC = () => {
   const { addTransaction, categoryIcons } = useFinance(); // For syncing expenses
   const colors = useThemeColors();
   const radius = useThemeRadius();
+  const { appearanceMode } = useTheme();
+  const isMidnight = appearanceMode === 'midnight';
+  const accentActionColor = isMidnight ? colors.success : colors.primary;
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -832,7 +835,7 @@ export const VaultScreen: React.FC = () => {
               style={[styles.clearFiltersButton, { borderColor: colors.border, backgroundColor: colors.background }]}
               onPress={clearFilters}
             >
-              <Text style={[styles.clearFiltersButtonText, { color: colors.primary }]}>Clear all filters</Text>
+              <Text style={[styles.clearFiltersButtonText, { color: accentActionColor }]}>Clear all filters</Text>
             </Pressable>
           </View>
         )}
@@ -924,7 +927,7 @@ export const VaultScreen: React.FC = () => {
               <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Alerts & Reminders</Text>
             </View>
             <Pressable onPress={() => setShowNotifications(true)}>
-              <Text style={[styles.viewAll, { color: colors.primary }]}>View All</Text>
+            <Text style={[styles.viewAll, { color: accentActionColor }]}>View All</Text>
             </Pressable>
           </View>
 
@@ -987,8 +990,8 @@ export const VaultScreen: React.FC = () => {
               },
             ]}
           >
-            <Text style={[styles.seeAllText, { color: colors.primary }]}>See All</Text>
-            <AppIcon name="arrowRight" size={14} color={colors.primary} style={{ marginLeft: 6 }} />
+            <Text style={[styles.seeAllText, { color: accentActionColor }]}>See All</Text>
+            <AppIcon name="arrowRight" size={14} color={accentActionColor} style={{ marginLeft: 6 }} />
           </Pressable>
         </View>
 
@@ -1139,7 +1142,7 @@ export const VaultScreen: React.FC = () => {
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 activeOpacity={0.7}
               >
-                <Filter size={20} color={colors.primary} />
+                <Filter size={20} color={accentActionColor} />
                 {hasActiveFilters && <View style={[styles.filterDot, { backgroundColor: colors.success }]} />}
               </TouchableOpacity>
             </View>

@@ -275,10 +275,10 @@ export const DateTimePicker: React.FC<SimpleDatePickerProps> = ({
                                 {/* ── CANCEL / OK buttons ── */}
                                 <View style={styles.actions}>
                                     <Pressable onPress={handleCancel} style={styles.actionBtn}>
-                                        <Text style={[styles.actionText, { color: colors.primary }]}>CANCEL</Text>
+                                        <Text style={[styles.actionText, { color: colors.foreground }]}>CANCEL</Text>
                                     </Pressable>
                                     <Pressable onPress={handleOk} style={styles.actionBtn}>
-                                        <Text style={[styles.actionText, { color: colors.primary }]}>OK</Text>
+                                        <Text style={[styles.actionText, { color: colors.success }]}>OK</Text>
                                     </Pressable>
                                 </View>
 

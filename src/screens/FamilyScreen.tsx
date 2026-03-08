@@ -9,7 +9,7 @@ import {
 import { AppLayout } from "../components/layout";
 import { useFamily, FamilyMember } from "../contexts/FamilyContext";
 import { theme } from "../theme";
-import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
+import { useThemeColors, useThemeRadius, useTheme } from '../contexts/ThemeContext';
 import { useSidebar } from "../contexts/SidebarContext";
 import {
   Users,
@@ -32,6 +32,9 @@ export const FamilyScreen: React.FC = () => {
   const { openSidebar } = useSidebar();
   const colors = useThemeColors();
   const radius = useThemeRadius();
+  const { appearanceMode } = useTheme();
+  const isMidnight = appearanceMode === 'midnight';
+  const accentColor = isMidnight ? colors.foreground : colors.primary;
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [selectedMember, setSelectedMember] = useState<FamilyMember | null>(null);
   const [showMemberModal, setShowMemberModal] = useState(false);

@@ -65,6 +65,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   const colors = useThemeColors();
   const { appearanceMode } = useTheme();
   const isMidnight = appearanceMode === "midnight";
+  const accentColor = isMidnight ? colors.foreground : colors.primary;
+  const activeProfileTextColor = isMidnight ? "#fff" : colors.primary;
   const { width } = useWindowDimensions();
   const sidebarWidth = Math.min(width * 0.85, 360);
   const [mounted, setMounted] = useState(open);
@@ -411,11 +413,19 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                           <MemberIcon
                             symbol={member.symbol}
                             size={24}
-                            color={member.isActive ? theme.colors.primary : '#050505'}
+                            color={member.isActive ? accentColor : '#050505'}
                           />
                         </View>
                         <View style={styles.profileNameSection}>
-                          <Text style={[styles.profileText, member.isActive && styles.profileTextActive]} numberOfLines={1}>
+                          <Text
+                            style={[
+                              styles.profileText,
+                              { color: colors.foreground },
+                              member.isActive && { color: activeProfileTextColor },
+                              member.isActive && styles.profileTextActive,
+                            ]}
+                            numberOfLines={1}
+                          >
                             {member.name}
                           </Text>
                           <View
@@ -456,12 +466,12 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                     },
                   ]}
                 >
-                      <View style={[styles.userCardIcon, { backgroundColor: theme.colors.primary }]}>
-                        <MemberIcon symbol={activeMember?.symbol || DEFAULT_MEMBER_ICON} size={20} color="#fff" />
+                  <View style={[styles.userCardIcon, { backgroundColor: theme.colors.primary }]}>
+                    <MemberIcon symbol={activeMember?.symbol || DEFAULT_MEMBER_ICON} size={20} color="#fff" />
                   </View>
                   <View style={styles.userCardText}>
-                    <Text style={styles.userCardTitle}>{activeMember?.name || familyName || 'Family'}</Text>
-                    <Text style={styles.userCardSubtitle}>{user?.email || 'Logged in user'}</Text>
+                    <Text style={[styles.userCardTitle, { color: colors.foreground }]}>{activeMember?.name || familyName || 'Family'}</Text>
+                    <Text style={[styles.userCardSubtitle, { color: colors.mutedForeground }]}>{user?.email || 'Logged in user'}</Text>
                   </View>
                   <Pressable
                     style={[
@@ -470,7 +480,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                     ]}
                     onPress={() => handleNavigate('Privacy')}
                   >
-                  <Text style={[styles.userCardActionText, { color: theme.colors.primary }]}>Account Details</Text>
+                    <Text style={[styles.userCardActionText, { color: isMidnight ? "#0F172A" : accentColor }]}>Account Details</Text>
                   </Pressable>
                 </View>
               </View>
@@ -519,36 +529,41 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                 </View>
               </View>
             )}
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Quick Access</Text>
-              <View style={{ gap: 4 }}>
-                {shortcuts.map((item) => (
-                  <Pressable
-                    key={item.route}
-                    style={styles.linkRow}
-                    onPress={() => handleNavigate(item.route)}
-                  >
-                    <item.icon size={20} color={theme.colors.foreground} style={styles.linkIcon} />
-                    <Text style={styles.linkText}>{item.label}</Text>
-                    <ChevronRight size={16} color={theme.colors.mutedForeground} />
-                  </Pressable>
-                ))}
-              </View>
-            </View>
+                <View style={styles.section}>
+                  <Text style={[styles.sectionLabel, { color: isMidnight ? colors.foreground : colors.mutedForeground }]}>Quick Access</Text>
+                  <View style={{ gap: 4 }}>
+                    {shortcuts.map((item) => (
+                      <Pressable
+                        key={item.route}
+                        style={styles.linkRow}
+                        onPress={() => handleNavigate(item.route)}
+                      >
+                    <item.icon size={20} color={colors.foreground} style={styles.linkIcon} />
+                    <Text style={[styles.linkText, { color: isMidnight ? colors.foreground : colors.foreground }]}>
+                      {item.label}
+                    </Text>
+                    <ChevronRight size={16} color={colors.mutedForeground} />
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
 
             <View style={styles.separator} />
 
             {/* Bottom Links */}
             <View style={styles.section}>
-              <View style={{ gap: 4 }}>
+                <View style={{ gap: 4 }}>
                 {bottomLinks.map((item) => (
                   <Pressable
                     key={item.route}
                     style={styles.linkRow}
                     onPress={() => handleNavigate(item.route)}
                   >
-                    <item.icon size={20} color={theme.colors.mutedForeground} style={styles.linkIcon} />
-                    <Text style={[styles.linkText, { color: theme.colors.mutedForeground }]}>{item.label}</Text>
+                    <item.icon size={20} color={colors.mutedForeground} style={styles.linkIcon} />
+                    <Text style={[
+                      styles.linkText,
+                      { color: isMidnight ? colors.mutedForeground : colors.mutedForeground },
+                    ]}>{item.label}</Text>
                   </Pressable>
                 ))}
               </View>
@@ -778,10 +793,8 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     fontWeight: '500',
-    color: theme.colors.foreground,
   },
   profileTextActive: {
-    color: theme.colors.primary,
     fontWeight: '600',
   },
   memberColorBadge: {

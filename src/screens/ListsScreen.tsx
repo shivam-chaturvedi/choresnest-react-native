@@ -161,7 +161,8 @@ const GroceryRow = React.memo<GroceryRowProps>(({
 const ListsScreenContent: React.FC = () => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
-  const { currentPalette } = useTheme();
+  const { currentPalette, appearanceMode } = useTheme();
+  const isMidnight = appearanceMode === 'midnight';
   const route = useRoute<RouteProp<{ params: { addItems?: any[] } }, 'params'>>();
   const { groceryList, addGroceryItem, toggleGroceryItem, removeGroceryItem, activeMember, members } = useFamily();
   const { generateGroceryList } = useMealPlan();
@@ -182,6 +183,7 @@ const ListsScreenContent: React.FC = () => {
   const [mealPlanItems, setMealPlanItems] = useState<ReturnType<typeof generateGroceryList>>([]);
 
   const filterAccentColor = useMemo(() => {
+    if (isMidnight) return colors.foreground;
     switch (currentPalette) {
       case "amber":
         return "#B45309";
@@ -190,7 +192,8 @@ const ListsScreenContent: React.FC = () => {
       default:
         return "#1E40AF";
     }
-  }, [currentPalette]);
+  }, [currentPalette, colors.foreground, isMidnight]);
+  const primaryIconColor = isMidnight ? colors.foreground : colors.primary;
 
   // Purchase history filters
   const [historyCategoryFilter, setHistoryCategoryFilter] = useState<string | null>(null);
@@ -737,7 +740,7 @@ const ListsScreenContent: React.FC = () => {
                   <View style={[styles.historyFilterCard, { backgroundColor: colors.card, borderRadius: radius.lg, borderColor: colors.border, borderWidth: 1, marginBottom: 20 }]}>
                     <View style={styles.filterSectionHeader}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <AppIcon name="filter" size={16} color={colors.primary} />
+                        <AppIcon name="filter" size={16} color={primaryIconColor} />
                         <Text style={[styles.filterSectionTitle, { color: colors.foreground }]}>Filter History</Text>
                       </View>
                       {(historyCategoryFilter || historyDate || historyTime) && (
@@ -894,7 +897,7 @@ const ListsScreenContent: React.FC = () => {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContainer, { backgroundColor: colors.card, shadowColor: colors.foreground, borderRadius: radius.card }]}>
             <View style={styles.modalHeader}>
-              <AppIcon name="calendar" size={24} color={colors.primary} />
+              <AppIcon name="calendar" size={24} color={primaryIconColor} />
               <Text style={[styles.modalTitle, { color: colors.foreground }]}>Import from Meal Plan</Text>
               <Pressable onPress={() => setShowImportModal(false)} style={styles.closeButton}>
                 <AppIcon name="x" size={24} color={colors.mutedForeground} />

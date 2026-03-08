@@ -17,7 +17,7 @@ import {
 } from "react-native";
 import { useNavigation, NavigationProp } from "@react-navigation/native";
 import { AppLayout } from "../components/layout";
-import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
+import { useThemeColors, useThemeRadius, useTheme } from "../contexts/ThemeContext";
 import { useSidebar } from "../contexts/SidebarContext";
 import { AppIcon, AppIconName } from "../components/ui/AppIcon";
 import { useFamily, FamilyMember } from "../contexts/FamilyContext";
@@ -51,6 +51,9 @@ interface MenuSection {
 const MoreScreenContent: React.FC = () => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
+  const { appearanceMode } = useTheme();
+  const isMidnight = appearanceMode === 'midnight';
+  const primaryIconColor = isMidnight ? colors.foreground : colors.primary;
   const navigation = useNavigation<NavigationProp<Record<string, undefined>>>();
   const { openSidebar } = useSidebar();
   const { logout, isGuest } = useAuth();
@@ -127,7 +130,7 @@ const MoreScreenContent: React.FC = () => {
           description: "Meal planning & recipes",
           icon: "utensils" as AppIconName,
           color: colors.primary + '25',
-          iconColor: colors.primary,
+          iconColor: primaryIconColor,
           route: "Recipes"
         }] : []),
         {
@@ -159,7 +162,7 @@ const MoreScreenContent: React.FC = () => {
           description: "Track assignments & rotations",
           icon: "checkSquare",
           color: colors.primary + '25',
-          iconColor: colors.primary,
+          iconColor: primaryIconColor,
           route: "Tasks"
         },
         {
@@ -167,7 +170,7 @@ const MoreScreenContent: React.FC = () => {
           description: "Secure Personal Storage",
           icon: "lock",
           color: colors.primary + '25',
-          iconColor: colors.primary,
+          iconColor: primaryIconColor,
           route: "Vault"
         },
         {
@@ -205,7 +208,7 @@ const MoreScreenContent: React.FC = () => {
           description: "Light / Cream mode",
           icon: "palette",
           color: colors.primary + '25',
-          iconColor: colors.primary,
+          iconColor: primaryIconColor,
           route: "Theme"
         },
         {
@@ -213,7 +216,7 @@ const MoreScreenContent: React.FC = () => {
           description: "Country, currency & time zone",
           icon: "globe",
           color: colors.info + '25',
-          iconColor: colors.info,
+          iconColor: isMidnight ? colors.foreground : colors.info,
           route: "Settings"
         },
         {
@@ -221,7 +224,7 @@ const MoreScreenContent: React.FC = () => {
           description: "FAQ & Feature Guide",
           icon: "help",
           color: colors.info + '25',
-          iconColor: colors.info,
+          iconColor: isMidnight ? colors.foreground : colors.info,
           route: "Help"
         },
       ],
@@ -234,7 +237,7 @@ const MoreScreenContent: React.FC = () => {
           description: "Email our support team",
           icon: "mail",
           color: colors.primary + '15',
-          iconColor: colors.primary,
+          iconColor: primaryIconColor,
           route: "Contact",
           action: () => handleEmail(contactSubject, contactMessage),
         },
@@ -258,7 +261,7 @@ const MoreScreenContent: React.FC = () => {
           description: "Database visualization & logs",
           icon: "terminal" as AppIconName,
           color: colors.primary + '25',
-          iconColor: colors.primary,
+          iconColor: primaryIconColor,
           route: "Debug"
         }
       ]

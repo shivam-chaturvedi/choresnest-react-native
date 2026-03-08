@@ -283,6 +283,17 @@ const AppNavigatorInner = () => {
           // the user has already been through setup.
           console.log('AppNavigator: Local onboarding not found. Checking Supabase for returning user...');
           try {
+            const netState = await NetInfo.fetch();
+            if (!(netState.isConnected ?? false)) {
+              console.log('AppNavigator: Offline — skipping remote onboarding check');
+              if (cancelled) return;
+              setHasLocalOnboarding(false);
+              return;
+            }
+          } catch (netErr) {
+            console.warn('AppNavigator: Failed to read network status before onboarding check:', netErr);
+          }
+          try {
             const remoteCheckPromise = supabase
               .from('settings')
               .select('id')

@@ -115,12 +115,27 @@ export const setCategoryColor = async (profileId: string, categoryKey: string, c
     const allRecords = await collection.query(Q.where('profile_id', profileId)).fetch();
     const matches = allRecords.filter(record => record.categoryKey === normalizedKey);
     const conflict = allRecords.find(record => record.colorHex === colorHex && record.categoryKey !== normalizedKey);
-    if (conflict) {
-        throw new Error('Color is already assigned to another category');
-    }
+
+    const usedColors = new Set<string>();
+    const usageCounts: Record<string, number> = {};
+    allRecords.forEach(record => {
+        usedColors.add(record.colorHex);
+        usageCounts[record.colorHex] = (usageCounts[record.colorHex] ?? 0) + 1;
+    });
 
     const now = Date.now();
     await database.write(async () => {
+        if (conflict && conflict !== matches[0]) {
+            const availableColors = new Set(usedColors);
+            availableColors.delete(colorHex);
+            const fallbackColor = pickDefaultColor(availableColors, usageCounts);
+            await conflict.update(record => {
+                record.colorHex = fallbackColor;
+                record.updatedAt = now;
+                record.version = record.version + 1;
+            });
+        }
+
         if (matches.length > 0) {
             await matches[0].update(record => {
                 record.colorHex = colorHex;

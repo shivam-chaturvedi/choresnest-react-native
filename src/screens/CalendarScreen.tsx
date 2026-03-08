@@ -15,7 +15,7 @@ import { AppLayout } from "../components/layout/AppLayout";
 import { AddEventModal } from "../components/modals/AddEventModal";
 import { GlobalSearch } from "../components/search/GlobalSearch";
 import { useFamily, CalendarEvent, Task } from "../contexts/FamilyContext";
-import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
+import { useThemeColors, useThemeRadius, useTheme } from "../contexts/ThemeContext";
 import { AppIcon } from "../components/ui/AppIcon";
 import { MemberIcon } from "../components/ui/MemberIcon";
 import { PROFILE_COLORS } from "../constants/profileColors";
@@ -451,6 +451,10 @@ const CalendarScreenContent: React.FC = () => {
   const { openSidebar } = useSidebar();
   const colors = useThemeColors();
   const radius = useThemeRadius();
+  const { appearanceMode } = useTheme();
+  const isMidnight = appearanceMode === "midnight";
+  const accentColor = isMidnight ? colors.foreground : colors.primary;
+  const accentIconColor = (fallback: string) => (isMidnight ? colors.foreground : fallback);
   const { currentCountry } = useCountry();
   const timeZone = safeTimeZone(currentCountry.timeZone);
   const weekOptions = useMemo(
@@ -896,7 +900,7 @@ const CalendarScreenContent: React.FC = () => {
                 { color: colors.foreground },
                 !isCurrentMonth && { color: colors.mutedForeground },
                 isSelected && { color: "#fff", fontWeight: "700" },
-                isToday && !isSelected && { color: colors.primary, fontWeight: "700" }
+                isToday && !isSelected && { color: accentColor, fontWeight: "700" }
               ]}>
                 {dayLabel}
               </Text>
@@ -904,7 +908,7 @@ const CalendarScreenContent: React.FC = () => {
               <View style={styles.eventDotRx}>
                 {dayEvents.slice(0, 3).map((e, idx) => {
                   // O(1) look-up using the pre-built map instead of two nested Array.find() calls
-                  const dotColor = memberColorMap.get(e.memberId) || colors.primary;
+                  const dotColor = memberColorMap.get(e.memberId) || accentColor;
 
                   return (
                     <Pressable
@@ -1010,7 +1014,7 @@ const CalendarScreenContent: React.FC = () => {
               <Text style={[styles.dayHeaderNumber, { color: colors.foreground }]}>{formatZoned(selectedDate, "d")}</Text>
               <View>
                 <Text style={[styles.dayHeaderMonth, { color: colors.foreground }]}>{formatZoned(selectedDate, "MMMM yyyy")}</Text>
-                <Text style={[styles.dayHeaderWeekday, { color: colors.primary }]}>{formatZoned(selectedDate, "EEEE")}</Text>
+                <Text style={[styles.dayHeaderWeekday, { color: accentColor }]}>{formatZoned(selectedDate, "EEEE")}</Text>
               </View>
             </View>
           )}
@@ -1372,12 +1376,17 @@ const CalendarScreenContent: React.FC = () => {
                 style={[
                   styles.segmentBtn,
                   { borderRadius: radius.sm },
-                  activeView === view && [styles.segmentBtnActive, { backgroundColor: "#fff" }]
+                  activeView === view && [
+                    styles.segmentBtnActive,
+                    { backgroundColor: isMidnight ? colors.primary : "#fff" },
+                  ]
                 ]}
               >
                 <Text style={[
                   styles.segmentText,
-                  activeView === view ? { color: colors.primary } : { color: "rgba(255,255,255,0.8)" }
+                  activeView === view
+                    ? { color: isMidnight ? colors.primaryForeground : colors.primary }
+                    : { color: "rgba(255,255,255,0.8)" }
                 ]}>{view}</Text>
               </Pressable>
             ))}
@@ -1430,7 +1439,7 @@ const CalendarScreenContent: React.FC = () => {
               setSelectedDate(now);
               requestAnimationFrame(() => scrollToCurrentTime(now));
             }} style={[styles.todayBtn, { backgroundColor: colors.primary + '15', borderRadius: radius.sm }]}>
-              <Text style={[styles.todayText, { color: colors.primary }]}>Today</Text>
+              <Text style={[styles.todayText, { color: accentColor }]}>Today</Text>
             </Pressable>
             <Pressable onPress={() => navigateDate(1)} style={[styles.navArrow, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.sm }]}>
               <AppIcon name="chevronRight" size={20} color={colors.foreground} />
