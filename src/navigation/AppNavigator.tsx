@@ -212,8 +212,7 @@ const AppNavigatorInner = () => {
         }
 
         console.log(
-          `Triggering ${
-            readOnly ? 'read-only' : 'full'
+          `Triggering ${readOnly ? 'read-only' : 'full'
           } sync from AppNavigator`,
         );
         await SyncService.sync(readOnly);
@@ -605,66 +604,74 @@ const AppNavigatorInner = () => {
   return (
     <>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {isAuthenticated ? (
-          <>
-            {isPasswordRecoveryFlow ? (
-              <Stack.Screen
-                name="ResetPassword"
-                component={ResetPasswordScreen}
-              />
-            ) : shouldShowInitialSetup ? (
-              <Stack.Screen name="InitialSetup">
-                {() => (
-                  <InitialSetupScreen
-                    onComplete={async () => {
-                      // Refresh member check
-                      const membersCollection = getDatabase().get('members');
-                      const members = await membersCollection.query().fetch();
-                      setHasMembersInDB(members.length > 0);
-                      setLocalOnboardingLoaded(true);
-                    }}
-                  />
-                )}
-              </Stack.Screen>
-            ) : (
-              <Stack.Screen name="MainTabs" component={TabNavigator} />
-            )}
-          </>
+        {isPasswordRecoveryFlow ? (
+          <Stack.Screen
+            name="ResetPassword"
+            component={ResetPasswordScreen}
+          />
+        ) : isAuthenticated ? (
+          shouldShowInitialSetup ? (
+            <Stack.Screen name="InitialSetup">
+              {() => (
+                <InitialSetupScreen
+                  onComplete={async () => {
+                    const membersCollection = getDatabase().get('members');
+                    const members = await membersCollection.query().fetch();
+
+                    setHasMembersInDB(members.length > 0);
+                    setLocalOnboardingLoaded(true);
+                  }}
+                />
+              )}
+            </Stack.Screen>
+          ) : (
+            <Stack.Screen
+              name="MainTabs"
+              component={TabNavigator}
+            />
+          )
         ) : (
           <>
-            {!hasCompletedOnboarding ? (
+            {!hasCompletedOnboarding && (
               <Stack.Screen name="Onboarding">
-                {({ navigation }: any) => (
+                {() => (
                   <OnboardingScreen
                     onSkip={() => {
                       completeOnboarding();
-                      // No navigation.replace needed, state change triggers re-render
                     }}
                     onComplete={() => {
                       completeOnboarding();
-                      // No navigation.replace needed
                     }}
                   />
                 )}
               </Stack.Screen>
-            ) : null}
+            )}
+
             <Stack.Screen name="Auth">
               {({ navigation }: any) => (
                 <AuthScreen
                   onAuthenticated={() => {
-                    // No navigation needed, state change to isAuthenticated=true will switch stacks
+                    // AuthContext state change will re-render navigator
                   }}
-                  onForgotPassword={() => navigation.navigate('ForgotPassword')}
-                  onPrivacy={() => navigation.navigate('Privacy')}
+                  onForgotPassword={() =>
+                    navigation.navigate('ForgotPassword')
+                  }
+                  onPrivacy={() =>
+                    navigation.navigate('Privacy')
+                  }
                 />
               )}
             </Stack.Screen>
-            {/* Pass navigation correctly */}
+
             <Stack.Screen
               name="ForgotPassword"
               component={ForgotPasswordScreen}
             />
-            <Stack.Screen name="Privacy" component={PrivacyScreen} />
+ 
+            <Stack.Screen
+              name="Privacy"
+              component={PrivacyScreen}
+            />
           </>
         )}
       </Stack.Navigator>

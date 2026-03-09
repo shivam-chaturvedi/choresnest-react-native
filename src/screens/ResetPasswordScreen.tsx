@@ -12,7 +12,7 @@ import { LoadingSpinner } from "../components/ui/LoadingSpinner";
 import { theme } from "../theme";
 import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
 import { AppIcon } from "../components/ui/AppIcon";
-import { supabase } from "../config/supabase";
+import { supabase, supabaseUrl, supabaseKey } from "../config/supabase";
 import { getHumanReadableMessage } from "../utils/SupabaseErrorHandler";
 import { isStrongPassword } from "../utils/validators";
 import { useAuth } from "../contexts/AuthContext";
@@ -21,7 +21,8 @@ export const ResetPasswordScreen: React.FC = () => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
   const { showToast } = useToast();
-  const { logout, completePasswordRecoveryFlow } = useAuth();
+  const { logout, completePasswordRecoveryFlow, passwordRecoveryAccessToken } =
+    useAuth();
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -48,9 +49,79 @@ export const ResetPasswordScreen: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.auth.updateUser({ password });
-      if (error) {
-        const message = getHumanReadableMessage(error, "password_reset");
+      let updateError: any = null;
+
+      // If we have a recovery access token from the deep link, use the REST API
+      // directly to update the user's password. This avoids Supabase JS'
+      // requirement for a full session during password recovery flows.
+      if (passwordRecoveryAccessToken && supabaseUrl && supabaseKey) {
+        try {
+          const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+            // Supabase Auth expects a PUT here to update the user
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              apikey: supabaseKey,
+              Authorization: `Bearer ${passwordRecoveryAccessToken}`,
+            },
+            body: JSON.stringify({ password }),
+          });
+
+          if (!response.ok) {
+            const body = await response.json().catch(() => null);
+            console.log("ResetPasswordScreen: REST password update failed", {
+              status: response.status,
+              body,
+            });
+
+            const errorCode =
+              (body && (body.error_code || body.code)) || undefined;
+            const raw =
+              (body &&
+                (body.message ||
+                  body.error_description ||
+                  body.error ||
+                  body.msg)) ||
+              "Password reset failed.";
+            const lower = raw.toLowerCase();
+
+            const isExpiredOrMissingSession =
+              response.status === 401 ||
+              (response.status === 403 &&
+                (errorCode === "session_not_found" ||
+                  lower.includes("session") &&
+                    (lower.includes("does not exist") ||
+                      lower.includes("not found")))) ||
+              lower.includes("jwt expired") ||
+              lower.includes("token expired") ||
+              lower.includes("expired token") ||
+              lower.includes("auth session missing");
+
+            const friendly = isExpiredOrMissingSession
+              ? "This reset link has expired or has already been used. Please request a new password reset email from the app."
+              : raw;
+
+            const enrichedError: any = new Error(friendly);
+            enrichedError.code = errorCode;
+            enrichedError.status = response.status;
+            updateError = enrichedError;
+          }
+        } catch (err: any) {
+          console.log("ResetPasswordScreen: REST password update threw", err);
+          updateError = err;
+        }
+      } else {
+        // Fallback: rely on Supabase JS session if available
+        const { error } = await supabase.auth.updateUser({ password });
+        if (error) {
+          updateError = error;
+        }
+      }
+
+      if (updateError) {
+        // Pass no context so we prefer the actual error message from Supabase
+        console.log("ResetPasswordScreen: updateError", updateError);
+        const message = getHumanReadableMessage(updateError);
         setError(message);
         showToast({
           type: "error",
@@ -71,7 +142,10 @@ export const ResetPasswordScreen: React.FC = () => {
       completePasswordRecoveryFlow();
       await logout();
     } catch (updateError: any) {
-      const message = getHumanReadableMessage(updateError, "password_reset");
+      // This is a local/unexpected error (not from Supabase API), so just
+      // show a generic "update password" message instead of the email text.
+      const message =
+        "Unable to update password right now. Please check your connection and try again.";
       setError(message);
       showToast({
         type: "error",

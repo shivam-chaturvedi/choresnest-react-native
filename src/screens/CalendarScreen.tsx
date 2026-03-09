@@ -2024,30 +2024,10 @@ const CalendarScreenContent: React.FC = () => {
           </View>
         </View>
 
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          {!exactAlarmEnabled && (
-            <View
-              style={[
-                styles.exactAlarmBanner,
-                {
-                  backgroundColor: '#fff8e1',
-                  borderColor: '#ffecb3',
-                },
-              ]}
-            >
-              <AppIcon
-                name="alertTriangle"
-                size={18}
-                color="#c27c00"
-                style={{ marginRight: 8 }}
-              />
-              <Text style={{ color: '#8d6e00', flex: 1, fontSize: 13 }}>
-                Exact alarm permission is required for reminders to fire
-                reliably. You will not receive notifications until this
-                permission is enabled.
-              </Text>
-            </View>
-          )}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          nestedScrollEnabled={true}
+        >
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}

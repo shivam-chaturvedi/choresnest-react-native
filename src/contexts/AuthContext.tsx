@@ -54,6 +54,7 @@ interface AuthContextType {
   completeOnboarding: () => Promise<void>;
   deleteAccount: () => Promise<void>;
   isPasswordRecoveryFlow: boolean;
+  passwordRecoveryAccessToken: string | null;
   completePasswordRecoveryFlow: () => void;
 }
 
@@ -90,6 +91,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [sessionEpoch, setSessionEpoch] = useState(0);
   const [isPasswordRecoveryFlow, setIsPasswordRecoveryFlow] = useState(false);
+  const [passwordRecoveryAccessToken, setPasswordRecoveryAccessToken] =
+    useState<string | null>(null);
 
   // Ref copy so async callbacks can read the latest epoch without closure capture
   const epochRef = useRef(0);
@@ -293,6 +296,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
 
   const completePasswordRecoveryFlow = () => {
     setIsPasswordRecoveryFlow(false);
+    setPasswordRecoveryAccessToken(null);
   };
 
   useEffect(() => {
@@ -306,33 +310,78 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
       const accessToken = params.get('access_token');
       const refreshToken = params.get('refresh_token');
       const flowType = params.get('type')?.toLowerCase();
-      const isRecoveryFlow = flowType === 'recovery';
-      if (!accessToken || !refreshToken) {
+      const hasAccessToken = !!accessToken;
+      const hasRefreshToken = !!refreshToken;
+      const isRecoveryFlow =
+        flowType === 'recovery' ||
+        (!flowType && hasAccessToken && !hasRefreshToken);
+      console.log('[AuthContext] setSessionFromFragment', {
+        hasAccessToken,
+        hasRefreshToken,
+        flowType,
+        isRecoveryFlow,
+      });
+      if (!accessToken) {
+        return;
+      }
+
+      // Password-recovery deep links coming from Supabase often include only an
+      // access_token and no refresh_token. In that case we don't try to create
+      // a long-lived Supabase JS session at all; instead we rely on the token
+      // directly for the REST password update flow and simply flip the
+      // navigator into reset-password mode. This avoids the expected
+      // "AuthSessionMissingError" noise in logs.
+      if (isRecoveryFlow && hasAccessToken && !hasRefreshToken) {
+        setPasswordRecoveryAccessToken(accessToken);
+        setIsPasswordRecoveryFlow(true);
         return;
       }
 
       try {
         const { error } = await supabase.auth.setSession({
           access_token: accessToken,
-          refresh_token: refreshToken,
+          refresh_token: refreshToken ?? '',
         });
         if (error) {
-          const message = getHumanReadableMessage(error, 'oauth');
-          onErrorRef.current?.('Google Sign-In Failed', message);
+          const isRecoveryOnlyAccess =
+            isRecoveryFlow && hasAccessToken && !hasRefreshToken;
+
+          // For password-recovery deep links we don't want to surface a
+          // confusing "Google Sign-In Failed" toast – just log and proceed.
+          if (!isRecoveryOnlyAccess) {
+            const message = getHumanReadableMessage(error, 'oauth');
+            onErrorRef.current?.('Google Sign-In Failed', message);
+          }
           ErrorLogger.logError(error, {
             component: 'AuthContext',
             action: 'setSessionFromOAuth',
             additionalData: { fragment: trimmed },
           });
+
+          if (isRecoveryOnlyAccess) {
+            setPasswordRecoveryAccessToken(accessToken);
+            setIsPasswordRecoveryFlow(true);
+            return;
+          }
+
           setIsPasswordRecoveryFlow(false);
           return;
+        }
+
+        if (isRecoveryFlow && hasAccessToken) {
+          setPasswordRecoveryAccessToken(accessToken);
+        } else {
+          setPasswordRecoveryAccessToken(null);
         }
 
         setIsPasswordRecoveryFlow(isRecoveryFlow);
         const { data } = await supabase.auth.getUser();
         console.log(
-          '[AuthContext] Google OAuth session restored for',
-          data?.user?.id,
+          '[AuthContext] OAuth/password-recovery session restored for',
+          {
+            userId: data?.user?.id,
+            isRecoveryFlow,
+          },
         );
       } catch (error) {
         ErrorLogger.logError(error, {
@@ -351,6 +400,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
       try {
         const parsed = new URL(rawUrl);
         const normalizedPath = parsed.pathname.replace(/\/$/, '');
+        const normalizedHost = parsed.host.replace(/^www\./, '');
 
         const isFallbackScheme =
           parsed.protocol === `${FALLBACK_OAUTH_SCHEME}:` &&
@@ -358,9 +408,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
 
         const isVerifiedLink =
           parsed.protocol === 'https:' &&
-          parsed.host === 'choresnest.com' &&
+          normalizedHost === 'choresnest.com' &&
           (normalizedPath === '/auth/callback' ||
             normalizedPath === '/reset-password');
+
+        console.log('[AuthContext] processOAuthCallback', {
+          rawUrl,
+          protocol: parsed.protocol,
+          host: parsed.host,
+          normalizedHost,
+          path: parsed.pathname,
+          normalizedPath,
+          hash: parsed.hash,
+          search: parsed.search,
+          isFallbackScheme,
+          isVerifiedLink,
+        });
 
         if (!isFallbackScheme && !isVerifiedLink) {
           return;
@@ -376,8 +439,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
         }
 
         const hashFragment = parsed.hash?.slice(1);
+        const searchFragment = parsed.search
+          ? parsed.search.startsWith('?')
+            ? parsed.search.slice(1)
+            : parsed.search
+          : '';
+
         if (hashFragment) {
           await setSessionFromFragment(hashFragment);
+        } else if (searchFragment) {
+          await setSessionFromFragment(searchFragment);
         }
       } catch (error) {
         ErrorLogger.logError(error, {
@@ -642,6 +713,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
         completeOnboarding,
         deleteAccount,
         isPasswordRecoveryFlow,
+        passwordRecoveryAccessToken,
         completePasswordRecoveryFlow,
       }}
     >
