@@ -681,7 +681,12 @@ const CalendarScreenContent: React.FC = () => {
     void trackScreen('CalendarScreen');
   }, []);
   const { currentCountry } = useCountry();
-  const timeZone = safeTimeZone(currentCountry.timeZone);
+  // Use the selected localization's timezone for "today" and current-time
+  // calculations, but event storage/rendering uses naive local dates so they
+  // don't shift across timezones.
+  const deviceTimeZone =
+    Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  const timeZone = safeTimeZone(currentCountry.timeZone || deviceTimeZone);
   const weekOptions = useMemo(
     () => ({ weekStartsOn: (currentCountry.code === 'US' ? 0 : 1) as Day }),
     [currentCountry.code],

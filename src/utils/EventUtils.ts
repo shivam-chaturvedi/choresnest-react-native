@@ -1,6 +1,5 @@
 import { differenceInDays, isAfter, isBefore, isSameDay, startOfDay } from "date-fns";
-import { toZonedTime } from "date-fns-tz";
-import { safeFormatInTimeZone, safeTimeZone, parseDateTimeInZone } from "./SafeDateUtils";
+import { safeFormat, parseLocalDateTime } from "./SafeDateUtils";
 import { CalendarEvent, Task } from "../contexts/FamilyContext";
 
 export interface CalendarEventWithMeta extends CalendarEvent {
@@ -9,38 +8,41 @@ export interface CalendarEventWithMeta extends CalendarEvent {
     __cachedRecurrenceEnd?: Date | null;
 }
 
-const getEventStartDate = (event: CalendarEventWithMeta, fallbackZone: string): Date | null => {
+const getEventStartDate = (event: CalendarEventWithMeta): Date | null => {
     if (event.__cachedStart) return event.__cachedStart;
-    const zone = safeTimeZone(event.timeZone, fallbackZone);
-    const parsed = parseDateTimeInZone(event.date, zone, event.time && event.time !== "All Day" ? event.time : undefined);
+    const parsed = parseLocalDateTime(
+        event.date,
+        event.time && event.time !== "All Day" ? event.time : undefined,
+    );
     if (parsed) {
         event.__cachedStart = parsed;
     }
     return parsed;
 };
 
-const getEventTimeZone = (event: CalendarEventWithMeta, fallbackZone: string): string => {
-    return safeTimeZone(event.timeZone, fallbackZone);
+// Deprecated in local-date mode; kept for type compatibility where referenced.
+const getEventTimeZone = (_event: CalendarEventWithMeta, _fallbackZone: string): string => {
+    return "";
 };
 
-const getEventEndDate = (event: CalendarEventWithMeta, eventTimeZone: string, fallback: Date): Date => {
+const getEventEndDate = (event: CalendarEventWithMeta, _eventTimeZone: string, fallback: Date): Date => {
     if (event.__cachedEnd) return event.__cachedEnd;
     const endTimeCandidate = event.endTime && event.endTime !== "All Day" ? event.endTime : event.time && event.time !== "All Day" ? event.time : undefined;
     const parsedEnd = event.endDate
-        ? parseDateTimeInZone(event.endDate, eventTimeZone, endTimeCandidate)
+        ? parseLocalDateTime(event.endDate, endTimeCandidate)
         : null;
     const resolved = parsedEnd || fallback;
     event.__cachedEnd = resolved;
     return resolved;
 };
 
-const getRecurrenceEnd = (event: CalendarEventWithMeta, eventTimeZone: string): Date | null => {
+const getRecurrenceEnd = (event: CalendarEventWithMeta, _eventTimeZone: string): Date | null => {
     if (event.__cachedRecurrenceEnd !== undefined) return event.__cachedRecurrenceEnd;
     if (!event.recurrenceEndDate) {
         event.__cachedRecurrenceEnd = null;
         return null;
     }
-    const parsed = parseDateTimeInZone(event.recurrenceEndDate, eventTimeZone);
+    const parsed = parseLocalDateTime(event.recurrenceEndDate);
     event.__cachedRecurrenceEnd = parsed;
     return parsed;
 };
@@ -58,17 +60,17 @@ export const getEventsForDate = (
     date: Date,
     events: CalendarEventWithMeta[],
     tasks: Task[],
-    timeZone: string
+    _timeZone: string
 ): CalendarItem[] => {
-    const safeZone = safeTimeZone(timeZone);
-    const targetZoned = toZonedTime(date, safeZone);
-    const baseTargetDate = startOfDay(targetZoned);
-    const baseTargetDateStr = safeFormatInTimeZone(targetZoned, safeZone, "yyyy-MM-dd");
-    const targetDateStr = baseTargetDateStr;
+    // Treat all dates/times as naive local values. We intentionally ignore
+    // timezones here so that events stay anchored to the calendar day/time the
+    // user picked, regardless of device or localization changes.
+    const baseTargetDate = startOfDay(date);
+    const targetDateStr = safeFormat(baseTargetDate, "yyyy-MM-dd");
 
     const result: CalendarItem[] = [];
 
-    // Process Tasks (Simple date match)
+    // Process Tasks (Simple date string match)
     tasks.forEach(task => {
         if (task.date === targetDateStr && task.status !== 'done') {
             result.push({
@@ -86,14 +88,13 @@ export const getEventsForDate = (
 
     // Process Events
     events.forEach(event => {
-        const eventTimeZone = getEventTimeZone(event, safeZone);
-        const eventStartDate = getEventStartDate(event, safeZone);
+        const eventTimeZone = ""; // unused with local dates, kept for type parity
+        const eventStartDate = getEventStartDate(event, "");
         if (!eventStartDate) return;
 
         const eventEndDate = getEventEndDate(event, eventTimeZone, eventStartDate);
         const recurrenceEnd = getRecurrenceEnd(event, eventTimeZone);
-        const targetDateStr = safeFormatInTimeZone(date, eventTimeZone, "yyyy-MM-dd");
-        const targetDate = startOfDay(toZonedTime(date, eventTimeZone));
+        const targetDate = baseTargetDate;
         const eventStartZoned = eventStartDate;
         const eventEndZoned = eventEndDate;
         const recurrenceEndZoned = recurrenceEnd;
@@ -102,8 +103,8 @@ export const getEventsForDate = (
         if (!event.isRecurring) {
             // Check if target date is within [start, end]
             // using string comparison for safety or date comparison
-            const startString = safeFormatInTimeZone(eventStartZoned, eventTimeZone, "yyyy-MM-dd");
-            const endString = safeFormatInTimeZone(eventEndZoned, eventTimeZone, "yyyy-MM-dd");
+            const startString = event.date;
+            const endString = event.endDate || event.date;
 
             if (targetDateStr >= startString && targetDateStr <= endString) {
                 result.push(event);

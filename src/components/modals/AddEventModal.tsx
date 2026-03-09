@@ -222,7 +222,17 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       setName(eventName);
       setDescription(eventToEdit.description || '');
       setNotes(eventToEdit.notes || '');
-      setStartDate(new Date(eventToEdit.date));
+      // Parse stored yyyy-MM-dd as a local calendar date (no timezone shifts)
+      if (eventToEdit.date) {
+        const [sy, sm, sd] = eventToEdit.date
+          .split('-')
+          .map(part => parseInt(part, 10));
+        setStartDate(
+          sy && sm && sd ? new Date(sy, sm - 1, sd, 0, 0, 0, 0) : new Date(),
+        );
+      } else {
+        setStartDate(new Date());
+      }
 
       if (eventToEdit.time === 'All Day') {
         setAllDay(true);
@@ -292,10 +302,23 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       }
 
       if (eventToEdit.recurrenceRule) setRepeatType(eventToEdit.recurrenceRule);
-      if (eventToEdit.recurrenceEndDate)
-        setRepeatEndDate(new Date(eventToEdit.recurrenceEndDate));
+      if (eventToEdit.recurrenceEndDate) {
+        const [ry, rm, rd] = eventToEdit.recurrenceEndDate
+          .split('-')
+          .map(part => parseInt(part, 10));
+        setRepeatEndDate(
+          ry && rm && rd ? new Date(ry, rm - 1, rd, 0, 0, 0, 0) : null,
+        );
+      } else {
+        setRepeatEndDate(null);
+      }
       if (eventToEdit.endDate) {
-        setEndDate(new Date(eventToEdit.endDate));
+        const [ey, em, ed] = eventToEdit.endDate
+          .split('-')
+          .map(part => parseInt(part, 10));
+        setEndDate(
+          ey && em && ed ? new Date(ey, em - 1, ed, 0, 0, 0, 0) : null,
+        );
       } else {
         setEndDate(null);
       }
@@ -324,7 +347,18 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       setDescription('');
       setNotes('');
 
-      const initDate = initialDate ? new Date(initialDate) : new Date();
+      // For new events/tasks, honour the calendar-picked date string directly
+      // instead of letting the JS Date parser apply timezone offsets.
+      let initDate: Date;
+      if (initialDate) {
+        const [y, m, d] = initialDate
+          .split('-')
+          .map(part => parseInt(part, 10));
+        initDate =
+          y && m && d ? new Date(y, m - 1, d, 0, 0, 0, 0) : new Date();
+      } else {
+        initDate = new Date();
+      }
       setStartDate(initDate);
 
       const initTime = new Date();
