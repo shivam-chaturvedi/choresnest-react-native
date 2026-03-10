@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "854953341531",
+    "project_id": "chores-nest",
+    "storage_bucket": "chores-nest.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:854953341531:android:7126b567f32f9a14d3857e",
+        "android_client_info": {
+          "package_name": "com.choresnest"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD624Bb1eJN5Kd6f0aTw8gQ72pa1xV2JpQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
