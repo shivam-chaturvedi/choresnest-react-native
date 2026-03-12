@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, useEffect } from "react";
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,25 +7,51 @@ import {
   Pressable,
   Modal,
   Alert,
-} from "react-native";
-import { Swipeable, PanGestureHandler, State } from "react-native-gesture-handler";
-import { useRoute, RouteProp } from "@react-navigation/native";
-import { AppLayout } from "../components/layout";
-import { useFamily, GroceryItem } from "../contexts/FamilyContext";
-import { useMealPlan } from "../contexts/MealPlanContext";
-import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
-import { GlobalSearch } from "../components/search/GlobalSearch";
-import { useSidebar } from "../contexts/SidebarContext";
-import { AppIcon, CustomDateTimePicker } from "../components/ui";
-import { MemberIcon } from "../components/ui/MemberIcon";
-import { ScreenErrorView } from "../components/ui/ScreenErrorView";
-import { AddShoppingItemModal } from "../components/modals/AddShoppingItemModal";
-import { CategoryIcon, IconLibrary } from "../components/ui/CategoryIcon";
-import { shoppingCategories } from "../constants/shoppingCategories";
-import Config from "react-native-config";
-import { withDeferredScreen } from "../components/layout/DeferredScreen";
+  ActivityIndicator,
+} from 'react-native';
+import {
+  Swipeable,
+  PanGestureHandler,
+  State,
+} from 'react-native-gesture-handler';
+import { useRoute, RouteProp } from '@react-navigation/native';
+import { AppLayout } from '../components/layout';
+import { useFamily, GroceryItem } from '../contexts/FamilyContext';
+import { useMealPlan } from '../contexts/MealPlanContext';
+import {
+  useTheme,
+  useThemeColors,
+  useThemeRadius,
+} from '../contexts/ThemeContext';
+import { GlobalSearch } from '../components/search/GlobalSearch';
+import { useSidebar } from '../contexts/SidebarContext';
+import { AppIcon, CustomDateTimePicker } from '../components/ui';
+import { MemberIcon } from '../components/ui/MemberIcon';
+import { ScreenErrorView } from '../components/ui/ScreenErrorView';
+import { AddShoppingItemModal } from '../components/modals/AddShoppingItemModal';
+import { CategoryIcon, IconLibrary } from '../components/ui/CategoryIcon';
+import { shoppingCategories } from '../constants/shoppingCategories';
+import Config from 'react-native-config';
+import { withDeferredScreen } from '../components/layout/DeferredScreen';
+import NetInfo from '@react-native-community/netinfo';
+import { SyncService } from '../services/SyncService';
+import { trackScreen } from '../services/analytics';
 
 const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
+
+const isSameLocalDay = (
+  timestamp?: number | null,
+  targetDate?: Date | null,
+): boolean => {
+  if (timestamp === undefined || timestamp === null || !targetDate)
+    return false;
+  const date = new Date(timestamp);
+  return (
+    date.getFullYear() === targetDate.getFullYear() &&
+    date.getMonth() === targetDate.getMonth() &&
+    date.getDate() === targetDate.getDate()
+  );
+};
 
 type GroceryRowProps = {
   item: GroceryItem;
@@ -41,132 +67,232 @@ type GroceryRowProps = {
   memberName?: string;
 };
 
-const GroceryRow = React.memo<GroceryRowProps>(({
-  item,
-  isPurchased,
-  categoryColor,
-  categoryIcon,
-  categoryLibrary,
-  colors,
-  radius,
-  onToggle,
-  onRemove,
-  memberSymbol,
-  memberName,
-}) => {
-  const renderRightActions = useCallback(() => (
-    <Pressable
-      style={[styles.swipedAction, { backgroundColor: colors.danger }]}
-      onPress={() => onRemove(item.id)}
-    >
-      <AppIcon name="trash" size={20} color="#fff" />
-      <Text style={styles.actionText}>Delete</Text>
-    </Pressable>
-  ), [colors.danger, item.id, onRemove]);
+const GroceryRow = React.memo<GroceryRowProps>(
+  ({
+    item,
+    isPurchased,
+    categoryColor,
+    categoryIcon,
+    categoryLibrary,
+    colors,
+    radius,
+    onToggle,
+    onRemove,
+    memberSymbol,
+    memberName,
+  }) => {
+    const renderRightActions = useCallback(
+      () => (
+        <Pressable
+          style={[styles.swipedAction, { backgroundColor: colors.danger }]}
+          onPress={() => onRemove(item.id)}
+        >
+          <AppIcon name="trash" size={20} color="#fff" />
+          <Text style={styles.actionText}>Delete</Text>
+        </Pressable>
+      ),
+      [colors.danger, item.id, onRemove],
+    );
 
-  const renderLeftActions = useCallback(() => (
-    <Pressable
-      style={[styles.swipedAction, styles.leftAction, { backgroundColor: colors.success }]}
-      onPress={() => {
-        if (!item.completed) onToggle(item.id);
-      }}
-    >
-      <AppIcon name="check" size={20} color="#fff" />
-      <Text style={styles.actionText}>Done</Text>
-    </Pressable>
-  ), [colors.success, item, onToggle]);
+    const renderLeftActions = useCallback(
+      () => (
+        <Pressable
+          style={[
+            styles.swipedAction,
+            styles.leftAction,
+            { backgroundColor: colors.success },
+          ]}
+          onPress={() => {
+            if (!item.completed) onToggle(item.id);
+          }}
+        >
+          <AppIcon name="check" size={20} color="#fff" />
+          <Text style={styles.actionText}>Done</Text>
+        </Pressable>
+      ),
+      [colors.success, item, onToggle],
+    );
 
-  return (
-    <Swipeable
-      renderRightActions={renderRightActions}
-      renderLeftActions={renderLeftActions}
-      onSwipeableRightOpen={() => onRemove(item.id)}
-      onSwipeableLeftOpen={() => !item.completed && onToggle(item.id)}
-      containerStyle={{ marginBottom: 10 }}
-    >
-      <View
-        style={[
-          styles.itemRow,
-          {
-            backgroundColor: colors.card,
-            borderRadius: radius.md,
-            padding: 12,
-            borderWidth: 1,
-            borderColor: colors.border,
-          },
-        ]}
+    return (
+      <Swipeable
+        renderRightActions={renderRightActions}
+        renderLeftActions={renderLeftActions}
+        onSwipeableRightOpen={() => onRemove(item.id)}
+        onSwipeableLeftOpen={() => !item.completed && onToggle(item.id)}
+        containerStyle={{ marginBottom: 10 }}
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-          <View style={[styles.categoryIconSmall, { backgroundColor: (categoryColor || colors.muted) + '20' }]}>
-            {categoryIcon ? (
-              <CategoryIcon
-                icon={categoryIcon}
-                library={categoryLibrary}
-                size={20}
-                color={colors.foreground}
-              />
-            ) : (
-              <Text style={{ fontSize: 16 }}>📦</Text>
-            )}
-          </View>
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={[styles.itemName, { color: colors.foreground, textDecorationLine: isPurchased ? 'line-through' : 'none', opacity: isPurchased ? 0.7 : 1 }]}>{item.name}</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-              <Text style={[styles.itemDetail, { color: colors.mutedForeground }]}>{item.quantity} {item.unit}</Text>
-              <View style={[styles.addedByBadge, { backgroundColor: colors.muted, borderRadius: radius.sm, marginLeft: 8, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6 }]}>
-                <MemberIcon symbol={memberSymbol} size={14} color={colors.foreground} />
-                <Text style={{ fontSize: 11, marginLeft: 4, color: colors.foreground }}>
-                  {memberName || "Family Member"}
-                </Text>
-              </View>
-              {isPurchased && item.purchasedAt && (
-                <Text style={[styles.itemDetail, { color: colors.mutedForeground, marginLeft: 8 }]}>
-                  {new Date(item.purchasedAt).toLocaleDateString()} at {new Date(item.purchasedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </Text>
+        <View
+          style={[
+            styles.itemRow,
+            {
+              backgroundColor: colors.card,
+              borderRadius: radius.md,
+              padding: 12,
+              borderWidth: 1,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+            <View
+              style={[
+                styles.categoryIconSmall,
+                { backgroundColor: (categoryColor || colors.muted) + '20' },
+              ]}
+            >
+              {categoryIcon ? (
+                <CategoryIcon
+                  icon={categoryIcon}
+                  library={categoryLibrary}
+                  size={20}
+                  color={colors.foreground}
+                />
+              ) : (
+                <Text style={{ fontSize: 16 }}>📦</Text>
               )}
             </View>
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text
+                style={[
+                  styles.itemName,
+                  {
+                    color: colors.foreground,
+                    textDecorationLine: isPurchased ? 'line-through' : 'none',
+                    opacity: isPurchased ? 0.7 : 1,
+                  },
+                ]}
+              >
+                {item.name}
+              </Text>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  marginTop: 2,
+                }}
+              >
+                <Text
+                  style={[styles.itemDetail, { color: colors.mutedForeground }]}
+                >
+                  {item.quantity} {item.unit}
+                </Text>
+                <View
+                  style={[
+                    styles.addedByBadge,
+                    {
+                      backgroundColor: colors.muted,
+                      borderRadius: radius.sm,
+                      marginLeft: 8,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      paddingHorizontal: 6,
+                    },
+                  ]}
+                >
+                  <MemberIcon
+                    symbol={memberSymbol}
+                    size={14}
+                    color={colors.foreground}
+                  />
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      marginLeft: 4,
+                      color: colors.foreground,
+                    }}
+                  >
+                    {memberName || 'Family Member'}
+                  </Text>
+                </View>
+                {isPurchased && item.purchasedAt && (
+                  <Text
+                    style={[
+                      styles.itemDetail,
+                      { color: colors.mutedForeground, marginLeft: 8 },
+                    ]}
+                  >
+                    {new Date(item.purchasedAt).toLocaleDateString()} at{' '}
+                    {new Date(item.purchasedAt).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </Text>
+                )}
+              </View>
+            </View>
           </View>
-        </View>
 
-        {!isPurchased ? (
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Pressable
-              onPress={() => onRemove(item.id)}
-              style={[styles.actionIconBtn, { backgroundColor: '#fff' }]}
-            >
-              <AppIcon name="trash" size={18} color={colors.danger} />
-            </Pressable>
+          {!isPurchased ? (
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Pressable
+                onPress={() => onRemove(item.id)}
+                style={[styles.actionIconBtn, { backgroundColor: '#fff' }]}
+              >
+                <AppIcon name="trash" size={18} color={colors.danger} />
+              </Pressable>
+              <Pressable
+                onPress={() => onToggle(item.id)}
+                style={[
+                  styles.doneBtn,
+                  { backgroundColor: colors.success, borderRadius: radius.sm },
+                ]}
+              >
+                <Text
+                  style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}
+                >
+                  Done
+                </Text>
+              </Pressable>
+            </View>
+          ) : (
             <Pressable
               onPress={() => onToggle(item.id)}
-              style={[styles.doneBtn, { backgroundColor: colors.success, borderRadius: radius.sm }]}
+              style={[styles.actionIconBtn, { backgroundColor: colors.muted }]}
             >
-              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Done</Text>
+              <AppIcon
+                name="rotateCw"
+                size={18}
+                color={colors.mutedForeground}
+              />
             </Pressable>
-          </View>
-        ) : (
-          <Pressable
-            onPress={() => onToggle(item.id)}
-            style={[styles.actionIconBtn, { backgroundColor: colors.muted }]}
-          >
-            <AppIcon name="rotateCw" size={18} color={colors.mutedForeground} />
-          </Pressable>
-        )}
-      </View>
-    </Swipeable>
-  );
-}, (prev, next) => {
-  return prev.item.id === next.item.id && prev.item.completed === next.item.completed && prev.onToggle === next.onToggle && prev.onRemove === next.onRemove && prev.isPurchased === next.isPurchased;
-});
+          )}
+        </View>
+      </Swipeable>
+    );
+  },
+  (prev, next) => {
+    return (
+      prev.item.id === next.item.id &&
+      prev.item.completed === next.item.completed &&
+      prev.onToggle === next.onToggle &&
+      prev.onRemove === next.onRemove &&
+      prev.isPurchased === next.isPurchased
+    );
+  },
+);
 
 const ListsScreenContent: React.FC = () => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
-  const route = useRoute<RouteProp<{ params: { addItems?: any[] } }, 'params'>>();
-  const { groceryList, addGroceryItem, toggleGroceryItem, removeGroceryItem, activeMember, members } = useFamily();
+  const { currentPalette, appearanceMode } = useTheme();
+  const isMidnight = appearanceMode === 'midnight';
+  const route =
+    useRoute<RouteProp<{ params: { addItems?: any[] } }, 'params'>>();
+  const {
+    groceryList,
+    addGroceryItem,
+    toggleGroceryItem,
+    removeGroceryItem,
+    activeMember,
+    members,
+  } = useFamily();
   const { generateGroceryList } = useMealPlan();
-  const defaultCategoryId = shoppingCategories[0]?.id ?? "Groceries";
+  const defaultCategoryId = shoppingCategories[0]?.id ?? 'Groceries';
+  useEffect(() => {
+    void trackScreen('ListsScreen');
+  }, []);
 
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -174,38 +300,67 @@ const ListsScreenContent: React.FC = () => {
   const [memberFilterId, setMemberFilterId] = useState<string | null>(null);
   const [updatedDateFilter, setUpdatedDateFilter] = useState<Date | null>(null);
   const [categoryFilterId, setCategoryFilterId] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
 
   // State to track expanded categories. Default all expanded.
-  const [activeTab, setActiveTab] = useState<"current" | "purchased">("current");
+  const [activeTab, setActiveTab] = useState<'current' | 'purchased'>(
+    'current',
+  );
   const { openSidebar } = useSidebar();
-  const [mealPlanItems, setMealPlanItems] = useState<ReturnType<typeof generateGroceryList>>([]);
+  const [mealPlanItems, setMealPlanItems] = useState<
+    ReturnType<typeof generateGroceryList>
+  >([]);
+
+  const filterAccentColor = useMemo(() => {
+    if (isMidnight) return colors.foreground;
+    switch (currentPalette) {
+      case 'amber':
+        return '#B45309';
+      case 'obsidian':
+        return '#DC2626';
+      default:
+        return '#1E40AF';
+    }
+  }, [currentPalette, colors.foreground, isMidnight]);
+  const primaryIconColor = isMidnight ? colors.foreground : colors.primary;
 
   // Purchase history filters
-  const [historyCategoryFilter, setHistoryCategoryFilter] = useState<string | null>(null);
+  const [historyCategoryFilter, setHistoryCategoryFilter] = useState<
+    string | null
+  >(null);
   const [historyDate, setHistoryDate] = useState<Date | null>(null);
   const [historyTime, setHistoryTime] = useState<Date | null>(null);
   const [screenError, setScreenError] = useState<string | null>(null);
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(state => {
+      setIsOnline(
+        Boolean(state.isConnected && (state.isInternetReachable ?? true)),
+      );
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Handle addItems from route params
   useEffect(() => {
     const addItems = route.params?.addItems;
     if (addItems && Array.isArray(addItems) && addItems.length > 0) {
       try {
-        addItems.forEach((item) => {
+        addItems.forEach(item => {
           addGroceryItem({
             name: item.name,
             quantity: item.quantity,
             unit: item.unit,
             category: defaultCategoryId,
-            addedBy: activeMember?.id || "1",
+            addedBy: activeMember?.id || '1',
             completed: false,
           });
         });
         // Clear the params after adding
         // Note: You might want to use navigation.setParams({ addItems: undefined }) here
       } catch (error) {
-        handleScreenError("handleRouteAddItems", error);
-        Alert.alert("Error", "Failed to add items from meal plan.");
+        handleScreenError('handleRouteAddItems', error);
+        Alert.alert('Error', 'Failed to add items from meal plan.');
       }
     }
   }, [route.params?.addItems]);
@@ -213,90 +368,150 @@ const ListsScreenContent: React.FC = () => {
   const handleScreenError = useCallback((context: string, error: unknown) => {
     console.error(`ListsScreen - ${context}`, error);
     const message =
-      error instanceof Error ? error.message : typeof error === "string" ? error : "Something went wrong";
+      error instanceof Error
+        ? error.message
+        : typeof error === 'string'
+        ? error
+        : 'Something went wrong';
     setScreenError(message);
   }, []);
 
   const resetScreenError = useCallback(() => setScreenError(null), []);
 
   const categoriesById = useMemo(() => {
-    const map = new Map<string, { color?: string; icon?: string; library?: IconLibrary }>();
-    shoppingCategories.forEach(cat => map.set(cat.id, { icon: cat.icon, color: cat.color, library: cat.library }));
+    const map = new Map<
+      string,
+      { color?: string; icon?: string; library?: IconLibrary }
+    >();
+    shoppingCategories.forEach(cat =>
+      map.set(cat.id, {
+        icon: cat.icon,
+        color: cat.color,
+        library: cat.library,
+      }),
+    );
     return map;
   }, []);
 
-  const getMemberMeta = useCallback((memberId: string) => {
-    const member = members.find(m => m.id === memberId);
-    return {
-      symbol: member?.symbol,
-      name: member?.name,
-    };
-  }, [members]);
+  const getMemberMeta = useCallback(
+    (memberId: string) => {
+      const member = members.find(m => m.id === memberId);
+      return {
+        symbol: member?.symbol,
+        name: member?.name,
+      };
+    },
+    [members],
+  );
 
-  const handleToggleItem = useCallback(async (id: string) => {
-    try {
-      await toggleGroceryItem(id);
-    } catch (error) {
-      console.error("Failed to toggle grocery item:", error);
-      Alert.alert("Error", "Could not update item. Please try again.");
-    }
-  }, [toggleGroceryItem]);
+  const handleToggleItem = useCallback(
+    async (id: string) => {
+      try {
+        await toggleGroceryItem(id);
+      } catch (error) {
+        console.error('Failed to toggle grocery item:', error);
+        Alert.alert('Error', 'Could not update item. Please try again.');
+      }
+    },
+    [toggleGroceryItem],
+  );
 
-  const handleRemoveItem = useCallback(async (id: string) => {
-    try {
-      await removeGroceryItem(id);
-    } catch (error) {
-      console.error("Failed to remove grocery item:", error);
-      Alert.alert("Error", "Unable to delete item right now.");
-    }
-  }, [removeGroceryItem]);
+  const handleRemoveItem = useCallback(
+    async (id: string) => {
+      try {
+        await removeGroceryItem(id);
+      } catch (error) {
+        console.error('Failed to remove grocery item:', error);
+        Alert.alert('Error', 'Unable to delete item right now.');
+      }
+    },
+    [removeGroceryItem],
+  );
 
-  const renderItemCard = useCallback((item: GroceryItem, _index: number, _isHistory: boolean) => {
-    const categoryMeta = categoriesById.get(item.category || "") || {
-      color: colors.muted,
-      icon: "cube-outline",
-      library: 'MaterialCommunityIcons',
-    };
+  const renderItemCard = useCallback(
+    (item: GroceryItem, _index: number, _isHistory: boolean) => {
+      const categoryMeta = categoriesById.get(item.category || '') || {
+        color: colors.muted,
+        icon: 'cube-outline',
+        library: 'MaterialCommunityIcons',
+      };
 
-    const memberMeta = getMemberMeta(item.addedBy || "");
-    return (
-      <GroceryRow
-        key={item.id}
-        item={item}
-        isPurchased={item.completed}
-        categoryColor={categoryMeta.color}
-        categoryIcon={categoryMeta.icon}
-        categoryLibrary={categoryMeta.library}
-        colors={colors}
-        radius={radius}
-        onToggle={handleToggleItem}
-        onRemove={handleRemoveItem}
-        memberSymbol={memberMeta.symbol}
-        memberName={memberMeta.name}
-      />
-    );
-  }, [categoriesById, colors, radius, handleRemoveItem, handleToggleItem, getMemberMeta]);
+      const memberMeta = getMemberMeta(item.addedBy || '');
+      return (
+        <GroceryRow
+          key={item.id}
+          item={item}
+          isPurchased={item.completed}
+          categoryColor={categoryMeta.color}
+          categoryIcon={categoryMeta.icon}
+          categoryLibrary={categoryMeta.library}
+          colors={colors}
+          radius={radius}
+          onToggle={handleToggleItem}
+          onRemove={handleRemoveItem}
+          memberSymbol={memberMeta.symbol}
+          memberName={memberMeta.name}
+        />
+      );
+    },
+    [
+      categoriesById,
+      colors,
+      radius,
+      handleRemoveItem,
+      handleToggleItem,
+      getMemberMeta,
+    ],
+  );
 
-  const filteredItems = useMemo(() => {
+  const baseItems = useMemo(() => {
     const searchLower = searchQuery.trim().toLowerCase();
-    return (groceryList as GroceryItem[]).filter((item) => {
+    return (groceryList as GroceryItem[]).filter(item => {
       const matchesSearch = item.name.toLowerCase().includes(searchLower);
       const matchesMember = !memberFilterId || item.addedBy === memberFilterId;
-      const matchesCategory = !categoryFilterId || item.category === categoryFilterId;
-      const matchesDate = !updatedDateFilter || (
-        item.updatedAt !== undefined &&
-        item.updatedAt !== null &&
-        new Date(item.updatedAt).toDateString() === updatedDateFilter.toDateString()
-      );
-      return matchesSearch && matchesMember && matchesCategory && matchesDate;
+      const matchesCategory =
+        !categoryFilterId || item.category === categoryFilterId;
+      return matchesSearch && matchesMember && matchesCategory;
     });
-  }, [groceryList, searchQuery, memberFilterId, updatedDateFilter, categoryFilterId]);
+  }, [groceryList, searchQuery, memberFilterId, categoryFilterId]);
 
-  const todoItems = useMemo(() => filteredItems.filter((item) => !item.completed), [filteredItems]);
-  const doneItems = useMemo(() => filteredItems.filter((item) => item.completed), [filteredItems]);
+  const filterByDate = useCallback(
+    (items: GroceryItem[], targetDate?: Date | null) => {
+      if (!targetDate) return items;
+      return items.filter(item => {
+        const ts = item.updatedAt ?? item.purchasedAt ?? item.createdAt;
+        return isSameLocalDay(ts, targetDate);
+      });
+    },
+    [],
+  );
+
+  const applyDateFilter = useMemo(() => filterByDate, [filterByDate]);
+
+  const baseTodoItems = useMemo(
+    () => baseItems.filter(item => !item.completed),
+    [baseItems],
+  );
+  const baseDoneItems = useMemo(
+    () => baseItems.filter(item => item.completed),
+    [baseItems],
+  );
+
+  const currentTodoItems = useMemo(
+    () => applyDateFilter(baseTodoItems, updatedDateFilter),
+    [baseTodoItems, updatedDateFilter, applyDateFilter],
+  );
+  const currentDoneItems = useMemo(
+    () => applyDateFilter(baseDoneItems, updatedDateFilter),
+    [baseDoneItems, updatedDateFilter, applyDateFilter],
+  );
+  const filteredItems = useMemo(
+    () => [...currentTodoItems, ...currentDoneItems],
+    [currentTodoItems, currentDoneItems],
+  );
 
   const historyItems = useMemo(() => {
-    let items = doneItems;
+    let items = baseDoneItems;
     if (historyCategoryFilter) {
       items = items.filter(i => i.category === historyCategoryFilter);
     }
@@ -304,10 +519,11 @@ const ListsScreenContent: React.FC = () => {
       const dateStr = historyDate.toISOString().split('T')[0];
       const dayStart = new Date(`${dateStr}T00:00:00`).getTime();
       const dayEnd = dayStart + 86400000;
-      items = items.filter(i =>
-        typeof i.purchasedAt === 'number' &&
-        i.purchasedAt >= dayStart &&
-        i.purchasedAt < dayEnd
+      items = items.filter(
+        i =>
+          typeof i.purchasedAt === 'number' &&
+          i.purchasedAt >= dayStart &&
+          i.purchasedAt < dayEnd,
       );
     }
     if (historyTime) {
@@ -317,30 +533,41 @@ const ListsScreenContent: React.FC = () => {
         if (typeof i.purchasedAt !== 'number') return false;
         const pDate = new Date(i.purchasedAt);
         // Show items at or after this time on the selected date (or any date if date filter isn't set)
-        return pDate.getHours() > hours || (pDate.getHours() === hours && pDate.getMinutes() >= mins);
+        return (
+          pDate.getHours() > hours ||
+          (pDate.getHours() === hours && pDate.getMinutes() >= mins)
+        );
       });
     }
     // Sort by date descending
-    return [...items].sort((a, b) => (b.purchasedAt || 0) - (a.purchasedAt || 0));
-  }, [doneItems, historyCategoryFilter, historyDate, historyTime]);
+    return [...items].sort(
+      (a, b) => (b.purchasedAt || 0) - (a.purchasedAt || 0),
+    );
+  }, [baseDoneItems, historyCategoryFilter, historyDate, historyTime]);
 
-  const progress = filteredItems.length > 0
-    ? Math.round((doneItems.length / filteredItems.length) * 100)
-    : 0;
+  const progress =
+    filteredItems.length > 0
+      ? Math.round((currentDoneItems.length / filteredItems.length) * 100)
+      : 0;
 
-  const handleAddItem = (item: { name: string; quantity: number; unit: string; category: string }) => {
+  const handleAddItem = (item: {
+    name: string;
+    quantity: number;
+    unit: string;
+    category: string;
+  }) => {
     try {
       addGroceryItem({
         name: item.name,
         quantity: item.quantity,
         unit: item.unit,
         category: item.category,
-        addedBy: activeMember?.id || "1",
+        addedBy: activeMember?.id || '1',
         completed: false,
       });
     } catch (error) {
-      handleScreenError("handleAddItem", error);
-      Alert.alert("Error", "Failed to add item. Please try again.");
+      handleScreenError('handleAddItem', error);
+      Alert.alert('Error', 'Failed to add item. Please try again.');
     }
   };
 
@@ -350,65 +577,77 @@ const ListsScreenContent: React.FC = () => {
       setMealPlanItems(items);
       setShowImportModal(true);
     } catch (error) {
-      handleScreenError("handleOpenImport", error);
-      Alert.alert("Error", "Unable to load meal plan items.");
+      handleScreenError('handleOpenImport', error);
+      Alert.alert('Error', 'Unable to load meal plan items.');
     }
   };
 
-  const handleImportItem = (item: { name: string; quantity: number; unit: string }) => {
+  const handleImportItem = (item: {
+    name: string;
+    quantity: number;
+    unit: string;
+  }) => {
     try {
       addGroceryItem({
         name: item.name,
         quantity: item.quantity,
         unit: item.unit,
         category: defaultCategoryId,
-        addedBy: activeMember?.id || "1",
+        addedBy: activeMember?.id || '1',
         completed: false,
       });
-      Alert.alert("Item added", `${item.name} added to grocery list`);
+      Alert.alert('Item added', `${item.name} added to grocery list`);
     } catch (error) {
-      handleScreenError("handleImportItem", error);
-      Alert.alert("Error", "Failed to import item.");
+      handleScreenError('handleImportItem', error);
+      Alert.alert('Error', 'Failed to import item.');
     }
   };
 
   const handleImportAll = () => {
     try {
-      mealPlanItems.forEach((item) => {
+      mealPlanItems.forEach(item => {
         addGroceryItem({
           name: item.name,
           quantity: item.quantity,
           unit: item.unit,
           category: defaultCategoryId,
-          addedBy: activeMember?.id || "1",
+          addedBy: activeMember?.id || '1',
           completed: false,
         });
       });
       setShowImportModal(false);
-      Alert.alert("All items imported!", `${mealPlanItems.length} items added to your list`);
+      Alert.alert(
+        'All items imported!',
+        `${mealPlanItems.length} items added to your list`,
+      );
     } catch (error) {
-      handleScreenError("handleImportAll", error);
-      Alert.alert("Error", "Failed to import all items.");
+      handleScreenError('handleImportAll', error);
+      Alert.alert('Error', 'Failed to import all items.');
     }
   };
 
   // The callbacks above already expose optimized handler hooks.
 
   const handleBulkDelete = () => {
-    const targetItems = activeTab === "current" ? todoItems : doneItems;
+    const targetItems =
+      activeTab === 'current' ? currentTodoItems : baseDoneItems;
     if (targetItems.length === 0) {
-      Alert.alert("Empty List", "No items to delete.");
+      Alert.alert('Empty List', 'No items to delete.');
       return;
     }
 
     Alert.alert(
-      "Clear List",
-      `Are you sure you want to delete all ${targetItems.length} items from the ${activeTab === 'current' ? 'current' : 'purchased'} list?`,
+      'Clear List',
+      `Are you sure you want to delete all ${
+        targetItems.length
+      } items from the ${
+        activeTab === 'current' ? 'current' : 'purchased'
+      } list?`,
       [
-        { text: "Cancel", style: "cancel" },
+        { text: 'Cancel', style: 'cancel' },
         {
-          text: "Delete All",
-          style: "destructive",
+          text: 'Delete All',
+          style: 'destructive',
           onPress: async () => {
             try {
               // Execute sequentially to avoid overwhelming DB/State
@@ -417,13 +656,29 @@ const ListsScreenContent: React.FC = () => {
               }
             } catch (e) {
               console.error(e);
-              Alert.alert("Error", "Failed to clear list.");
+              Alert.alert('Error', 'Failed to clear list.');
             }
-          }
-        }
-      ]
+          },
+        },
+      ],
     );
   };
+
+  const handleManualRefresh = useCallback(async () => {
+    if (!isOnline || isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      await SyncService.sync(false, { mode: 'manual' });
+    } catch (error) {
+      console.error('ListsScreen: Manual sync failed', error);
+      Alert.alert(
+        'Refresh failed',
+        'Could not sync right now. Please try again.',
+      );
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [isOnline, isRefreshing]);
 
   const handleGestureEvent = (event: any) => {
     if (event.nativeEvent.state === State.END) {
@@ -431,10 +686,10 @@ const ListsScreenContent: React.FC = () => {
       // Trigger if swipe is long enough (50px) and fast enough
       if (translationX > 50 && Math.abs(velocityX) > 300) {
         // Right Swipe (Drag L -> R)
-        if (activeTab === "current") setActiveTab("purchased");
+        if (activeTab === 'current') setActiveTab('purchased');
       } else if (translationX < -50 && Math.abs(velocityX) > 300) {
         // Left Swipe (Drag R -> L)
-        if (activeTab === "purchased") setActiveTab("current");
+        if (activeTab === 'purchased') setActiveTab('current');
       }
     }
   };
@@ -471,22 +726,84 @@ const ListsScreenContent: React.FC = () => {
           failOffsetY={[-20, 20]} // Allow vertical scrolling to continue if moving vertically
         >
           <View style={{ flex: 1, backgroundColor: colors.background }}>
-            <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              contentContainerStyle={styles.container}
+              showsVerticalScrollIndicator={false}
+            >
               {/* Header */}
               <View style={styles.headerRow}>
-                <Pressable onPress={openSidebar} style={[styles.menuButton, { backgroundColor: colors.card, borderRadius: radius.md }]}>
+                <Pressable
+                  onPress={openSidebar}
+                  style={[
+                    styles.menuButton,
+                    { backgroundColor: colors.card, borderRadius: radius.md },
+                  ]}
+                >
                   <AppIcon name="menu" size={20} color={colors.foreground} />
                 </Pressable>
                 <View style={{ flex: 1, marginLeft: 16 }}>
-                  <Text style={[styles.title, { color: colors.foreground }]}>Grocery List</Text>
-                  <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Your family's shopping list</Text>
+                  <Text style={[styles.title, { color: colors.foreground }]}>
+                    Grocery List
+                  </Text>
+                  <Text
+                    style={[styles.subtitle, { color: colors.mutedForeground }]}
+                  >
+                    Your family's shopping list
+                  </Text>
                 </View>
-                <View style={[styles.headerActions, { gap: 8, flexDirection: 'row' }]}>
-                  <Pressable style={[styles.roundButton, { backgroundColor: colors.card, borderRadius: radius.md }]} onPress={() => setShowSearch(true)}>
-                    <AppIcon name="search" size={18} color={colors.foreground} />
-                  </Pressable>
+                <View
+                  style={[
+                    styles.headerActions,
+                    { gap: 8, flexDirection: 'row' },
+                  ]}
+                >
                   <Pressable
-                    style={[styles.roundButton, { backgroundColor: colors.danger + '15', borderRadius: radius.md }]}
+                    style={[
+                      styles.roundButton,
+                      { backgroundColor: colors.card, borderRadius: radius.md },
+                    ]}
+                    onPress={() => setShowSearch(true)}
+                  >
+                    <AppIcon
+                      name="search"
+                      size={18}
+                      color={colors.foreground}
+                    />
+                  </Pressable>
+                  {isOnline && (
+                    <Pressable
+                      style={[
+                        styles.refreshButton,
+                        {
+                          backgroundColor: colors.card,
+                          borderRadius: radius.md,
+                        },
+                      ]}
+                      onPress={handleManualRefresh}
+                      disabled={isRefreshing}
+                    >
+                      {isRefreshing ? (
+                        <ActivityIndicator
+                          size="small"
+                          color={colors.foreground}
+                        />
+                      ) : (
+                        <AppIcon
+                          name="rotateCw"
+                          size={18}
+                          color={colors.foreground}
+                        />
+                      )}
+                    </Pressable>
+                  )}
+                  <Pressable
+                    style={[
+                      styles.roundButton,
+                      {
+                        backgroundColor: colors.danger + '15',
+                        borderRadius: radius.md,
+                      },
+                    ]}
                     onPress={handleBulkDelete}
                   >
                     <AppIcon name="trash" size={18} color={colors.danger} />
@@ -495,26 +812,86 @@ const ListsScreenContent: React.FC = () => {
               </View>
 
               {/* Tabs */}
-              <View style={[styles.tabContainer, { backgroundColor: colors.card, borderRadius: radius.md, marginBottom: 20 }]}>
+              <View
+                style={[
+                  styles.tabContainer,
+                  {
+                    backgroundColor: colors.card,
+                    borderRadius: radius.md,
+                    marginBottom: 20,
+                  },
+                ]}
+              >
                 <Pressable
-                  onPress={() => setActiveTab("current")}
-                  style={[styles.tab, activeTab === "current" && { backgroundColor: colors.primary, borderRadius: radius.sm }]}
+                  onPress={() => setActiveTab('current')}
+                  style={[
+                    styles.tab,
+                    activeTab === 'current'
+                      ? {
+                          backgroundColor: colors.primary,
+                          borderRadius: radius.sm,
+                        }
+                      : {
+                          backgroundColor: colors.background,
+                          borderRadius: radius.sm,
+                        },
+                  ]}
                 >
-                  <Text style={[styles.tabText, { color: activeTab === "current" ? colors.primaryForeground : colors.mutedForeground }]}>
-                    Current Bag ({todoItems.length})
+                  <Text
+                    style={[
+                      styles.tabText,
+                      {
+                        color:
+                          activeTab === 'current'
+                            ? colors.primaryForeground
+                            : colors.foreground,
+                      },
+                    ]}
+                  >
+                    Current Bag ({currentTodoItems.length})
                   </Text>
                 </Pressable>
                 <Pressable
-                  onPress={() => setActiveTab("purchased")}
-                  style={[styles.tab, activeTab === "purchased" && { backgroundColor: colors.primary, borderRadius: radius.sm }]}
+                  onPress={() => setActiveTab('purchased')}
+                  style={[
+                    styles.tab,
+                    activeTab === 'purchased'
+                      ? {
+                          backgroundColor: colors.primary,
+                          borderRadius: radius.sm,
+                        }
+                      : {
+                          backgroundColor: colors.background,
+                          borderRadius: radius.sm,
+                        },
+                  ]}
                 >
-                  <Text style={[styles.tabText, { color: activeTab === "purchased" ? colors.primaryForeground : colors.mutedForeground }]}>
+                  <Text
+                    style={[
+                      styles.tabText,
+                      {
+                        color:
+                          activeTab === 'purchased'
+                            ? colors.primaryForeground
+                            : colors.foreground,
+                      },
+                    ]}
+                  >
                     Purchased
                   </Text>
                 </Pressable>
               </View>
-              {activeTab === "current" && (
-                <View style={[styles.filterRow, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.md }]}>
+              {activeTab === 'current' && (
+                <View
+                  style={[
+                    styles.filterRow,
+                    {
+                      backgroundColor: colors.card,
+                      borderColor: colors.border,
+                      borderRadius: radius.md,
+                    },
+                  ]}
+                >
                   <View style={styles.memberFilterRow}>
                     <ScrollView
                       horizontal
@@ -525,59 +902,89 @@ const ListsScreenContent: React.FC = () => {
                         onPress={() => setMemberFilterId(null)}
                         style={[
                           styles.memberFilterChip,
-                          !memberFilterId && { backgroundColor: colors.primary + '10', borderColor: colors.primary },
+                          !memberFilterId
+                            ? {
+                                backgroundColor: colors.primary + '10',
+                                borderColor: colors.primary,
+                              }
+                            : {
+                                backgroundColor: colors.background,
+                                borderColor: colors.border,
+                              },
                         ]}
                       >
                         <AppIcon
                           name="users"
                           size={14}
-                          color={memberFilterId ? colors.mutedForeground : colors.primary}
+                          color={
+                            !memberFilterId ? colors.primary : colors.foreground
+                          }
                           style={{ marginRight: 6 }}
                         />
-                        <Text style={[
-                          styles.memberFilterChipText,
-                          !memberFilterId && { color: colors.primary },
-                          memberFilterId && { color: colors.mutedForeground }
-                        ]}>
+                        <Text
+                          style={[
+                            styles.memberFilterChipText,
+                            !memberFilterId
+                              ? { color: colors.primary }
+                              : { color: colors.foreground },
+                          ]}
+                        >
                           All members
                         </Text>
                       </Pressable>
-                      {members.map(member => (
-                        <Pressable
-                          key={member.id}
-                          onPress={() => setMemberFilterId(member.id)}
-                          style={[
-                            styles.memberFilterChip,
-                            memberFilterId === member.id && { backgroundColor: colors.primary + '10', borderColor: colors.primary },
-                          ]}
-                        >
-                          <MemberIcon
-                            symbol={member.symbol}
-                            size={14}
-                            color={memberFilterId === member.id ? colors.primary : colors.mutedForeground}
-                            style={{ marginRight: 6 }}
-                          />
-                          <Text style={[
-                            styles.memberFilterChipText,
-                            memberFilterId === member.id ? { color: colors.primary } : { color: colors.mutedForeground }
-                          ]}>
-                            {member.name}
-                          </Text>
-                        </Pressable>
-                      ))}
+                      {members.map(member => {
+                        const isMemberActive = memberFilterId === member.id;
+                        return (
+                          <Pressable
+                            key={member.id}
+                            onPress={() => setMemberFilterId(member.id)}
+                            style={[
+                              styles.memberFilterChip,
+                              isMemberActive
+                                ? {
+                                    backgroundColor: colors.primary + '10',
+                                    borderColor: colors.primary,
+                                  }
+                                : {
+                                    backgroundColor: colors.background,
+                                    borderColor: colors.border,
+                                  },
+                            ]}
+                          >
+                            <MemberIcon
+                              symbol={member.symbol}
+                              size={14}
+                              color={
+                                isMemberActive
+                                  ? colors.primary
+                                  : colors.foreground
+                              }
+                              style={{ marginRight: 6 }}
+                            />
+                            <Text
+                              style={[
+                                styles.memberFilterChipText,
+                                isMemberActive
+                                  ? { color: colors.primary }
+                                  : { color: colors.foreground },
+                              ]}
+                            >
+                              {member.name}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
                     </ScrollView>
                   </View>
-                  <View style={styles.dateFilterRow}>
-                    <CustomDateTimePicker
-                      mode="date"
-                      value={updatedDateFilter ?? new Date()}
-                      onChange={(value) => setUpdatedDateFilter(value)}
-                      label="Updated Date"
-                      placeholder="Any date"
-                    />
-                  </View>
                   <View style={{ marginTop: 12, width: '100%' }}>
-                    <Text style={[styles.filterLabel, { color: colors.mutedForeground, marginBottom: 8 }]}>Category</Text>
+                    <Text
+                      style={[
+                        styles.filterLabel,
+                        { color: colors.mutedForeground, marginBottom: 8 },
+                      ]}
+                    >
+                      Category
+                    </Text>
                     <ScrollView
                       horizontal
                       showsHorizontalScrollIndicator={false}
@@ -588,125 +995,343 @@ const ListsScreenContent: React.FC = () => {
                         onPress={() => setCategoryFilterId(null)}
                         style={[
                           styles.memberHistoryChip,
-                          !categoryFilterId && { borderColor: colors.primary, backgroundColor: colors.primary + '10' },
                           { minHeight: 38 },
+                          !categoryFilterId
+                            ? {
+                                borderColor: colors.primary,
+                                backgroundColor: colors.primary + '10',
+                              }
+                            : {
+                                borderColor: colors.border,
+                                backgroundColor: colors.background,
+                              },
                         ]}
                       >
                         <CategoryIcon
                           icon="package"
                           size={14}
-                          color={categoryFilterId ? colors.mutedForeground : colors.primary}
+                          color={
+                            !categoryFilterId
+                              ? colors.primary
+                              : colors.foreground
+                          }
                           style={{ marginRight: 6 }}
                         />
-                        <Text style={[
-                          styles.memberFilterChipText,
-                          !categoryFilterId && { color: colors.primary },
-                          categoryFilterId && { color: colors.mutedForeground }
-                        ]}>
+                        <Text
+                          style={[
+                            styles.memberFilterChipText,
+                            !categoryFilterId
+                              ? { color: colors.primary }
+                              : { color: colors.foreground },
+                          ]}
+                        >
                           All categories
                         </Text>
                       </Pressable>
-                      {shoppingCategories.map(cat => (
-                        <Pressable
-                          key={cat.id}
-                          onPress={() => setCategoryFilterId(cat.id)}
-                          style={[
-                            styles.memberHistoryChip,
-                            categoryFilterId === cat.id && { borderColor: colors.primary, backgroundColor: colors.primary + '10' },
-                            { minHeight: 38 },
-                          ]}
-                        >
-                          <CategoryIcon
-                            icon={cat.icon}
-                            library={cat.library}
-                            size={14}
-                            color={categoryFilterId === cat.id ? colors.primary : colors.mutedForeground}
-                            style={{ marginRight: 6 }}
-                          />
-                          <Text style={[
-                            styles.memberFilterChipText,
-                            categoryFilterId === cat.id ? { color: colors.primary } : { color: colors.mutedForeground }
-                          ]}>
-                            {cat.name}
-                          </Text>
-                        </Pressable>
-                      ))}
+                      {shoppingCategories.map(cat => {
+                        const isCategoryActive = categoryFilterId === cat.id;
+                        return (
+                          <Pressable
+                            key={cat.id}
+                            onPress={() => setCategoryFilterId(cat.id)}
+                            style={[
+                              styles.memberHistoryChip,
+                              { minHeight: 38 },
+                              isCategoryActive
+                                ? {
+                                    borderColor: colors.primary,
+                                    backgroundColor: colors.primary + '10',
+                                  }
+                                : {
+                                    borderColor: colors.border,
+                                    backgroundColor: colors.background,
+                                  },
+                            ]}
+                          >
+                            <CategoryIcon
+                              icon={cat.icon}
+                              library={cat.library}
+                              size={14}
+                              color={
+                                isCategoryActive
+                                  ? colors.primary
+                                  : colors.foreground
+                              }
+                              style={{ marginRight: 6 }}
+                            />
+                            <Text
+                              style={[
+                                styles.memberFilterChipText,
+                                isCategoryActive
+                                  ? { color: colors.primary }
+                                  : { color: colors.foreground },
+                              ]}
+                            >
+                              {cat.name}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
                     </ScrollView>
                   </View>
                 </View>
               )}
 
-              {activeTab === "current" ? (
+              {activeTab === 'current' ? (
                 <>
                   {/* Hero / Progress Card */}
-                  <View style={[styles.heroCard, { backgroundColor: colors.card, borderRadius: radius.lg, borderColor: colors.success + '20', borderWidth: 1 }]}>
-                    <View style={[styles.heroBg, { backgroundColor: colors.success + '05' }]} />
+                  <View
+                    style={[
+                      styles.heroCard,
+                      {
+                        backgroundColor: colors.card,
+                        borderRadius: radius.lg,
+                        borderColor: colors.success + '20',
+                        borderWidth: 1,
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.heroBg,
+                        { backgroundColor: colors.success + '05' },
+                      ]}
+                    />
                     <View style={styles.heroContent}>
-                      <View style={[styles.heroIcon, { backgroundColor: colors.success + '20', borderRadius: radius.md }]}>
-                        <AppIcon name="shoppingBag" size={24} color={colors.success} />
+                      <View
+                        style={[
+                          styles.heroIcon,
+                          {
+                            backgroundColor: colors.success + '20',
+                            borderRadius: radius.md,
+                          },
+                        ]}
+                      >
+                        <AppIcon
+                          name="shoppingBag"
+                          size={24}
+                          color={colors.success}
+                        />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4 }}>
-                          <Text style={[styles.heroTitle, { color: colors.foreground }]}>{todoItems.length} items to buy</Text>
-                          <Text style={[styles.heroSubtitle, { color: colors.mutedForeground }]}>{doneItems.length}/{filteredItems.length} purchased</Text>
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            justifyContent: 'space-between',
+                            alignItems: 'flex-end',
+                            marginBottom: 4,
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.heroTitle,
+                              { color: colors.foreground },
+                            ]}
+                          >
+                            {currentTodoItems.length} items to buy
+                          </Text>
+                          <Text
+                            style={[
+                              styles.heroSubtitle,
+                              { color: colors.mutedForeground },
+                            ]}
+                          >
+                            {currentDoneItems.length}/{filteredItems.length}{' '}
+                            purchased
+                          </Text>
                         </View>
-                        <View style={[styles.progressBar, { backgroundColor: colors.muted, borderRadius: radius.full }]}>
-                          <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: colors.success, borderRadius: radius.full }]} />
+                        <View
+                          style={[
+                            styles.progressBar,
+                            {
+                              backgroundColor: colors.muted,
+                              borderRadius: radius.full,
+                            },
+                          ]}
+                        >
+                          <View
+                            style={[
+                              styles.progressFill,
+                              {
+                                width: `${progress}%`,
+                                backgroundColor: colors.success,
+                                borderRadius: radius.full,
+                              },
+                            ]}
+                          />
                         </View>
                       </View>
                     </View>
 
                     {ENABLE_RECIPE_AND_MEALS && (
                       <View style={styles.heroActions}>
-                        <Pressable onPress={handleOpenImport} style={[styles.heroBtn, { backgroundColor: colors.background, borderColor: colors.success + '30', borderRadius: radius.md }]}>
-                          <AppIcon name="calendar" size={14} color={colors.foreground} style={{ marginRight: 6 }} />
-                          <Text style={{ fontSize: 12, fontWeight: '600', color: colors.foreground }}>From Meal Plan</Text>
+                        <Pressable
+                          onPress={handleOpenImport}
+                          style={[
+                            styles.heroBtn,
+                            {
+                              backgroundColor: colors.background,
+                              borderColor: colors.success + '30',
+                              borderRadius: radius.md,
+                            },
+                          ]}
+                        >
+                          <AppIcon
+                            name="calendar"
+                            size={14}
+                            color={colors.foreground}
+                            style={{ marginRight: 6 }}
+                          />
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              fontWeight: '600',
+                              color: colors.foreground,
+                            }}
+                          >
+                            From Meal Plan
+                          </Text>
                         </Pressable>
                       </View>
                     )}
                   </View>
 
-
-
                   {/* Pro Tip Card */}
-                  {todoItems.length > 0 && (
-                    <View style={[styles.guideCard, { backgroundColor: colors.info + '10', borderColor: colors.info + '20', borderRadius: radius.md }]}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  {currentTodoItems.length > 0 && (
+                    <View
+                      style={[
+                        styles.guideCard,
+                        {
+                          backgroundColor: colors.info + '10',
+                          borderColor: colors.info + '20',
+                          borderRadius: radius.md,
+                        },
+                      ]}
+                    >
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 8,
+                          marginBottom: 4,
+                        }}
+                      >
                         <AppIcon name="info" size={16} color={colors.info} />
-                        <Text style={[styles.guideTitle, { color: colors.foreground }]}>Pro Tip</Text>
+                        <Text
+                          style={[
+                            styles.guideTitle,
+                            { color: colors.foreground },
+                          ]}
+                        >
+                          Pro Tip
+                        </Text>
                       </View>
-                      <Text style={[styles.guideText, { color: colors.mutedForeground }]}>
-                        Swipe <Text style={{ color: colors.success, fontWeight: '700' }}>Right</Text> to mark purchased,
-                        Swipe <Text style={{ color: colors.danger, fontWeight: '700' }}>Left</Text> to delete.
+                      <Text
+                        style={[
+                          styles.guideText,
+                          { color: colors.mutedForeground },
+                        ]}
+                      >
+                        Swipe{' '}
+                        <Text
+                          style={{ color: colors.success, fontWeight: '700' }}
+                        >
+                          Right
+                        </Text>{' '}
+                        to mark purchased, Swipe{' '}
+                        <Text
+                          style={{ color: colors.danger, fontWeight: '700' }}
+                        >
+                          Left
+                        </Text>{' '}
+                        to delete.
                       </Text>
                     </View>
                   )}
 
                   {/* Single List for Current Items */}
-                  {todoItems.length === 0 ? (
+                  {currentTodoItems.length === 0 ? (
                     <View style={styles.emptyState}>
-                      <View style={[styles.emptyIcon, { backgroundColor: colors.muted, borderRadius: radius.xl }]}>
-                        <AppIcon name="shoppingCart" size={32} color={colors.mutedForeground} />
+                      <View
+                        style={[
+                          styles.emptyIcon,
+                          {
+                            backgroundColor: colors.muted,
+                            borderRadius: radius.xl,
+                          },
+                        ]}
+                      >
+                        <AppIcon
+                          name="shoppingCart"
+                          size={32}
+                          color={colors.mutedForeground}
+                        />
                       </View>
-                      <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Your bag is empty</Text>
-                      <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>Add items above or import from your meal plan</Text>
+                      <Text
+                        style={[
+                          styles.emptyTitle,
+                          { color: colors.foreground },
+                        ]}
+                      >
+                        Your bag is empty
+                      </Text>
+                      <Text
+                        style={[
+                          styles.emptyText,
+                          { color: colors.mutedForeground },
+                        ]}
+                      >
+                        Add items above or import from your meal plan
+                      </Text>
                     </View>
                   ) : (
                     <View style={styles.listContainer}>
-                      {todoItems.map((item, index) => renderItemCard(item, index, false))}
+                      {currentTodoItems.map((item, index) =>
+                        renderItemCard(item, index, false),
+                      )}
                     </View>
                   )}
                 </>
               ) : (
                 <>
                   {/* History Filters Section */}
-                  <View style={[styles.historyFilterCard, { backgroundColor: colors.card, borderRadius: radius.lg, borderColor: colors.border, borderWidth: 1, marginBottom: 20 }]}>
+                  <View
+                    style={[
+                      styles.historyFilterCard,
+                      {
+                        backgroundColor: colors.card,
+                        borderRadius: radius.lg,
+                        borderColor: colors.border,
+                        borderWidth: 1,
+                        marginBottom: 20,
+                      },
+                    ]}
+                  >
                     <View style={styles.filterSectionHeader}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <AppIcon name="filter" size={16} color={colors.primary} />
-                        <Text style={[styles.filterSectionTitle, { color: colors.foreground }]}>Filter History</Text>
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 8,
+                        }}
+                      >
+                        <AppIcon
+                          name="filter"
+                          size={16}
+                          color={primaryIconColor}
+                        />
+                        <Text
+                          style={[
+                            styles.filterSectionTitle,
+                            { color: colors.foreground },
+                          ]}
+                        >
+                          Filter History
+                        </Text>
                       </View>
-                      {(historyCategoryFilter || historyDate || historyTime) && (
+                      {(historyCategoryFilter ||
+                        historyDate ||
+                        historyTime) && (
                         <Pressable
                           onPress={() => {
                             setHistoryCategoryFilter(null);
@@ -715,7 +1340,15 @@ const ListsScreenContent: React.FC = () => {
                           }}
                           style={styles.resetFiltersBtn}
                         >
-                          <Text style={{ color: colors.danger, fontSize: 12, fontWeight: '600' }}>Reset All</Text>
+                          <Text
+                            style={{
+                              color: colors.danger,
+                              fontSize: 12,
+                              fontWeight: '600',
+                            }}
+                          >
+                            Reset All
+                          </Text>
                         </Pressable>
                       )}
                     </View>
@@ -723,35 +1356,93 @@ const ListsScreenContent: React.FC = () => {
                     <View style={{ padding: 12 }}>
                       {members.length > 0 && (
                         <View style={styles.memberHistoryFilterRow}>
-                          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                          <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={{ gap: 8 }}
+                          >
                             <Pressable
                               style={[
                                 styles.memberHistoryChip,
-                                !memberFilterId && { borderColor: colors.primary, backgroundColor: colors.primary + '10' },
+                                !memberFilterId
+                                  ? {
+                                      borderColor: colors.primary,
+                                      backgroundColor: colors.background,
+                                    }
+                                  : {
+                                      borderColor: colors.border,
+                                      backgroundColor: colors.background,
+                                    },
                               ]}
                               onPress={() => setMemberFilterId(null)}
                             >
-                              <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>All</Text>
-                            </Pressable>
-                            {members.map(member => (
-                              <Pressable
-                                key={member.id}
-                                style={[
-                                  styles.memberHistoryChip,
-                                  memberFilterId === member.id && { borderColor: colors.primary, backgroundColor: colors.primary + '10' },
-                                ]}
-                                onPress={() => setMemberFilterId(member.id)}
+                              <Text
+                                style={{
+                                  fontSize: 12,
+                                  fontWeight: '600',
+                                  color: !memberFilterId
+                                    ? filterAccentColor
+                                    : colors.foreground,
+                                }}
                               >
-                                <MemberIcon symbol={member.symbol} size={14} color={colors.foreground} />
-                                <Text style={{ marginLeft: 6, fontSize: 12, color: colors.foreground }}>
-                                  {member.name}
-                                </Text>
-                              </Pressable>
-                            ))}
+                                All
+                              </Text>
+                            </Pressable>
+                            {members.map(member => {
+                              const isMemberActive =
+                                memberFilterId === member.id;
+                              return (
+                                <Pressable
+                                  key={member.id}
+                                  style={[
+                                    styles.memberHistoryChip,
+                                    isMemberActive
+                                      ? {
+                                          borderColor: colors.primary,
+                                          backgroundColor:
+                                            colors.primary + '10',
+                                        }
+                                      : {
+                                          borderColor: colors.border,
+                                          backgroundColor: colors.background,
+                                        },
+                                  ]}
+                                  onPress={() => setMemberFilterId(member.id)}
+                                >
+                                  <MemberIcon
+                                    symbol={member.symbol}
+                                    size={14}
+                                    color={
+                                      isMemberActive
+                                        ? colors.primary
+                                        : colors.foreground
+                                    }
+                                  />
+                                  <Text
+                                    style={{
+                                      marginLeft: 6,
+                                      fontSize: 12,
+                                      color: isMemberActive
+                                        ? colors.primary
+                                        : colors.foreground,
+                                    }}
+                                  >
+                                    {member.name}
+                                  </Text>
+                                </Pressable>
+                              );
+                            })}
                           </ScrollView>
                         </View>
                       )}
-                      <Text style={[styles.filterLabel, { color: colors.mutedForeground, marginBottom: 8 }]}>Category</Text>
+                      <Text
+                        style={[
+                          styles.filterLabel,
+                          { color: filterAccentColor, marginBottom: 8 },
+                        ]}
+                      >
+                        Category
+                      </Text>
                       <ScrollView
                         horizontal
                         showsHorizontalScrollIndicator={false}
@@ -760,26 +1451,78 @@ const ListsScreenContent: React.FC = () => {
                       >
                         <Pressable
                           onPress={() => setHistoryCategoryFilter(null)}
-                          style={[styles.miniChip, !historyCategoryFilter && { backgroundColor: colors.primary, borderColor: colors.primary }]}
+                          style={[
+                            styles.miniChip,
+                            !historyCategoryFilter
+                              ? {
+                                  backgroundColor: colors.primary,
+                                  borderColor: colors.primary,
+                                }
+                              : {
+                                  backgroundColor: colors.background,
+                                  borderColor: colors.border,
+                                },
+                          ]}
                         >
-                          <Text style={[styles.miniChipText, !historyCategoryFilter && { color: colors.primaryForeground }]}>All</Text>
-                        </Pressable>
-                        {shoppingCategories.map((cat) => (
-                          <Pressable
-                            key={cat.id}
-                            onPress={() => setHistoryCategoryFilter(cat.id)}
-                            style={[styles.miniChip, historyCategoryFilter === cat.id && { backgroundColor: colors.primary, borderColor: colors.primary }]}
+                          <Text
+                            style={[
+                              styles.miniChipText,
+                              {
+                                color: historyCategoryFilter
+                                  ? filterAccentColor
+                                  : colors.foreground,
+                              },
+                            ]}
                           >
-                            <CategoryIcon
-                              icon={cat.icon}
-                              library={cat.library}
-                              size={12}
-                              color={historyCategoryFilter === cat.id ? colors.primary : colors.mutedForeground}
-                              style={{ marginRight: 4 }}
-                            />
-                            <Text style={[styles.miniChipText, historyCategoryFilter === cat.id && { color: colors.primaryForeground }]}>{cat.name}</Text>
-                          </Pressable>
-                        ))}
+                            All
+                          </Text>
+                        </Pressable>
+                        {shoppingCategories.map(cat => {
+                          const isCategoryActive =
+                            historyCategoryFilter === cat.id;
+                          return (
+                            <Pressable
+                              key={cat.id}
+                              onPress={() => setHistoryCategoryFilter(cat.id)}
+                              style={[
+                                styles.miniChip,
+                                isCategoryActive
+                                  ? {
+                                      backgroundColor: colors.primary,
+                                      borderColor: colors.primary,
+                                    }
+                                  : {
+                                      backgroundColor: colors.background,
+                                      borderColor: colors.border,
+                                    },
+                              ]}
+                            >
+                              <CategoryIcon
+                                icon={cat.icon}
+                                library={cat.library}
+                                size={12}
+                                color={
+                                  isCategoryActive
+                                    ? colors.primary
+                                    : filterAccentColor
+                                }
+                                style={{ marginRight: 4 }}
+                              />
+                              <Text
+                                style={[
+                                  styles.miniChipText,
+                                  {
+                                    color: isCategoryActive
+                                      ? colors.primaryForeground
+                                      : colors.foreground,
+                                  },
+                                ]}
+                              >
+                                {cat.name}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
                       </ScrollView>
 
                       <View style={styles.dateTimeFilterRow}>
@@ -808,15 +1551,43 @@ const ListsScreenContent: React.FC = () => {
 
                   {historyItems.length === 0 ? (
                     <View style={styles.emptyState}>
-                      <View style={[styles.emptyIcon, { backgroundColor: colors.muted, borderRadius: radius.xl }]}>
-                        <AppIcon name="package" size={32} color={colors.mutedForeground} />
+                      <View
+                        style={[
+                          styles.emptyIcon,
+                          {
+                            backgroundColor: colors.muted,
+                            borderRadius: radius.xl,
+                          },
+                        ]}
+                      >
+                        <AppIcon
+                          name="package"
+                          size={32}
+                          color={colors.mutedForeground}
+                        />
                       </View>
-                      <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No purchase history</Text>
-                      <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>Items you mark as done will appear here</Text>
+                      <Text
+                        style={[
+                          styles.emptyTitle,
+                          { color: colors.foreground },
+                        ]}
+                      >
+                        No purchase history
+                      </Text>
+                      <Text
+                        style={[
+                          styles.emptyText,
+                          { color: colors.mutedForeground },
+                        ]}
+                      >
+                        Items you mark as done will appear here
+                      </Text>
                     </View>
                   ) : (
                     <View style={styles.listContainer}>
-                      {historyItems.map((item, index) => renderItemCard(item, index, true))}
+                      {historyItems.map((item, index) =>
+                        renderItemCard(item, index, true),
+                      )}
                     </View>
                   )}
                 </>
@@ -836,13 +1607,32 @@ const ListsScreenContent: React.FC = () => {
       />
 
       {/* Import Modal */}
-      <Modal visible={showImportModal} transparent animationType="slide" onRequestClose={() => setShowImportModal(false)}>
+      <Modal
+        visible={showImportModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowImportModal(false)}
+      >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContainer, { backgroundColor: colors.card, shadowColor: colors.foreground, borderRadius: radius.card }]}>
+          <View
+            style={[
+              styles.modalContainer,
+              {
+                backgroundColor: colors.card,
+                shadowColor: colors.foreground,
+                borderRadius: radius.card,
+              },
+            ]}
+          >
             <View style={styles.modalHeader}>
-              <AppIcon name="calendar" size={24} color={colors.primary} />
-              <Text style={[styles.modalTitle, { color: colors.foreground }]}>Import from Meal Plan</Text>
-              <Pressable onPress={() => setShowImportModal(false)} style={styles.closeButton}>
+              <AppIcon name="calendar" size={24} color={primaryIconColor} />
+              <Text style={[styles.modalTitle, { color: colors.foreground }]}>
+                Import from Meal Plan
+              </Text>
+              <Pressable
+                onPress={() => setShowImportModal(false)}
+                style={styles.closeButton}
+              >
                 <AppIcon name="x" size={24} color={colors.mutedForeground} />
               </Pressable>
             </View>
@@ -851,27 +1641,82 @@ const ListsScreenContent: React.FC = () => {
               {mealPlanItems.length === 0 ? (
                 <View style={{ alignItems: 'center', padding: 32 }}>
                   <AppIcon name="calendar" size={48} color={colors.muted} />
-                  <Text style={{ marginTop: 16, color: colors.mutedForeground }}>No meals planned yet.</Text>
+                  <Text
+                    style={{ marginTop: 16, color: colors.mutedForeground }}
+                  >
+                    No meals planned yet.
+                  </Text>
                 </View>
               ) : (
                 <View style={{ gap: 8 }}>
                   {mealPlanItems.map((item, index) => (
-                    <View key={`${item.name}-${index}`} style={[styles.importItemRow, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
+                    <View
+                      key={`${item.name}-${index}`}
+                      style={[
+                        styles.importItemRow,
+                        {
+                          backgroundColor: colors.muted,
+                          borderRadius: radius.md,
+                        },
+                      ]}
+                    >
                       <View style={{ flex: 1 }}>
-                        <Text style={[styles.importItemName, { color: colors.foreground }]}>{item.name}</Text>
-                        <Text style={[styles.importItemMeta, { color: colors.mutedForeground }]}>{item.quantity} {item.unit} • from {item.fromRecipes.length} recipe(s)</Text>
+                        <Text
+                          style={[
+                            styles.importItemName,
+                            { color: colors.foreground },
+                          ]}
+                        >
+                          {item.name}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.importItemMeta,
+                            { color: colors.mutedForeground },
+                          ]}
+                        >
+                          {item.quantity} {item.unit} • from{' '}
+                          {item.fromRecipes.length} recipe(s)
+                        </Text>
                       </View>
                       <Pressable
-                        style={[styles.importItemAdd, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.sm }]}
+                        style={[
+                          styles.importItemAdd,
+                          {
+                            backgroundColor: colors.card,
+                            borderColor: colors.border,
+                            borderRadius: radius.sm,
+                          },
+                        ]}
                         onPress={() => handleImportItem(item)}
                       >
-                        <AppIcon name="plus" size={16} color={colors.foreground} />
+                        <AppIcon
+                          name="plus"
+                          size={16}
+                          color={colors.foreground}
+                        />
                       </Pressable>
                     </View>
                   ))}
-                  <Pressable style={[styles.importAllButton, { backgroundColor: colors.primary, borderRadius: radius.lg }]} onPress={handleImportAll}>
-                    <AppIcon name="download" size={16} color="#fff" style={{ marginRight: 8 }} />
-                    <Text style={styles.importAllText}>Import All ({mealPlanItems.length} items)</Text>
+                  <Pressable
+                    style={[
+                      styles.importAllButton,
+                      {
+                        backgroundColor: colors.primary,
+                        borderRadius: radius.lg,
+                      },
+                    ]}
+                    onPress={handleImportAll}
+                  >
+                    <AppIcon
+                      name="download"
+                      size={16}
+                      color="#fff"
+                      style={{ marginRight: 8 }}
+                    />
+                    <Text style={styles.importAllText}>
+                      Import All ({mealPlanItems.length} items)
+                    </Text>
                   </Pressable>
                 </View>
               )}
@@ -891,16 +1736,16 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 20,
   },
   menuButton: {
     width: 40,
     height: 40,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 6,
@@ -908,22 +1753,35 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 22,
-    fontWeight: "700",
+    fontWeight: '700',
   },
   subtitle: {
     fontSize: 12,
   },
   headerActions: {
-    flexDirection: "row",
+    flexDirection: 'row',
     gap: 8,
   },
   roundButton: {
     width: 40,
     height: 40,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  refreshButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
+    borderRadius: 12,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
     shadowRadius: 4,
     elevation: 3,
   },
@@ -1133,12 +1991,12 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
     padding: 16,
   },
   modalContainer: {
-    maxHeight: "80%",
+    maxHeight: '80%',
     padding: 20,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.25,
@@ -1146,14 +2004,14 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   modalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
     marginBottom: 20,
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: "700",
+    fontWeight: '700',
     flex: 1,
   },
   closeButton: {
@@ -1274,7 +2132,7 @@ const styles = StyleSheet.create({
 });
 
 export const ListsScreen = withDeferredScreen(ListsScreenContent, {
-  title: "Lists",
-  subtitle: "Loading grocery items...",
+  title: 'Lists',
+  subtitle: 'Loading grocery items...',
   layoutProps: { showNav: false, showAddButton: true },
 });

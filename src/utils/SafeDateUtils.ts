@@ -72,6 +72,30 @@ export const parseDateTimeInZone = (
 };
 
 /**
+ * Parses a date string + optional time as a "naive" local Date.
+ *
+ * IMPORTANT: This intentionally ignores any explicit timezone and does NOT
+ * perform UTC conversions. It is used for calendar UI where we must preserve
+ * the exact day/time that the user picked, regardless of localization or
+ * device timezone changes.
+ */
+export const parseLocalDateTime = (
+  dateStr: string | undefined | null,
+  timeStr?: string | null,
+): Date | null => {
+  if (!dateStr) return null;
+  const parts = dateStr.split('-').map(part => parseInt(part, 10));
+  if (parts.length !== 3 || parts.some(v => Number.isNaN(v))) {
+    return null;
+  }
+  const [year, month, day] = parts;
+  const timeComp = parseTimeComponents(timeStr ?? undefined);
+  const hours = timeComp?.hours ?? 0;
+  const minutes = timeComp?.minutes ?? 0;
+  return new Date(year, month - 1, day, hours, minutes, 0, 0);
+};
+
+/**
  * Safely formats a date. Returns fallback if invalid.
  */
 export const safeFormat = (date: Date | null | undefined, formatStr: string, fallback: string = ''): string => {

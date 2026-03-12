@@ -26,7 +26,7 @@ export const HomePlaceholder: React.FC<HomePlaceholderProps> = ({ onReset }) => 
         contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={[styles.title, { color: colors.foreground }]}>Family Chores</Text>
+        <Text style={[styles.title, { color: colors.foreground }]}>Chores Nest</Text>
         <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
           This placeholder sits inside the shared layout components (AppLayout,
           BottomNavigation, AppSidebar). You can extend the remaining screens

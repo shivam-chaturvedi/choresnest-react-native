@@ -3,17 +3,17 @@
 export const palettes = {
   sapphire: {
     name: "Sapphire Veil",
-    colors: ["#E7F0FA", "#7BA4D0", "#2E5E99", "#0D2440"], // Light -> Dark
+    colors: ["#d6e5f6ff", "#719dcdff", "#356aaaff", "#092342ff"], // Light -> Dark
     palette: {
-      light: "#E7F0FA",
-      mediumLight: "#7BA4D0",
-      mediumDark: "#2E5E99",
-      dark: "#0D2440",
+      light: "#c4dbf1ff",
+      mediumLight: "#0c4684ff",
+      mediumDark: "#265084ff",
+      dark: "#07182dff",
     }
   },
   amber: {
     name: "Amber Mirage",
-    colors: ["#FFF5E1", "#EBC176", "#C48B28", "#5A3C0B"],
+    colors: ["#f7e8caff", "#e2b566ff", "#e8aa3fff", "#684307ff"],
     palette: {
       light: "#FFF5E1",
       mediumLight: "#EBC176",
@@ -34,18 +34,41 @@ export const palettes = {
 };
 
 type PaletteKey = keyof typeof palettes;
+export type AppearanceMode = 'light' | 'cream' | 'midnight';
 
 // Helper to generate full theme colors from a palette
-export const createThemeColors = (paletteKey: PaletteKey, mode: 'light' | 'dark') => {
+export const createThemeColors = (paletteKey: PaletteKey, mode: AppearanceMode) => {
   const safePaletteKey = palettes[paletteKey] ? paletteKey : 'sapphire';
   const p = palettes[safePaletteKey].palette;
-  const isDark = mode === 'dark';
+  const isMidnight = mode === 'midnight';
+
+  const backgroundPalette: Record<AppearanceMode, string> = {
+    light: "#FFFFFF",
+    cream: "#efede4ff",
+    midnight: "#03040A",
+  };
+
+  const cardPalette: Record<AppearanceMode, string> = {
+    light: "#FFFFFF",
+    cream: "#f6f3edff",
+    midnight: "#262737ff",
+  };
+
+  const borderPalette: Record<AppearanceMode, string> = {
+    light: "#E2E8F0",
+    cream: "#E6D7C7",
+    midnight: "#363640ff",
+  };
+
+  const shadowPalette: Record<AppearanceMode, string> = {
+    light: "#E2E8F0",
+    cream: "#C8A97F",
+    midnight: "#171616ff",
+  };
 
   return {
-    // Background: White for light mode, Cream (#F5F2E8) for "dark" (Cream) mode
-    background: isDark ? "#F5F2E8" : "#FFFFFF",
-    // Foreground: Always dark text now since both White and Cream are light backgrounds
-    foreground: p.dark,
+    background: backgroundPalette[mode],
+    foreground: isMidnight ? "#F9FAFB" : p.dark,
 
     // Primary: Keep brand identity
     primary: p.mediumDark,
@@ -56,13 +79,12 @@ export const createThemeColors = (paletteKey: PaletteKey, mode: 'light' | 'dark'
     secondaryForeground: p.dark,
     accent: p.mediumLight,
     accentForeground: p.dark,
-    muted: p.light,
-    mutedForeground: "#64748B",
+    muted: isMidnight ? "#31445eff" : p.light,
+    mutedForeground: isMidnight ? "#CBD5F5" : "#64748B",
 
-    // Card background: White for both, or slightly off-white for Cream mode
-    card: isDark ? "#FFFFFF" : "#FFFFFF",
+    card: cardPalette[mode],
 
-    border: isDark ? "#E6E2D6" : "#E2E8F0",
+    border: borderPalette[mode],
 
     success: "#22C55E",
     successLight: "#DCFCE7",
@@ -77,12 +99,12 @@ export const createThemeColors = (paletteKey: PaletteKey, mode: 'light' | 'dark'
     dangerLight: "#FEE2E2",
     dangerDark: "#B91C1C",
     googleBlue: "#4285F4",
-    shadow: isDark ? "#E6E2D6" : "#E2E8F0",
+    shadow: shadowPalette[mode],
   };
 };
 
 // Initial default
-const defaultColors = createThemeColors('sapphire', 'dark');
+const defaultColors = createThemeColors('sapphire', 'cream');
 
 // Legacy support
 // Legacy support
@@ -92,10 +114,10 @@ export const darkColors = createThemeColors('sapphire', 'dark');
 export const theme = {
   colors: { ...defaultColors }, // Mutable object
   // Helper to update theme in-place
-  updateTheme: (paletteKey: PaletteKey, mode: 'light' | 'dark') => {
+  updateTheme: (paletteKey: PaletteKey, mode: AppearanceMode) => {
     const newColors = createThemeColors(paletteKey, mode);
     Object.assign(theme.colors, newColors);
-    theme.shadows.card.shadowColor = mode === 'dark' ? newColors.foreground : "#000000";
+    theme.shadows.card.shadowColor = newColors.shadow;
   },
   palettes,
   lightColors, // For legacy/reference
@@ -116,9 +138,9 @@ export const theme = {
     },
     blue: {
       50: "#EFF6FF",
-      100: "#DBEAFE",
-      200: "#BFDBFE",
-      500: "#3B82F6",
+      100: "#acc8ecff",
+      200: "#a1c3edff",
+      500: "#2f75e6ff",
       600: "#2563EB",
       800: "#1E40AF",
       900: "#1E3A8A",

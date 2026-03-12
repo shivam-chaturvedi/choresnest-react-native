@@ -2,6 +2,7 @@ import React, { Component, ErrorInfo, ReactNode } from "react";
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, StatusBar } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AppIcon } from "./ui/AppIcon";
+import * as Sentry from "@sentry/react-native";
 
 interface Props {
     children: ReactNode;
@@ -25,6 +26,16 @@ export class ErrorBoundary extends Component<Props, State> {
 
     componentDidCatch(error: Error, errorInfo: ErrorInfo) {
         console.error("ErrorBoundary caught an error:", error, errorInfo);
+        Sentry.addBreadcrumb({
+            category: "error-boundary",
+            message: "React component crash",
+            level: "error",
+        });
+        Sentry.captureException(error, {
+            extra: {
+                componentStack: errorInfo.componentStack,
+            },
+        });
         this.setState({ errorInfo });
     }
 
@@ -182,4 +193,3 @@ const styles = StyleSheet.create({
         textAlign: "center",
     }
 });
-

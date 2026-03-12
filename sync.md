@@ -1,5 +1,5 @@
-Family Chores - Sync Architecture
-This document explains the real-time, offline-first synchronization architecture used in the Family Chores app, specifically focusing on how Events and Tasks (and other core models) synchronize instantaneously across multiple devices.
+Chores Nest - Sync Architecture
+This document explains the real-time, offline-first synchronization architecture used in the Chores Nest app, specifically focusing on how Events and Tasks (and other core models) synchronize instantaneously across multiple devices.
 
 🏗 High-Level Architecture
 The app uses WatermelonDB for local offline-first storage and Supabase (Postgres) as the remote source of truth.

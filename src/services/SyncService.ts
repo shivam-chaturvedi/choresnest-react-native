@@ -88,12 +88,17 @@ const ensureRealtimeSubscription = (triggerSync: () => void) => {
             } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
                 console.warn(`Realtime sync subscription failed with status: ${status}. Attempting backoff retry...`);
                 realtimeRetryCount++;
-                teardownRealtimeSubscription();
+                // Channel is already closing/closed; avoid calling unsubscribe()
+                // here to prevent the Realtime client from recursively firing
+                // additional close events and overflowing the JS stack.
+                teardownRealtimeSubscription(true);
                 isRealtimeConnecting = false;
                 scheduleRealtimeRetry(triggerSync);
             } else if (status === 'TIMED_OUT') {
                 console.warn('Realtime sync subscription timed out.');
-                teardownRealtimeSubscription();
+                // Same as CLOSED/CHANNEL_ERROR: just clear our local reference
+                // and schedule a retry without calling unsubscribe() again.
+                teardownRealtimeSubscription(true);
                 isRealtimeConnecting = false;
                 scheduleRealtimeRetry(triggerSync);
             } else {
@@ -109,11 +114,18 @@ const ensureRealtimeSubscription = (triggerSync: () => void) => {
     }
 };
 
-const teardownRealtimeSubscription = () => {
+const teardownRealtimeSubscription = (fromStatusCallback: boolean = false) => {
     if (!realtimeChannel) {
         return;
     }
-    realtimeChannel.unsubscribe();
+    // When called from the Realtime status callback (CLOSED / CHANNEL_ERROR /
+    // TIMED_OUT), the channel is already in the process of leaving/closing.
+    // Calling unsubscribe() again causes the client to fire additional close
+    // events, which in turn re-enter our status callback and eventually
+    // overflow the call stack. In those cases we only clear our local refs.
+    if (!fromStatusCallback) {
+        realtimeChannel.unsubscribe();
+    }
     realtimeChannel = null;
     isRealtimeConnecting = false;
 };
@@ -432,6 +444,12 @@ export const SyncService = {
             }
         } catch (error) {
             console.error('Failed to determine guest mode before sync:', error);
+        }
+
+        const onlineBeforeAuth = await this.isOnline();
+        if (!onlineBeforeAuth) {
+            console.log('Device offline before auth check, skipping sync early');
+            return;
         }
 
         const {

@@ -20,6 +20,7 @@ import NotificationPreference from './models/NotificationPreference';
 import QuietHours from './models/QuietHours';
 import AppLock from './models/AppLock';
 import UserPreference from './models/UserPreference';
+import CategoryColorMapping from './models/CategoryColorMapping';
 
 const modelClasses = [
     User,
@@ -43,6 +44,7 @@ const modelClasses = [
     QuietHours,
     AppLock,
     UserPreference,
+    CategoryColorMapping,
 ];
 
 export const createDatabase = (profileId: string): Database => {

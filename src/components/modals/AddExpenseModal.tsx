@@ -6,6 +6,8 @@ import { Button } from '../ui/Button';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useCountry } from '../../contexts/CountryContext';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { CategoryColorService } from '../../services/CategoryColorService';
+import { CATEGORY_COLOR_FALLBACK } from '../../constants/categoryColors';
 
 export interface ExpenseData {
     name: string;
@@ -22,6 +24,7 @@ interface AddExpenseModalProps {
     onAdd: (expense: ExpenseData) => void;
     budgets: Record<string, number>;
     currentSpending: Record<string, number>;
+    categoryColors?: Record<string, string>;
 }
 
 const categories = [
@@ -42,6 +45,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     onAdd,
     budgets,
     currentSpending,
+    categoryColors = {},
 }) => {
     const colors = useThemeColors();
     const [name, setName] = useState('');
@@ -265,29 +269,44 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                                     {errors.category && <Text style={[styles.errorText, { color: colors.danger }]}> *</Text>}
                                 </View>
                                 <View style={styles.categoriesGrid}>
-                                    {categories.map((cat) => (
-                                        <TouchableOpacity
-                                            key={cat.id}
-                                            style={[
-                                                styles.categoryItem,
-                                                { backgroundColor: colors.muted },
-                                                category === cat.id && { backgroundColor: colors.primary + '20', borderColor: colors.primary }
-                                            ]}
-                                            onPress={() => setCategory(cat.id)}
-                                        >
-                                            <MaterialCommunityIcons name={cat.icon} size={28} color={category === cat.id ? colors.primary : colors.foreground} style={{ marginBottom: 4 }} />
-                                            <Text
+                                    {categories.map((cat) => {
+                                        const normalizedKey = CategoryColorService.normalizeCategoryKey(cat.id);
+                                        const catColor = categoryColors[normalizedKey] ?? CATEGORY_COLOR_FALLBACK;
+                                        return (
+                                            <TouchableOpacity
+                                                key={cat.id}
                                                 style={[
-                                                    styles.categoryName,
-                                                    { color: colors.foreground },
-                                                    category === cat.id && { color: colors.primary, fontWeight: '700' }
+                                                    styles.categoryItem,
+                                                    { backgroundColor: colors.muted },
+                                                    category === cat.id && { backgroundColor: colors.primary + '20', borderColor: colors.primary }
                                                 ]}
-                                                numberOfLines={1}
+                                                onPress={() => setCategory(cat.id)}
                                             >
-                                                {cat.name.split(' ')[0]}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
+                                                <MaterialCommunityIcons
+                                                    name={cat.icon}
+                                                    size={28}
+                                                    color={catColor}
+                                                    style={{ marginBottom: 4 }}
+                                                />
+                                                <Text
+                                                    style={[
+                                                        styles.categoryName,
+                                                        { color: colors.foreground },
+                                                        category === cat.id && { color: colors.primary, fontWeight: '700' }
+                                                    ]}
+                                                    numberOfLines={1}
+                                                >
+                                                    {cat.name.split(' ')[0]}
+                                                </Text>
+                                                <View
+                                                    style={[
+                                                        styles.categoryColorDot,
+                                                        { backgroundColor: catColor, borderColor: colors.border }
+                                                    ]}
+                                                />
+                                            </TouchableOpacity>
+                                        );
+                                    })}
                                 </View>
                                 {errors.category && (
                                     <Text style={[styles.errorMessage, { color: colors.danger }]}>{errors.category}</Text>
@@ -494,10 +513,20 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         borderWidth: 2,
         borderColor: 'transparent',
+        position: 'relative',
     },
     categoryName: {
         fontSize: 11,
         fontWeight: '500',
+    },
+    categoryColorDot: {
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        borderWidth: 1,
     },
     alertContainer: {
         borderWidth: 1,

@@ -10,12 +10,13 @@ import {
     TouchableOpacity,
 } from "react-native";
 import { theme } from "../theme";
-import { useThemeColors } from "../contexts/ThemeContext";
+import { useThemeColors, useTheme } from "../contexts/ThemeContext";
 import { useFamily } from "../contexts/FamilyContext";
 import { PROFILE_COLORS } from "../constants/profileColors";
 import { AppIcon, AppIconName, isAppIconName } from "../components/ui/AppIcon";
 import { AppSettingsService } from "../services/AppSettingsService";
 import { MemberIcon } from "../components/ui";
+import { MEMBER_ICON_OPTIONS, DEFAULT_MEMBER_ICON } from "../constants/memberIcons";
 
 interface InitialSetupScreenProps {
     onComplete: () => void;
@@ -23,20 +24,23 @@ interface InitialSetupScreenProps {
 
 export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComplete }) => {
     const colors = useThemeColors();
+    const { appearanceMode } = useTheme();
+    const isMidnight = appearanceMode === "midnight";
+    const accentColor = isMidnight ? colors.foreground : colors.primary;
     const radius = theme.radius;
     const { setFamilyName, addMember, updateMember, setActiveMember, removeMember, members, familyName } = useFamily();
 
     const [familyNameInput, setFamilyNameInput] = useState("Family");
     const [memberName, setMemberName] = useState("Admin");
     const [selectedColor, setSelectedColor] = useState(PROFILE_COLORS[0]);
-    const [selectedEmoji, setSelectedEmoji] = useState<AppIconName>("user");
+    const [selectedEmoji, setSelectedEmoji] = useState<string>(DEFAULT_MEMBER_ICON);
     const [familyNameTouched, setFamilyNameTouched] = useState(false);
     const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
     const scrollViewRef = useRef<ScrollView | null>(null);
 
     useEffect(() => {
         if (familyNameTouched) return;
-        if (familyName && familyName !== "Family Chores") {
+        if (familyName && familyName !== "Chores Nest") {
             setFamilyNameInput(familyName);
             return;
         }
@@ -70,7 +74,7 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
 
     const handleMemberEdit = (member: any) => {
         setMemberName(member.name || "");
-        setSelectedEmoji(isAppIconName(member.symbol) ? member.symbol : "user");
+        setSelectedEmoji(member.symbol || DEFAULT_MEMBER_ICON);
         const matchingColor = PROFILE_COLORS.find((color) => color.value === member.color);
         setSelectedColor(matchingColor || PROFILE_COLORS[0]);
         setEditingMemberId(member.id);
@@ -95,7 +99,7 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
                             if (editingMemberId === member.id) {
                                 setEditingMemberId(null);
                                 setMemberName("");
-                                setSelectedEmoji("user");
+                                setSelectedEmoji(DEFAULT_MEMBER_ICON);
                                 setSelectedColor(PROFILE_COLORS[0]);
                             }
                         } catch (error) {
@@ -107,25 +111,6 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
             ]
         );
     };
-
-    const icons: AppIconName[] = [
-        "user",
-        "users",
-        "shield",
-        "sparkles",
-        "smile",
-        "heart",
-        "home",
-        "gift",
-        "party",
-        "sun",
-        "moon",
-        "zap",
-        "trophy",
-        "shoppingCart",
-        "calendar",
-        "checkCircle",
-    ];
 
     const currentEditingMember = editingMemberId ? members.find((member: any) => member.id === editingMemberId) : null;
 
@@ -199,8 +184,8 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
             >
                 {/* Header */}
                 <View style={styles.header}>
-                    <View style={[styles.iconCircle, { backgroundColor: colors.primary + '20', borderRadius: radius.xl }]}>
-                        <AppIcon name="users" size={32} color={colors.primary} />
+                    <View style={[styles.iconCircle, { backgroundColor: accentColor + '20', borderRadius: radius.xl }]}>
+                        <AppIcon name="users" size={32} color={accentColor} />
                     </View>
                     <Text style={[styles.title, { color: colors.foreground }]}>
                         Welcome! Let's Set Up
@@ -280,7 +265,7 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
                         This will be your main profile
                     </Text>
                     {editingMemberId && (
-                        <Text style={[styles.editingNotice, { color: colors.primary }]}>
+                        <Text style={[styles.editingNotice, { color: accentColor }]}>
                             Editing {currentEditingMember?.name || "member"} — changes will update this profile.
                         </Text>
                     )}
@@ -298,16 +283,16 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
                     {/* Icon Selection */}
                     <Text style={[styles.label, { color: colors.foreground }]}>Choose a Profile Icon</Text>
                     <View style={styles.emojiGrid}>
-                        {icons.map((icon) => (
+                        {MEMBER_ICON_OPTIONS.map((icon) => (
                             <TouchableOpacity
                                 key={icon}
                                 style={[
                                     styles.emojiButton,
-                                    { backgroundColor: selectedEmoji === icon ? colors.primary + '20' : colors.muted, borderColor: selectedEmoji === icon ? colors.primary : colors.border, borderRadius: radius.md }
+                                    { backgroundColor: selectedEmoji === icon ? accentColor + '20' : colors.muted, borderColor: selectedEmoji === icon ? accentColor : colors.border, borderRadius: radius.md }
                                 ]}
                                 onPress={() => setSelectedEmoji(icon)}
                             >
-                                <AppIcon name={icon} size={28} color={selectedEmoji === icon ? colors.primary : colors.foreground} />
+                                <AppIcon source={icon} size={28} color={selectedEmoji === icon ? accentColor : colors.foreground} />
                             </TouchableOpacity>
                         ))}
                     </View>
@@ -337,7 +322,7 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
                     {/* Preview */}
                     <View style={[styles.preview, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
                         <View style={[styles.previewAvatar, { backgroundColor: selectedColor.hex, borderRadius: radius.md }]}>
-                            <MemberIcon symbol={selectedEmoji} size={32} color={colors.primary} />
+                            <MemberIcon symbol={selectedEmoji} size={32} color={accentColor} />
                         </View>
                         <Text style={[styles.previewName, { color: colors.foreground }]}>
                             {memberName || "Your Name"}
@@ -350,10 +335,21 @@ export const InitialSetupScreen: React.FC<InitialSetupScreenProps> = ({ onComple
                     style={[styles.completeButton, { backgroundColor: colors.primary, borderRadius: radius.lg }]}
                     onPress={handleComplete}
                 >
-                    <Text style={[styles.completeButtonText, { color: colors.primaryForeground }]}>
+                    <Text style={[styles.completeButtonText, { color: colors.primaryForeground }]}> 
                         Complete Setup →
                     </Text>
                 </Pressable>
+                {members.length > 0 && (
+                    <Pressable
+                        style={[
+                            styles.skipButton,
+                            { borderRadius: radius.lg, borderColor: colors.border }
+                        ]}
+                        onPress={onComplete}
+                    >
+                        <Text style={[styles.skipButtonText, { color: colors.foreground }]}>Skip Setup</Text>
+                    </Pressable>
+                )}
             </ScrollView>
         </View>
     );
@@ -524,6 +520,17 @@ const styles = StyleSheet.create({
     },
     completeButtonText: {
         fontSize: 18,
+        fontWeight: "700",
+    },
+    skipButton: {
+        padding: theme.spacing.lg,
+        alignItems: "center",
+        marginTop: theme.spacing.sm,
+        borderWidth: 1,
+        borderColor: "transparent",
+    },
+    skipButtonText: {
+        fontSize: 16,
         fontWeight: "700",
     },
 });

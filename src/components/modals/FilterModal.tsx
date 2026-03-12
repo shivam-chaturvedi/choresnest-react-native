@@ -11,6 +11,7 @@ import {
 import { X, Filter } from "lucide-react-native";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { DateTimePicker } from "../ui/SimpleDatePicker";
+import { IconGlyph } from "../ui/IconGlyph";
 
 export interface FilterOptions {
     categories: string[];
@@ -27,13 +28,13 @@ interface FilterModalProps {
 }
 
 const CATEGORIES = [
-    { id: 'warranty', name: 'Warranty', icon: '🛡️' },
-    { id: 'bill', name: 'Bill', icon: '🧾' },
-    { id: 'insurance', name: 'Insurance', icon: '📋' },
-    { id: 'service', name: 'Service', icon: '🔧' },
-    { id: 'certificate', name: 'Certificate', icon: '📜' },
-    { id: 'receipt', name: 'Receipt', icon: '🧾' },
-    { id: 'other', name: 'Other', icon: '📄' },
+    { id: 'warranty', name: 'Warranty', icon: 'shield-check' },
+    { id: 'bill', name: 'Bill', icon: 'file-document-outline' },
+    { id: 'insurance', name: 'Insurance', icon: 'shield-account' },
+    { id: 'service', name: 'Service', icon: 'tools' },
+    { id: 'certificate', name: 'Certificate', icon: 'certificate' },
+    { id: 'receipt', name: 'Receipt', icon: 'receipt' },
+    { id: 'other', name: 'Other', icon: 'dots-horizontal' },
 ];
 
 const EXPIRY_STATUS = [
@@ -145,7 +146,12 @@ export const FilterModal: React.FC<FilterModalProps> = ({
                                         ]}
                                         onPress={() => toggleCategory(cat.id)}
                                     >
-                                        <Text style={{ fontSize: 16, marginRight: 4 }}>{cat.icon}</Text>
+                                        <IconGlyph
+                                            icon={cat.icon}
+                                            size={18}
+                                            color={selectedCategories.includes(cat.id) ? colors.primaryForeground : colors.foreground}
+                                            style={{ marginRight: 4 }}
+                                        />
                                         <Text style={[
                                             styles.categoryChipText,
                                             { color: selectedCategories.includes(cat.id) ? colors.primaryForeground : colors.foreground }

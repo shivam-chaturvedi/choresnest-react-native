@@ -1,12 +1,20 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from "react";
-import { FamilyService } from "../services/FamilyService";
-import { TaskService } from "../services/TaskService";
-import { ListService } from "../services/ListService";
-import type { ListItemRecord } from "../services/ListService";
-import { VaultService } from "../services/VaultService";
-import { supabase } from "../config/supabase";
-import { ProfileService } from "../services/ProfileService";
-import { useAuth } from "./AuthContext";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  ReactNode,
+} from 'react';
+import { FamilyService } from '../services/FamilyService';
+import { TaskService } from '../services/TaskService';
+import { ListService } from '../services/ListService';
+import type { ListItemRecord } from '../services/ListService';
+import { VaultService } from '../services/VaultService';
+import { supabase } from '../config/supabase';
+import { ProfileService } from '../services/ProfileService';
+import { useAuth } from './AuthContext';
 
 // Re-export interfaces (keeping compatibility or updating as needed)
 export interface FamilyMember {
@@ -60,10 +68,11 @@ export interface GroceryItem {
   category?: string;
   purchasedAt?: number;
   updatedAt?: number;
+  createdAt?: number;
 }
 
-import { VaultReminderRule } from "../utils/VaultReminderUtils";
-import { DocumentUploadScheduler } from "../services/sync/DocumentUploadScheduler";
+import { VaultReminderRule } from '../utils/VaultReminderUtils';
+import { DocumentUploadScheduler } from '../services/sync/DocumentUploadScheduler';
 
 export interface VaultDocument {
   id: string;
@@ -118,18 +127,21 @@ export interface FamilyContextValue {
   toggleGroceryItem: (id: string) => Promise<any>;
   removeGroceryItem: (id: string) => Promise<any>;
   tasks: Task[];
-  addTask: (task: any) => Promise<void>;
+  addTask: (task: any, options?: { source?: string }) => Promise<void>;
   updateTask: (id: string, updates: any) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   reloadLocalData: () => void;
   profileId: string | null;
 }
 
-const mapEventModelToCalendarEvent = (eventModel: any, membersById: Map<string, FamilyMember>): CalendarEvent => ({
+const mapEventModelToCalendarEvent = (
+  eventModel: any,
+  membersById: Map<string, FamilyMember>,
+): CalendarEvent => ({
   id: eventModel.id,
   title: eventModel.title,
   icon: eventModel.icon,
-  date: eventModel.dateString || "",
+  date: eventModel.dateString || '',
   time: eventModel.time,
   endTime: eventModel.endTime,
   memberId: eventModel.memberId,
@@ -145,14 +157,20 @@ const mapEventModelToCalendarEvent = (eventModel: any, membersById: Map<string, 
   timeZone: eventModel.timeZone,
 });
 
-const mapTaskModelToTask = (taskModel: any, membersById: Map<string, FamilyMember>): Task => ({
+const mapTaskModelToTask = (
+  taskModel: any,
+  membersById: Map<string, FamilyMember>,
+): Task => ({
   id: taskModel.id,
   name: taskModel.name,
   status: taskModel.status,
   priority: taskModel.priority,
   due: taskModel.dueDisplay,
-  date: taskModel.dateString || "",
-  assignee: taskModel.assigneeId && membersById.has(taskModel.assigneeId) ? taskModel.assigneeId : undefined,
+  date: taskModel.dateString || '',
+  assignee:
+    taskModel.assigneeId && membersById.has(taskModel.assigneeId)
+      ? taskModel.assigneeId
+      : undefined,
   tab: taskModel.tab,
   icon: taskModel.icon,
 });
@@ -163,10 +181,17 @@ const normalizeVirtualId = (id: string): string => {
   return match && match[1] ? match[1] : id;
 };
 
-export const FamilyContext = createContext<FamilyContextValue | undefined>(undefined);
+export const FamilyContext = createContext<FamilyContextValue | undefined>(
+  undefined,
+);
 
-const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean; children: ReactNode; reloadLocalData: () => void }> = ({ profileId, isGuest, children, reloadLocalData }) => {
-  const [familyName, setFamilyNameState] = useState("Family Chores");
+const FamilyProviderInner: React.FC<{
+  profileId: string | null;
+  isGuest: boolean;
+  children: ReactNode;
+  reloadLocalData: () => void;
+}> = ({ profileId, isGuest, children, reloadLocalData }) => {
+  const [familyName, setFamilyNameState] = useState('Chores Nest');
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [rawEvents, setRawEvents] = useState<any[]>([]);
   const [rawTasks, setRawTasks] = useState<any[]>([]);
@@ -193,10 +218,14 @@ const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean
     });
 
     if (missingMembers.length > 0) {
-      console.warn(`FamilyContext: ${missingMembers.length} events reference missing members`.trim());
+      console.warn(
+        `FamilyContext: ${missingMembers.length} events reference missing members`.trim(),
+      );
     }
 
-    return normalized.map(eventModel => mapEventModelToCalendarEvent(eventModel, membersById));
+    return normalized.map(eventModel =>
+      mapEventModelToCalendarEvent(eventModel, membersById),
+    );
   }, [rawEvents, membersById]);
 
   const tasks = useMemo(() => {
@@ -210,10 +239,14 @@ const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean
     });
 
     if (missingAssignees.length > 0) {
-      console.warn(`FamilyContext: ${missingAssignees.length} tasks reference missing assignees`.trim());
+      console.warn(
+        `FamilyContext: ${missingAssignees.length} tasks reference missing assignees`.trim(),
+      );
     }
 
-    return normalized.map(taskModel => mapTaskModelToTask(taskModel, membersById));
+    return normalized.map(taskModel =>
+      mapTaskModelToTask(taskModel, membersById),
+    );
   }, [rawTasks, membersById]);
 
   const groceryList = useMemo(() => {
@@ -227,25 +260,29 @@ const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean
       addedBy: item.addedById,
       purchasedAt: item.purchasedAt,
       updatedAt: item.updatedAt,
+      createdAt: item.createdAt,
     }));
   }, [rawGroceryItems]);
 
   // --- Family Name Subscription ---
   useEffect(() => {
     if (!profileId) {
-      setFamilyNameState("Family Chores");
+      setFamilyNameState('Chores Nest');
       return;
     }
     try {
       const sub = FamilyService.observeFamilyName(profileId).subscribe({
         next: setFamilyNameState,
-        error: (error) => {
-          console.error("FamilyContext: Failed to observe family name", error);
-        }
+        error: error => {
+          console.error('FamilyContext: Failed to observe family name', error);
+        },
       });
       return () => sub.unsubscribe();
     } catch (error) {
-      console.error("FamilyContext: Error setting up family name subscription", error);
+      console.error(
+        'FamilyContext: Error setting up family name subscription',
+        error,
+      );
     }
   }, [profileId]);
 
@@ -261,9 +298,12 @@ const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean
   }, [profileId, isGuest]);
 
   const setFamilyName = async (name: string): Promise<void> => {
-    const effectiveProfileId = profileId || await ProfileService.getActiveProfileId();
+    const effectiveProfileId =
+      profileId || (await ProfileService.getActiveProfileId());
     if (!effectiveProfileId) {
-      console.warn('FamilyContext: Profile ID unavailable while setting family name — write skipped');
+      console.warn(
+        'FamilyContext: Profile ID unavailable while setting family name — write skipped',
+      );
       return;
     }
     await FamilyService.setFamilyName(effectiveProfileId, name);
@@ -277,7 +317,7 @@ const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean
     }
     try {
       const sub = FamilyService.observeMembers(profileId).subscribe({
-        next: (rawMembers) => {
+        next: rawMembers => {
           try {
             const mapped = rawMembers.map(m => ({
               id: m.id,
@@ -285,16 +325,16 @@ const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean
               symbol: m.symbol,
               color: m.color,
               isActive: m.isActive,
-              role: m.role
+              role: m.role,
             }));
             setMembers(mapped);
           } catch (error) {
             console.error('Error mapping members:', error);
           }
         },
-        error: (error) => {
+        error: error => {
           console.error('Error observing members:', error);
-        }
+        },
       });
       return () => sub.unsubscribe();
     } catch (error) {
@@ -304,26 +344,33 @@ const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean
 
   // --- Active Member Helper ---
   const activeMember = useMemo(() => {
-    const explicit = members.find((m) => m.isActive);
+    const explicit = members.find(m => m.isActive);
     return explicit || (members.length > 0 ? members[0] : null);
   }, [members]);
 
-  const setActiveMember = useCallback(async (member: FamilyMember) => {
-    try {
-      if (!profileId) {
-        console.warn('FamilyContext: Profile ID unavailable for active member update');
-        return;
-      }
-      await FamilyService.setActiveMember(profileId, member.id);
+  const setActiveMember = useCallback(
+    async (member: FamilyMember) => {
+      try {
+        if (!profileId) {
+          console.warn(
+            'FamilyContext: Profile ID unavailable for active member update',
+          );
+          return;
+        }
+        await FamilyService.setActiveMember(profileId, member.id);
 
-      // Reschedule notifications for the new active profile
-      const { NotificationScheduler } = await import('../services/NotificationScheduler');
-      await NotificationScheduler.rescheduleNotificationsForActiveProfile();
-    } catch (error) {
-      console.error('FamilyContext: Error setting active member:', error);
-      throw error;
-    }
-  }, [profileId]);
+        // Reschedule notifications for the new active profile
+        const { NotificationScheduler } = await import(
+          '../services/NotificationScheduler'
+        );
+        await NotificationScheduler.rescheduleNotificationsForActiveProfile();
+      } catch (error) {
+        console.error('FamilyContext: Error setting active member:', error);
+        throw error;
+      }
+    },
+    [profileId],
+  );
 
   useEffect(() => {
     if (members.length === 0) {
@@ -353,13 +400,15 @@ const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean
     setRawEvents([]);
     try {
       const sub = TaskService.observeEvents(profileId).subscribe({
-        next: (rawEvents) => {
-          console.log(`FamilyContext: Received ${rawEvents.length} events from DB for profile ${profileId}`);
+        next: rawEvents => {
+          console.log(
+            `FamilyContext: Received ${rawEvents.length} events from DB for profile ${profileId}`,
+          );
           setRawEvents(rawEvents);
         },
-        error: (error) => {
+        error: error => {
           console.error('Error observing events:', error);
-        }
+        },
       });
       return () => sub.unsubscribe();
     } catch (error) {
@@ -376,13 +425,15 @@ const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean
     setRawTasks([]);
     try {
       const sub = TaskService.observeTasks(profileId).subscribe({
-        next: (rawTasks) => {
-          console.log(`FamilyContext: Received ${rawTasks.length} tasks from DB for profile ${profileId}`);
+        next: rawTasks => {
+          console.log(
+            `FamilyContext: Received ${rawTasks.length} tasks from DB for profile ${profileId}`,
+          );
           setRawTasks(rawTasks);
         },
-        error: (error) => {
+        error: error => {
           console.error('Error observing tasks:', error);
-        }
+        },
       });
       return () => sub.unsubscribe();
     } catch (error) {
@@ -390,11 +441,13 @@ const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean
     }
   }, [profileId]);
 
-  const addTask = async (t: any) => {
+  const addTask = async (t: any, options: { source?: string } = {}) => {
     try {
       const pid = ensureProfileId();
       if (!pid) return;
-      return await TaskService.addTask({ ...t, profileId: pid });
+      const created = await TaskService.addTask({ ...t, profileId: pid });
+
+      return created;
     } catch (error) {
       console.error('Failed to add task:', error);
       throw new Error('Failed to add task. Please try again.');
@@ -404,7 +457,13 @@ const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean
   const updateTask = async (id: string, updates: any) => {
     try {
       const normalizedId = normalizeVirtualId(id);
-      return await TaskService.updateTask(normalizedId, updates);
+      const previous = tasks.find(task => task.id === normalizedId);
+      const prevStatus = previous?.status;
+      const prevAssignee = previous?.assignee;
+      const prevPriority = previous?.priority;
+      const result = await TaskService.updateTask(normalizedId, updates);
+
+      return result;
     } catch (error) {
       console.error('Failed to update task:', error);
       throw new Error('Failed to update task. Please try again.');
@@ -414,7 +473,8 @@ const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean
   const deleteTask = async (id: string) => {
     try {
       const normalizedId = normalizeVirtualId(id);
-      return await TaskService.deleteTask(normalizedId);
+      const result = await TaskService.deleteTask(normalizedId);
+      return result;
     } catch (error) {
       console.error('Failed to delete task:', error);
       throw new Error('Failed to delete task. Please try again.');
@@ -462,7 +522,7 @@ const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean
 
     try {
       const sub = VaultService.observeAllDocuments(profileId).subscribe({
-        next: (docs) => {
+        next: docs => {
           try {
             const g: any[] = [];
             const m: Record<string, any[]> = {};
@@ -482,7 +542,7 @@ const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean
                 uri: docUri, // Map for VaultUtils
                 uploadStatus: d.uploadStatus,
                 remotePath: d.remotePath,
-                ...meta,  // Merge meta fields (expiryDate, etc.) to top level
+                ...meta, // Merge meta fields (expiryDate, etc.) to top level
               };
               if (d.memberId === 'global') {
                 g.push(docObj);
@@ -497,9 +557,9 @@ const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean
             console.error('Error processing vault documents:', error);
           }
         },
-        error: (error) => {
+        error: error => {
           console.error('Error observing vault:', error);
-        }
+        },
       });
       return () => sub.unsubscribe();
     } catch (error) {
@@ -515,12 +575,12 @@ const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean
     }
     try {
       const sub = ListService.observeShoppingListItems(profileId).subscribe({
-        next: (items) => {
+        next: items => {
           setRawGroceryItems(items);
         },
-        error: (error) => {
+        error: error => {
           console.error('Error observing grocery list:', error);
-        }
+        },
       });
       return () => sub.unsubscribe();
     } catch (error) {
@@ -549,7 +609,13 @@ const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean
         addMember: async (m: any) => {
           const pid = ensureProfileId();
           if (!pid) return;
-          await FamilyService.addMember(pid, m.name, m.symbol, m.color, m.isActive ?? false);
+          await FamilyService.addMember(
+            pid,
+            m.name,
+            m.symbol,
+            m.color,
+            m.isActive ?? false,
+          );
         },
         removeMember: handleCascadeDelete,
         deleteMemberCascade: handleCascadeDelete,
@@ -594,7 +660,9 @@ const FamilyProviderInner: React.FC<{ profileId: string | null; isGuest: boolean
   );
 };
 
-export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const FamilyProvider: React.FC<{ children: ReactNode }> = ({
+  children,
+}) => {
   const { isGuest, user } = useAuth();
   const [profileId, setProfileId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -612,7 +680,9 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     };
     refreshProfile();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async () => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async () => {
       const pid = await ProfileService.getActiveProfileId();
       if (mounted) {
         setProfileId(pid);
@@ -641,7 +711,7 @@ const fallbackVoidAsync = async () => {};
 const fallbackValueAsync = async () => undefined;
 
 const FALLBACK_FAMILY_CONTEXT: FamilyContextValue = {
-  familyName: "Family Chores",
+  familyName: 'Chores Nest',
   setFamilyName: fallbackVoidAsync as (name: string) => Promise<void>,
   members: [],
   activeMember: null,
@@ -649,12 +719,21 @@ const FALLBACK_FAMILY_CONTEXT: FamilyContextValue = {
   addMember: fallbackValueAsync as (member: any) => Promise<any>,
   removeMember: fallbackValueAsync as (id: string) => Promise<any>,
   deleteMemberCascade: fallbackValueAsync as (id: string) => Promise<any>,
-  updateMember: fallbackValueAsync as (id: string, updates: any) => Promise<any>,
-  updateMemberColor: fallbackValueAsync as (id: string, color: string) => Promise<any>,
+  updateMember: fallbackValueAsync as (
+    id: string,
+    updates: any,
+  ) => Promise<any>,
+  updateMemberColor: fallbackValueAsync as (
+    id: string,
+    color: string,
+  ) => Promise<any>,
   globalVault: [],
   memberVaults: {},
   addDocument: fallbackValueAsync as (doc: any) => Promise<any>,
-  updateDocument: fallbackValueAsync as (id: string, updates: any) => Promise<any>,
+  updateDocument: fallbackValueAsync as (
+    id: string,
+    updates: any,
+  ) => Promise<any>,
   events: [],
   addEvent: fallbackVoidAsync as (event: any) => Promise<void>,
   updateEvent: fallbackVoidAsync as (id: string, updates: any) => Promise<void>,
@@ -664,11 +743,16 @@ const FALLBACK_FAMILY_CONTEXT: FamilyContextValue = {
   toggleGroceryItem: fallbackValueAsync as (id: string) => Promise<any>,
   removeGroceryItem: fallbackValueAsync as (id: string) => Promise<any>,
   tasks: [],
-  addTask: fallbackVoidAsync as (task: any) => Promise<void>,
+  addTask: fallbackVoidAsync as (
+    task: any,
+    options?: { source?: string },
+  ) => Promise<void>,
   updateTask: fallbackVoidAsync as (id: string, updates: any) => Promise<void>,
   deleteTask: fallbackVoidAsync as (id: string) => Promise<void>,
   reloadLocalData: () => {
-    console.warn("FamilyContext: reloadLocalData called before provider was ready");
+    console.warn(
+      'FamilyContext: reloadLocalData called before provider was ready',
+    );
   },
   profileId: null,
 };
@@ -680,7 +764,7 @@ export const useFamily = () => {
   if (!context) {
     if (!hasWarnedMissingFamilyProvider) {
       console.warn(
-        "useFamily called outside of FamilyProvider. Returning fallback context while the provider initializes."
+        'useFamily called outside of FamilyProvider. Returning fallback context while the provider initializes.',
       );
       hasWarnedMissingFamilyProvider = true;
     }

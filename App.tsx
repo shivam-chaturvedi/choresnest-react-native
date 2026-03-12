@@ -1,52 +1,106 @@
-import "react-native-gesture-handler";
-import notifee, { EventType } from "@notifee/react-native";
-import React, { useEffect, useState } from "react";
-import { StatusBar, StyleSheet } from "react-native";
-import { SafeAreaProvider } from "react-native-safe-area-context";
-import { SafeAreaView } from "react-native-safe-area-context";
+import 'react-native-gesture-handler';
+import notifee, { EventType } from '@notifee/react-native';
+import React, { useEffect, useState } from 'react';
+import { StatusBar, StyleSheet } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { theme } from "./src/theme";
-import { FamilyProvider } from "./src/contexts/FamilyContext";
-import { FinanceProvider } from "./src/contexts/FinanceContext";
-import { MealPlanProvider } from "./src/contexts/MealPlanContext";
-import { SidebarProvider } from "./src/contexts/SidebarContext";
-import { RecipeProvider } from "./src/contexts/RecipeContext";
-import { ToastProvider, useToast } from "./src/components/ui/Toast";
-import { ErrorBoundary } from "./src/components/ErrorBoundary";
-import { AppNavigator } from "./src/navigation/AppNavigator";
-import { ThemeProvider } from "./src/contexts/ThemeContext";
-import { AuthProvider } from "./src/contexts/AuthContext";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { databaseService } from "./src/services/DBService";
-import { getDatabase } from "./src/database";
-import Event from "./src/database/models/Event";
-import Task from "./src/database/models/Task";
+import { theme } from './src/theme';
+import { FamilyProvider } from './src/contexts/FamilyContext';
+import { FinanceProvider } from './src/contexts/FinanceContext';
+import { MealPlanProvider } from './src/contexts/MealPlanContext';
+import { SidebarProvider } from './src/contexts/SidebarContext';
+import { RecipeProvider } from './src/contexts/RecipeContext';
+import { ToastProvider, useToast } from './src/components/ui/Toast';
+import { ErrorBoundary } from './src/components/ErrorBoundary';
+import { AppNavigator } from './src/navigation/AppNavigator';
+import { ThemeProvider } from './src/contexts/ThemeContext';
+import { AuthProvider } from './src/contexts/AuthContext';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { databaseService } from './src/services/DBService';
+import { getDatabase } from './src/database';
+import Event from './src/database/models/Event';
+import Task from './src/database/models/Task';
 import {
   NotificationCategory,
   NotificationScheduler,
   RepeatMeta,
   RepeatType,
-} from "./src/services/NotificationScheduler";
-import { CountryProvider } from "./src/contexts/CountryContext";
-import { appLockManager } from "./src/services/AppLockManager";
-import { SyncIndicator } from "./src/components/SyncIndicator";
-import { SyncService } from "./src/services/SyncService";
-import NetInfo from "@react-native-community/netinfo";
-import { PermissionPromptRenderer } from "./src/components/ui/PermissionPrompt";
+} from './src/services/NotificationScheduler';
+import { CountryProvider } from './src/contexts/CountryContext';
+import { appLockManager } from './src/services/AppLockManager';
+import { SyncIndicator } from './src/components/SyncIndicator';
+import { SyncService } from './src/services/SyncService';
+import NetInfo from '@react-native-community/netinfo';
+import { PermissionPromptRenderer } from './src/components/ui/PermissionPrompt';
+import { bootService } from './src/services/BootService';
+import * as Sentry from '@sentry/react-native';
+import { reactNavigationIntegration } from './src/services/SentryNavigation';
+
+Sentry.init({
+  dsn: 'https://89d6728a04ce8a7a66a67655e9bbe3fc@o4511009722466304.ingest.us.sentry.io/4511009726070784',
+
+  // Adds more context data to events (IP address, cookies, user, etc.)
+  // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
+  sendDefaultPii: true,
+
+  // Enable Logs
+  enableLogs: true,
+
+  tracesSampleRate: __DEV__ ? 1.0 : 0.2,
+  // Configure Session Replay
+  replaysSessionSampleRate: 0.1,
+  replaysOnErrorSampleRate: 1,
+  integrations: [
+    reactNavigationIntegration,
+    Sentry.mobileReplayIntegration(),
+    Sentry.feedbackIntegration(),
+  ],
+
+  // uncomment the line below to enable Spotlight (https://spotlightjs.com)
+  // spotlight: __DEV__,
+});
 
 const App = () => {
+  const [bootCompleted, setBootCompleted] = useState(false);
+
   useEffect(() => {
+    let mounted = true;
+
+    const restore = async () => {
+      try {
+        await bootService.restoreLastActiveProfile();
+      } catch (error) {
+        console.error('[App] BootService failed', error);
+      } finally {
+        if (mounted) {
+          setBootCompleted(true);
+        }
+      }
+    };
+
+    restore();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!bootCompleted) {
+      return;
+    }
+
     const initDB = async () => {
       try {
         await databaseService.init();
         await NotificationScheduler.initialize();
         await NotificationScheduler.rescheduleAllMissing();
       } catch (e) {
-        console.error("Failed to init DB/Notifications on launch", e);
+        console.error('Failed to init DB/Notifications on launch', e);
       }
     };
     initDB();
-  }, []);
+  }, [bootCompleted]);
 
   useEffect(() => {
     const unsubscribe = notifee.onForegroundEvent(async ({ type, detail }) => {
@@ -61,21 +115,27 @@ const App = () => {
       }
 
       const repeatType = payload.__repeatType as RepeatType;
-      if (repeatType === "daily" || repeatType === "weekly") {
+      if (repeatType === 'daily' || repeatType === 'weekly') {
         return;
       }
 
       const repeatMeta = payload.__repeatMeta as RepeatMeta | undefined;
       let nextTrigger: Date | null = null;
 
-      if (repeatType === "custom") {
-        nextTrigger = NotificationScheduler.getNextCustomDate(repeatMeta?.dates);
+      if (repeatType === 'custom') {
+        nextTrigger = NotificationScheduler.getNextCustomDate(
+          repeatMeta?.dates,
+        );
       } else {
         const lastTriggerValue = payload.__lastTrigger;
         if (lastTriggerValue) {
           const lastTrigger = new Date(lastTriggerValue);
           if (!Number.isNaN(lastTrigger.getTime())) {
-            nextTrigger = NotificationScheduler.computeNextDate(lastTrigger, repeatType, repeatMeta);
+            nextTrigger = NotificationScheduler.computeNextDate(
+              lastTrigger,
+              repeatType,
+              repeatMeta,
+            );
           }
         }
       }
@@ -90,48 +150,53 @@ const App = () => {
       }
 
       try {
-        const newNotificationId = await NotificationScheduler.scheduleNotification(
-          category,
-          {
-            title: notification?.title ?? "",
-            body: notification?.body ?? "",
-            data: { ...payload },
-          },
-          nextTrigger,
-          {
-            repeatType,
-            repeatMeta,
-          }
-        );
+        const newNotificationId =
+          await NotificationScheduler.scheduleNotification(
+            category,
+            {
+              title: notification?.title ?? '',
+              body: notification?.body ?? '',
+              data: { ...payload },
+            },
+            nextTrigger,
+            {
+              repeatType,
+              repeatMeta,
+            },
+          );
 
         if (!newNotificationId) {
           return;
         }
 
-        if (category === "events" && payload.eventId) {
+        if (category === 'events' && payload.eventId) {
           const db = getDatabase();
           await db.write(async () => {
-            const record = await db.get<Event>("events").find(payload.eventId);
+            const record = await db.get<Event>('events').find(payload.eventId);
             await record.update(e => {
               e.notificationId = newNotificationId;
             });
           });
-        } else if (category === "tasks" && payload.taskId) {
+        } else if (category === 'tasks' && payload.taskId) {
           const db = getDatabase();
           await db.write(async () => {
-            const record = await db.get<Task>("tasks").find(payload.taskId);
+            const record = await db.get<Task>('tasks').find(payload.taskId);
             await record.update(t => {
               t.notificationId = newNotificationId;
             });
           });
         }
       } catch (error) {
-        console.warn("Failed to reschedule manual repeat notification", error);
+        console.warn('Failed to reschedule manual repeat notification', error);
       }
     });
 
     return () => unsubscribe();
   }, []);
+
+  if (!bootCompleted) {
+    return null;
+  }
 
   // Note: Sync setup is handled in AppNavigatorInner where we have access to auth context
   // This ensures sync only runs when user is authenticated
@@ -153,7 +218,10 @@ const App = () => {
                             backgroundColor={theme.colors.background}
                             animated
                           />
-                          <SafeAreaView style={styles.appWrapper} edges={["top", "bottom", "left", "right"]}>
+                          <SafeAreaView
+                            style={styles.appWrapper}
+                            edges={['top', 'bottom', 'left', 'right']}
+                          >
                             <ErrorBoundary>
                               <AppNavigator />
                             </ErrorBoundary>
@@ -167,8 +235,8 @@ const App = () => {
             </ToastProvider>
           </ThemeProvider>
         </SafeAreaProvider>
-        </CountryProvider>
-        <PermissionPromptRenderer />
+      </CountryProvider>
+      <PermissionPromptRenderer />
     </GestureHandlerRootView>
   );
 };
@@ -195,4 +263,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default App;
+export default Sentry.wrap(App);

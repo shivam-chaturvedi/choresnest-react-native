@@ -5,9 +5,9 @@ import {
   View,
   StyleSheet,
   Pressable,
+  StatusBar,
 } from "react-native";
 import { NavigationProp, useNavigation } from "@react-navigation/native";
-import { theme } from "../../theme";
 import { BottomNavigation, BottomNavRoute } from "./BottomNavigation";
 import { AppIcon } from "../ui/AppIcon";
 import { QuickAddModal } from "../modals/QuickAddModal";
@@ -42,7 +42,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   disableScroll = false,
 }) => {
   const navigation = useNavigation<NavigationProp<{ MainTabs: { screen?: BottomNavRoute } }>>();
-  const { themeVersion } = useTheme();
+  const { theme, themeVersion, appearanceMode } = useTheme();
   const radius = useThemeRadius();
   const { openSidebar } = useSidebar();
   const { refreshing, refreshNow } = useManualSync();
@@ -83,6 +83,15 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       failOffsetY={[-10, 10]}
     >
       <View style={[styles.container, { backgroundColor: theme.colors.background }, style]}>
+        <StatusBar
+          translucent={false}
+          backgroundColor={
+            appearanceMode === "midnight" ? "#03040A" : theme.colors.background
+          }
+          barStyle={
+            appearanceMode === "midnight" ? "light-content" : "dark-content"
+          }
+        />
         {disableScroll ? (
           <View style={[styles.scrollView, styles.content]}>{children}</View>
         ) : (
@@ -133,7 +142,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   scrollView: {
     flex: 1,

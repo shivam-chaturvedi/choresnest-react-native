@@ -12,6 +12,8 @@ DROP TRIGGER IF EXISTS force_profile_id_notes ON public.notes;
 DROP FUNCTION IF EXISTS public.force_profile_id();
 DROP TRIGGER IF EXISTS documents_before_write ON public.documents;
 DROP FUNCTION IF EXISTS public.documents_before_write_hook();
+DROP TRIGGER IF EXISTS category_color_mappings_before_write ON public.budget_category_color_mappings;
+DROP FUNCTION IF EXISTS public.category_color_mappings_before_write_hook();
 
 -- drop published type used for document uploads
 DROP TYPE IF EXISTS public.documents_upload_status;
@@ -24,6 +26,7 @@ DROP TABLE IF EXISTS public.meal_plans CASCADE;
 DROP TABLE IF EXISTS public.recipes CASCADE;
 DROP TABLE IF EXISTS public.transactions CASCADE;
 DROP TABLE IF EXISTS public.budgets CASCADE;
+DROP TABLE IF EXISTS public.budget_category_color_mappings CASCADE;
 DROP TABLE IF EXISTS public.documents CASCADE;
 DROP TABLE IF EXISTS public.list_categories CASCADE;
 DROP TABLE IF EXISTS public.lists CASCADE;
@@ -79,6 +82,13 @@ BEGIN
       AND tablename = 'list_categories'
   ) THEN
     ALTER PUBLICATION supabase_realtime DROP TABLE list_categories;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime'
+      AND tablename = 'budget_category_color_mappings'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime DROP TABLE budget_category_color_mappings;
   END IF;
 END;
 $$;
@@ -864,6 +874,81 @@ create policy "Users can update own budgets"
 create policy "Users can delete own budgets"
   on budgets for delete
   using ( auth.uid() = profile_id );
+
+
+-- 34_budget_category_color_mappings.sql
+-- Budget Category Color Mappings (Finance metadata)
+create table budget_category_color_mappings (
+  id uuid primary key default gen_random_uuid(),
+  profile_id uuid references profiles(id) on delete cascade not null,
+  category_key text not null,
+  color_hex text not null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  deleted boolean default false,
+  version integer default 0
+);
+
+create unique index idx_budget_category_color_mappings_profile_category on budget_category_color_mappings(profile_id, category_key);
+create index idx_budget_category_color_mappings_profile_updated_id on budget_category_color_mappings(profile_id, updated_at);
+
+alter table budget_category_color_mappings enable row level security;
+
+create policy "Users can view own category color mappings"
+  on budget_category_color_mappings for select
+  using ( auth.uid() = profile_id );
+
+create policy "Users can insert own category color mappings"
+  on budget_category_color_mappings for insert
+  with check ( auth.uid() = profile_id );
+
+create policy "Users can update own category color mappings"
+  on budget_category_color_mappings for update
+  using ( auth.uid() = profile_id )
+  with check ( auth.uid() = profile_id );
+
+create policy "Users can delete own category color mappings"
+  on budget_category_color_mappings for delete
+  using ( auth.uid() = profile_id );
+
+create or replace function public.category_color_mappings_before_write_hook()
+returns trigger as $$
+declare
+  requester_id uuid;
+begin
+  begin
+    requester_id := auth.uid()::uuid;
+  exception when invalid_text_representation then
+    requester_id := null;
+  end;
+
+  if tg_op = 'INSERT' then
+    if new.profile_id is null then
+      if requester_id is null then
+        raise exception 'category_color_mappings.profile_id cannot be null';
+      end if;
+      new.profile_id := requester_id;
+    end if;
+    new.created_at := coalesce(new.created_at, now());
+    new.deleted := coalesce(new.deleted, false);
+    new.version := coalesce(new.version, 0);
+  else
+    if new.profile_id is null then
+      new.profile_id := coalesce(old.profile_id, requester_id);
+    end if;
+    new.version := coalesce(new.version, coalesce(old.version, 0)) + 1;
+  end if;
+
+  new.updated_at := now();
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists category_color_mappings_before_write on public.budget_category_color_mappings;
+create trigger category_color_mappings_before_write
+  before insert or update on public.budget_category_color_mappings
+  for each row
+  execute function public.category_color_mappings_before_write_hook();
 
 
 -- 09_create_notes.sql
@@ -2318,6 +2403,14 @@ BEGIN
     
     IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'list_categories') THEN
         ALTER PUBLICATION supabase_realtime ADD TABLE list_categories;
+    END IF;
+END $$;
+
+-- 34_budget_category_color_mappings.sql
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'budget_category_color_mappings') THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE budget_category_color_mappings;
     END IF;
 END $$;
 

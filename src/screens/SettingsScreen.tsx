@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
 import { AppLayout } from "../components/layout";
-import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
+import { useThemeColors, useThemeRadius, useTheme } from "../contexts/ThemeContext";
 import { listCountries } from "../config/countries";
 import { useCountry } from "../contexts/CountryContext";
 import { Check, Globe } from "lucide-react-native";
@@ -9,6 +9,10 @@ import { Check, Globe } from "lucide-react-native";
 export const SettingsScreen: React.FC = () => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
+  const { appearanceMode } = useTheme();
+  const isMidnight = appearanceMode === "midnight";
+  const switchColor = isMidnight ? colors.success : colors.primary;
+  const globeColor = isMidnight ? colors.success : colors.primary;
   const { currentCountry, setCountry, formatDateTime, formatCurrency } = useCountry();
 
   const countries = useMemo(() => listCountries(), []);
@@ -25,7 +29,7 @@ export const SettingsScreen: React.FC = () => {
       <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
           <View style={styles.currentRow}>
-            <Globe size={20} color={colors.primary} />
+          <Globe size={20} color={globeColor} />
             <View style={{ marginLeft: 12 }}>
               <Text style={[styles.currentTitle, { color: colors.foreground }]}>Country preferences</Text>
               <Text style={[styles.currentSubtitle, { color: colors.mutedForeground }]}>
@@ -67,7 +71,7 @@ export const SettingsScreen: React.FC = () => {
                 {isActive ? (
                   <Check size={20} color={colors.success} />
                 ) : (
-                  <Text style={{ color: colors.primary, fontWeight: "600" }}>Switch</Text>
+                  <Text style={{ color: switchColor, fontWeight: "600" }}>Switch</Text>
                 )}
               </Pressable>
             );

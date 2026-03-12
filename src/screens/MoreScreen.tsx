@@ -8,10 +8,16 @@ import {
   Alert,
   Modal,
   ActivityIndicator,
+  Linking,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Keyboard,
 } from "react-native";
 import { useNavigation, NavigationProp } from "@react-navigation/native";
 import { AppLayout } from "../components/layout";
-import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
+import { useThemeColors, useThemeRadius, useTheme } from "../contexts/ThemeContext";
 import { useSidebar } from "../contexts/SidebarContext";
 import { AppIcon, AppIconName } from "../components/ui/AppIcon";
 import { useFamily, FamilyMember } from "../contexts/FamilyContext";
@@ -20,6 +26,8 @@ import { useAuth } from "../contexts/AuthContext";
 import { MemberIcon } from "../components/ui";
 import Config from "react-native-config";
 import { withDeferredScreen } from "../components/layout/DeferredScreen";
+import { SupabaseService } from "../services/SupabaseService";
+import { useToast } from "../components/ui/Toast";
 
 const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 
@@ -30,7 +38,9 @@ interface MenuItem {
   color: string;
   iconColor: string;
   route: string;
+  action?: () => void;
   badge?: string;
+  logo?: AppIconName;
 }
 
 interface MenuSection {
@@ -41,13 +51,69 @@ interface MenuSection {
 const MoreScreenContent: React.FC = () => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
+  const { appearanceMode } = useTheme();
+  const isMidnight = appearanceMode === 'midnight';
+  const primaryIconColor = isMidnight ? colors.foreground : colors.primary;
   const navigation = useNavigation<NavigationProp<Record<string, undefined>>>();
   const { openSidebar } = useSidebar();
   const { logout, isGuest } = useAuth();
-  const { activeMember, members, setActiveMember } = useFamily();
+  const { activeMember, members, setActiveMember, profileId } = useFamily();
+  const { showToast } = useToast();
   const [showProfileSwitcher, setShowProfileSwitcher] = useState(false);
 
   const debugToolsEnabled = (Config.ENABLE_DEBUG_TOOLS ?? '').trim().toLowerCase() === 'true';
+  const contactEmail = Config.SUPPORT_EMAIL ?? "support@choresnest.com";
+  const contactSubject = "Contact Request";
+  const contactMessage = "Hi Chores Nest Team,\n\nI’d love some help with...";
+  const bugSubject = "Report a Bug / Feature Request";
+  const bugMessage =
+    "Hi Team,\n\nI discovered an issue or feature idea:\n- Summary:\n- Steps:\n- Expected:\n- Actual:\n\nThanks!";
+  const handleEmail = async (subject: string, body: string) => {
+    const encodedSubject = encodeURIComponent(subject);
+    const encodedBody = encodeURIComponent(body);
+    const url = `mailto:${contactEmail}?subject=${encodedSubject}&body=${encodedBody}`;
+    await Linking.openURL(url);
+  };
+  const feedbackOptions = ["Bug Found", "Feature Request", "General Feedback", "Account Issue", "Theme & UI", "Other"];
+  const [feedbackModalVisible, setFeedbackModalVisible] = useState(false);
+  const [feedbackCategory, setFeedbackCategory] = useState(feedbackOptions[0]);
+  const [feedbackDescription, setFeedbackDescription] = useState("");
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
+  const openFeedbackForm = () => {
+    setFeedbackCategory(feedbackOptions[0]);
+    setFeedbackDescription("");
+    setFeedbackModalVisible(true);
+  };
+  const handleSubmitFeedback = async () => {
+    if (!feedbackDescription.trim()) {
+      Alert.alert("Missing description", "Please describe your request before submitting.");
+      return;
+    }
+    const pid = profileId ?? "guest";
+    try {
+      setFeedbackSubmitting(true);
+      const { error } = await SupabaseService.from("feedback").insert({
+        profile_id: pid,
+        category: feedbackCategory,
+        description: feedbackDescription.trim(),
+      });
+      if (error) {
+        Alert.alert("Submission failed", "Unable to save your feedback right now. Please try again.");
+        return;
+      }
+      setFeedbackModalVisible(false);
+      setCategoryMenuOpen(false);
+      setFeedbackDescription("");
+      showToast({
+        title: "Thanks for your message!",
+        description: "We’ll review it shortly.",
+        type: "success",
+      });
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  };
 
   // Safe access to profile color
   const activeProfileColor = activeMember?.color
@@ -64,7 +130,7 @@ const MoreScreenContent: React.FC = () => {
           description: "Meal planning & recipes",
           icon: "utensils" as AppIconName,
           color: colors.primary + '25',
-          iconColor: colors.primary,
+          iconColor: primaryIconColor,
           route: "Recipes"
         }] : []),
         {
@@ -96,7 +162,7 @@ const MoreScreenContent: React.FC = () => {
           description: "Track assignments & rotations",
           icon: "checkSquare",
           color: colors.primary + '25',
-          iconColor: colors.primary,
+          iconColor: primaryIconColor,
           route: "Tasks"
         },
         {
@@ -104,7 +170,7 @@ const MoreScreenContent: React.FC = () => {
           description: "Secure Personal Storage",
           icon: "lock",
           color: colors.primary + '25',
-          iconColor: colors.primary,
+          iconColor: primaryIconColor,
           route: "Vault"
         },
         {
@@ -142,7 +208,7 @@ const MoreScreenContent: React.FC = () => {
           description: "Light / Cream mode",
           icon: "palette",
           color: colors.primary + '25',
-          iconColor: colors.primary,
+          iconColor: primaryIconColor,
           route: "Theme"
         },
         {
@@ -150,16 +216,40 @@ const MoreScreenContent: React.FC = () => {
           description: "Country, currency & time zone",
           icon: "globe",
           color: colors.info + '25',
-          iconColor: colors.info,
+          iconColor: isMidnight ? colors.foreground : colors.info,
           route: "Settings"
         },
         {
-          label: "Help & Support",
-          description: "FAQ & contact us",
+          label: "Help Center",
+          description: "FAQ & Feature Guide",
           icon: "help",
           color: colors.info + '25',
-          iconColor: colors.info,
+          iconColor: isMidnight ? colors.foreground : colors.info,
           route: "Help"
+        },
+      ],
+    },
+    {
+      title: "CONTACT",
+      items: [
+        {
+          label: "Contact Us",
+          description: "Email our support team",
+          icon: "mail",
+          color: colors.primary + '15',
+          iconColor: primaryIconColor,
+          route: "Contact",
+          action: () => handleEmail(contactSubject, contactMessage),
+        },
+        {
+          label: "Feedback & Support",
+          description: "Share feedback or issues",
+          icon: "alertCircle",
+          color: colors.warning + '15',
+          iconColor: colors.warning,
+          route: "Contact",
+          action: openFeedbackForm,
+          logo: "sparkles",
         },
       ],
     },
@@ -171,7 +261,7 @@ const MoreScreenContent: React.FC = () => {
           description: "Database visualization & logs",
           icon: "terminal" as AppIconName,
           color: colors.primary + '25',
-          iconColor: colors.primary,
+          iconColor: primaryIconColor,
           route: "Debug"
         }
       ]
@@ -314,7 +404,7 @@ const MoreScreenContent: React.FC = () => {
                         { borderRadius: radius.md },
                         index !== section.items.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }
                       ]}
-                      onPress={() => handleNavigate(item.route)}
+                      onPress={() => item.action ? item.action() : handleNavigate(item.route)}
                     >
                       <View style={[styles.itemIcon, { backgroundColor: item.color, borderRadius: radius.md }]}>
                         <AppIcon name={item.icon} size={20} color={item.iconColor} />
@@ -330,6 +420,11 @@ const MoreScreenContent: React.FC = () => {
                           <Text style={[styles.badgeText, { color: colors.primaryForeground }]}>{item.badge}</Text>
                         </View>
                       )}
+                      {item.logo && (
+                        <View style={styles.itemLogo}>
+                          <AppIcon name={item.logo} size={16} color={item.iconColor} />
+                        </View>
+                      )}
                       <AppIcon name="chevronRight" size={20} color={colors.mutedForeground} />
                     </Pressable>
                   );
@@ -343,7 +438,7 @@ const MoreScreenContent: React.FC = () => {
             <Text style={[styles.logoutText, { color: colors.danger }]}>Sign Out</Text>
           </Pressable>
 
-          <Text style={[styles.version, { color: colors.mutedForeground }]}>Family Chores v1.0.0 · Made with ❤️ for families</Text>
+          <Text style={[styles.version, { color: colors.mutedForeground }]}>Chores Nest v1.0.0 · Made with ❤️ for families</Text>
         </View>
       </AppLayout>
 
@@ -397,6 +492,128 @@ const MoreScreenContent: React.FC = () => {
               }}
             />
           </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={feedbackModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => {
+          setFeedbackModalVisible(false);
+          setCategoryMenuOpen(false);
+          Keyboard.dismiss();
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => {
+              setFeedbackModalVisible(false);
+              setCategoryMenuOpen(false);
+              Keyboard.dismiss();
+            }}
+          />
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 70}
+            style={styles.modalWrapper}
+          >
+            <View style={[styles.modalContent, { backgroundColor: colors.card, borderRadius: radius.xl }]}>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={styles.modalBody}
+              >
+                <View>
+                  <View style={styles.modalHeader}>
+                    <Text style={[styles.modalTitle, { color: colors.foreground }]}>Feedback & Support</Text>
+                    <Pressable
+                      onPress={() => {
+                        setFeedbackModalVisible(false);
+                        setCategoryMenuOpen(false);
+                        Keyboard.dismiss();
+                      }}
+                    >
+                      <AppIcon name="x" size={24} color={colors.mutedForeground} />
+                    </Pressable>
+                  </View>
+                  <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Category</Text>
+                  <View style={{ position: "relative", marginBottom: 12 }}>
+                    <Pressable
+                      style={[
+                        styles.feedbackDropdown,
+                        {
+                          borderColor: colors.border,
+                          backgroundColor: colors.background,
+                          borderRadius: radius.md,
+                        },
+                      ]}
+                      onPress={() => setCategoryMenuOpen(prev => !prev)}
+                    >
+                      <Text style={[styles.feedbackOptionText, { color: colors.foreground }]}>{feedbackCategory}</Text>
+                      <AppIcon name={categoryMenuOpen ? "chevronUp" : "chevronDown"} size={16} color={colors.mutedForeground} />
+                    </Pressable>
+                    {categoryMenuOpen && (
+                      <View style={[styles.categoryMenu, { borderColor: colors.border, backgroundColor: colors.card }]}>
+                        {feedbackOptions.map(option => (
+                          <Pressable
+                            key={option}
+                            style={[
+                              styles.categoryOption,
+                              {
+                                backgroundColor: option === feedbackCategory ? colors.primary + "15" : colors.background,
+                              },
+                            ]}
+                            onPress={() => {
+                              setFeedbackCategory(option);
+                              setCategoryMenuOpen(false);
+                            }}
+                          >
+                            <Text style={{ color: colors.foreground }}>{option}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                  <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Description</Text>
+                  <TextInput
+                    style={[
+                      styles.feedbackInput,
+                      {
+                        borderColor: colors.border,
+                        color: colors.foreground,
+                        borderRadius: radius.md,
+                        backgroundColor: colors.background,
+                      },
+                    ]}
+                    placeholder="Tell us what happened or what you'd like to see"
+                    placeholderTextColor={colors.mutedForeground}
+                    multiline
+                    numberOfLines={4}
+                    textAlignVertical="top"
+                    value={feedbackDescription}
+                    onChangeText={setFeedbackDescription}
+                  />
+                  <Pressable
+                    style={[
+                      styles.feedbackSubmit,
+                      { backgroundColor: colors.primary, borderRadius: radius.md },
+                      feedbackSubmitting && { opacity: 0.6 },
+                    ]}
+                    onPress={handleSubmitFeedback}
+                    disabled={feedbackSubmitting}
+                  >
+                    {feedbackSubmitting ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={[styles.feedbackSubmitText]}>Submit feedback</Text>
+                    )}
+                  </Pressable>
+                </View>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </>
@@ -521,6 +738,67 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
   },
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  feedbackOption: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  feedbackOptionText: {
+    fontSize: 14,
+  },
+  feedbackInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    minHeight: 100,
+  },
+  feedbackSubmit: {
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  feedbackSubmitText: {
+    color: "#fff",
+    fontWeight: "700",
+  },
+  feedbackDropdown: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderRadius: 12,
+  },
+  categoryMenu: {
+    position: "absolute",
+    top: 54,
+    left: 0,
+    right: 0,
+    borderWidth: 1,
+    borderRadius: 12,
+    overflow: "hidden",
+    zIndex: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  categoryOption: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  itemLogo: {
+    marginRight: 8,
+    marginLeft: 4,
+  },
   logoutButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -550,9 +828,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 20
   },
+  modalWrapper: {
+    width: "100%",
+    alignItems: "center",
+  },
   modalContent: {
+    width: "100%",
+    maxWidth: 520,
+    alignSelf: "center",
     padding: 24,
-    maxHeight: '60%'
+    maxHeight: '90%',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    elevation: 10,
+    minHeight: 400,
+  },
+  modalBody: {
+    paddingBottom: 8,
   },
   modalHeader: {
     flexDirection: 'row',

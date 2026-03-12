@@ -63,6 +63,10 @@ const CONTEXT_MESSAGES: Record<string, Record<string, string>> = {
         default: 'Unable to send password reset email. Please try again.',
         network: 'Cannot connect to the server. Please check your internet connection.',
     },
+    oauth: {
+        default: 'Unable to complete social sign-in. Please try again.',
+        network: 'Cannot connect to the server. Please check your internet connection.',
+    },
 };
 
 /**

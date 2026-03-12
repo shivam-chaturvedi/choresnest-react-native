@@ -3,10 +3,11 @@ import { Pressable, Text, View, StyleSheet, Platform } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { theme } from "../../theme";
 import { AppIcon } from "./AppIcon";
+import { useTheme, useThemeColors } from "../../contexts/ThemeContext";
 
 interface DateTimePickerProps {
     mode: "date" | "time";
-    value: Date;
+    value?: Date | null;
     onChange: (date: Date) => void;
     label?: string;
     placeholder?: string;
@@ -26,6 +27,12 @@ export const CustomDateTimePicker: React.FC<DateTimePickerProps> = ({
     disabled,
 }) => {
     const [show, setShow] = useState(false);
+    const colors = useThemeColors();
+    const { appearanceMode } = useTheme();
+    const isMidnight = appearanceMode === "midnight";
+    const iconColor = isMidnight ? "#fff" : colors.mutedForeground;
+    const textColor = isMidnight ? "#fff" : colors.foreground;
+    const buttonBg = isMidnight ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.03)";
 
     const handleChange = (event: any, selectedDate?: Date) => {
         if (Platform.OS === "android") {
@@ -62,28 +69,28 @@ export const CustomDateTimePicker: React.FC<DateTimePickerProps> = ({
     return (
         <View style={styles.container}>
             <Pressable
-                style={[styles.button, disabled && { opacity: 0.5 }]}
+                style={[styles.button, { backgroundColor: buttonBg }, disabled && { opacity: 0.5 }]}
                 onPress={() => !disabled && onPress()}
             >
                 <AppIcon
                     name={mode === "date" ? "calendar" : "clock"}
                     size={16}
-                    color={theme.colors.mutedForeground}
+                    color={iconColor}
                     style={styles.icon}
                 />
-                <Text style={styles.buttonText}>
+                <Text style={[styles.buttonText, { color: textColor }]}>
                     {value ? formatDate(value) : placeholder || "Select"}
                 </Text>
                 <AppIcon
                     name="chevronDown"
                     size={16}
-                    color={theme.colors.mutedForeground}
+                    color={iconColor}
                 />
             </Pressable>
 
             {show && (
                 <DateTimePicker
-                    value={value}
+                    value={value ?? new Date()}
                     mode={mode}
                     display={Platform.OS === "ios" ? "spinner" : "default"}
                     onChange={handleChange}

@@ -60,7 +60,10 @@ export class SupabaseService {
     }
 
     static async resetPasswordForEmail(email: string) {
-        const result = await supabase.auth.resetPasswordForEmail(email);
+        const callbackUrl = "https://choresnest.com/reset-password";
+        const result = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: callbackUrl,
+        });
         this.logError(result.error ?? null, 'resetPasswordForEmail');
         return result;
     }

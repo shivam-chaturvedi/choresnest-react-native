@@ -11,7 +11,7 @@ interface SetupProfileModalProps {
 
 export const SetupProfileModal: React.FC<SetupProfileModalProps> = ({ visible, onSubmit, initialFamilyName }) => {
     const [userName, setUserName] = useState('');
-    const [familyName, setFamilyName] = useState(initialFamilyName || 'Family Chores');
+    const [familyName, setFamilyName] = useState(initialFamilyName || 'Chores Nest');
     const [step, setStep] = useState(1); // 1: Name, 2: Family
 
     useEffect(() => {

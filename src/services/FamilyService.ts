@@ -52,7 +52,7 @@ export const FamilyService = {
         Q.sortBy('updated_at', Q.desc)
       )
       .observeWithColumns(OBSERVE_COLUMNS)
-      .pipe(map(records => (records.length > 0 ? records[0].value : 'Family Chores')));
+      .pipe(map(records => (records.length > 0 ? records[0].value : 'Chores Nest')));
   },
 
   setFamilyName: async (profileId: string | null | undefined, name: string) => {

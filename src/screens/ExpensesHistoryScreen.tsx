@@ -175,13 +175,13 @@ export const ExpensesHistoryScreen: React.FC = () => {
                 { borderColor: colors.border },
                 historyFilter === filter && {
                   borderColor: colors.primary,
-                  backgroundColor: colors.primary + '15',
+                  backgroundColor: colors.success + '15',
                 },
               ]}
             >
               <Text style={[
                 styles.filterTabText,
-                { color: historyFilter === filter ? colors.primary : colors.mutedForeground }
+                { color: historyFilter === filter ? colors.success : colors.mutedForeground }
               ]}>
                 {filter.toUpperCase()}
               </Text>
@@ -195,24 +195,24 @@ export const ExpensesHistoryScreen: React.FC = () => {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.monthScroll}
             >
-              {(monthOptions.length ? monthOptions : [{ value: formatMonthKey(new Date()), label: formatMonthLabel(formatMonthKey(new Date())) }]).map(monthValue => (
-                <Pressable
-                  key={monthValue.value}
-                  onPress={() => setHistoryMonth(monthValue.value)}
-                  style={[
-                    styles.monthOption,
-                    { borderColor: colors.border },
-                    historyMonth === monthValue.value && {
-                      borderColor: colors.primary,
-                      backgroundColor: colors.primary + '20',
-                    },
-                  ]}
-                >
-                  <Text style={{ color: historyMonth === monthValue.value ? colors.primary : colors.foreground }}>
-                    {monthValue.label}
-                  </Text>
-                </Pressable>
-              ))}
+                {(monthOptions.length ? monthOptions : [{ value: formatMonthKey(new Date()), label: formatMonthLabel(formatMonthKey(new Date())) }]).map(monthValue => (
+                  <Pressable
+                    key={monthValue.value}
+                    onPress={() => setHistoryMonth(monthValue.value)}
+                    style={[
+                      styles.monthOption,
+                      { borderColor: colors.border },
+                      historyMonth === monthValue.value && {
+                        borderColor: colors.primary,
+                        backgroundColor: colors.primary + '20',
+                      },
+                    ]}
+                  >
+                    <Text style={{ color: historyMonth === monthValue.value ? colors.primaryForeground : colors.foreground }}>
+                      {monthValue.label}
+                    </Text>
+                  </Pressable>
+                ))}
             </ScrollView>
           )}
           {historyFilter === 'week' && (
@@ -244,24 +244,24 @@ export const ExpensesHistoryScreen: React.FC = () => {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.yearScroll}
             >
-              {normalizedYearOptions.map(yearValue => (
-                <Pressable
-                  key={yearValue}
-                  onPress={() => setHistoryYear(yearValue)}
-                  style={[
-                    styles.monthOption,
-                    { borderColor: colors.border },
-                    historyYear === yearValue && {
-                      borderColor: colors.primary,
-                      backgroundColor: colors.primary + '20',
-                    },
-                  ]}
-                >
-                  <Text style={{ color: historyYear === yearValue ? colors.primary : colors.foreground }}>
-                    {yearValue}
-                  </Text>
-                </Pressable>
-              ))}
+                {normalizedYearOptions.map(yearValue => (
+                  <Pressable
+                    key={yearValue}
+                    onPress={() => setHistoryYear(yearValue)}
+                    style={[
+                      styles.monthOption,
+                      { borderColor: colors.border },
+                      historyYear === yearValue && {
+                        borderColor: colors.primary,
+                        backgroundColor: colors.primary + '20',
+                      },
+                    ]}
+                  >
+                    <Text style={{ color: historyYear === yearValue ? colors.primaryForeground : colors.foreground }}>
+                      {yearValue}
+                    </Text>
+                  </Pressable>
+                ))}
             </ScrollView>
           )}
           {historyFilter === 'custom' && (

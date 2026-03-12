@@ -41,6 +41,7 @@ type TableSyncConfig = {
     key: string;
     remoteTable?: string;
     hasProfileId?: boolean;
+    localOnly?: boolean;
 };
 
 const syncPhases = Array.from(new Set(SYNC_TABLES.map(config => config.phase))).sort();
@@ -94,22 +95,32 @@ export class SyncOrchestrator {
         const lastPulled = lastPulledAt ? new Date(lastPulledAt).toISOString() : new Date(0).toISOString();
         console.log(`PULL_START${label ? ` (${label})` : ''} for user ${this.userId}; readOnly=${readOnly}; since=${lastPulled}`);
 
-        const buildDescriptor = (config: TableSyncConfig): TableFetchDescriptor => ({
-            key: config.key,
-            fetcher: () =>
-                pullTableChangesWithCursor({
-                    table: config.key,
-                    remoteTable: config.remoteTable,
-                    userId: this.userId,
-                    lastPulled,
-                    hasProfileId: config.hasProfileId ?? true,
-                }),
-        });
+        const buildDescriptor = (config: TableSyncConfig): TableFetchDescriptor | null => {
+            if (config.localOnly) {
+                return null;
+            }
+            return {
+                key: config.key,
+                fetcher: () =>
+                    pullTableChangesWithCursor({
+                        table: config.key,
+                        remoteTable: config.remoteTable,
+                        userId: this.userId,
+                        lastPulled,
+                        hasProfileId: config.hasProfileId ?? true,
+                    }),
+            };
+        };
 
         const descriptors: TableFetchDescriptor[] = [];
         for (const phase of syncPhases) {
-            const tablesInPhase = SYNC_TABLES.filter(config => config.phase === phase);
-            tablesInPhase.forEach(config => descriptors.push(buildDescriptor(config)));
+            const tablesInPhase = SYNC_TABLES.filter(config => config.phase === phase && !config.localOnly);
+            tablesInPhase.forEach(config => {
+                const descriptor = buildDescriptor(config);
+                if (descriptor) {
+                    descriptors.push(descriptor);
+                }
+            });
         }
 
         const tableChangesMap = await collectTableFetchResults(descriptors);
@@ -126,7 +137,16 @@ export class SyncOrchestrator {
     }
 
     private async pushToServer(changes: Record<string, TableChangeSet | undefined>): Promise<void> {
-        const hasChanges = Object.values(changes).some(tableChanges => {
+        const pushableChanges: Record<string, TableChangeSet | undefined> = {};
+        Object.entries(changes).forEach(([tableName, changeSet]) => {
+            const config = SYNC_TABLES.find(c => c.key === tableName);
+            if (config?.localOnly) {
+                return;
+            }
+            pushableChanges[tableName] = changeSet;
+        });
+
+        const hasChanges = Object.values(pushableChanges).some(tableChanges => {
             if (!tableChanges) return false;
             const { created = [], updated = [], deleted = [] } = tableChanges;
             return created.length > 0 || updated.length > 0 || deleted.length > 0;
@@ -167,10 +187,13 @@ export class SyncOrchestrator {
 
         const filteredChanges: Record<string, TableChangeSet> = {};
 
-        for (const [tableName, changeSet] of Object.entries(changes)) {
+        for (const [tableName, changeSet] of Object.entries(pushableChanges)) {
             if (!changeSet) continue;
 
             const config = SYNC_TABLES.find(c => c.key === tableName);
+            if (!config || config.localOnly) {
+                continue;
+            }
 
             // If the table doesn't use profile scoping (like Global items), push as-is
             if (config && config.hasProfileId === false) {

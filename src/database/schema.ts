@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export default appSchema({
-    version: 17,
+    version: 20,
     tables: [
         tableSchema({
             name: 'users',
@@ -251,6 +251,18 @@ export default appSchema({
                 { name: 'category', type: 'string' },
                 { name: 'amount', type: 'number' },
                 { name: 'month', type: 'string', isIndexed: true }, // YYYY-MM
+                { name: 'created_at', type: 'number' },
+                { name: 'updated_at', type: 'number' },
+                { name: 'deleted', type: 'boolean' },
+                { name: 'version', type: 'number' },
+            ],
+        }),
+        tableSchema({
+            name: 'budget_category_color_mappings',
+            columns: [
+                { name: 'profile_id', type: 'string', isIndexed: true },
+                { name: 'category_key', type: 'string', isIndexed: true },
+                { name: 'color_hex', type: 'string' },
                 { name: 'created_at', type: 'number' },
                 { name: 'updated_at', type: 'number' },
                 { name: 'deleted', type: 'boolean' },

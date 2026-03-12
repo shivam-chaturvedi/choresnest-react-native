@@ -43,6 +43,13 @@ local.properties
 *.keystore
 !debug.keystore
 .kotlin/
+android/sentry.properties
+ios/sentry.properties
+
+# Android signing keys
+android/gradle.properties
+android/app/*.keystore
+android/app/*.jks
 
 # node.js
 #

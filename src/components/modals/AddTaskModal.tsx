@@ -9,7 +9,7 @@ import {
   View,
   Platform,
 } from "react-native";
-import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
+import { useTheme, useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { useFamily } from "../../contexts/FamilyContext";
 import { PROFILE_COLORS } from "../../constants/profileColors";
 import { AppIcon, CustomDateTimePicker } from "../ui";
@@ -36,14 +36,17 @@ const taskIcons = ["format-list-checks", "phone", "pill", "email", "school", "wr
 
 export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSave, taskToEdit }) => {
   const colors = useThemeColors();
+  const { appearanceMode } = useTheme();
+  const isMidnight = appearanceMode === 'midnight';
+  const accentColor = isMidnight ? colors.foreground : colors.primary;
   const radius = useThemeRadius();
   const { members, activeMember } = useFamily();
   const { currentCountry } = useCountry();
 
   const priorities = [
-    { label: "High", value: "high", color: colors.primary, bgColor: colors.danger + "20", textColor: colors.danger },
-    { label: "Medium", value: "medium", color: colors.success, bgColor: colors.warning + "20", textColor: "#000000" }, // Adjusted for visibility
-    { label: "Low", value: "low", color: colors.mutedForeground, bgColor: colors.muted, textColor: colors.mutedForeground },
+    { label: "High", value: "high", bgColor: colors.danger + "25", textColor: colors.danger },
+    { label: "Medium", value: "medium", bgColor: colors.warning + "20", textColor: colors.warning },
+    { label: "Low", value: "low", bgColor: colors.muted, textColor: colors.mutedForeground },
   ];
 
   const defaultMemberId = members?.[0]?.id;
@@ -132,7 +135,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
               placeholderTextColor={colors.mutedForeground}
               style={[
                 styles.nameInput,
-                { color: colors.foreground, borderBottomColor: colors.primary }
+                { color: colors.foreground, borderBottomColor: accentColor }
               ]}
               autoFocus
             />
@@ -169,6 +172,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
               <View style={styles.priorityRow}>
                 {priorities.map((p) => {
                   const isSelected = formData.priority === p.value;
+                  const mediumMidnight = p.value === "medium" && isMidnight;
                   return (
                     <Pressable
                       key={p.value}
@@ -177,9 +181,9 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
                         styles.priorityButton,
                         { backgroundColor: colors.muted, borderRadius: radius.md },
                         isSelected && {
-                          backgroundColor: p.bgColor,
                           borderColor: p.textColor,
-                          borderWidth: 1
+                          borderWidth: 1,
+                          ...(!mediumMidnight ? { backgroundColor: p.bgColor } : {})
                         }
                       ]}
                     >

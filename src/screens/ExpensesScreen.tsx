@@ -1,5 +1,14 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Pressable, RefreshControl } from 'react-native';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Dimensions,
+  Pressable,
+  RefreshControl,
+} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { AppLayout } from '../components/layout';
 import { theme } from '../theme';
@@ -14,19 +23,33 @@ import {
   Target,
   BarChart3,
   PieChart as PieChartIcon,
-  Edit2
+  Edit2,
 } from 'lucide-react-native';
-import { AddExpenseModal, ExpenseData } from '../components/modals/AddExpenseModal';
-import { EditBudgetsModal } from "../components/modals/EditBudgetsModal";
+import {
+  AddExpenseModal,
+  ExpenseData,
+} from '../components/modals/AddExpenseModal';
+import { EditBudgetsModal } from '../components/modals/EditBudgetsModal';
 import { useSidebar } from '../contexts/SidebarContext';
-import Svg, { Path, Defs, LinearGradient, Stop, G, Circle, Text as SvgText } from 'react-native-svg';
+import Svg, {
+  Path,
+  Defs,
+  LinearGradient,
+  Stop,
+  G,
+  Circle,
+  Text as SvgText,
+} from 'react-native-svg';
 import { AppIcon } from '../components/ui/AppIcon';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import { useFinance, Transaction } from '../contexts/FinanceContext';
+import { trackScreen } from '../services/analytics';
 import { ScreenErrorView } from '../components/ui/ScreenErrorView';
 import { useCountry } from '../contexts/CountryContext';
 import { SyncService } from '../services/SyncService';
+import { CategoryColorService } from '../services/CategoryColorService';
+import { CATEGORY_COLOR_FALLBACK } from '../constants/categoryColors';
 import { IconGlyph } from '../components/ui/IconGlyph';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -35,29 +58,67 @@ const tabs = ['Overview', 'Breakdown', 'Insights'];
 
 type DailyDataItem = { day: number; income: number; expenses: number };
 
-type Category = { name: string; id: string; formattedAmount: string; numAmount: number; percent: number; icon: string; color: string; budget: number; formattedBudget: string | null; };
+type Category = {
+  name: string;
+  id: string;
+  formattedAmount: string;
+  numAmount: number;
+  percent: number;
+  icon: string;
+  color: string;
+  budget: number;
+  formattedBudget: string | null;
+};
 
 const formatViewDate = (date: Date) => {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
   return `${months[date.getMonth()]}, ${date.getFullYear()}`;
 };
 
-const AreaChart = ({ dailyData, viewDate, onPrevMonth, onNextMonth }: { dailyData: DailyDataItem[]; viewDate: Date; onPrevMonth: () => void; onNextMonth: () => void; }) => {
+const AreaChart = ({
+  dailyData,
+  viewDate,
+  onPrevMonth,
+  onNextMonth,
+}: {
+  dailyData: DailyDataItem[];
+  viewDate: Date;
+  onPrevMonth: () => void;
+  onNextMonth: () => void;
+}) => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
   const height = 180;
   const width = SCREEN_WIDTH - 64;
 
-  const maxDataVal = Math.max(...dailyData.map(d => Math.max(d.income, d.expenses)));
+  const maxDataVal = Math.max(
+    ...dailyData.map(d => Math.max(d.income, d.expenses)),
+  );
   const maxValue = maxDataVal > 0 ? maxDataVal * 1.2 : 1000;
 
   const getY = (val: number) => height - (val / maxValue) * height;
-  const getX = (index: number) => (index / (dailyData.length - 1)) * (width - 20) + 10;
+  const getX = (index: number) =>
+    (index / (dailyData.length - 1)) * (width - 20) + 10;
 
   const createPath = (key: 'income' | 'expenses') => {
     if (dailyData.length === 0) return '';
     const points = dailyData.map((d, i) => `${getX(i)},${getY(d[key])}`);
-    return `M${getX(0)},${height} L${points.join(' L')} L${getX(dailyData.length - 1)},${height} Z`;
+    return `M${getX(0)},${height} L${points.join(' L')} L${getX(
+      dailyData.length - 1,
+    )},${height} Z`;
   };
 
   const createLinePath = (key: 'income' | 'expenses') => {
@@ -69,10 +130,14 @@ const AreaChart = ({ dailyData, viewDate, onPrevMonth, onNextMonth }: { dailyDat
   const getOrdinalSuffix = (day: number) => {
     if (day > 3 && day < 21) return 'th';
     switch (day % 10) {
-      case 1: return "st";
-      case 2: return "nd";
-      case 3: return "rd";
-      default: return "th";
+      case 1:
+        return 'st';
+      case 2:
+        return 'nd';
+      case 3:
+        return 'rd';
+      default:
+        return 'th';
     }
   };
 
@@ -82,28 +147,80 @@ const AreaChart = ({ dailyData, viewDate, onPrevMonth, onNextMonth }: { dailyDat
     <View style={{ marginTop: 8 }}>
       {/* Month Navigator & Legend at Top */}
       <View style={{ marginBottom: 16, gap: 12 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <TouchableOpacity onPress={onPrevMonth} style={[styles.iconButton, { backgroundColor: colors.muted, borderRadius: radius.sm, padding: 6 }]}>
+            <TouchableOpacity
+              onPress={onPrevMonth}
+              style={[
+                styles.iconButton,
+                {
+                  backgroundColor: colors.muted,
+                  borderRadius: radius.sm,
+                  padding: 6,
+                },
+              ]}
+            >
               <AppIcon name="chevronLeft" size={18} color={colors.foreground} />
             </TouchableOpacity>
-            <Text style={{ fontSize: 15, fontWeight: '700', color: colors.foreground, minWidth: 100, textAlign: 'center' }}>
+            <Text
+              style={{
+                fontSize: 15,
+                fontWeight: '700',
+                color: colors.foreground,
+                minWidth: 100,
+                textAlign: 'center',
+              }}
+            >
               {currentMonthLabel}
             </Text>
-            <TouchableOpacity onPress={onNextMonth} style={[styles.iconButton, { backgroundColor: colors.muted, borderRadius: radius.sm, padding: 6 }]}>
-              <AppIcon name="chevronRight" size={18} color={colors.foreground} />
+            <TouchableOpacity
+              onPress={onNextMonth}
+              style={[
+                styles.iconButton,
+                {
+                  backgroundColor: colors.muted,
+                  borderRadius: radius.sm,
+                  padding: 6,
+                },
+              ]}
+            >
+              <AppIcon
+                name="chevronRight"
+                size={18}
+                color={colors.foreground}
+              />
             </TouchableOpacity>
           </View>
 
           {/* Legend Tucked to Side */}
           <View style={{ flexDirection: 'row', gap: 12 }}>
             <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#10b981', borderRadius: 2 }]} />
-              <Text style={{ fontSize: 11, color: colors.mutedForeground }}>Inc</Text>
+              <View
+                style={[
+                  styles.legendDot,
+                  { backgroundColor: '#10b981', borderRadius: 2 },
+                ]}
+              />
+              <Text style={{ fontSize: 11, color: colors.mutedForeground }}>
+                Inc
+              </Text>
             </View>
             <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#ef4444', borderRadius: 2 }]} />
-              <Text style={{ fontSize: 11, color: colors.mutedForeground }}>Exp</Text>
+              <View
+                style={[
+                  styles.legendDot,
+                  { backgroundColor: '#ef4444', borderRadius: 2 },
+                ]}
+              />
+              <Text style={{ fontSize: 11, color: colors.mutedForeground }}>
+                Exp
+              </Text>
             </View>
           </View>
         </View>
@@ -137,8 +254,18 @@ const AreaChart = ({ dailyData, viewDate, onPrevMonth, onNextMonth }: { dailyDat
             <Path d={createPath('income')} fill="url(#incomeGradient)" />
             <Path d={createPath('expenses')} fill="url(#expenseGradient)" />
 
-            <Path d={createLinePath('income')} stroke="#10b981" strokeWidth={2.5} fill="none" />
-            <Path d={createLinePath('expenses')} stroke="#ef4444" strokeWidth={2.5} fill="none" />
+            <Path
+              d={createLinePath('income')}
+              stroke="#10b981"
+              strokeWidth={2.5}
+              fill="none"
+            />
+            <Path
+              d={createLinePath('expenses')}
+              stroke="#ef4444"
+              strokeWidth={2.5}
+              fill="none"
+            />
           </>
         )}
 
@@ -157,7 +284,9 @@ const AreaChart = ({ dailyData, viewDate, onPrevMonth, onNextMonth }: { dailyDat
             const idx = dayNum - 1;
             const xPos = getX(idx);
             const isBoundary = dayNum === 1 || dayNum === dailyData.length;
-            const labelText = `${dayNum}${isBoundary ? getOrdinalSuffix(dayNum) : ''}`;
+            const labelText = `${dayNum}${
+              isBoundary ? getOrdinalSuffix(dayNum) : ''
+            }`;
 
             return (
               <SvgText
@@ -167,7 +296,7 @@ const AreaChart = ({ dailyData, viewDate, onPrevMonth, onNextMonth }: { dailyDat
                 fontSize="9"
                 fill={colors.mutedForeground}
                 textAnchor="middle"
-                fontWeight={isBoundary ? "bold" : "normal"}
+                fontWeight={isBoundary ? 'bold' : 'normal'}
               >
                 {labelText}
               </SvgText>
@@ -182,11 +311,13 @@ const AreaChart = ({ dailyData, viewDate, onPrevMonth, onNextMonth }: { dailyDat
 const DonutChart = ({ categories }: { categories: Category[] }) => {
   const colors = useThemeColors();
   const { formatCurrency } = useCountry();
-  const size = 180;
+  const size = Math.min(SCREEN_WIDTH - 48, 280);
   const chartRadius = size / 2;
-  const strokeWidth = 35;
+  const strokeWidth = 48;
   const center = size / 2;
-  const innerRadius = chartRadius - strokeWidth;
+  const innerRadius = Math.max(chartRadius - strokeWidth, 32);
+
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
   let startAngle = 0;
   const total = categories.reduce((sum, cat) => sum + cat.numAmount, 0);
@@ -203,7 +334,7 @@ const DonutChart = ({ categories }: { categories: Category[] }) => {
     <View style={{ alignItems: 'center', marginVertical: 16 }}>
       <Svg height={size} width={size}>
         <G rotation="-90" origin={`${center}, ${center}`}>
-          {categories.map((cat) => {
+          {categories.map(cat => {
             const percentage = cat.numAmount / total;
             const angle = percentage * 360;
 
@@ -227,15 +358,27 @@ const DonutChart = ({ categories }: { categories: Category[] }) => {
 
             const largeArcFlag = angle > 180 ? 1 : 0;
 
-            const x1 = center + chartRadius * Math.cos(Math.PI * startAngle / 180);
-            const y1 = center + chartRadius * Math.sin(Math.PI * startAngle / 180);
-            const x2 = center + chartRadius * Math.cos(Math.PI * (startAngle + angle) / 180);
-            const y2 = center + chartRadius * Math.sin(Math.PI * (startAngle + angle) / 180);
+            const x1 =
+              center + chartRadius * Math.cos((Math.PI * startAngle) / 180);
+            const y1 =
+              center + chartRadius * Math.sin((Math.PI * startAngle) / 180);
+            const x2 =
+              center +
+              chartRadius * Math.cos((Math.PI * (startAngle + angle)) / 180);
+            const y2 =
+              center +
+              chartRadius * Math.sin((Math.PI * (startAngle + angle)) / 180);
 
-            const x3 = center + innerRadius * Math.cos(Math.PI * (startAngle + angle) / 180);
-            const y3 = center + innerRadius * Math.sin(Math.PI * (startAngle + angle) / 180);
-            const x4 = center + innerRadius * Math.cos(Math.PI * startAngle / 180);
-            const y4 = center + innerRadius * Math.sin(Math.PI * startAngle / 180);
+            const x3 =
+              center +
+              innerRadius * Math.cos((Math.PI * (startAngle + angle)) / 180);
+            const y3 =
+              center +
+              innerRadius * Math.sin((Math.PI * (startAngle + angle)) / 180);
+            const x4 =
+              center + innerRadius * Math.cos((Math.PI * startAngle) / 180);
+            const y4 =
+              center + innerRadius * Math.sin((Math.PI * startAngle) / 180);
 
             const d = `
               M ${x1} ${y1}
@@ -254,6 +397,7 @@ const DonutChart = ({ categories }: { categories: Category[] }) => {
                 fill={cat.color}
                 stroke={colors.card}
                 strokeWidth={1}
+                onPress={() => setActiveCategory(cat.name)}
               />
             );
           })}
@@ -279,6 +423,18 @@ const DonutChart = ({ categories }: { categories: Category[] }) => {
           {formatCurrency(total)}
         </SvgText>
       </Svg>
+      {activeCategory && (
+        <Text
+          style={{
+            marginTop: 8,
+            color: colors.primary,
+            fontWeight: '600',
+            textAlign: 'center',
+          }}
+        >
+          {activeCategory}
+        </Text>
+      )}
     </View>
   );
 };
@@ -291,7 +447,9 @@ const HorizontalBarChart = ({ categories }: { categories: Category[] }) => {
 
   if (categories.length === 0) {
     return (
-      <View style={{ height: 100, alignItems: 'center', justifyContent: 'center' }}>
+      <View
+        style={{ height: 100, alignItems: 'center', justifyContent: 'center' }}
+      >
         <Text style={{ color: colors.mutedForeground }}>No data available</Text>
       </View>
     );
@@ -302,7 +460,12 @@ const HorizontalBarChart = ({ categories }: { categories: Category[] }) => {
       {categories.map((cat, i) => (
         <View key={cat.id} style={styles.barChartRow}>
           <View style={{ width: 80 }}>
-            <Text style={[styles.barLabel, { color: colors.foreground }]} numberOfLines={1}>{cat.name}</Text>
+            <Text
+              style={[styles.barLabel, { color: colors.foreground }]}
+              numberOfLines={1}
+            >
+              {cat.name}
+            </Text>
           </View>
           <View style={styles.barTrack}>
             <View
@@ -311,12 +474,14 @@ const HorizontalBarChart = ({ categories }: { categories: Category[] }) => {
                 {
                   width: `${(cat.numAmount / maxVal) * 100}%`,
                   backgroundColor: cat.color,
-                  borderRadius: radius.xs
-                }
+                  borderRadius: radius.xs,
+                },
               ]}
             />
           </View>
-          <Text style={[styles.barValue, { color: colors.mutedForeground }]}>{cat.formattedAmount}</Text>
+          <Text style={[styles.barValue, { color: colors.mutedForeground }]}>
+            {cat.formattedAmount}
+          </Text>
         </View>
       ))}
     </View>
@@ -334,13 +499,27 @@ export const ExpensesScreen: React.FC = () => {
   const [viewDate, setViewDate] = useState(new Date()); // For month navigation in trend chart
   const { openSidebar } = useSidebar();
 
-  const { transactions, addTransaction, budgets, categoryColors, categoryIcons } = useFinance();
+  useEffect(() => {
+    void trackScreen('FinanceScreen');
+  }, []);
+
+  const {
+    transactions,
+    addTransaction,
+    budgets,
+    categoryColors,
+    categoryIcons,
+  } = useFinance();
   const { formatCurrency } = useCountry();
   const [screenError, setScreenError] = useState<string | null>(null);
   const handleScreenError = useCallback((context: string, error: unknown) => {
     console.error(`ExpensesScreen - ${context}`, error);
     const message =
-      error instanceof Error ? error.message : typeof error === "string" ? error : "Something went wrong";
+      error instanceof Error
+        ? error.message
+        : typeof error === 'string'
+        ? error
+        : 'Something went wrong';
     setScreenError(message);
   }, []);
   const resetScreenError = useCallback(() => setScreenError(null), []);
@@ -355,7 +534,6 @@ export const ExpensesScreen: React.FC = () => {
       setIsRefreshing(false);
     }
   }, []);
-
 
   const handlePrevMonth = () => {
     setViewDate(prev => {
@@ -398,21 +576,34 @@ export const ExpensesScreen: React.FC = () => {
   }, [transactions]);
 
   const categories = useMemo(() => {
-    return Object.entries(categorySpending).map(([name, amount]) => {
-      const budgetValue = budgets[name] || 0;
-      return {
-        name: name.charAt(0).toUpperCase() + name.slice(1),
-        id: name,
-        formattedAmount: formatCurrency(amount),
-        numAmount: amount,
-        percent: totalExpenses > 0 ? Math.round((amount / totalExpenses) * 100) : 0,
-        icon: categoryIcons[name] || '📦',
-        color: categoryColors[name] || categoryColors.other,
-        budget: budgetValue,
-        formattedBudget: budgetValue > 0 ? formatCurrency(budgetValue) : null,
-      };
-    }).sort((a, b) => b.numAmount - a.numAmount);
-  }, [categorySpending, totalExpenses, budgets, categoryIcons, categoryColors, formatCurrency]);
+    return Object.entries(categorySpending)
+      .map(([name, amount]) => {
+        const budgetValue = budgets[name] || 0;
+        const normalizedKey = CategoryColorService.normalizeCategoryKey(name);
+        const displayColor =
+          categoryColors[normalizedKey] ?? CATEGORY_COLOR_FALLBACK;
+        return {
+          name: name.charAt(0).toUpperCase() + name.slice(1),
+          id: name,
+          formattedAmount: formatCurrency(amount),
+          numAmount: amount,
+          percent:
+            totalExpenses > 0 ? Math.round((amount / totalExpenses) * 100) : 0,
+          icon: categoryIcons[name] || '📦',
+          color: displayColor,
+          budget: budgetValue,
+          formattedBudget: budgetValue > 0 ? formatCurrency(budgetValue) : null,
+        };
+      })
+      .sort((a, b) => b.numAmount - a.numAmount);
+  }, [
+    categorySpending,
+    totalExpenses,
+    budgets,
+    categoryIcons,
+    categoryColors,
+    formatCurrency,
+  ]);
 
   // Daily Data for Area Chart (Current Month)
   const dailyData = useMemo(() => {
@@ -462,34 +653,54 @@ export const ExpensesScreen: React.FC = () => {
     return stats;
   }, [transactions, viewDate]);
 
-
   // AI Insights Generation
   const aiInsights = useMemo(() => {
     const insights = [];
 
     // Insight 1: Spending Trend
     if (totalExpenses > totalIncome) {
-      insights.push({ icon: '📉', text: 'You are spending more than you earn this month.', type: 'warning' });
+      insights.push({
+        icon: '📉',
+        text: 'You are spending more than you earn this month.',
+        type: 'warning',
+      });
     } else if (savingsPercent > 20) {
-      insights.push({ icon: '🎯', text: `Great job! You're converting ${savingsPercent.toFixed(0)}% of income to savings.`, type: 'success' });
+      insights.push({
+        icon: '🎯',
+        text: `Great job! You're converting ${savingsPercent.toFixed(
+          0,
+        )}% of income to savings.`,
+        type: 'success',
+      });
     }
 
     // Insight 2: Category Spike
     if (categories.length > 0) {
       const topCat = categories[0];
-      insights.push({ icon: '📊', text: `Your highest spending is in ${topCat.name} (${topCat.formattedAmount}).`, type: 'tip' });
+      insights.push({
+        icon: '📊',
+        text: `Your highest spending is in ${topCat.name} (${topCat.formattedAmount}).`,
+        type: 'tip',
+      });
     }
 
     // Insight 3: Income
     if (totalIncome > 0) {
-      insights.push({ icon: '📈', text: 'Income recorded. Keep tracking to maintain budget health.', type: 'success' });
+      insights.push({
+        icon: '📈',
+        text: 'Income recorded. Keep tracking to maintain budget health.',
+        type: 'success',
+      });
     } else {
-      insights.push({ icon: '💡', text: 'Add your income to see your savings potential.', type: 'tip' });
+      insights.push({
+        icon: '💡',
+        text: 'Add your income to see your savings potential.',
+        type: 'tip',
+      });
     }
 
     return insights;
   }, [totalExpenses, totalIncome, savingsPercent, categories]);
-
 
   const handleAddExpense = (expense: ExpenseData) => {
     try {
@@ -502,7 +713,7 @@ export const ExpensesScreen: React.FC = () => {
         category: expense.category,
       });
     } catch (error) {
-      handleScreenError("handleAddExpense", error);
+      handleScreenError('handleAddExpense', error);
     }
   };
 
@@ -523,7 +734,7 @@ export const ExpensesScreen: React.FC = () => {
   const panGesture = Gesture.Pan()
     .failOffsetY([-20, 20]) // Strict vertical fail to allow scrolling
     .activeOffsetX([-30, 30]) // Lower threshold for horizontal activation
-    .onEnd((e) => {
+    .onEnd(e => {
       if (e.translationX < -30) runOnJS(handleSwipe)('left');
       else if (e.translationX > 30) runOnJS(handleSwipe)('right');
     });
@@ -531,58 +742,105 @@ export const ExpensesScreen: React.FC = () => {
   if (screenError) {
     return (
       <AppLayout showNav={false} showAddButton={false}>
-        <ScreenErrorView message={screenError} onRetry={resetScreenError} actionLabel="Refresh" />
+        <ScreenErrorView
+          message={screenError}
+          onRetry={resetScreenError}
+          actionLabel="Refresh"
+        />
       </AppLayout>
     );
   }
 
   return (
-    <AppLayout showNav={false} showAddButton={true} onAddPress={() => setExpenseModalOpen(true)}>
+    <AppLayout
+      showNav={false}
+      showAddButton={true}
+      onAddPress={() => setExpenseModalOpen(true)}
+    >
       <GestureDetector gesture={panGesture}>
         <ScrollView
-          contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
+          contentContainerStyle={[
+            styles.container,
+            { backgroundColor: colors.background },
+          ]}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={isRefreshing} onRefresh={handlePullToRefresh} tintColor={colors.primary} />
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handlePullToRefresh}
+              tintColor={colors.primary}
+            />
           }
         >
           {/* Header */}
           <View style={styles.header}>
-            <TouchableOpacity onPress={openSidebar} style={[styles.iconButton, { backgroundColor: colors.card, borderRadius: radius.md }]}>
+            <TouchableOpacity
+              onPress={openSidebar}
+              style={[
+                styles.iconButton,
+                { backgroundColor: colors.card, borderRadius: radius.md },
+              ]}
+            >
               <AppIcon name="menu" size={24} color={colors.foreground} />
             </TouchableOpacity>
             <View style={{ flex: 1, paddingHorizontal: 12 }}>
-              <Text style={[styles.title, { color: colors.foreground }]}>Family Finances</Text>
-              <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Track income, expenses & budgets</Text>
+              <Text style={[styles.title, { color: colors.foreground }]}>
+                Family Finances
+              </Text>
+              <Text
+                style={[styles.subtitle, { color: colors.mutedForeground }]}
+              >
+                Track income, expenses & budgets
+              </Text>
             </View>
             {/* Removed top Add button, keeping only FAB */}
             <Pressable
               onPress={() => navigation.navigate('ExpensesHistory' as never)}
               style={[
                 styles.historyBtn,
-                { borderColor: colors.border, backgroundColor: colors.muted, borderRadius: radius.md }
+                {
+                  borderColor: colors.border,
+                  backgroundColor: colors.muted,
+                  borderRadius: radius.md,
+                },
               ]}
             >
-              <Text style={[styles.historyBtnText, { color: colors.foreground }]}>History</Text>
+              <Text
+                style={[styles.historyBtnText, { color: colors.foreground }]}
+              >
+                History
+              </Text>
             </Pressable>
           </View>
 
           {/* Tabs */}
-          <View style={[styles.tabContainer, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
-            {tabs.map((tab) => (
+          <View
+            style={[
+              styles.tabContainer,
+              { backgroundColor: colors.muted, borderRadius: radius.md },
+            ]}
+          >
+            {tabs.map(tab => (
               <TouchableOpacity
                 key={tab}
                 onPress={() => setActiveTab(tab)}
                 style={[
                   styles.tabButton,
                   { borderRadius: radius.sm },
-                  activeTab === tab && { backgroundColor: colors.card }
+                  activeTab === tab && { backgroundColor: colors.card },
                 ]}
               >
-                <Text style={[
-                  styles.tabText,
-                  { color: activeTab === tab ? colors.foreground : colors.mutedForeground }
-                ]}>
+                <Text
+                  style={[
+                    styles.tabText,
+                    {
+                      color:
+                        activeTab === tab
+                          ? colors.foreground
+                          : colors.mutedForeground,
+                    },
+                  ]}
+                >
                   {tab}
                 </Text>
               </TouchableOpacity>
@@ -590,7 +848,16 @@ export const ExpensesScreen: React.FC = () => {
           </View>
 
           {/* Balance Card */}
-          <View style={[styles.card, { backgroundColor: theme.colors.primary, borderWidth: 0, borderRadius: radius.card }]}>
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: theme.colors.primary,
+                borderWidth: 0,
+                borderRadius: radius.card,
+              },
+            ]}
+          >
             <View style={styles.cardHeader}>
               <Text style={styles.balanceLabel}>Current Balance</Text>
               <Wallet size={24} color="rgba(255,255,255,0.6)" />
@@ -598,19 +865,51 @@ export const ExpensesScreen: React.FC = () => {
             <Text style={styles.balanceAmount}>{formatCurrency(balance)}</Text>
 
             <View style={styles.statsRow}>
-              <View style={[styles.statBox, { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: radius.md }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+              <View
+                style={[
+                  styles.statBox,
+                  {
+                    backgroundColor: 'rgba(255,255,255,0.1)',
+                    borderRadius: radius.md,
+                  },
+                ]}
+              >
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    marginBottom: 4,
+                  }}
+                >
                   <ArrowDownLeft size={14} color="#6ee7b7" />
                   <Text style={styles.statLabel}> Income</Text>
                 </View>
-                <Text style={styles.statValue}>{formatCurrency(totalIncome)}</Text>
+                <Text style={styles.statValue}>
+                  {formatCurrency(totalIncome)}
+                </Text>
               </View>
-              <View style={[styles.statBox, { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: radius.md }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+              <View
+                style={[
+                  styles.statBox,
+                  {
+                    backgroundColor: 'rgba(255,255,255,0.1)',
+                    borderRadius: radius.md,
+                  },
+                ]}
+              >
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    marginBottom: 4,
+                  }}
+                >
                   <ArrowUpRight size={14} color="#fca5a5" />
                   <Text style={styles.statLabel}> Expenses</Text>
                 </View>
-                <Text style={styles.statValue}>{formatCurrency(totalExpenses)}</Text>
+                <Text style={styles.statValue}>
+                  {formatCurrency(totalExpenses)}
+                </Text>
               </View>
             </View>
           </View>
@@ -618,58 +917,168 @@ export const ExpensesScreen: React.FC = () => {
           {activeTab === 'Overview' && (
             <View>
               {/* Savings Goal */}
-              <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+              <View
+                style={[
+                  styles.card,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    borderRadius: radius.card,
+                  },
+                ]}
+              >
                 <View style={styles.savingsContent}>
-                  <View style={[styles.savingsIcon, { backgroundColor: colors.background, borderRadius: radius.card }]}>
+                  <View
+                    style={[
+                      styles.savingsIcon,
+                      {
+                        backgroundColor: colors.background,
+                        borderRadius: radius.card,
+                      },
+                    ]}
+                  >
                     <PiggyBank size={24} color={colors.success} />
                   </View>
                   <View style={{ flex: 1, paddingHorizontal: 12 }}>
-                    <Text style={[styles.cardTitle, { color: colors.foreground }]}>Monthly Savings</Text>
-                    <Text style={[styles.cardSubtitle, { color: colors.mutedForeground }]}>{savingsPercent.toFixed(1)}% of income</Text>
+                    <Text
+                      style={[styles.cardTitle, { color: colors.foreground }]}
+                    >
+                      Monthly Savings
+                    </Text>
+                    <Text
+                      style={[
+                        styles.cardSubtitle,
+                        { color: colors.mutedForeground },
+                      ]}
+                    >
+                      {savingsPercent.toFixed(1)}% of income
+                    </Text>
                   </View>
                   <Text style={[styles.amountText, { color: colors.success }]}>
                     {formatCurrency(savings)}
                   </Text>
                 </View>
-                <View style={[styles.progressBarBg, { backgroundColor: colors.muted, borderRadius: radius.xs }]}>
-                  <View style={[styles.progressBarFill, { width: `${Math.min(savingsPercent * 2, 100)}%`, backgroundColor: colors.success, borderRadius: radius.xs }]} />
+                <View
+                  style={[
+                    styles.progressBarBg,
+                    { backgroundColor: colors.muted, borderRadius: radius.xs },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.progressBarFill,
+                      {
+                        width: `${Math.min(savingsPercent * 2, 100)}%`,
+                        backgroundColor: colors.success,
+                        borderRadius: radius.xs,
+                      },
+                    ]}
+                  />
                 </View>
               </View>
 
               {/* Monthly Trend Chart */}
-              <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+              <View
+                style={[
+                  styles.card,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    borderRadius: radius.card,
+                  },
+                ]}
+              >
                 <View style={styles.chartHeader}>
                   <BarChart3 size={20} color={colors.primary} />
-                  <Text style={[styles.chartTitle, { color: colors.foreground }]}>Trend</Text>
+                  <Text
+                    style={[styles.chartTitle, { color: colors.foreground }]}
+                  >
+                    Trend
+                  </Text>
                 </View>
-                <AreaChart dailyData={dailyData} viewDate={viewDate} onPrevMonth={handlePrevMonth} onNextMonth={handleNextMonth} />
+                <AreaChart
+                  dailyData={dailyData}
+                  viewDate={viewDate}
+                  onPrevMonth={handlePrevMonth}
+                  onNextMonth={handleNextMonth}
+                />
               </View>
 
               {/* Recent Transactions */}
               <View style={styles.sectionHeader}>
-                <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Recent Transactions</Text>
+                <Text
+                  style={[styles.sectionTitle, { color: colors.foreground }]}
+                >
+                  Recent Transactions
+                </Text>
               </View>
 
               <View>
-                {transactions.slice(0, 5).map((tx) => (
-                  <View key={tx.id} style={[styles.transactionCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
-                    <View style={[styles.transactionIconBg, { backgroundColor: colors.muted, borderRadius: radius.md }]}>
-                      <IconGlyph icon={tx.icon} size={20} color={colors.foreground} />
+                {transactions.slice(0, 5).map(tx => (
+                  <View
+                    key={tx.id}
+                    style={[
+                      styles.transactionCard,
+                      {
+                        backgroundColor: colors.card,
+                        borderColor: colors.border,
+                        borderRadius: radius.card,
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.transactionIconBg,
+                        {
+                          backgroundColor: colors.muted,
+                          borderRadius: radius.md,
+                        },
+                      ]}
+                    >
+                      <IconGlyph
+                        icon={tx.icon}
+                        size={20}
+                        color={colors.foreground}
+                      />
                     </View>
                     <View style={{ flex: 1, paddingHorizontal: 12 }}>
-                      <Text style={[styles.txName, { color: colors.foreground }]}>{tx.name}</Text>
-                      <Text style={[styles.txDate, { color: colors.mutedForeground }]}>{tx.date}</Text>
+                      <Text
+                        style={[styles.txName, { color: colors.foreground }]}
+                      >
+                        {tx.name}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.txDate,
+                          { color: colors.mutedForeground },
+                        ]}
+                      >
+                        {tx.date}
+                      </Text>
                     </View>
-                    <Text style={[
-                      styles.txAmount,
-                      tx.type === 'income' ? { color: colors.success } : { color: colors.danger }
-                    ]}>
-                      {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
+                    <Text
+                      style={[
+                        styles.txAmount,
+                        tx.type === 'income'
+                          ? { color: colors.success }
+                          : { color: colors.danger },
+                      ]}
+                    >
+                      {tx.type === 'income' ? '+' : '-'}
+                      {formatCurrency(tx.amount)}
                     </Text>
                   </View>
                 ))}
                 {transactions.length === 0 && (
-                  <Text style={{ color: colors.mutedForeground, textAlign: 'center', marginVertical: 20 }}>No transactions yet. Add one!</Text>
+                  <Text
+                    style={{
+                      color: colors.mutedForeground,
+                      textAlign: 'center',
+                      marginVertical: 20,
+                    }}
+                  >
+                    No transactions yet. Add one!
+                  </Text>
                 )}
               </View>
             </View>
@@ -678,89 +1087,253 @@ export const ExpensesScreen: React.FC = () => {
           {activeTab === 'Breakdown' && (
             <View>
               {/* Pie Chart */}
-              <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+              <View
+                style={[
+                  styles.card,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    borderRadius: radius.card,
+                  },
+                ]}
+              >
                 <View style={styles.chartHeader}>
                   <PieChartIcon size={20} color={colors.primary} />
-                  <Text style={[styles.chartTitle, { color: colors.foreground }]}>Spending Breakdown</Text>
+                  <Text
+                    style={[styles.chartTitle, { color: colors.foreground }]}
+                  >
+                    Spending Breakdown
+                  </Text>
                 </View>
                 <DonutChart categories={categories} />
 
                 {/* Legend List */}
-                <View style={{ marginTop: 24, gap: 12, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 16 }}>
-                  {categories.map((cat) => (
-                    <View key={cat.id} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                        <View style={{ width: 32, height: 32, backgroundColor: cat.color + '20', borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' }}>
-                          <IconGlyph icon={cat.icon} size={18} color={colors.foreground} />
+                <View
+                  style={{
+                    marginTop: 24,
+                    gap: 12,
+                    borderTopWidth: 1,
+                    borderTopColor: colors.border,
+                    paddingTop: 16,
+                  }}
+                >
+                  {categories.map(cat => (
+                    <View
+                      key={cat.id}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 12,
+                        }}
+                      >
+                        <View
+                          style={{
+                            width: 32,
+                            height: 32,
+                            backgroundColor: cat.color + '20',
+                            borderRadius: radius.sm,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <IconGlyph
+                            icon={cat.icon}
+                            size={18}
+                            color={colors.foreground}
+                          />
                         </View>
                         <View>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                            <Text style={{ fontSize: 14, fontWeight: '600', color: colors.foreground }}>{cat.name}</Text>
-                            <View style={{ width: 8, height: 8, backgroundColor: cat.color, borderRadius: 10 }} />
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              gap: 8,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 14,
+                                fontWeight: '600',
+                                color: colors.foreground,
+                              }}
+                            >
+                              {cat.name}
+                            </Text>
+                            <View
+                              style={{
+                                width: 8,
+                                height: 8,
+                                backgroundColor: cat.color,
+                                borderRadius: 10,
+                              }}
+                            />
                           </View>
-                          <Text style={{ fontSize: 12, color: colors.mutedForeground }}>{cat.percent}% of total</Text>
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              color: colors.mutedForeground,
+                            }}
+                          >
+                            {cat.percent}% of total
+                          </Text>
                         </View>
                       </View>
                       <View style={{ alignItems: 'flex-end' }}>
-                        <Text style={{ fontSize: 14, fontWeight: '700', color: colors.foreground }}>{cat.formattedAmount}</Text>
+                        <Text
+                          style={{
+                            fontSize: 14,
+                            fontWeight: '700',
+                            color: colors.foreground,
+                          }}
+                        >
+                          {cat.formattedAmount}
+                        </Text>
                       </View>
                     </View>
                   ))}
                   {categories.length === 0 && (
-                    <Text style={{ color: colors.mutedForeground, textAlign: 'center' }}>No categorized expenses.</Text>
+                    <Text
+                      style={{
+                        color: colors.mutedForeground,
+                        textAlign: 'center',
+                      }}
+                    >
+                      No categorized expenses.
+                    </Text>
                   )}
                 </View>
               </View>
 
               {/* Budget vs Actual */}
-              <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+              <View
+                style={[
+                  styles.card,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    borderRadius: radius.card,
+                  },
+                ]}
+              >
                 <View style={styles.chartHeader}>
                   <Target size={20} color={colors.primary} />
-                  <Text style={[styles.chartTitle, { color: colors.foreground }]}>Budget vs Actual</Text>
-                  <TouchableOpacity onPress={() => setBudgetModalOpen(true)} style={{ marginLeft: 'auto', padding: 4 }}>
+                  <Text
+                    style={[styles.chartTitle, { color: colors.foreground }]}
+                  >
+                    Budget vs Actual
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setBudgetModalOpen(true)}
+                    style={{ marginLeft: 'auto', padding: 4 }}
+                  >
                     <Edit2 size={16} color={colors.mutedForeground} />
                   </TouchableOpacity>
                 </View>
 
                 <View style={{ gap: 16 }}>
-                  {categories.map((cat) => {
-                    const percentUsed = cat.budget > 0 ? (cat.numAmount / cat.budget) * 100 : 0;
+                  {categories.map(cat => {
+                    const percentUsed =
+                      cat.budget > 0 ? (cat.numAmount / cat.budget) * 100 : 0;
                     const isOverBudget = percentUsed > 100;
 
                     return (
                       <View key={cat.id}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            <Text style={{ marginRight: 8, fontSize: 16 }}>{cat.icon}</Text>
-                            <Text style={[styles.catName, { color: colors.foreground }]}>{cat.name}</Text>
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            justifyContent: 'space-between',
+                            marginBottom: 6,
+                          }}
+                        >
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                            }}
+                          >
+                            <IconGlyph
+                              icon={cat.icon}
+                              size={18}
+                              color={cat.color}
+                              style={{ marginRight: 8 }}
+                            />
+                            <Text
+                              style={[
+                                styles.catName,
+                                { color: colors.foreground },
+                              ]}
+                            >
+                              {cat.name}
+                            </Text>
                           </View>
-                          <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                            <Text style={[styles.catAmount, isOverBudget && { color: colors.danger }, { color: colors.foreground }]}>
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'baseline',
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.catAmount,
+                                isOverBudget && { color: colors.danger },
+                                { color: colors.foreground },
+                              ]}
+                            >
                               {cat.formattedAmount}
                             </Text>
                             {cat.budget > 0 && (
-                              <Text style={[styles.catBudget, { color: colors.mutedForeground }]}>
+                              <Text
+                                style={[
+                                  styles.catBudget,
+                                  { color: colors.mutedForeground },
+                                ]}
+                              >
                                 {' / '}
                                 {cat.formattedBudget}
                               </Text>
                             )}
                           </View>
                         </View>
-                        <View style={[styles.progressBarBg, { backgroundColor: colors.muted, borderRadius: radius.xs }]}>
+                        <View
+                          style={[
+                            styles.progressBarBg,
+                            {
+                              backgroundColor: colors.muted,
+                              borderRadius: radius.xs,
+                            },
+                          ]}
+                        >
                           <View
                             style={[
                               styles.progressBarFill,
                               {
                                 width: `${Math.min(percentUsed, 100)}%`,
-                                backgroundColor: isOverBudget ? colors.danger : colors.primary,
-                                borderRadius: radius.xs
-                              }
+                                backgroundColor: isOverBudget
+                                  ? colors.danger
+                                  : colors.primary,
+                                borderRadius: radius.xs,
+                              },
                             ]}
                           />
                         </View>
                         {isOverBudget && (
-                          <Text style={[styles.overBudgetText, { color: colors.danger }]}>
-                            ⚠️ Over budget by {formatCurrency(Math.max(cat.numAmount - cat.budget, 0))}
+                          <Text
+                            style={[
+                              styles.overBudgetText,
+                              { color: colors.danger },
+                            ]}
+                          >
+                            ⚠️ Over budget by{' '}
+                            {formatCurrency(
+                              Math.max(cat.numAmount - cat.budget, 0),
+                            )}
                           </Text>
                         )}
                       </View>
@@ -774,10 +1347,23 @@ export const ExpensesScreen: React.FC = () => {
           {activeTab === 'Insights' && (
             <View>
               {/* AI Insights */}
-              <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+              <View
+                style={[
+                  styles.card,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    borderRadius: radius.card,
+                  },
+                ]}
+              >
                 <View style={styles.chartHeader}>
                   <Lightbulb size={20} color="#f59e0b" />
-                  <Text style={[styles.chartTitle, { color: colors.foreground }]}>AI Insights</Text>
+                  <Text
+                    style={[styles.chartTitle, { color: colors.foreground }]}
+                  >
+                    AI Insights
+                  </Text>
                 </View>
                 <View style={{ gap: 8 }}>
                   {aiInsights.map((insight, i) => (
@@ -786,40 +1372,81 @@ export const ExpensesScreen: React.FC = () => {
                       style={[
                         styles.insightCard,
                         { borderRadius: radius.md },
-                        insight.type === 'warning' ? { backgroundColor: 'rgba(245, 158, 11, 0.1)' } : // Warning tint
-                          insight.type === 'success' ? { backgroundColor: 'rgba(34, 197, 94, 0.1)' } : // Success tint
-                            { backgroundColor: colors.muted }
+                        insight.type === 'warning'
+                          ? { backgroundColor: 'rgba(245, 158, 11, 0.1)' } // Warning tint
+                          : insight.type === 'success'
+                          ? { backgroundColor: 'rgba(34, 197, 94, 0.1)' } // Success tint
+                          : { backgroundColor: colors.muted },
                       ]}
                     >
                       <Text style={{ fontSize: 20 }}>{insight.icon}</Text>
-                      <Text style={[styles.insightText, { color: colors.foreground }]}>{insight.text}</Text>
+                      <Text
+                        style={[
+                          styles.insightText,
+                          { color: colors.foreground },
+                        ]}
+                      >
+                        {insight.text}
+                      </Text>
                     </View>
                   ))}
                 </View>
               </View>
 
               {/* Spending Bar Chart */}
-              <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
+              <View
+                style={[
+                  styles.card,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    borderRadius: radius.card,
+                  },
+                ]}
+              >
                 <View style={styles.chartHeader}>
                   <BarChart3 size={20} color={colors.primary} />
-                  <Text style={[styles.chartTitle, { color: colors.foreground }]}>Category Spending</Text>
+                  <Text
+                    style={[styles.chartTitle, { color: colors.foreground }]}
+                  >
+                    Category Spending
+                  </Text>
                 </View>
                 <HorizontalBarChart categories={categories} />
               </View>
 
               {/* Tips Card */}
-              <View style={[styles.card, styles.tipsCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}>
-                <Text style={[styles.tipsTitle, { color: colors.foreground }]}>💡 Money Saving Tips</Text>
+              <View
+                style={[
+                  styles.card,
+                  styles.tipsCard,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    borderRadius: radius.card,
+                  },
+                ]}
+              >
+                <Text style={[styles.tipsTitle, { color: colors.foreground }]}>
+                  💡 Money Saving Tips
+                </Text>
                 <View style={{ gap: 10 }}>
                   {[
                     'Set up automatic transfers to savings on payday',
                     'Review subscriptions monthly and cancel unused ones',
                     'Use the 24-hour rule before making impulse purchases',
-                    'Plan meals weekly to reduce food waste and dining out'
+                    'Plan meals weekly to reduce food waste and dining out',
                   ].map((tip, i) => (
                     <View key={i} style={{ flexDirection: 'row', gap: 8 }}>
                       <Text style={{ color: colors.success }}>✓</Text>
-                      <Text style={[styles.tipText, { color: colors.mutedForeground }]}>{tip}</Text>
+                      <Text
+                        style={[
+                          styles.tipText,
+                          { color: colors.mutedForeground },
+                        ]}
+                      >
+                        {tip}
+                      </Text>
                     </View>
                   ))}
                 </View>
@@ -838,14 +1465,14 @@ export const ExpensesScreen: React.FC = () => {
         onAdd={handleAddExpense}
         budgets={budgets}
         currentSpending={categorySpending} // Now dynamic
+        categoryColors={categoryColors}
       />
 
       <EditBudgetsModal
         visible={budgetModalOpen}
         onClose={() => setBudgetModalOpen(false)}
       />
-
-    </AppLayout >
+    </AppLayout>
   );
 };
 
@@ -1068,14 +1695,14 @@ const styles = StyleSheet.create({
   },
   tipText: {
     flex: 1,
-    fontSize: 12
+    fontSize: 12,
   },
 
   barChartRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
-    gap: 12
+    gap: 12,
   },
   barLabel: {
     fontSize: 12,
@@ -1085,7 +1712,7 @@ const styles = StyleSheet.create({
     height: 8,
     backgroundColor: 'rgba(0,0,0,0.05)',
     borderRadius: 4,
-    overflow: 'hidden'
+    overflow: 'hidden',
   },
   barFill: {
     height: '100%',
@@ -1093,6 +1720,6 @@ const styles = StyleSheet.create({
   barValue: {
     fontSize: 12,
     width: 60,
-    textAlign: 'right'
-  }
+    textAlign: 'right',
+  },
 });

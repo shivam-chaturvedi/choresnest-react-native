@@ -13,7 +13,7 @@ import {
     Linking,
 } from "react-native";
 import { X, Edit2, Save } from "lucide-react-native";
-import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
+import { useThemeColors, useThemeRadius, useTheme } from "../../contexts/ThemeContext";
 import { VaultDocument } from "../../contexts/FamilyContext";
 import { NotificationCenter } from "../../services/NotificationCenter";
 import { VaultStorageService } from "../../services/VaultStorageService";
@@ -27,9 +27,10 @@ import {
     REMINDER_OFFSET_OPTIONS,
     VaultReminderRule,
 } from "../../utils/VaultReminderUtils";
+import { IconGlyph } from "../ui/IconGlyph";
 import FileViewer from 'react-native-file-viewer';
 import NetInfo from '@react-native-community/netinfo';
-import { AppIcon } from "../ui/AppIcon";
+import { AppIcon, CustomDateTimePicker } from "../ui";
 
 interface DocumentDetailsModalProps {
     visible: boolean;
@@ -40,14 +41,30 @@ interface DocumentDetailsModalProps {
 }
 
 const CATEGORIES = [
-    { id: 'warranty', name: 'Warranty', icon: '🛡️' },
-    { id: 'bill', name: 'Bill', icon: '🧾' },
-    { id: 'insurance', name: 'Insurance', icon: '📋' },
-    { id: 'service', name: 'Service', icon: '🔧' },
-    { id: 'certificate', name: 'Certificate', icon: '📜' },
-    { id: 'receipt', name: 'Receipt', icon: '🧾' },
-    { id: 'other', name: 'Other', icon: '📄' },
+    { id: 'warranty', name: 'Warranty', icon: 'shield-check' },
+    { id: 'bill', name: 'Bill', icon: 'file-document-outline' },
+    { id: 'insurance', name: 'Insurance', icon: 'shield-account' },
+    { id: 'service', name: 'Service', icon: 'tools' },
+    { id: 'certificate', name: 'Certificate', icon: 'certificate' },
+    { id: 'receipt', name: 'Receipt', icon: 'receipt' },
+    { id: 'other', name: 'Other', icon: 'dots-horizontal' },
 ];
+
+const parseReminderTimeString = (value?: string): Date => {
+    const fallback = "09:00";
+    const match = (value || fallback).match(/^(\d{1,2}):(\d{2})$/);
+    const hours = match ? Math.min(Math.max(Number(match[1]), 0), 23) : 9;
+    const minutes = match ? Math.min(Math.max(Number(match[2]), 0), 59) : 0;
+    const date = new Date();
+    date.setHours(hours, minutes, 0, 0);
+    return date;
+};
+
+const formatDateToTimeString = (date: Date): string => {
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    return `${hours}:${minutes}`;
+};
 
 export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
     visible,
@@ -58,6 +75,9 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
 }) => {
     const colors = useThemeColors();
     const radius = useThemeRadius();
+    const { appearanceMode } = useTheme();
+    const isMidnight = appearanceMode === "midnight";
+    const accentColor = isMidnight ? colors.success : colors.primary;
     const pushNotification = (title: string, detail: string, severity: "success" | "warning" | "default" = "default") => {
         NotificationCenter.addNotification({
             title,
@@ -303,6 +323,11 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
         }];
     };
 
+    const reminderTimeDate = parseReminderTimeString(reminderTime);
+    const handleReminderTimeChange = (next: Date) => {
+        setReminderTime(formatDateToTimeString(next));
+    };
+
     const toggleReminderOffset = (value: number) => {
         setReminderOffsets(prev => {
             if (prev.includes(value)) {
@@ -322,32 +347,29 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                     {REMINDER_OFFSET_OPTIONS.map(offset => {
                         const selected = reminderOffsets.includes(offset);
                         return (
-                            <Pressable
-                                key={offset}
-                                onPress={() => toggleReminderOffset(offset)}
-                                style={[
-                                    styles.reminderOption,
-                                    {
-                                        borderColor: selected ? colors.primary : colors.border,
-                                        backgroundColor: selected ? colors.primary + "20" : colors.background,
-                                        borderRadius: radius.md,
-                                    },
-                                ]}
-                            >
-                                <Text style={{ color: selected ? colors.primary : colors.foreground }}>{offset}d</Text>
-                            </Pressable>
-                        );
-                    })}
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12 }}>
-                    <Text style={{ color: colors.foreground }}>Time</Text>
-                    <TextInput
-                        style={[styles.input, { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.background }]}
-                        value={reminderTime}
-                        onChangeText={setReminderTime}
-                        placeholder="HH:MM"
-                        placeholderTextColor={colors.mutedForeground}
-                        keyboardType="numbers-and-punctuation"
+                                    <Pressable
+                                        key={offset}
+                                        onPress={() => toggleReminderOffset(offset)}
+                                        style={[
+                                            styles.reminderOption,
+                                            {
+                                                borderColor: selected ? accentColor : colors.border,
+                                                backgroundColor: selected ? accentColor + "20" : colors.background,
+                                                borderRadius: radius.md,
+                                            },
+                                        ]}
+                                    >
+                                        <Text style={{ color: selected ? accentColor : colors.foreground }}>{offset}d</Text>
+                                    </Pressable>
+                                );
+                            })}
+                        </View>
+                <View style={{ marginTop: 12 }}>
+                    <Text style={{ color: colors.foreground, marginBottom: 6 }}>Time</Text>
+                    <CustomDateTimePicker
+                        mode="time"
+                        value={reminderTimeDate}
+                        onChange={handleReminderTimeChange}
                     />
                 </View>
                 <Text style={[styles.reminderSummary, { color: colors.mutedForeground }]}>{summary}</Text>
@@ -669,7 +691,7 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                                     style={styles.editBtn}
                                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                                 >
-                                    <Edit2 size={20} color={colors.primary} />
+                                    <Edit2 size={20} color={accentColor} />
                                 </Pressable>
                             )}
                             <TouchableOpacity
@@ -722,7 +744,12 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                                                 ]}
                                                 onPress={() => setSelectedCategory(cat.id)}
                                             >
-                                                <Text style={{ fontSize: 16, marginRight: 4 }}>{cat.icon}</Text>
+                                                <IconGlyph
+                                                    icon={cat.icon}
+                                                    size={18}
+                                                    color={selectedCategory === cat.id ? colors.primaryForeground : colors.foreground}
+                                                    style={{ marginRight: 4 }}
+                                                />
                                                 <Text style={[
                                                     styles.categoryChipText,
                                                     { color: selectedCategory === cat.id ? colors.primaryForeground : colors.foreground }

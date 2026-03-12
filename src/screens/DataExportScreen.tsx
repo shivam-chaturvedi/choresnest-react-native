@@ -1,7 +1,15 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from "react-native";
-import { useNavigation } from "@react-navigation/native";
-import { AppLayout } from "../components/layout";
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { AppLayout } from '../components/layout';
 import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import {
   ChevronLeft,
@@ -11,23 +19,26 @@ import {
   FileText,
   Check,
   Loader2,
-  Share2
-} from "lucide-react-native";
-import { exportService, ExportFormat, ExportStats } from "../services/ExportService";
-import Config from "react-native-config";
-import { useFamily } from "../contexts/FamilyContext";
+  Share2,
+} from 'lucide-react-native';
+import { exportService, ExportStats } from '../services/ExportService';
+import Config from 'react-native-config';
+import { useFamily } from '../contexts/FamilyContext';
+import { trackScreen } from '../services/analytics';
 
 const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 
 const initialDataOptions = [
-  { id: 'events', label: "Calendar Events", items: 0, selected: true },
-  { id: 'tasks', label: "Tasks & Chores", items: 0, selected: true },
-  { id: 'lists', label: "Shopping Lists", items: 0, selected: true },
-  ...(ENABLE_RECIPE_AND_MEALS ? [{ id: 'recipes', label: "Recipes", items: 0, selected: true }] : []),
-  { id: 'documents', label: "Documents", items: 0, selected: false },
-  { id: 'notes', label: "Notes", items: 0, selected: true },
-  { id: 'expenses', label: "Expenses", items: 0, selected: true },
-  { id: 'system', label: "System & Settings", items: 0, selected: true },
+  { id: 'events', label: 'Calendar Events', items: 0, selected: true },
+  { id: 'tasks', label: 'Tasks & Chores', items: 0, selected: true },
+  { id: 'lists', label: 'Shopping Lists', items: 0, selected: true },
+  ...(ENABLE_RECIPE_AND_MEALS
+    ? [{ id: 'recipes', label: 'Recipes', items: 0, selected: true }]
+    : []),
+  { id: 'documents', label: 'Documents', items: 0, selected: false },
+  { id: 'notes', label: 'Notes', items: 0, selected: true },
+  { id: 'expenses', label: 'Expenses', items: 0, selected: true },
+  { id: 'system', label: 'System & Settings', items: 0, selected: true },
 ];
 
 export const DataExportScreen: React.FC = () => {
@@ -40,9 +51,13 @@ export const DataExportScreen: React.FC = () => {
 
   const [dataOptions, setDataOptions] = useState(initialDataOptions);
   const [stats, setStats] = useState<ExportStats | null>(null);
-  const [estimatedSize, setEstimatedSize] = useState<string>("Calculating...");
+  const [estimatedSize, setEstimatedSize] = useState<string>('Calculating...');
 
   const [isExporting, setIsExporting] = useState(false);
+
+  useEffect(() => {
+    void trackScreen('DataExportScreen');
+  }, []);
 
   // Load live stats on mount or when profileId changes
   useEffect(() => {
@@ -54,10 +69,12 @@ export const DataExportScreen: React.FC = () => {
     setStats(liveStats);
 
     // Update options with live counts
-    setDataOptions(prev => prev.map(opt => ({
-      ...opt,
-      items: liveStats[opt.id as keyof ExportStats] || 0
-    })));
+    setDataOptions(prev =>
+      prev.map(opt => ({
+        ...opt,
+        items: liveStats[opt.id as keyof ExportStats] || 0,
+      })),
+    );
   };
 
   // Recalculate size when selection changes
@@ -76,25 +93,34 @@ export const DataExportScreen: React.FC = () => {
   }, [stats, dataOptions]);
 
   const toggleData = (id: string) => {
-    setDataOptions(prev => prev.map(opt =>
-      opt.id === id ? { ...opt, selected: !opt.selected } : opt
-    ));
+    setDataOptions(prev =>
+      prev.map(opt =>
+        opt.id === id ? { ...opt, selected: !opt.selected } : opt,
+      ),
+    );
   };
 
-  const handleExport = async () => {
+  const runExport = async (format: 'json' | 'pdf') => {
     const selectedIds = dataOptions.filter(o => o.selected).map(o => o.id);
     if (selectedIds.length === 0) {
-      Alert.alert("No Data Selected", "Please select at least one data type to export.");
+      Alert.alert(
+        'No Data Selected',
+        'Please select at least one data type to export.',
+      );
       return;
     }
 
     setIsExporting(true);
     try {
-      const filePath = await exportService.generateBackup(profileId, selectedIds);
+      const filePath =
+        format === 'pdf'
+          ? await exportService.exportAsPDF(profileId, selectedIds)
+          : await exportService.generateBackup(profileId, selectedIds);
       await exportService.shareBackup(filePath);
     } catch (error: any) {
-      const errorMessage = error?.message || "Could not generate or share backup file.";
-      Alert.alert("Export Failed", errorMessage);
+      const errorMessage =
+        error?.message || 'Could not generate or share backup file.';
+      Alert.alert('Export Failed', errorMessage);
       console.error('Export error:', error);
     } finally {
       setIsExporting(false);
@@ -103,51 +129,112 @@ export const DataExportScreen: React.FC = () => {
 
   return (
     <AppLayout>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Header */}
         <View style={styles.headerRow}>
-          <Pressable onPress={() => navigation.goBack()} style={[styles.backButton, { borderRadius: radius.sm }]}>
+          <Pressable
+            onPress={() => navigation.goBack()}
+            style={[styles.backButton, { borderRadius: radius.sm }]}
+          >
             <ChevronLeft size={24} color={colors.foreground} />
           </Pressable>
-          <Text style={[styles.title, { color: colors.foreground }]}>Data Export</Text>
+          <Text style={[styles.title, { color: colors.foreground }]}>
+            Data Export
+          </Text>
         </View>
 
         {/* Hero Card */}
-        <View style={[styles.heroCard, { backgroundColor: colors.primary, shadowColor: colors.primary, borderRadius: radius.card }]}>
-          <View style={[styles.heroIcon, { backgroundColor: "rgba(255,255,255,0.2)", borderRadius: radius.card }]}>
+        <View
+          style={[
+            styles.heroCard,
+            {
+              backgroundColor: colors.primary,
+              shadowColor: colors.primary,
+              borderRadius: radius.card,
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.heroIcon,
+              {
+                backgroundColor: 'rgba(255,255,255,0.2)',
+                borderRadius: radius.card,
+              },
+            ]}
+          >
             <Download size={32} color={colors.primaryForeground} />
           </View>
           <View>
-            <Text style={[styles.heroTitle, { color: colors.primaryForeground }]}>Full Backup</Text>
-            <Text style={[styles.heroSubtitle, { color: 'rgba(255,255,255,0.9)' }]}>Export data as JSON or PDF</Text>
+            <Text
+              style={[styles.heroTitle, { color: colors.primaryForeground }]}
+            >
+              Full Backup
+            </Text>
+            <Text
+              style={[styles.heroSubtitle, { color: 'rgba(255,255,255,0.9)' }]}
+            >
+              Export data as JSON or PDF
+            </Text>
           </View>
         </View>
 
-
         {/* Select Data */}
         <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.foreground, marginBottom: 0 }]}>Select Data</Text>
-          <Text style={[styles.sizeEstimate, { color: colors.mutedForeground }]}>Est. Size: {estimatedSize}</Text>
+          <Text
+            style={[
+              styles.sectionTitle,
+              { color: colors.foreground, marginBottom: 0 },
+            ]}
+          >
+            Select Data
+          </Text>
+          <Text
+            style={[styles.sizeEstimate, { color: colors.mutedForeground }]}
+          >
+            Est. Size: {estimatedSize}
+          </Text>
         </View>
 
-        <View style={[styles.dataCard, { backgroundColor: colors.card, shadowColor: colors.shadow, borderRadius: radius.card }]}>
-          {dataOptions.map((option) => (
+        <View
+          style={[
+            styles.dataCard,
+            {
+              backgroundColor: colors.card,
+              shadowColor: colors.shadow,
+              borderRadius: radius.card,
+            },
+          ]}
+        >
+          {dataOptions.map(option => (
             <Pressable
               key={option.id}
               style={styles.dataRow}
               onPress={() => toggleData(option.id)}
             >
-              <View style={[
-                styles.checkbox,
-                { borderColor: colors.border, borderRadius: radius.sm },
-                option.selected && { backgroundColor: colors.primary, borderColor: colors.primary }
-              ]}>
+              <View
+                style={[
+                  styles.checkbox,
+                  { borderColor: colors.border, borderRadius: radius.sm },
+                  option.selected && {
+                    backgroundColor: colors.primary,
+                    borderColor: colors.primary,
+                  },
+                ]}
+              >
                 {option.selected && <Check size={14} color="#fff" />}
               </View>
               <View style={styles.dataText}>
-                <Text style={[styles.dataLabel, { color: colors.foreground }]}>{option.label}</Text>
+                <Text style={[styles.dataLabel, { color: colors.foreground }]}>
+                  {option.label}
+                </Text>
               </View>
-              <Text style={[styles.dataCount, { color: colors.mutedForeground }]}>
+              <Text
+                style={[styles.dataCount, { color: colors.mutedForeground }]}
+              >
                 {stats ? `${option.items} items` : '...'}
               </Text>
             </Pressable>
@@ -156,24 +243,16 @@ export const DataExportScreen: React.FC = () => {
 
         {/* Export PDF Button */}
         <Pressable
-          style={[styles.exportButton, { backgroundColor: colors.primary, shadowColor: colors.primary, borderRadius: radius.card }, isExporting && { opacity: 0.8 }]}
-          onPress={async () => {
-            const selectedIds = dataOptions.filter(o => o.selected).map(o => o.id);
-            if (selectedIds.length === 0) {
-              Alert.alert("No Data Selected", "Please select at least one data type to export.");
-              return;
-            }
-
-            setIsExporting(true);
-            try {
-              const filePath = await exportService.exportAsPDF(profileId, selectedIds);
-              await exportService.shareBackup(filePath);
-            } catch (error: any) {
-              Alert.alert("Export Failed", error?.message || "Could not generate PDF.");
-            } finally {
-              setIsExporting(false);
-            }
-          }}
+          style={[
+            styles.exportButton,
+            {
+              backgroundColor: colors.primary,
+              shadowColor: colors.primary,
+              borderRadius: radius.card,
+            },
+            isExporting && { opacity: 0.8 },
+          ]}
+          onPress={() => runExport('pdf')}
           disabled={isExporting}
         >
           {isExporting ? (
@@ -181,26 +260,54 @@ export const DataExportScreen: React.FC = () => {
           ) : (
             <>
               <FileText size={20} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={[styles.exportText, { color: colors.primaryForeground }]}>Export as PDF</Text>
+              <Text
+                style={[styles.exportText, { color: colors.primaryForeground }]}
+              >
+                Export as PDF
+              </Text>
             </>
           )}
         </Pressable>
 
         {/* Export Button (JSON) */}
         <Pressable
-          style={[styles.exportButton, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, marginTop: 12, borderRadius: radius.card }, isExporting && { opacity: 0.8 }]}
-          onPress={handleExport}
+          style={[
+            styles.exportButton,
+            {
+              backgroundColor: colors.card,
+              borderWidth: 1,
+              borderColor: colors.border,
+              marginTop: 12,
+              borderRadius: radius.card,
+            },
+            isExporting && { opacity: 0.8 },
+          ]}
+          onPress={() => runExport('json')}
           disabled={isExporting}
         >
           {isExporting ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Loader2 size={24} color={colors.foreground} style={{ transform: [{ rotate: '45deg' }] }} />
-              <Text style={[styles.exportText, { color: colors.foreground }]}>Exporting...</Text>
+            <View
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
+            >
+              <Loader2
+                size={24}
+                color={colors.foreground}
+                style={{ transform: [{ rotate: '45deg' }] }}
+              />
+              <Text style={[styles.exportText, { color: colors.foreground }]}>
+                Exporting...
+              </Text>
             </View>
           ) : (
             <>
-              <FileJson size={20} color={colors.foreground} style={{ marginRight: 8 }} />
-              <Text style={[styles.exportText, { color: colors.foreground }]}>Export as JSON</Text>
+              <FileJson
+                size={20}
+                color={colors.foreground}
+                style={{ marginRight: 8 }}
+              />
+              <Text style={[styles.exportText, { color: colors.foreground }]}>
+                Export as JSON
+              </Text>
             </>
           )}
         </Pressable>
@@ -215,8 +322,8 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 20,
     marginTop: 8,
   },
@@ -226,11 +333,11 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 20,
-    fontWeight: "700",
+    fontWeight: '700',
   },
   heroCard: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 16,
     marginBottom: 24,
     shadowOffset: { width: 0, height: 4 },
@@ -241,20 +348,20 @@ const styles = StyleSheet.create({
   heroIcon: {
     width: 56,
     height: 56,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
     marginRight: 16,
   },
   heroTitle: {
     fontSize: 18,
-    fontWeight: "700",
+    fontWeight: '700',
   },
   heroSubtitle: {
     fontSize: 14,
   },
   sectionTitle: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: '600',
     marginBottom: 12,
     marginTop: 8,
   },
@@ -269,11 +376,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   optionCard: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 12,
     borderWidth: 2,
-    borderColor: "transparent",
+    borderColor: 'transparent',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
@@ -282,8 +389,8 @@ const styles = StyleSheet.create({
   optionIcon: {
     width: 48,
     height: 48,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
     marginRight: 12,
   },
   optionText: {
@@ -291,7 +398,7 @@ const styles = StyleSheet.create({
   },
   optionLabel: {
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: '600',
   },
   optionSubtitle: {
     fontSize: 12,
@@ -305,8 +412,8 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   dataRow: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: 10,
     paddingHorizontal: 8,
   },
@@ -314,8 +421,8 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderWidth: 2,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
     marginRight: 12,
   },
   dataText: {
@@ -323,7 +430,7 @@ const styles = StyleSheet.create({
   },
   dataLabel: {
     fontSize: 14,
-    fontWeight: "500",
+    fontWeight: '500',
   },
   dataCount: {
     fontSize: 12,
@@ -331,7 +438,7 @@ const styles = StyleSheet.create({
   exportButton: {
     height: 56,
     flexDirection: 'row',
-    alignItems: "center",
+    alignItems: 'center',
     justifyContent: 'center',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
@@ -339,7 +446,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   exportText: {
-    fontWeight: "600",
+    fontWeight: '600',
     fontSize: 16,
   },
 });

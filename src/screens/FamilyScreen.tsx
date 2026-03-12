@@ -1,16 +1,14 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { AppLayout } from '../components/layout';
+import { useFamily, FamilyMember } from '../contexts/FamilyContext';
+import { theme } from '../theme';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-} from "react-native";
-import { AppLayout } from "../components/layout";
-import { useFamily, FamilyMember } from "../contexts/FamilyContext";
-import { theme } from "../theme";
-import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
-import { useSidebar } from "../contexts/SidebarContext";
+  useThemeColors,
+  useThemeRadius,
+  useTheme,
+} from '../contexts/ThemeContext';
+import { useSidebar } from '../contexts/SidebarContext';
 import {
   Users,
   UserPlus,
@@ -18,12 +16,13 @@ import {
   Shield,
   Edit,
   Menu,
-  ChevronLeft
-} from "lucide-react-native";
-import { PROFILE_COLORS } from "../constants/profileColors";
-import { FamilyOnboarding } from "../components/family/FamilyOnboarding";
-import { AddMemberModal } from "../components/modals/AddMemberModal";
-import { MemberIcon } from "../components/ui/MemberIcon";
+  ChevronLeft,
+} from 'lucide-react-native';
+import { PROFILE_COLORS } from '../constants/profileColors';
+import { FamilyOnboarding } from '../components/family/FamilyOnboarding';
+import { AddMemberModal } from '../components/modals/AddMemberModal';
+import { MemberIcon } from '../components/ui/MemberIcon';
+import { trackScreen } from '../services/analytics';
 
 // No explicit roles as per new requirement
 
@@ -32,9 +31,18 @@ export const FamilyScreen: React.FC = () => {
   const { openSidebar } = useSidebar();
   const colors = useThemeColors();
   const radius = useThemeRadius();
+  const { appearanceMode } = useTheme();
+  const isMidnight = appearanceMode === 'midnight';
+  const accentColor = isMidnight ? colors.foreground : colors.primary;
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [selectedMember, setSelectedMember] = useState<FamilyMember | null>(null);
+  const [selectedMember, setSelectedMember] = useState<FamilyMember | null>(
+    null,
+  );
   const [showMemberModal, setShowMemberModal] = useState(false);
+
+  useEffect(() => {
+    void trackScreen('FamilyScreen');
+  }, []);
 
   // Helper to get color values
   const getColor = (colorName: string) => {
@@ -44,36 +52,90 @@ export const FamilyScreen: React.FC = () => {
 
   return (
     <AppLayout showNav={false}>
-      <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.container,
+          { backgroundColor: colors.background },
+        ]}
+      >
         {/* Header */}
         <View style={styles.header}>
-          <Pressable onPress={openSidebar} style={[styles.iconButton, { backgroundColor: colors.card, borderRadius: radius.md }]}>
+          <Pressable
+            onPress={openSidebar}
+            style={[
+              styles.iconButton,
+              { backgroundColor: colors.card, borderRadius: radius.md },
+            ]}
+          >
             <Menu size={24} color={colors.foreground} />
           </Pressable>
           <View style={{ flex: 1, paddingHorizontal: 12 }}>
-            <Text style={[styles.title, { color: colors.foreground }]}>Family Members</Text>
-            <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{familyName}</Text>
+            <Text style={[styles.title, { color: colors.foreground }]}>
+              Family Members
+            </Text>
+            <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
+              {familyName}
+            </Text>
           </View>
         </View>
 
         {/* Family Card */}
-        <View style={[styles.familyCard, { backgroundColor: colors.primary, shadowColor: colors.primary, borderRadius: radius.card }]}>
-          <View style={[styles.iconContainer, { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: radius.lg }]}>
+        <View
+          style={[
+            styles.familyCard,
+            {
+              backgroundColor: colors.primary,
+              shadowColor: colors.primary,
+              borderRadius: radius.card,
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.iconContainer,
+              {
+                backgroundColor: 'rgba(255,255,255,0.2)',
+                borderRadius: radius.lg,
+              },
+            ]}
+          >
             <Users size={32} color={colors.primaryForeground} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.cardTitle, { color: colors.primaryForeground }]}>{familyName}</Text>
-            <Text style={[styles.cardSubtitle, { color: colors.primaryForeground, opacity: 0.8 }]}>{members.length} members</Text>
+            <Text
+              style={[styles.cardTitle, { color: colors.primaryForeground }]}
+            >
+              {familyName}
+            </Text>
+            <Text
+              style={[
+                styles.cardSubtitle,
+                { color: colors.primaryForeground, opacity: 0.8 },
+              ]}
+            >
+              {members.length} members
+            </Text>
           </View>
-          <Pressable onPress={() => setShowOnboarding(true)} style={[styles.cardEditButton, { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: radius.sm }]}>
+          <Pressable
+            onPress={() => setShowOnboarding(true)}
+            style={[
+              styles.cardEditButton,
+              {
+                backgroundColor: 'rgba(255,255,255,0.1)',
+                borderRadius: radius.sm,
+              },
+            ]}
+          >
             <Edit size={20} color={colors.primaryForeground} />
           </Pressable>
         </View>
 
         {/* Members List */}
-        <Text style={[styles.sectionHeader, { color: colors.foreground }]}>Members</Text>
+        <Text style={[styles.sectionHeader, { color: colors.foreground }]}>
+          Members
+        </Text>
         <View style={{ gap: 8 }}>
-          {members.map((member) => {
+          {members.map(member => {
             const handleLongPress = () => {
               setSelectedMember(member);
               setShowMemberModal(true);
@@ -82,21 +144,80 @@ export const FamilyScreen: React.FC = () => {
               <Pressable
                 key={member.id}
                 onLongPress={handleLongPress}
-                style={[styles.memberCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.card }]}
+                style={[
+                  styles.memberCard,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    borderRadius: radius.card,
+                  },
+                ]}
               >
-                <View style={[styles.avatar, { backgroundColor: member.color || colors.muted, borderRadius: radius.card }]}>
+                <View
+                  style={[
+                    styles.avatar,
+                    {
+                      backgroundColor: member.color || colors.muted,
+                      borderRadius: radius.card,
+                    },
+                  ]}
+                >
                   <MemberIcon symbol={member.symbol} size={28} color="#fff" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.memberName, { color: colors.foreground }]}>{member.name}</Text>
+                  <Text
+                    style={[styles.memberName, { color: colors.foreground }]}
+                  >
+                    {member.name}
+                  </Text>
                   <View style={styles.statusContainer}>
-                    <View style={[styles.roleBadge, { backgroundColor: PROFILE_COLORS.find(c => c.value === member.color)?.hex + "20", borderRadius: radius.xs }]}>
-                      <Text style={[styles.roleText, { color: PROFILE_COLORS.find(c => c.value === member.color)?.hex }]}>{PROFILE_COLORS.find(c => c.value === member.color)?.name || "Member"}</Text>
+                    <View
+                      style={[
+                        styles.roleBadge,
+                        {
+                          backgroundColor:
+                            PROFILE_COLORS.find(c => c.value === member.color)
+                              ?.hex + '20',
+                          borderRadius: radius.xs,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.roleText,
+                          {
+                            color: PROFILE_COLORS.find(
+                              c => c.value === member.color,
+                            )?.hex,
+                          },
+                        ]}
+                      >
+                        {PROFILE_COLORS.find(c => c.value === member.color)
+                          ?.name || 'Member'}
+                      </Text>
                     </View>
                     {member.isActive && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                        <View style={[styles.onlineDot, { backgroundColor: colors.success, borderRadius: radius.xs }]} />
-                        <Text style={[styles.onlineText, { color: colors.success }]}>Active Profile</Text>
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}
+                      >
+                        <View
+                          style={[
+                            styles.onlineDot,
+                            {
+                              backgroundColor: colors.success,
+                              borderRadius: radius.xs,
+                            },
+                          ]}
+                        />
+                        <Text
+                          style={[styles.onlineText, { color: colors.success }]}
+                        >
+                          Active Profile
+                        </Text>
                       </View>
                     )}
                   </View>
@@ -115,15 +236,22 @@ export const FamilyScreen: React.FC = () => {
           })}
         </View>
 
-
         {/* Add Button */}
-        <Pressable onPress={() => setShowOnboarding(true)} style={[styles.addButton, { backgroundColor: colors.primary, borderRadius: radius.md }]}>
+        <Pressable
+          onPress={() => setShowOnboarding(true)}
+          style={[
+            styles.addButton,
+            { backgroundColor: colors.primary, borderRadius: radius.md },
+          ]}
+        >
           <UserPlus size={20} color="#fff" />
           <Text style={styles.addButtonText}>Family Setup</Text>
         </Pressable>
-
       </ScrollView>
-      <FamilyOnboarding open={showOnboarding} onClose={() => setShowOnboarding(false)} />
+      <FamilyOnboarding
+        open={showOnboarding}
+        onClose={() => setShowOnboarding(false)}
+      />
       <AddMemberModal
         open={showMemberModal}
         onClose={() => {
