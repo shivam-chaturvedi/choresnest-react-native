@@ -74,7 +74,7 @@ apply from: "../../node_modules/react-native-vector-icons/fonts.gradle"
 /**
  * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
  */
-def enableProguardInReleaseBuilds = false
+def enableProguardInReleaseBuilds = true
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -100,8 +100,8 @@ android {
         applicationId "com.choresnest"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode 4
+        versionName "1.0.3"
     }
     signingConfigs {
         debug {

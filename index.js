@@ -7,6 +7,9 @@ import App from './App';
 import { name as appName } from './app.json';
 import notifee from '@notifee/react-native';
 import * as Sentry from '@sentry/react-native';
+import { enableScreens } from 'react-native-screens';
+
+enableScreens();
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // GLOBAL ERROR HANDLERS - Prevent app crashes and red screens
@@ -33,6 +36,7 @@ if (ErrorUtils) {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 // Register background handler for notifee
+
 notifee.onBackgroundEvent(async ({ type, detail }) => {
   try {
     // This handler creates a background process that keeps the app alive briefly

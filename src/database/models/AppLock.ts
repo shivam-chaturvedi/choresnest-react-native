@@ -11,3 +11,5 @@ export default class AppLock extends Model {
     @field('updated_at') updatedAt!: number;
     @field('version') version!: number;
 }
+
+
