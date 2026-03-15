@@ -34,6 +34,7 @@ const FIELD_MAPPINGS: Record<string, Record<string, string>> = {
         contentType: 'content_type',
         fileSize: 'file_size',
         checksum: 'checksum',
+        metadataVersion: 'metadata_version',
     },
 };
 

@@ -1,0 +1,25 @@
+Changelog v1.0.4
+===============
+
+1. **Vault metadata & sync hardening**
+   - Added `metadata_version`/`remote_delete_pending` columns in Supabase, schema, and WatermelonDB so metadata-only changes can be tracked, incremented, and synced without re-uploading files. VaultService now increments this counter and enqueues metadata-only upserts.
+   - Implemented `DocumentMetadataSyncService` + `VaultRemoteCleanupService` to flush metadata updates and remote deletions after an online transition; errors are fully handled and surfaced via queue retry logic.
+   - Updated Vault delete/upload flows to respect guest mode, consistently cache local URIs, and avoid unhandled console errors.
+
+2. **Document export & UI polish**
+   - Built a shopping-list PDF generator that writes a tabular document to cache and immediately shares it with the native share intent; cancelled or already-running exports are quietly suppressed, while true failures still show toasts.
+   - Restored the original share-chooser UX (no extra modal) while styling the “Export PDF” button and category chips so their outline/text colors adapt per light, cream, and midnight themes without solid primary fills.
+   - Ensured share requests always open the platform sheet (WhatsApp/file manager/download options still appear) and that toggles like guest-mode uploading, the share modal, and other actions remain responsive with defensive try/catch handling.
+
+3. **Experience & layout refinements**
+   - Updated Privacy & Security to hide the user ID from the account card, and reading the global theme, notification, and home screen code received adjustments for new share logic and error handling.
+   - Vault screen now always shows the upload button (even in guest mode) while removing redundant guards that blocked scanning, and categories use outline indicators across all appearance modes.
+   - Lists screen history filters now keep a single-card layout (light and other themes keep a neutral background with a primary border for the active chip) and the “Items to buy” header sits above the export control.
+
+4. **Analytics & supporting service updates**
+   - Migrated all analytics calls to the modular Firebase API (`logEvent(getAnalytics(), …)` + `setUserProperty`) to satisfy RNFirebase v22 requirements.
+   - ExportService now exposes an `exportShoppingListAsPDF` helper with theme-aware styling, and Notification* / Storage / Task services updated alongside the new flows.
+
+5. **Migrations & schema upkeep**
+   - Added the new metadata columns to `src/migrations/schema.sql`, WatermelonDB schema/migrations files, and updated `Document` model/serialization so the database always knows about the new fields.
+   - Coherent version bump ensures existing installs will run the `metadata_version` migration before the new services attempt to read or write it.

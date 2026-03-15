@@ -86,10 +86,11 @@ export const DateTimePicker: React.FC<SimpleDatePickerProps> = ({
     const yearScrollRef = useRef<ScrollView>(null);
 
     const openPicker = useCallback(() => {
-        const d = parseLocalDate(value) ?? new Date();
-        setPendingDate(parseLocalDate(value)); // null if empty → no day highlighted yet
-        setViewYear(d.getFullYear());
-        setViewMonth(d.getMonth());
+        const parsed = parseLocalDate(value);
+        const baseline = parsed ?? new Date();
+        setPendingDate(baseline);
+        setViewYear(baseline.getFullYear());
+        setViewMonth(baseline.getMonth());
         setShowYearPicker(false);
         setShow(true);
     }, [value]);

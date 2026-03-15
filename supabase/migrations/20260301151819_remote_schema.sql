@@ -183,7 +183,9 @@ CREATE TABLE IF NOT EXISTS "public"."app_lock" (
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "deleted" boolean DEFAULT false NOT NULL,
-    "version" integer DEFAULT 0 NOT NULL
+    "version" integer DEFAULT 0 NOT NULL,
+    "metadata_version" integer DEFAULT 0 NOT NULL,
+    "remote_delete_pending" boolean DEFAULT false NOT NULL
 );
 
 
@@ -284,7 +286,9 @@ CREATE TABLE IF NOT EXISTS "public"."documents" (
     "last_upload_error" "text",
     "content_type" "text",
     "file_size" bigint,
-    "checksum" "text"
+    "checksum" "text",
+    "metadata_version" integer DEFAULT 0 NOT NULL,
+    "remote_delete_pending" boolean DEFAULT false NOT NULL
 );
 
 
@@ -2073,8 +2077,6 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "anon";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "authenticated";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "service_role";
-
-
 
 
 

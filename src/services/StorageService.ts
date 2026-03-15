@@ -7,7 +7,8 @@ import { decode } from '../utils/base64';
 const IMAGE_BUCKET = 'recipe-images';
 const AUDIO_BUCKET = 'recipe-audio';
 const THUMBNAIL_BUCKET = 'recipe-thumbnails';
-const PUBLIC_BUCKETS = new Set<string>([IMAGE_BUCKET, AUDIO_BUCKET, THUMBNAIL_BUCKET]);
+const FEEDBACK_BUCKET = 'feedback-images';
+const PUBLIC_BUCKETS = new Set<string>([IMAGE_BUCKET, AUDIO_BUCKET, THUMBNAIL_BUCKET, FEEDBACK_BUCKET]);
 const MAX_IMAGE_SIZE = 8 * 1024 * 1024;
 const MAX_AUDIO_SIZE = 10 * 1024 * 1024;
 const MAX_RETRY_ATTEMPTS = 3;
@@ -223,6 +224,63 @@ const prepareUploadUri = async (uri: string): Promise<PreparedUpload> => {
 
 const buildUploadPath = (profileId: string, recipeId: string, fileName: string): string => {
   return `${profileId}/${recipeId}/${uuidv4()}_${fileName}`;
+};
+
+const ensureProfilePathSegment = (profileId: string): string => {
+  const trimmed = profileId?.trim();
+  if (!trimmed) {
+    return 'guest';
+  }
+  return trimmed.replace(/[^a-zA-Z0-9._-]/g, '_');
+};
+
+const buildFeedbackUploadPath = (profileId: string, fileName: string): string => {
+  const safeProfile = ensureProfilePathSegment(profileId);
+  return `${safeProfile}/feedback/${uuidv4()}_${fileName}`;
+};
+
+export const uploadFeedbackImage = async (
+  profileId: string,
+  file: RecipeAssetFile
+): Promise<string> => {
+  const candidateName = file.name ?? getFileNameFromUri(file.uri);
+  const sanitizedName = sanitizeFileName(candidateName);
+  const contentType = resolveContentType(file, candidateName);
+  const finalFileName = ensureFileNameWithExtension(
+    sanitizedName,
+    contentType,
+    getExtensionFromUri(file.uri, 'jpg')
+  );
+  const uploadPath = buildFeedbackUploadPath(profileId, finalFileName);
+
+  await ensureOnline();
+  const prepared = await prepareUploadUri(file.uri);
+  let uploaded = false;
+
+  try {
+    await enforceFileSizeLimit(prepared.filePath, MAX_IMAGE_SIZE);
+    const payload: UploadFormDataFile = {
+      uri: prepared.uploadUri,
+      name: finalFileName,
+      type: contentType ?? 'application/octet-stream',
+    };
+    await uploadWithRetry(FEEDBACK_BUCKET, uploadPath, payload);
+    uploaded = true;
+    return uploadPath;
+  } catch (error) {
+    if (uploaded) {
+      await cleanupOrphan(FEEDBACK_BUCKET, uploadPath);
+    }
+    throw error;
+  } finally {
+    if (prepared.cleanup) {
+      try {
+        await prepared.cleanup();
+      } catch {
+        // ignore cleanup failures
+      }
+    }
+  }
 };
 
 const createUploadError = (bucket: string, path: string, error: any): Error => {
@@ -453,6 +511,7 @@ export {
   IMAGE_BUCKET,
   AUDIO_BUCKET,
   THUMBNAIL_BUCKET,
+  FEEDBACK_BUCKET,
   isPublicBucket,
   getBucketPublicUrl,
   getBucketObjectUrl,

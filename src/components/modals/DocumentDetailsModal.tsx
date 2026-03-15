@@ -11,6 +11,7 @@ import {
     TouchableWithoutFeedback,
     TouchableOpacity,
     Linking,
+    Switch,
 } from "react-native";
 import { X, Edit2, Save } from "lucide-react-native";
 import { useThemeColors, useThemeRadius, useTheme } from "../../contexts/ThemeContext";
@@ -19,18 +20,13 @@ import { NotificationCenter } from "../../services/NotificationCenter";
 import { VaultStorageService } from "../../services/VaultStorageService";
 import { VaultService } from "../../services/VaultService";
 import { DateTimePicker } from "../ui/SimpleDatePicker";
-import {
-    formatReminderRuleSummary,
-    getPrimaryReminderField,
-    normalizeReminderOffsets,
-    normalizeReminderTime,
-    REMINDER_OFFSET_OPTIONS,
-    VaultReminderRule,
-} from "../../utils/VaultReminderUtils";
+import { formatReminderRuleSummary, getPrimaryReminderField, VaultReminderRule } from "../../utils/VaultReminderUtils";
 import { IconGlyph } from "../ui/IconGlyph";
 import FileViewer from 'react-native-file-viewer';
 import NetInfo from '@react-native-community/netinfo';
-import { AppIcon, CustomDateTimePicker } from "../ui";
+import { AppIcon } from "../ui";
+import { useCountry } from "../../contexts/CountryContext";
+import { CATEGORY_ICON_MAP } from "../../utils/VaultUtils";
 
 interface DocumentDetailsModalProps {
     visible: boolean;
@@ -38,6 +34,8 @@ interface DocumentDetailsModalProps {
     document: VaultDocument | null;
     onUpdate: (docId: string, updates: Partial<Omit<VaultDocument, "id">>) => Promise<any>;
     onViewImage?: (uri: string) => void;
+    isGuest?: boolean;
+    profileId?: string | null;
 }
 
 const CATEGORIES = [
@@ -50,28 +48,14 @@ const CATEGORIES = [
     { id: 'other', name: 'Other', icon: 'dots-horizontal' },
 ];
 
-const parseReminderTimeString = (value?: string): Date => {
-    const fallback = "09:00";
-    const match = (value || fallback).match(/^(\d{1,2}):(\d{2})$/);
-    const hours = match ? Math.min(Math.max(Number(match[1]), 0), 23) : 9;
-    const minutes = match ? Math.min(Math.max(Number(match[2]), 0), 59) : 0;
-    const date = new Date();
-    date.setHours(hours, minutes, 0, 0);
-    return date;
-};
-
-const formatDateToTimeString = (date: Date): string => {
-    const hours = String(date.getHours()).padStart(2, "0");
-    const minutes = String(date.getMinutes()).padStart(2, "0");
-    return `${hours}:${minutes}`;
-};
-
 export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
     visible,
     onClose,
     document,
     onUpdate,
     onViewImage,
+    isGuest = false,
+    profileId,
 }) => {
     const colors = useThemeColors();
     const radius = useThemeRadius();
@@ -96,7 +80,7 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                         : colors.foreground,
             icon: severity === "warning" ? "alertCircle" : "file",
             route: { tab: "home", screen: "Vault" },
-        });
+        }, profileId);
     };
     const [isEditMode, setIsEditMode] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -109,7 +93,28 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
     const [downloadStatus, setDownloadStatus] = useState<'idle' | 'pending' | 'error'>('idle');
     const [downloadError, setDownloadError] = useState<string | null>(null);
     // Priority: resolved+verified local file > Supabase signed URL
-    const viewUri = resolvedLocalUri ?? signedUrl ?? undefined;
+    const normalizeLocalUri = (uri?: string | null): string | null => {
+        if (!uri) return null;
+        if (uri.startsWith('file://')) {
+            return uri;
+        }
+        return `file://${uri.replace(/^file:|^\/\//, '')}`;
+    };
+    const fallbackLocalUri = normalizeLocalUri(document?.localUri ?? null);
+    const viewUri = resolvedLocalUri ?? signedUrl ?? fallbackLocalUri ?? undefined;
+    const { formatCurrency } = useCountry();
+    const lastHydratedIdRef = useRef<string | null>(null);
+    const lastHydratedTimestampRef = useRef<number | null>(null);
+
+    const formatCurrencyValue = (value?: string): string | undefined => {
+        if (!value) return undefined;
+        const numericString = value.replace(/[^0-9.-]/g, '');
+        const parsed = Number(numericString);
+        if (!Number.isFinite(parsed)) {
+            return value;
+        }
+        return formatCurrency(parsed);
+    };
 
     // Form fields
     const [documentName, setDocumentName] = useState('');
@@ -124,8 +129,7 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
     const [serviceDate, setServiceDate] = useState('');
     const [nextServiceDate, setNextServiceDate] = useState('');
     const [cost, setCost] = useState('');
-    const [reminderOffsets, setReminderOffsets] = useState<number[]>([]);
-    const [reminderTime, setReminderTime] = useState('09:00');
+    const [reminderEnabled, setReminderEnabled] = useState(true);
     const [nameError, setNameError] = useState('');
 
     const createDateSetter = (fieldName: string, setter: (value: string) => void) => (value: string) => {
@@ -154,23 +158,25 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
         setCost(doc.cost || '');
         const reminderField = getPrimaryReminderField(doc.type);
         const reminderRule = reminderField ? (doc.reminderRules || []).find(rule => rule.field === reminderField) : undefined;
-        setReminderOffsets(reminderRule?.offsets ? normalizeReminderOffsets(reminderRule.offsets) : [1]);
-        setReminderTime(reminderRule?.timeOfDay || '09:00');
+        setReminderEnabled(Boolean(reminderRule));
     };
-
-    const lastHydratedIdRef = useRef<string | null>(null);
 
     useEffect(() => {
         if (!visible || !document) {
             lastHydratedIdRef.current = null;
+            lastHydratedTimestampRef.current = null;
             return;
         }
-        if (lastHydratedIdRef.current === document.id) {
+        if (
+            lastHydratedIdRef.current === document.id &&
+            lastHydratedTimestampRef.current === document.updatedAt
+        ) {
             return;
         }
         hydrateForm(document);
         lastHydratedIdRef.current = document.id;
-    }, [visible, document?.id]);
+        lastHydratedTimestampRef.current = document.updatedAt ?? null;
+    }, [visible, document?.id, document?.updatedAt]);
 
     useEffect(() => {
         if (visible) {
@@ -198,48 +204,61 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                 return;
             }
 
-            const canDownload = Boolean(document.remotePath && document.uploadStatus === 'uploaded');
-            if (canDownload) {
+            const shouldDownloadFromRemote = Boolean(
+                document.remotePath && document.uploadStatus === 'uploaded',
+            );
+
+            if (shouldDownloadFromRemote) {
                 setDownloadError(null);
                 setDownloadStatus('pending');
                 setDownloadProgress(0);
-                try {
-                    const localUri = await VaultService.ensureLocalUri(document, (bytesWritten, contentLength) => {
-                        if (!active || contentLength <= 0) {
-                            return;
-                        }
-                        const ratio = Math.min(Math.max(bytesWritten / contentLength, 0), 1);
-                        setDownloadProgress(ratio);
-                    });
-                    if (!active) {
-                        return;
-                    }
-                    if (localUri) {
-                        setResolvedLocalUri(localUri);
-                        setSignedUrl(null);
-                        setDownloadStatus('idle');
-                        setDownloadProgress(null);
-                        return;
-                    }
-                    setDownloadStatus('error');
-                    setDownloadError('Unable to download this file at the moment.');
-                } catch (error) {
-                    if (!active) {
-                        return;
-                    }
+            } else {
+                setDownloadStatus('idle');
+                setDownloadProgress(null);
+            }
+
+            let localUri: string | null | undefined = null;
+            try {
+                localUri = await VaultService.ensureLocalUri(
+                    document,
+                    shouldDownloadFromRemote
+                        ? (bytesWritten, contentLength) => {
+                              if (!active || contentLength <= 0) {
+                                  return;
+                              }
+                              const ratio = Math.min(Math.max(bytesWritten / contentLength, 0), 1);
+                              setDownloadProgress(ratio);
+                          }
+                        : undefined,
+                );
+            } catch (error) {
+                if (active && shouldDownloadFromRemote) {
                     console.error('DocumentDetailsModal: failed to download document', error);
                     setDownloadStatus('error');
                     setDownloadError(extractErrorMessage(error));
-                } finally {
-                    if (active) {
-                        setDownloadProgress(null);
-                        setDownloadStatus(prev => (prev === 'error' ? 'error' : 'idle'));
-                    }
+                    setDownloadProgress(null);
                 }
             }
 
             if (!active) {
                 return;
+            }
+
+            if (localUri) {
+                setResolvedLocalUri(localUri);
+                setSignedUrl(null);
+                setDownloadStatus('idle');
+                setDownloadProgress(null);
+                return;
+            }
+
+            if (shouldDownloadFromRemote) {
+                setDownloadStatus('error');
+                setDownloadError('Unable to download this file at the moment.');
+                setDownloadProgress(null);
+            } else {
+                setDownloadStatus('idle');
+                setDownloadProgress(null);
             }
 
             if (!document.remotePath) {
@@ -281,11 +300,12 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
         };
 
         setIsSaving(true);
-        try {
+        const iconName = CATEGORY_ICON_MAP[selectedCategory] || 'file-document';
+            try {
             await onUpdate(document.id, {
                 name: documentName,
                 type: selectedCategory as any,
-                icon: categoryIcons[selectedCategory] || '📄',
+                icon: iconName,
                 purchaseDate,
                 warrantyTillDate,
                 billAmount,
@@ -301,6 +321,7 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
 
             pushNotification("Document updated", `${documentName} details saved successfully.`, "success");
             setIsEditMode(false);
+            onClose();
         } catch (error) {
             console.error("Failed to update document:", error);
             pushNotification("Error", "Failed to update document.", "warning");
@@ -311,68 +332,48 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
     };
 
     const buildReminderRules = (): VaultReminderRule[] => {
-        const field = getPrimaryReminderField(selectedCategory);
-        const normalizedOffsets = normalizeReminderOffsets(reminderOffsets);
-        if (!field || normalizedOffsets.length === 0) {
+        if (!reminderEnabled) {
             return [];
         }
-        return [{
-            field,
-            offsets: normalizedOffsets,
-            timeOfDay: normalizeReminderTime(reminderTime),
-        }];
-    };
-
-    const reminderTimeDate = parseReminderTimeString(reminderTime);
-    const handleReminderTimeChange = (next: Date) => {
-        setReminderTime(formatDateToTimeString(next));
-    };
-
-    const toggleReminderOffset = (value: number) => {
-        setReminderOffsets(prev => {
-            if (prev.includes(value)) {
-                return prev.filter(offset => offset !== value);
-            }
-            return normalizeReminderOffsets([...prev, value]);
-        });
+        const field = getPrimaryReminderField(selectedCategory);
+        if (!field) {
+            return [];
+        }
+        return [
+            {
+                field,
+                offsets: [1],
+                timeOfDay: '09:00',
+            },
+        ];
     };
 
     const renderReminderSettings = () => {
-        const rules = buildReminderRules();
-        const summary = formatReminderRuleSummary(rules[0]);
+        const summary = reminderEnabled
+            ? 'Reminders fire 1 day before the selected date.'
+            : 'Reminders disabled.';
         return (
             <View style={styles.formGroup}>
-                <Text style={[styles.label, { color: colors.foreground, marginBottom: 8 }]}>Reminder preferences</Text>
-                <View style={styles.reminderSlider}>
-                    {REMINDER_OFFSET_OPTIONS.map(offset => {
-                        const selected = reminderOffsets.includes(offset);
-                        return (
-                                    <Pressable
-                                        key={offset}
-                                        onPress={() => toggleReminderOffset(offset)}
-                                        style={[
-                                            styles.reminderOption,
-                                            {
-                                                borderColor: selected ? accentColor : colors.border,
-                                                backgroundColor: selected ? accentColor + "20" : colors.background,
-                                                borderRadius: radius.md,
-                                            },
-                                        ]}
-                                    >
-                                        <Text style={{ color: selected ? accentColor : colors.foreground }}>{offset}d</Text>
-                                    </Pressable>
-                                );
-                            })}
-                        </View>
-                <View style={{ marginTop: 12 }}>
-                    <Text style={{ color: colors.foreground, marginBottom: 6 }}>Time</Text>
-                    <CustomDateTimePicker
-                        mode="time"
-                        value={reminderTimeDate}
-                        onChange={handleReminderTimeChange}
+                <View
+                    style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                    }}
+                >
+                    <Text style={[styles.label, { color: colors.foreground, marginBottom: 0 }]}>
+                        Reminder preferences
+                    </Text>
+                    <Switch
+                        value={reminderEnabled}
+                        onValueChange={setReminderEnabled}
+                        trackColor={{ true: colors.primary, false: colors.muted }}
+                        thumbColor={reminderEnabled ? colors.primaryForeground : colors.card}
                     />
                 </View>
-                <Text style={[styles.reminderSummary, { color: colors.mutedForeground }]}>{summary}</Text>
+                <Text style={[styles.reminderSummary, { color: colors.mutedForeground }]}>
+                    {summary}
+                </Text>
             </View>
         );
     };
@@ -500,6 +501,10 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
         return 'View File';
     };
 
+    const shouldShowReminderControl = ['warranty', 'bill', 'service'].includes(
+        selectedCategory,
+    );
+
     const renderCategoryFields = () => {
         if (isEditMode) {
             let editableFields: React.ReactNode = null;
@@ -624,29 +629,39 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                 default:
                     editableFields = null;
             }
-            return (
-                <>
-                    {editableFields}
-                    {renderReminderSettings()}
-                </>
-            );
-        }
+                return (
+                    <>
+                        {editableFields}
+                        {shouldShowReminderControl && renderReminderSettings()}
+                    </>
+                );
+            }
         const fields: Array<{ label: string; value: string | undefined }> = [];
+        const pushCurrencyField = (label: string, value?: string) => {
+            if (!value) {
+                return;
+            }
+            const formatted = formatCurrencyValue(value);
+            fields.push({
+                label,
+                value: formatted ?? value,
+            });
+        };
 
         if (selectedCategory === 'warranty') {
             if (purchaseDate) fields.push({ label: 'Purchase Date', value: new Date(purchaseDate).toLocaleDateString() });
             if (warrantyTillDate) fields.push({ label: 'Warranty Valid Till', value: new Date(warrantyTillDate).toLocaleDateString() });
         } else if (selectedCategory === 'bill') {
             if (billDate) fields.push({ label: 'Bill Date', value: new Date(billDate).toLocaleDateString() });
-            if (billAmount) fields.push({ label: 'Amount', value: `$${billAmount}` });
+            pushCurrencyField('Amount', billAmount);
         } else if (selectedCategory === 'insurance') {
             if (provider) fields.push({ label: 'Provider', value: provider });
             if (policyNumber) fields.push({ label: 'Policy Number', value: policyNumber });
-            if (premiumAmount) fields.push({ label: 'Premium', value: `$${premiumAmount}` });
+            pushCurrencyField('Premium', premiumAmount);
         } else if (selectedCategory === 'service') {
             if (serviceDate) fields.push({ label: 'Service Date', value: new Date(serviceDate).toLocaleDateString() });
             if (nextServiceDate) fields.push({ label: 'Next Service', value: new Date(nextServiceDate).toLocaleDateString() });
-            if (cost) fields.push({ label: 'Cost', value: `$${cost}` });
+            pushCurrencyField('Cost', cost);
         }
 
         const reminderField = getPrimaryReminderField(selectedCategory);
@@ -855,19 +870,31 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                                         {downloadError ?? "Unable to download this file at the moment."}
                                     </Text>
                                 ) : (
-                                    <Text style={[styles.viewUnavailableText, { color: colors.mutedForeground }]}>
-                                        {(() => {
-                                            if (document.uploadStatus && ['pending_upload', 'uploading'].includes(document.uploadStatus)) {
-                                                return 'Document is still uploading. Please try again after the upload finishes.';
-                                            }
-                                            if (document.uploadStatus === 'failed') {
-                                                return 'Upload failed. Please retry the document upload before viewing.';
-                                            }
-                                            if (!document.remotePath && !document.localUri) {
-                                                return 'No file has been attached to this document yet.';
-                                            }
-                                            return 'Unable to load this file at the moment.';
-                                        })()}
+                    <Text style={[styles.viewUnavailableText, { color: colors.mutedForeground }]}>
+                                            {(() => {
+                                                if (!document) {
+                                                    return 'Unable to load this file at the moment.';
+                                                }
+                                                const pendingStatuses = ['pending_upload', 'uploading'];
+                                                const hasLocalAttachment = Boolean(resolvedLocalUri ?? fallbackLocalUri);
+                                                if (isGuest) {
+                                                    return 'Guest mode keeps Vault files local; uploads are skipped until you sign in.';
+                                                }
+                                                if (
+                                                    document.uploadStatus &&
+                                                    pendingStatuses.includes(document.uploadStatus) &&
+                                                    !hasLocalAttachment
+                                                ) {
+                                                    return 'Document is still uploading. Please try again after the upload finishes.';
+                                                }
+                                                if (document.uploadStatus === 'failed') {
+                                                    return 'Upload failed. Please retry the document upload before viewing.';
+                                                }
+                                                if (!document.remotePath && !document.localUri) {
+                                                    return 'No file has been attached to this document yet.';
+                                                }
+                                                return 'Unable to load this file at the moment.';
+                                            })()}
                                     </Text>
                                 )}
                             </View>

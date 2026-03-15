@@ -10,20 +10,14 @@ import {
     TextInput,
     ScrollView,
     TouchableOpacity,
+    Switch,
 } from "react-native";
 import { Camera, Upload, X } from "lucide-react-native";
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { captureImage, pickDocument, SavedDocument } from "../../utils/DocumentUtils";
 import { NotificationCenter } from "../../services/NotificationCenter";
 import { DateTimePicker } from "../ui/SimpleDatePicker";
-import {
-    formatReminderRuleSummary,
-    getPrimaryReminderField,
-    normalizeReminderOffsets,
-    normalizeReminderTime,
-    REMINDER_OFFSET_OPTIONS,
-    VaultReminderRule,
-} from "../../utils/VaultReminderUtils";
+import { getPrimaryReminderField, VaultReminderRule } from "../../utils/VaultReminderUtils";
 import { IconGlyph } from "../ui/IconGlyph";
 
 type ScannerStep = 'upload' | 'form';
@@ -53,6 +47,7 @@ interface DocumentScannerProps {
     }) => void;
     persistedState?: ScannerSession | null;
     onPersistedStateChange?: (state: ScannerSession | null) => void;
+    profileId?: string | null;
 }
 
 const CATEGORIES = [
@@ -71,6 +66,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
     onDocumentSaved,
     persistedState,
     onPersistedStateChange,
+    profileId,
 }) => {
     const colors = useThemeColors();
     const radius = useThemeRadius();
@@ -82,7 +78,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
     const [documentName, setDocumentName] = useState('');
     const [nameError, setNameError] = useState('');
     const [categoryError, setCategoryError] = useState('');
-    const [selectedCategory, setSelectedCategory] = useState('');
+    const [selectedCategory, setSelectedCategory] = useState('other');
 
     // Warranty fields
     const [purchaseDate, setPurchaseDate] = useState('');
@@ -101,8 +97,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
     const [serviceDate, setServiceDate] = useState('');
     const [nextServiceDate, setNextServiceDate] = useState('');
     const [cost, setCost] = useState('');
-    const [reminderOffsets, setReminderOffsets] = useState<number[]>([1]);
-    const [reminderTime, setReminderTime] = useState('09:00');
+    const [reminderEnabled, setReminderEnabled] = useState(true);
 
     const createDateSetter = (fieldName: string, setter: (value: string) => void) => (value: string) => {
         console.log(`[DocumentScanner] ${fieldName} changed to`, value);
@@ -123,7 +118,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
         setDocumentName('');
         setNameError('');
         setCategoryError('');
-        setSelectedCategory('');
+        setSelectedCategory('other');
         setPurchaseDate('');
         setWarrantyTillDate('');
         setBillAmount('');
@@ -134,8 +129,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
         setServiceDate('');
         setNextServiceDate('');
         setCost('');
-        setReminderOffsets([1]);
-        setReminderTime('09:00');
+        setReminderEnabled(true);
         onPersistedStateChange?.(null);
     }, [onPersistedStateChange]);
 
@@ -163,7 +157,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
                         : colors.foreground,
             icon: severity === "warning" ? "alertCircle" : "file",
             route: { tab: "home", screen: "Vault" },
-        });
+        }, profileId);
     };
 
     useEffect(() => {
@@ -304,26 +298,25 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
     };
 
     const buildReminderRules = (): VaultReminderRule[] => {
-        const field = getPrimaryReminderField(selectedCategory);
-        const normalizedOffsets = normalizeReminderOffsets(reminderOffsets);
-        if (!field || normalizedOffsets.length === 0) {
+        if (!reminderEnabled) {
             return [];
         }
-        return [{
-            field,
-            offsets: normalizedOffsets,
-            timeOfDay: normalizeReminderTime(reminderTime),
-        }];
+        const field = getPrimaryReminderField(selectedCategory);
+        if (!field) {
+            return [];
+        }
+        return [
+            {
+                field,
+                offsets: [1],
+                timeOfDay: '09:00',
+            },
+        ];
     };
 
-    const toggleReminderOffset = (value: number) => {
-        setReminderOffsets(prev => {
-            if (prev.includes(value)) {
-                return prev.filter(offset => offset !== value);
-            }
-            return normalizeReminderOffsets([...prev, value]);
-        });
-    };
+    const shouldShowReminderControl = ['warranty', 'bill', 'service'].includes(
+        selectedCategory,
+    );
 
     const renderCategoryFields = () => {
         switch (selectedCategory) {
@@ -446,44 +439,25 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
     };
 
     const renderReminderSettings = () => {
-        const rules = buildReminderRules();
-        const summary = formatReminderRuleSummary(rules[0]);
+        const summary = reminderEnabled
+            ? 'Reminders fire 1 day before the selected date.'
+            : 'Reminders disabled.';
         return (
             <View style={styles.formGroup}>
-                <Text style={[styles.label, { color: colors.foreground, marginBottom: 8 }]}>Reminder preferences</Text>
-                <View style={styles.reminderSlider}>
-                    {REMINDER_OFFSET_OPTIONS.map(offset => {
-                        const selected = reminderOffsets.includes(offset);
-                        return (
-                            <Pressable
-                                key={offset}
-                                onPress={() => toggleReminderOffset(offset)}
-                                style={[
-                                    styles.reminderOption,
-                                    {
-                                        borderColor: selected ? colors.primary : colors.border,
-                                        backgroundColor: selected ? colors.primary + "20" : colors.background,
-                                        borderRadius: radius.md,
-                                    },
-                                ]}
-                            >
-                                <Text style={{ color: selected ? colors.primary : colors.foreground }}>{offset}d</Text>
-                            </Pressable>
-                        );
-                    })}
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12 }}>
-                    <Text style={{ color: colors.foreground }}>Time</Text>
-                    <TextInput
-                        style={[styles.input, { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.background }]}
-                        value={reminderTime}
-                        onChangeText={setReminderTime}
-                        placeholder="HH:MM"
-                        placeholderTextColor={colors.mutedForeground}
-                        keyboardType="numbers-and-punctuation"
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={[styles.label, { color: colors.foreground, marginBottom: 0 }]}>
+                        Reminder preferences
+                    </Text>
+                    <Switch
+                        value={reminderEnabled}
+                        onValueChange={setReminderEnabled}
+                        trackColor={{ true: colors.primary, false: colors.muted }}
+                        thumbColor={reminderEnabled ? colors.primaryForeground : colors.card}
                     />
                 </View>
-                <Text style={[styles.reminderSummary, { color: colors.mutedForeground }]}>{summary}</Text>
+                <Text style={[styles.reminderSummary, { color: colors.mutedForeground }]}>
+                    {summary}
+                </Text>
             </View>
         );
     };
@@ -614,7 +588,7 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
                             </View>
 
                             {renderCategoryFields()}
-                            {renderReminderSettings()}
+                            {shouldShowReminderControl && renderReminderSettings()}
 
                             <View style={styles.buttonGroup}>
                                 <Pressable

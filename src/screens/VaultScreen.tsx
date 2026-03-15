@@ -15,6 +15,7 @@ import {
   TouchableOpacity,
   BackHandler,
   GestureResponderEvent,
+  Alert,
 } from 'react-native';
 import { AppLayout } from '../components/layout';
 import { useFamily } from '../contexts/FamilyContext';
@@ -39,7 +40,11 @@ import {
   calculateStorageDetails,
   formatStorageSize,
 } from '../utils/StorageUtils';
-import { generateAlerts, getCategoryCounts } from '../utils/VaultUtils';
+import {
+  generateAlerts,
+  getCategoryCounts,
+  CATEGORY_ICON_MAP,
+} from '../utils/VaultUtils';
 import {
   formatReminderRulesSummary,
   getPrimaryReminderField,
@@ -73,9 +78,11 @@ import {
   Lock,
   Settings,
   ArrowLeft,
+  Trash2,
 } from 'lucide-react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppIcon } from '../components/ui/AppIcon';
+import FileViewer from 'react-native-file-viewer';
 
 import { GUEST_PROFILE_ID } from '../services/ProfileService';
 
@@ -100,7 +107,7 @@ export const VaultScreen: React.FC = () => {
   const { user } = useAuth();
   const { openSidebar } = useSidebar();
   const { showToast } = useToast();
-  const { addTransaction, categoryIcons } = useFinance(); // For syncing expenses
+  const { addTransaction, categoryIcons: expenseCategoryIcons } = useFinance(); // For syncing expenses
   const colors = useThemeColors();
   const radius = useThemeRadius();
   const { appearanceMode } = useTheme();
@@ -151,6 +158,7 @@ export const VaultScreen: React.FC = () => {
   const [isNetworkReachable, setNetworkReachable] = useState(true);
   const { formatDateTime } = useCountry();
   const nowDate = new Date(currentTime);
+  const isGuestMode = profileId === GUEST_PROFILE_ID;
 
   const normalizeDocument = (doc: any): VaultDocument => {
     const meta = doc.meta || {};
@@ -174,6 +182,8 @@ export const VaultScreen: React.FC = () => {
     };
   };
 
+  const [vaultRefreshKey, setVaultRefreshKey] = useState(0);
+
   const documents = useObservableValue(
     () => {
       if (!profileId) {
@@ -183,10 +193,24 @@ export const VaultScreen: React.FC = () => {
         map(records => records.map(normalizeDocument)),
       );
     },
-    [profileId],
+    [profileId, vaultRefreshKey],
     [],
   );
   const allDocs = documents;
+
+  const refreshVaultList = useCallback(() => {
+    setVaultRefreshKey(prev => prev + 1);
+  }, []);
+
+  useEffect(() => {
+    if (!modalDocument?.id) {
+      return;
+    }
+    const updated = allDocs.find(doc => doc.id === modalDocument.id);
+    if (updated && updated !== modalDocument) {
+      setModalDocument(updated);
+    }
+  }, [allDocs, modalDocument?.id]);
 
   const formatVaultDateLabel = (value?: string): string | null => {
     if (!value) return null;
@@ -251,6 +275,9 @@ export const VaultScreen: React.FC = () => {
     const status =
       update?.status ?? (doc.uploadStatus as DocumentUploadStatus | undefined);
     if (!status || status === 'uploaded') return null;
+    if (isGuestMode && (status === 'pending_upload' || status === 'uploading')) {
+      return null;
+    }
     const percent =
       update?.progress !== undefined
         ? Math.min(100, Math.max(0, Math.round(update.progress * 100)))
@@ -333,17 +360,90 @@ export const VaultScreen: React.FC = () => {
     return null;
   };
 
+  const stripUri = (uri: string): string => uri.split(/[?#]/)[0];
+  const isImageUri = useCallback((uri: string): boolean => {
+    const cleaned = stripUri(uri).toLowerCase();
+    return /\.(jpg|jpeg|png|webp|heic)$/i.test(cleaned);
+  }, []);
+
+  const openDocumentFile = useCallback(
+    async (doc: VaultDocument) => {
+      if (!doc) {
+        return;
+      }
+      try {
+        const ensured = await VaultService.ensureLocalUri(doc);
+        const uri =
+          ensured ??
+          VaultService.getCachedLocalUri(doc.id) ??
+          doc.localUri ??
+          doc.filePath ??
+          doc.uri ??
+          undefined;
+        if (!uri) {
+          showToast({
+            title: 'Unavailable',
+            description: 'This document is not ready to be opened.',
+            type: 'warning',
+          });
+          return;
+        }
+
+        if (isImageUri(uri)) {
+          setSelectedImageUri(uri);
+          setShowImageModal(true);
+          return;
+        }
+
+        try {
+          await FileViewer.open(uri, { showOpenWithDialog: true });
+        } catch (error) {
+          console.error('VaultScreen: failed to open document viewer', error);
+          showToast({
+            title: 'Unable to open file',
+            description: 'Please install a viewer or try again later.',
+            type: 'warning',
+          });
+        }
+      } catch (error) {
+        console.error('VaultScreen: failed to prepare document for viewing', error);
+        showToast({
+          title: 'Unable to open file',
+          description: 'We could not resolve the document locally.',
+          type: 'warning',
+        });
+      }
+    },
+    [isImageUri, showToast],
+  );
+
+  const isValidIconName = (value?: string): value is string =>
+    typeof value === 'string' && /^[a-z0-9-]+$/.test(value);
+
   const renderDocumentIcon = (doc: VaultDocument) => {
     const dotColor = getUploadStatusDotColor(doc);
+    const fallbackIcon = CATEGORY_ICON_MAP[doc.type] || 'file-document';
+    const iconName = isValidIconName(doc.icon) ? doc.icon : fallbackIcon;
+    const handleIconPress = (event: GestureResponderEvent) => {
+      event.stopPropagation();
+      void openDocumentFile(doc);
+    };
     return (
-      <View
+      <Pressable
+        onPress={handleIconPress}
         style={[
           styles.docIconBox,
-          { backgroundColor: colors.muted, borderRadius: radius.md },
+          {
+            backgroundColor: colors.muted,
+            borderRadius: radius.md,
+            justifyContent: 'center',
+            alignItems: 'center',
+            marginRight: 12,
+          },
         ]}
       >
         <MaterialCommunityIcons
-          name={doc.icon || 'file-document'}
+          name={iconName}
           size={24}
           color={colors.foreground}
         />
@@ -355,7 +455,7 @@ export const VaultScreen: React.FC = () => {
             ]}
           />
         ) : null}
-      </View>
+      </Pressable>
     );
   };
 
@@ -393,8 +493,9 @@ export const VaultScreen: React.FC = () => {
         description: parts.join(' • '),
         type: 'default',
       });
+      refreshVaultList();
     },
-    [showToast, profileId, user?.id],
+    [showToast, profileId, refreshVaultList, user?.id],
   );
 
   const renderDocumentActions = (doc: VaultDocument) => {
@@ -427,6 +528,158 @@ export const VaultScreen: React.FC = () => {
           Sync now
         </Text>
       </Pressable>
+    );
+  };
+
+  const renderDocumentRow = (
+    doc: VaultDocument,
+    options?: { showCategoryTag?: boolean },
+  ) => {
+    const docDateLabel = getDocumentDateLabel(doc);
+    const syncButton = renderDocumentActions(doc);
+    return (
+      <Pressable
+        key={doc.id}
+        style={[
+          styles.docRow,
+          { backgroundColor: colors.card, borderRadius: radius.md },
+        ]}
+        onPress={() => {
+          setModalDocument(doc);
+          setShowDetailsModal(true);
+        }}
+      >
+        <View style={styles.docRowInfo}>
+          {renderDocumentIcon(doc)}
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text
+              style={[styles.docName, { color: colors.foreground }]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {doc.name}
+            </Text>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                marginTop: 2,
+              }}
+            >
+              {options?.showCategoryTag && doc.type && (
+                <View
+                  style={[
+                    styles.docBadge,
+                    {
+                      backgroundColor: colors.muted,
+                      borderRadius: radius.xs,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.docBadgeText,
+                      { color: colors.mutedForeground },
+                    ]}
+                  >
+                    {doc.type}
+                  </Text>
+                </View>
+              )}
+              {docDateLabel ? (
+                <Text
+                  style={[
+                    styles.docDate,
+                    { color: colors.mutedForeground },
+                  ]}
+                >
+                  {docDateLabel}
+                </Text>
+              ) : null}
+              {VaultService.getCachedLocalUri(doc.id) && (
+                <View
+                  style={{
+                    backgroundColor: colors.success + '20',
+                    paddingHorizontal: 6,
+                    paddingVertical: 2,
+                    borderRadius: radius.sm,
+                  }}
+                >
+                 
+                </View>
+              )}
+            </View>
+            {renderDocMeta(doc)}
+          </View>
+        </View>
+        <View style={styles.docRowControls}>
+          {syncButton && (
+            <View style={styles.syncButtonWrapper}>{syncButton}</View>
+          )}
+          <Pressable
+            onPress={event => {
+              event.stopPropagation();
+              confirmDeleteDocument(doc);
+            }}
+            style={({ pressed }) => [
+              styles.deleteButton,
+              {
+                borderColor: colors.danger,
+                backgroundColor: colors.danger + '15',
+                opacity: pressed ? 0.75 : 1,
+              },
+            ]}
+          >
+            <Trash2 size={16} color={colors.danger} />
+          </Pressable>
+          <ChevronRight size={16} color={colors.mutedForeground} />
+        </View>
+      </Pressable>
+    );
+  };
+
+  const handleDocumentDelete = useCallback(
+    async (doc: VaultDocument) => {
+      try {
+        const { remoteDeleteQueued } = await VaultService.deleteDocument(doc.id);
+        setModalDocument(prev => (prev?.id === doc.id ? null : prev));
+        setShowDetailsModal(false);
+        showToast({
+          title: remoteDeleteQueued ? 'Document removed' : 'Document deleted',
+          description: remoteDeleteQueued
+            ? 'The file has been removed successfully'
+            : `${doc.name} has been removed from the vault.`,
+          type: 'success',
+        });
+        refreshVaultList();
+      } catch (error) {
+        console.error('VaultScreen: delete document failed', error);
+        showToast({
+          title: 'Delete failed',
+          description:
+            'Unable to remove the document right now. Please try again once you have a stable connection.',
+          type: 'danger',
+        });
+      }
+    },
+    [refreshVaultList, setModalDocument, setShowDetailsModal, showToast],
+  );
+
+  const confirmDeleteDocument = (doc: VaultDocument) => {
+    Alert.alert(
+      'Delete document',
+      `This will permanently delete "${doc.name}" from the vault. Are you sure?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            void handleDocumentDelete(doc);
+          },
+        },
+      ],
     );
   };
 
@@ -868,16 +1121,6 @@ export const VaultScreen: React.FC = () => {
       cost?: string;
     },
   ) => {
-    const categoryIcons: Record<string, string> = {
-      warranty: 'shield-check',
-      bill: 'receipt',
-      insurance: 'clipboard-text',
-      service: 'wrench',
-      certificate: 'certificate',
-      receipt: 'receipt',
-      other: 'file-document',
-    };
-
     const sourceUri = doc.uri ?? doc.originalUri ?? '';
     let permanentPath: string;
     try {
@@ -898,7 +1141,7 @@ export const VaultScreen: React.FC = () => {
     addDocument({
       name: doc.documentName,
       type: doc.category as any,
-      icon: categoryIcons[doc.category] || 'file-document',
+      icon: CATEGORY_ICON_MAP[doc.category] || 'file-document',
       date: new Date().toISOString().split('T')[0],
       memberId: activeMember?.id || 'global',
       sharedWith: [],
@@ -950,13 +1193,21 @@ export const VaultScreen: React.FC = () => {
         date: expenseDate,
         type: 'expense',
         category: expenseCategory,
-        icon: categoryIcons[doc.category] || 'receipt',
+        icon: expenseCategoryIcons[doc.category] || 'receipt',
       });
 
       // Optional: Notify user
       // showToast({ title: "Expense Added", description: `Added ₹${expenseAmount} to Expenses`, type: "success" });
     }
   };
+
+  const handleDocumentUpdated = useCallback(
+    async (docId: string, updates: Partial<Omit<VaultDocument, 'id'>>) => {
+      await updateDocument(docId, updates);
+      refreshVaultList();
+    },
+    [refreshVaultList, updateDocument],
+  );
 
   /* View Renderers */
 
@@ -971,83 +1222,7 @@ export const VaultScreen: React.FC = () => {
           showsVerticalScrollIndicator={false}
         >
           {categoryDocs.length > 0 ? (
-            categoryDocs.map(doc => {
-              const docDateLabel = getDocumentDateLabel(doc);
-              const syncButton = renderDocumentActions(doc);
-              return (
-                <Pressable
-                  key={doc.id}
-                  style={[
-                    styles.docRow,
-                    { backgroundColor: colors.card, borderRadius: radius.md },
-                  ]}
-                  onPress={() => {
-                    setModalDocument(doc);
-                    setShowDetailsModal(true);
-                  }}
-                >
-                  {renderDocumentIcon(doc)}
-                  <View style={{ flex: 1 }}>
-                    <Text
-                      style={[styles.docName, { color: colors.foreground }]}
-                      numberOfLines={1}
-                      ellipsizeMode="tail"
-                    >
-                      {doc.name}
-                    </Text>
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: 6,
-                        marginTop: 2,
-                      }}
-                    >
-                      {docDateLabel ? (
-                        <Text
-                          style={[
-                            styles.docDate,
-                            { color: colors.mutedForeground },
-                          ]}
-                        >
-                          {docDateLabel}
-                        </Text>
-                      ) : null}
-                      {VaultService.getCachedLocalUri(doc.id) && (
-                        <View
-                          style={{
-                            backgroundColor: colors.success + '20',
-                            paddingHorizontal: 6,
-                            paddingVertical: 2,
-                            borderRadius: radius.sm,
-                          }}
-                        >
-                          <Text
-                            style={{
-                              fontSize: 10,
-                              color: colors.success,
-                              fontWeight: '600',
-                            }}
-                          >
-                            Saved locally{' '}
-                            {doc.fileSize
-                              ? `- ${formatStorageSize(doc.fileSize)}`
-                              : ''}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                    {renderDocMeta(doc)}
-                  </View>
-                  <View style={styles.docRowControls}>
-                    {syncButton && (
-                      <View style={styles.syncButtonWrapper}>{syncButton}</View>
-                    )}
-                    <ChevronRight size={16} color={colors.mutedForeground} />
-                  </View>
-                </Pressable>
-              );
-            })
+            categoryDocs.map(doc => renderDocumentRow(doc))
           ) : (
             <View style={{ alignItems: 'center', marginTop: 40 }}>
               <View
@@ -1116,62 +1291,7 @@ export const VaultScreen: React.FC = () => {
               >
                 {cat.name}
               </Text>
-              {docsInCat.map(doc => {
-                const docDateLabel = getDocumentDateLabel(doc);
-                const syncButton = renderDocumentActions(doc);
-                return (
-                  <Pressable
-                    key={doc.id}
-                    style={[
-                      styles.docRow,
-                      { backgroundColor: colors.card, borderRadius: radius.md },
-                    ]}
-                    onPress={() => {
-                      setModalDocument(doc);
-                      setShowDetailsModal(true);
-                    }}
-                  >
-                    {renderDocumentIcon(doc)}
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={[styles.docName, { color: colors.foreground }]}
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                      >
-                        {doc.name}
-                      </Text>
-                      <View
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          gap: 6,
-                          marginTop: 2,
-                        }}
-                      >
-                        {docDateLabel ? (
-                          <Text
-                            style={[
-                              styles.docDate,
-                              { color: colors.mutedForeground },
-                            ]}
-                          >
-                            {docDateLabel}
-                          </Text>
-                        ) : null}
-                      </View>
-                      {renderDocMeta(doc)}
-                    </View>
-                    <View style={styles.docRowControls}>
-                      {syncButton && (
-                        <View style={styles.syncButtonWrapper}>
-                          {syncButton}
-                        </View>
-                      )}
-                      <ChevronRight size={16} color={colors.mutedForeground} />
-                    </View>
-                  </Pressable>
-                );
-              })}
+              {docsInCat.map(doc => renderDocumentRow(doc))}
             </View>
           );
         })}
@@ -1381,74 +1501,9 @@ export const VaultScreen: React.FC = () => {
         </View>
 
         {recentDocs.length > 0 ? (
-          recentDocs.map(doc => {
-            const docDateLabel = getDocumentDateLabel(doc);
-            const syncButton = renderDocumentActions(doc);
-            return (
-              <Pressable
-                key={doc.id}
-                style={[
-                  styles.docRow,
-                  { backgroundColor: colors.card, borderRadius: radius.md },
-                ]}
-                onPress={() => {
-                  setModalDocument(doc);
-                  setShowDetailsModal(true);
-                }}
-              >
-                {renderDocumentIcon(doc)}
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.docName, { color: colors.foreground }]}>
-                    {doc.name}
-                  </Text>
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 6,
-                      marginTop: 2,
-                    }}
-                  >
-                    <View
-                      style={[
-                        styles.docBadge,
-                        {
-                          backgroundColor: colors.muted,
-                          borderRadius: radius.xs,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.docBadgeText,
-                          { color: colors.mutedForeground },
-                        ]}
-                      >
-                        {doc.type}
-                      </Text>
-                    </View>
-                    {docDateLabel ? (
-                      <Text
-                        style={[
-                          styles.docDate,
-                          { color: colors.mutedForeground },
-                        ]}
-                      >
-                        {docDateLabel}
-                      </Text>
-                    ) : null}
-                  </View>
-                  {renderDocMeta(doc)}
-                </View>
-                <View style={styles.docRowControls}>
-                  {syncButton && (
-                    <View style={styles.syncButtonWrapper}>{syncButton}</View>
-                  )}
-                  <ChevronRight size={16} color={colors.mutedForeground} />
-                </View>
-              </Pressable>
-            );
-          })
+          recentDocs.map(doc =>
+            renderDocumentRow(doc, { showCategoryTag: true }),
+          )
         ) : (
           <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
             No documents found
@@ -1657,6 +1712,7 @@ export const VaultScreen: React.FC = () => {
           onDocumentSaved={handleDocumentSaved}
           persistedState={scannerSession}
           onPersistedStateChange={setScannerSession}
+          profileId={profileId}
         />
 
         <ImageViewerModal
@@ -1672,11 +1728,13 @@ export const VaultScreen: React.FC = () => {
             setModalDocument(null);
           }}
           document={modalDocument}
-          onUpdate={updateDocument}
+          onUpdate={handleDocumentUpdated}
           onViewImage={uri => {
             setSelectedImageUri(uri);
             setShowImageModal(true);
           }}
+          isGuest={profileId === GUEST_PROFILE_ID}
+          profileId={profileId}
         />
 
         <FilterModal
@@ -1913,11 +1971,31 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 8,
     position: 'relative',
+    paddingRight: 96,
   },
-  docRowControls: {
+  docRowInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    flex: 1,
+    marginRight: 12,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  docRowControls: {
+    position: 'absolute',
+    right: 12,
+    top: '50%',
+    transform: [{ translateY: -16 }],
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  deleteButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
   },
   syncButtonWrapper: {
     marginRight: 8,

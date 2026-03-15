@@ -1,10 +1,15 @@
-import analytics from '@react-native-firebase/analytics';
+import {
+  getAnalytics,
+  logEvent as firebaseLogEvent,
+  setUserProperty as firebaseSetUserProperty,
+} from '@react-native-firebase/analytics';
 
 type AuthMethod = 'guest' | 'google' | 'email';
 
 const logEvent = async (event: string, params: Record<string, any> = {}) => {
   try {
-    await analytics().logEvent(event, params);
+    const analyticsInstance = getAnalytics();
+    await firebaseLogEvent(analyticsInstance, event, params);
   } catch (error) {
     console.log('Analytics event failed:', error);
   }
@@ -12,7 +17,7 @@ const logEvent = async (event: string, params: Record<string, any> = {}) => {
 
 export const trackScreen = async (screen: string) => {
   try {
-    await analytics().logScreenView({
+    await logEvent('screen_view', {
       screen_name: screen,
       screen_class: screen,
     });
@@ -38,7 +43,8 @@ export const trackForgotPasswordClicked = async () => {
 
 export const setUserProperty = async (property: string, value: string) => {
   try {
-    await analytics().setUserProperty(property, value);
+    const analyticsInstance = getAnalytics();
+    await firebaseSetUserProperty(analyticsInstance, property, value);
   } catch (error) {
     console.log('User property update failed:', error);
   }

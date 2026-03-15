@@ -503,13 +503,14 @@ const ensureAlarmPermission = async (promptToOpenSettings = false): Promise<bool
         if (!enabled && promptToOpenSettings === true) {
             if (!alarmSettingsNotificationSent) {
                 alarmSettingsNotificationSent = true;
-                NotificationCenter.addNotification({
-                    title: "Enable exact alarms",
-                    detail: "Allow Exact Alarms (Android S/14+) so reminders fire on time.",
-                    tone: 'rgba(245,158,11,0.2)',
-                    textColor: '#F59E0B',
-                    icon: 'alertCircle',
-                });
+            const profileId = await ProfileService.getActiveProfileId();
+            NotificationCenter.addNotification({
+                title: "Enable exact alarms",
+                detail: "Allow Exact Alarms (Android S/14+) so reminders fire on time.",
+                tone: 'rgba(245,158,11,0.2)',
+                textColor: '#F59E0B',
+                icon: 'alertCircle',
+            }, profileId);
             }
             await notifee.openAlarmPermissionSettings();
         }
@@ -924,6 +925,7 @@ export const NotificationScheduler = {
             console.log(`✓ Scheduled ${category} notification: ${notificationId} for ${finalTrigger.toISOString()} ${repeatType !== 'none' ? `(Repeat: ${repeatType})` : ''}`);
 
             if (notifyCenter) {
+                const profileId = await ProfileService.getActiveProfileId();
                 const meta = CATEGORY_META[category];
                 NotificationCenter.addNotification({
                     title: `${meta.label} reminder scheduled`,
@@ -937,7 +939,7 @@ export const NotificationScheduler = {
                     textColor: meta.textColor,
                     icon: meta.icon,
                     route: ROUTE_FOR_CATEGORY[category],
-                });
+                }, profileId);
             }
             return notificationId;
         } catch (error) {

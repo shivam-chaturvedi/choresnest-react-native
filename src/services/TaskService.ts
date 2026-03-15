@@ -84,13 +84,14 @@ const serializeTaskRecord = (task: Task) => ({
     deleted: task.deleted,
 });
 
-const pushHomeNotification = (
+const pushHomeNotification = async (
     title: string,
     detail: string,
     severity: "success" | "warning" | "default" = "default",
     route?: NotificationRoute
 ) => {
     const { tone, textColor } = severityMeta[severity];
+    const profileId = await ProfileService.getActiveProfileId();
     NotificationCenter.addNotification({
         title,
         detail,
@@ -98,7 +99,7 @@ const pushHomeNotification = (
         textColor,
         icon: severity === "warning" ? "alertCircle" : "bell",
         route,
-    });
+    }, profileId);
 };
 
 type TaskNotificationJobOptions = { showFeedback: boolean; promptForPermission?: boolean };
@@ -157,7 +158,7 @@ const handleTaskNotificationJob = async (taskId: string, options: TaskNotificati
 
                     if (options.showFeedback) {
                         const formattedReminder = formatReminderDateTimeDisplay(notificationTrigger);
-                        pushHomeNotification(
+                        void pushHomeNotification(
                             "Task reminder updated",
                             `${task.name} reminder set for ${formattedReminder}.`,
                             "success",
@@ -179,7 +180,7 @@ const handleTaskNotificationJob = async (taskId: string, options: TaskNotificati
             });
 
             if (options.showFeedback) {
-                pushHomeNotification(
+                void pushHomeNotification(
                     "Task reminder cancelled",
                     `${task.name} will no longer trigger reminders.`,
                     "warning",
@@ -273,7 +274,7 @@ const handleEventNotificationJob = async (eventId: string, options: EventNotific
                     await event.update(e => { e.notificationId = undefined; });
                 });
                 if (options.showFeedback) {
-                    pushHomeNotification(
+                    void pushHomeNotification(
                         "Event reminder cancelled",
                         `${event.title} reminders have been disabled.`,
                         "warning",
@@ -339,7 +340,7 @@ const handleEventNotificationJob = async (eventId: string, options: EventNotific
                     });
                     if (options.showFeedback) {
                         const formattedReminder = formatReminderDateTimeDisplay(triggerDate);
-                        pushHomeNotification(
+                        void pushHomeNotification(
                             "Event reminder updated",
                             `${event.title} reminder set for ${formattedReminder}.`,
                             "success",
@@ -388,7 +389,7 @@ const handleEventNotificationJob = async (eventId: string, options: EventNotific
                 });
                 if (options.showFeedback) {
                     const formattedReminder = formatReminderDateTimeDisplay(triggerDate);
-                    pushHomeNotification(
+                    void pushHomeNotification(
                         "Event reminder updated",
                         `${event.title} reminder set for ${formattedReminder}.`,
                         "success",
@@ -408,7 +409,7 @@ const handleEventNotificationJob = async (eventId: string, options: EventNotific
                 await event.update(e => { e.notificationId = undefined; });
             });
             if (options.showFeedback) {
-                pushHomeNotification(
+                void pushHomeNotification(
                     "Event reminder cancelled",
                     `${event.title} reminder cleared because the event is in the past.`,
                     "warning",

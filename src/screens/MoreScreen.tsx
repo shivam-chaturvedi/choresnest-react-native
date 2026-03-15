@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   FlatList,
   Pressable,
@@ -28,6 +29,9 @@ import Config from "react-native-config";
 import { withDeferredScreen } from "../components/layout/DeferredScreen";
 import { SupabaseService } from "../services/SupabaseService";
 import { useToast } from "../components/ui/Toast";
+import { launchImageLibrary } from "react-native-image-picker";
+import { checkPermission, requestPermission } from "../utils/permissions";
+import { FEEDBACK_BUCKET, RecipeAssetFile, uploadFeedbackImage } from "../services/StorageService";
 
 const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 
@@ -80,10 +84,94 @@ const MoreScreenContent: React.FC = () => {
   const [feedbackDescription, setFeedbackDescription] = useState("");
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
+  const [feedbackImage, setFeedbackImage] = useState<RecipeAssetFile | null>(null);
+  const closeFeedbackModal = () => {
+    setFeedbackModalVisible(false);
+    setCategoryMenuOpen(false);
+    setFeedbackImage(null);
+    Keyboard.dismiss();
+  };
+  const ensurePhotoPermission = async (): Promise<boolean> => {
+    if (await checkPermission('photo')) {
+      return true;
+    }
+
+    const attemptRequest = async (): Promise<boolean> => {
+      const granted = await requestPermission('photo');
+      if (granted) {
+        return true;
+      }
+
+      return new Promise<boolean>((resolve) => {
+        Alert.alert(
+          "Permission needed",
+          "Please allow access to your photo library to attach an image.",
+          [
+            {
+              text: "Try again",
+              onPress: async () => {
+                const again = await attemptRequest();
+                resolve(again);
+              },
+            },
+            {
+              text: "Open settings",
+              onPress: () => {
+                Linking.openSettings();
+                resolve(false);
+              },
+            },
+            {
+              text: "Cancel",
+              style: "cancel",
+              onPress: () => resolve(false),
+            },
+          ],
+          { cancelable: true }
+        );
+      });
+    };
+
+    return attemptRequest();
+  };
   const openFeedbackForm = () => {
     setFeedbackCategory(feedbackOptions[0]);
     setFeedbackDescription("");
+    setFeedbackImage(null);
     setFeedbackModalVisible(true);
+  };
+  const handleSelectFeedbackImage = async () => {
+    if (!(await ensurePhotoPermission())) {
+      return;
+    }
+    try {
+      const { assets, errorCode, errorMessage, didCancel } = await launchImageLibrary({
+        mediaType: "photo",
+        selectionLimit: 1,
+      });
+      if (didCancel) {
+        return;
+      }
+      if (errorCode) {
+        Alert.alert("Attachment failed", errorMessage ?? "Unable to open the photo library.");
+        return;
+      }
+      const asset = assets?.[0];
+      if (!asset?.uri) {
+        return;
+      }
+      setFeedbackImage({
+        uri: asset.uri,
+        name: asset.fileName,
+        type: asset.type ?? "image/jpeg",
+      });
+    } catch (error) {
+      console.warn("Feedback image picker error", error);
+      Alert.alert("Attachment failed", "Unable to open the photo library right now.");
+    }
+  };
+  const handleRemoveFeedbackImage = () => {
+    setFeedbackImage(null);
   };
   const handleSubmitFeedback = async () => {
     if (!feedbackDescription.trim()) {
@@ -93,17 +181,30 @@ const MoreScreenContent: React.FC = () => {
     const pid = profileId ?? "guest";
     try {
       setFeedbackSubmitting(true);
+      let imageBucket: string | null = null;
+      let imagePath: string | null = null;
+      if (feedbackImage) {
+        try {
+          imagePath = await uploadFeedbackImage(pid, feedbackImage);
+          imageBucket = FEEDBACK_BUCKET;
+        } catch (error) {
+          console.warn("Feedback attachment upload failed", error);
+          Alert.alert("Attachment failed", "We couldn't upload the image. Try again or remove the attachment.");
+          return;
+        }
+      }
       const { error } = await SupabaseService.from("feedback").insert({
         profile_id: pid,
         category: feedbackCategory,
         description: feedbackDescription.trim(),
+        image_bucket: imageBucket,
+        image_path: imagePath,
       });
       if (error) {
         Alert.alert("Submission failed", "Unable to save your feedback right now. Please try again.");
         return;
       }
-      setFeedbackModalVisible(false);
-      setCategoryMenuOpen(false);
+      closeFeedbackModal();
       setFeedbackDescription("");
       showToast({
         title: "Thanks for your message!",
@@ -438,7 +539,7 @@ const MoreScreenContent: React.FC = () => {
             <Text style={[styles.logoutText, { color: colors.danger }]}>Sign Out</Text>
           </Pressable>
 
-          <Text style={[styles.version, { color: colors.mutedForeground }]}>Chores Nest v1.0.0 · Made with ❤️ for families</Text>
+          <Text style={[styles.version, { color: colors.mutedForeground }]}>Chores Nest v1.0.4 · Made with ❤️ families</Text>
         </View>
       </AppLayout>
 
@@ -499,19 +600,13 @@ const MoreScreenContent: React.FC = () => {
         visible={feedbackModalVisible}
         animationType="slide"
         transparent
-        onRequestClose={() => {
-          setFeedbackModalVisible(false);
-          setCategoryMenuOpen(false);
-          Keyboard.dismiss();
-        }}
+        onRequestClose={closeFeedbackModal}
       >
         <View style={styles.modalOverlay}>
           <Pressable
             style={StyleSheet.absoluteFill}
             onPress={() => {
-              setFeedbackModalVisible(false);
-              setCategoryMenuOpen(false);
-              Keyboard.dismiss();
+              closeFeedbackModal();
             }}
           />
           <KeyboardAvoidingView
@@ -529,11 +624,7 @@ const MoreScreenContent: React.FC = () => {
                   <View style={styles.modalHeader}>
                     <Text style={[styles.modalTitle, { color: colors.foreground }]}>Feedback & Support</Text>
                     <Pressable
-                      onPress={() => {
-                        setFeedbackModalVisible(false);
-                        setCategoryMenuOpen(false);
-                        Keyboard.dismiss();
-                      }}
+                      onPress={closeFeedbackModal}
                     >
                       <AppIcon name="x" size={24} color={colors.mutedForeground} />
                     </Pressable>
@@ -595,6 +686,49 @@ const MoreScreenContent: React.FC = () => {
                     value={feedbackDescription}
                     onChangeText={setFeedbackDescription}
                   />
+                  <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Attach an image</Text>
+                  {feedbackImage ? (
+                    <View
+                      style={[
+                        styles.feedbackAttachmentPreview,
+                        {
+                          borderColor: colors.border,
+                          backgroundColor: colors.background,
+                        },
+                      ]}
+                    >
+                      <Image source={{ uri: feedbackImage.uri }} style={styles.feedbackAttachmentImage} />
+                      <View style={styles.feedbackAttachmentDetails}>
+                        <Text style={[styles.feedbackAttachmentName, { color: colors.foreground }]}>
+                          {feedbackImage.name ?? "Selected image"}
+                        </Text>
+                        <View style={styles.feedbackAttachmentActions}>
+                          <Pressable onPress={handleSelectFeedbackImage}>
+                            <Text style={[styles.feedbackAttachmentActionText, { color: colors.primary }]}>Change</Text>
+                          </Pressable>
+                          <Pressable onPress={handleRemoveFeedbackImage}>
+                            <Text style={[styles.feedbackAttachmentActionText, { color: colors.danger }]}>Remove</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    </View>
+                  ) : (
+                    <Pressable
+                      style={[
+                        styles.feedbackAttachmentButton,
+                        {
+                          borderColor: colors.border,
+                          borderRadius: radius.md,
+                          backgroundColor: colors.background,
+                        },
+                      ]}
+                      onPress={handleSelectFeedbackImage}
+                    >
+                      <Text style={[styles.feedbackAttachmentButtonText, { color: colors.foreground }]}>
+                        Tap to attach a screenshot or photo (optional)
+                      </Text>
+                    </Pressable>
+                  )}
                   <Pressable
                     style={[
                       styles.feedbackSubmit,
@@ -759,6 +893,50 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     minHeight: 100,
   },
+  feedbackAttachmentButton: {
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  feedbackAttachmentButtonText: {
+    fontSize: 14,
+    textAlign: "center",
+  },
+  feedbackAttachmentPreview: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  feedbackAttachmentImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 10,
+    backgroundColor: "#f0f0f0",
+  },
+  feedbackAttachmentDetails: {
+    flex: 1,
+  },
+  feedbackAttachmentName: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 6,
+  },
+  feedbackAttachmentActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  feedbackAttachmentActionText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
   feedbackSubmit: {
     paddingVertical: 14,
     alignItems: "center",
@@ -837,13 +1015,13 @@ const styles = StyleSheet.create({
     maxWidth: 520,
     alignSelf: "center",
     padding: 24,
-    maxHeight: '90%',
+    maxHeight: '94%',
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.12,
     shadowRadius: 20,
     elevation: 10,
-    minHeight: 400,
+    minHeight: 460,
   },
   modalBody: {
     paddingBottom: 8,
