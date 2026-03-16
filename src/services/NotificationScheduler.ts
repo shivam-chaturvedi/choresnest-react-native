@@ -131,6 +131,61 @@ const describeRepeat = (repeatType: RepeatType) => {
     if (repeatType === 'none') return '';
     return ` (Repeat: ${repeatType})`;
 };
+const formatShortDateTime = (date: Date): string => {
+    return date.toLocaleString(undefined, {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+    });
+};
+
+const formatTimeUntil = (target: Date): string | null => {
+    const now = Date.now();
+    const diffMs = target.getTime() - now;
+    if (diffMs <= 0) {
+        return null;
+    }
+    const minutes = Math.round(diffMs / 60000);
+    if (minutes < 1) return 'in less than a minute';
+    if (minutes < 60) return `in ${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    if (remainingMinutes === 0) {
+        return `in ${hours} hr${hours === 1 ? '' : 's'}`;
+    }
+    return `in ${hours} hr${hours === 1 ? '' : 's'} ${remainingMinutes} min`;
+};
+
+const buildEventNotificationBody = (event: Event, startDate: Date): string => {
+    const parts: string[] = [];
+    parts.push(formatShortDateTime(startDate));
+    const timeUntil = formatTimeUntil(startDate);
+    if (timeUntil) {
+        parts.push(`Starts ${timeUntil}`);
+    }
+    if (event.location) {
+        parts.push(`Location: ${event.location}`);
+    }
+    return parts.join(' · ');
+};
+
+const buildTaskNotificationBody = (task: Task, dueDate: Date): string => {
+    const parts: string[] = [];
+    parts.push(formatShortDateTime(dueDate));
+    if (task.dueDisplay) {
+        parts.push(`Due ${task.dueDisplay}`);
+    }
+    const timeUntil = formatTimeUntil(dueDate);
+    if (timeUntil) {
+        parts.push(`Due ${timeUntil}`);
+    }
+    if (task.priority) {
+        parts.push(`Priority: ${task.priority}`);
+    }
+    return parts.join(' · ');
+};
 
 const DEFAULT_WEEKDAY_SCHEDULE = [1, 2, 3, 4, 5];
 const MANUAL_REPEAT_TYPES: RepeatType[] = ['biweekly', 'weekday', 'monthly', 'yearly', 'custom'];
@@ -927,14 +982,12 @@ export const NotificationScheduler = {
             if (notifyCenter) {
                 const profileId = await ProfileService.getActiveProfileId();
                 const meta = CATEGORY_META[category];
+                const bodyLabel = (data.body ?? data.title).trim();
+                const repeatSuffix = describeRepeat(repeatType).trim();
+                const centerDetail = repeatSuffix ? `${bodyLabel} ${repeatSuffix}` : bodyLabel;
                 NotificationCenter.addNotification({
-                    title: `${meta.label} reminder scheduled`,
-                    detail: `${data.title} · ${finalTrigger.toLocaleString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                        hour: "numeric",
-                        minute: "2-digit",
-                    })}${describeRepeat(repeatType)}`,
+                    title: data.title,
+                    detail: centerDetail,
                     tone: meta.tone,
                     textColor: meta.textColor,
                     icon: meta.icon,
@@ -1378,21 +1431,23 @@ export const NotificationScheduler = {
                 if (!manualRepeat && triggerDate <= new Date() && !event.isRecurring) continue;
                 if (manualRepeat && triggerDate <= new Date()) continue;
 
-                    const notificationId = await this.scheduleNotification(
-                        'events',
-                        {
-                            title: `Event: ${event.title}`,
-                        body: event.location ? `at ${event.location}` : `Starting soon`,
+                const eventTitle = event.title?.trim() || 'Upcoming event';
+                const eventBody = buildEventNotificationBody(event, targetEventDate);
+                const notificationId = await this.scheduleNotification(
+                    'events',
+                    {
+                        title: eventTitle,
+                        body: eventBody || 'Reminder scheduled',
                         data: { eventId: event.id },
                     },
                     triggerDate,
-                        {
-                            repeatType,
-                            repeatMeta,
-                            notifyCenter: true, // Visible in Bell icon list
-                            promptForAlarm: false // Background reschedules should not force settings
-                        }
-                    );
+                    {
+                        repeatType,
+                        repeatMeta,
+                        notifyCenter: true, // Visible in Bell icon list
+                        promptForAlarm: false // Background reschedules should not force settings
+                    }
+                );
 
                 if (notificationId) {
                     await getDatabase().write(async () => {
@@ -1440,19 +1495,21 @@ export const NotificationScheduler = {
                 const triggerDate = new Date(taskDate.getTime() - defaultTaskReminder * 60000);
                 if (triggerDate <= new Date()) continue;
 
-                    const notificationId = await this.scheduleNotification(
-                        'tasks',
-                        {
-                            title: `Task: ${task.name}`,
-                        body: `Due ${task.dueDisplay || 'today'}! Priority: ${task.priority}`,
+                const taskTitle = task.name?.trim() || 'Task reminder';
+                const taskBody = buildTaskNotificationBody(task, taskDate);
+                const notificationId = await this.scheduleNotification(
+                    'tasks',
+                    {
+                        title: taskTitle,
+                        body: taskBody || `Priority: ${task.priority}`,
                         data: { taskId: task.id }
                     },
                     triggerDate,
-                        {
-                            notifyCenter: true, // Visible in Bell icon list
-                            promptForAlarm: false // Background reschedules should not force settings
-                        }
-                    );
+                    {
+                        notifyCenter: true, // Visible in Bell icon list
+                        promptForAlarm: false // Background reschedules should not force settings
+                    }
+                );
 
                 if (notificationId) {
                     await getDatabase().write(async () => {
