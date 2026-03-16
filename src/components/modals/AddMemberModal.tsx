@@ -7,8 +7,12 @@ import {
   TextInput,
   View,
   Alert,
+  Dimensions,
 } from "react-native";
 import { Check } from "lucide-react-native";
+
+const SCREEN_HEIGHT = Dimensions.get("window").height;
+const MODAL_HEIGHT = SCREEN_HEIGHT * 0.65;
 
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { useFamily } from "../../contexts/FamilyContext";
@@ -295,6 +299,7 @@ const styles = StyleSheet.create({
   card: {
     width: "100%",
     maxWidth: 380,
+    height: MODAL_HEIGHT,
     padding: 24,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.2,
