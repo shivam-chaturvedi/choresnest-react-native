@@ -5,6 +5,7 @@ import { getDatabase } from "../database";
 import { Platform } from "react-native";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Q } from "@nozbe/watermelondb";
+import type { GroceryItem } from '../contexts/FamilyContext';
 
 export type ExportFormat = 'json';
 
@@ -783,5 +784,98 @@ export const exportService = {
 
         html += `</body></html>`;
         return html;
+    },
+
+    async exportShoppingListAsPDF(items: GroceryItem[]): Promise<string> {
+        if (!items || items.length === 0) {
+            throw new Error('No items found in the current bag to export.');
+        }
+        if (this.isPdfGenerating) {
+            throw new Error('A PDF export is already in progress. Please wait.');
+        }
+        this.isPdfGenerating = true;
+        try {
+            const html = this.generateShoppingListHTML(items);
+            const options = {
+                html,
+                fileName: `ChoresNest_CurrentBag_${new Date().getTime()}`,
+                directory: 'Documents',
+            };
+            const file = await generatePDF(options);
+            if (!file.filePath) {
+                throw new Error('PDF generation failed: No file path returned');
+            }
+            const filename = file.filePath.split('/').pop();
+            const destPath = `${RNFS.CachesDirectoryPath}/${filename}`;
+            if (file.filePath !== destPath) {
+                if (await RNFS.exists(destPath)) {
+                    await RNFS.unlink(destPath);
+                }
+                await RNFS.copyFile(file.filePath, destPath);
+            }
+            return destPath;
+        } finally {
+            setTimeout(() => {
+                this.isPdfGenerating = false;
+            }, 1000);
+        }
+    },
+
+    generateShoppingListHTML(items: GroceryItem[]): string {
+        const date = new Date().toLocaleDateString();
+        const time = new Date().toLocaleTimeString();
+        const css = `
+            <style>
+                body { font-family: 'Helvetica Neue', 'Arial', sans-serif; padding: 24px; color: #1f2937; }
+                h1 { color: #2563eb; margin-bottom: 6px; }
+                .meta { font-size: 13px; color: #4b5563; margin-bottom: 14px; }
+                table { width: 100%; border-collapse: collapse; font-size: 12px; }
+                th, td { border: 1px solid #e2e8f0; padding: 8px; text-align: left; }
+                th { background: #e0f2fe; font-weight: 600; color: #0f172a; }
+                tr:nth-child(even) { background: #f8fafc; }
+            </style>
+        `;
+        const rows = items
+            .map((item, index) => {
+                const category = item.category || 'General';
+                const quantity = item.quantity ?? '';
+                const unit = item.unit || '';
+                return `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${item.name}</td>
+                        <td>${category}</td>
+                        <td>${quantity}</td>
+                        <td>${unit}</td>
+                    </tr>
+                `;
+            })
+            .join('');
+        return `
+            <html>
+                <head>${css}</head>
+                <body>
+                    <h1>Current Bag Items</h1>
+                    <div class="meta">
+                        Generated on ${date} at ${time}<br/>
+                        Total rows: ${items.length}
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Item</th>
+                                <th>Category</th>
+                                <th>Quantity</th>
+                                <th>Unit</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows}
+                        </tbody>
+                    </table>
+                </body>
+            </html>
+        `;
     }
 };

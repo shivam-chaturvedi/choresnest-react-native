@@ -559,5 +559,18 @@ export default schemaMigrations({
                 `),
             ],
         },
+        {
+            toVersion: 21,
+            steps: [
+                unsafeExecuteSql(`
+                    ALTER TABLE documents
+                    ADD COLUMN IF NOT EXISTS metadata_version INTEGER NOT NULL DEFAULT 0;
+                `),
+                unsafeExecuteSql(`
+                    ALTER TABLE documents
+                    ADD COLUMN IF NOT EXISTS remote_delete_pending INTEGER NOT NULL DEFAULT 0;
+                `),
+            ],
+        },
     ],
 });

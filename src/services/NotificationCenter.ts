@@ -20,13 +20,25 @@ export interface AppNotification {
 
 type Subscriber = (notifications: AppNotification[]) => void;
 
-const subscribers = new Set<Subscriber>();
-let notifications: AppNotification[] = [];
+const PROFILE_PREFIX = "profile:";
+const DEFAULT_PROFILE_KEY = `${PROFILE_PREFIX}__default__`;
 
-const pushUpdate = () => {
-  const snapshot = [...notifications];
-  subscribers.forEach((subscriber) => subscriber(snapshot));
+const notificationsByProfile = new Map<string, AppNotification[]>();
+const subscribersByProfile = new Map<string, Set<Subscriber>>();
+
+let activeProfileId: string | null = null;
+let activeProfileKey = DEFAULT_PROFILE_KEY;
+
+const ensureProfileEntry = (key: string) => {
+  if (!notificationsByProfile.has(key)) {
+    notificationsByProfile.set(key, []);
+  }
+  if (!subscribersByProfile.has(key)) {
+    subscribersByProfile.set(key, new Set());
+  }
 };
+
+ensureProfileEntry(activeProfileKey);
 
 const formatTimeLabel = () => {
   const now = new Date();
@@ -35,16 +47,40 @@ const formatTimeLabel = () => {
 
 const generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
+const getProfileKey = (profileId?: string | null) => {
+  if (profileId === undefined || profileId === null) {
+    return activeProfileKey;
+  }
+  return `${PROFILE_PREFIX}${profileId}`;
+};
+
+const pushUpdate = (key: string) => {
+  const snapshot = [...(notificationsByProfile.get(key) ?? [])];
+  const subscribers = subscribersByProfile.get(key);
+  if (!subscribers) {
+    return;
+  }
+  subscribers.forEach((subscriber) => subscriber(snapshot));
+};
+
 export const NotificationCenter = {
-  subscribe: (subscriber: Subscriber) => {
+  subscribe: (subscriber: Subscriber, profileId?: string | null) => {
+    const key = getProfileKey(profileId);
+    ensureProfileEntry(key);
+    const subscribers = subscribersByProfile.get(key)!;
     subscribers.add(subscriber);
-    subscriber([...notifications]);
+    subscriber([...notificationsByProfile.get(key)!]);
     return () => {
       subscribers.delete(subscriber);
     };
   },
 
-  addNotification: (payload: Omit<AppNotification, "id" | "time" | "read"> & { time?: string }) => {
+  addNotification: (
+    payload: Omit<AppNotification, "id" | "time" | "read"> & { time?: string },
+    profileId?: string | null,
+  ) => {
+    const key = getProfileKey(profileId);
+    ensureProfileEntry(key);
     const notification: AppNotification = {
       id: payload.id ?? generateId(),
       title: payload.title,
@@ -56,26 +92,42 @@ export const NotificationCenter = {
       route: payload.route,
       read: false,
     };
-    notifications = [notification, ...notifications];
-    pushUpdate();
+    const existing = notificationsByProfile.get(key) ?? [];
+    notificationsByProfile.set(key, [notification, ...existing]);
+    pushUpdate(key);
     return notification.id;
   },
 
-  getNotifications: () => [...notifications],
-
-  clearNotifications: () => {
-    notifications = [];
-    pushUpdate();
+  getNotifications: (profileId?: string | null) => {
+    const key = getProfileKey(profileId);
+    return [...(notificationsByProfile.get(key) ?? [])];
   },
 
-  markAllRead: () => {
-    notifications = notifications.map((notification) => ({ ...notification, read: true }));
-    pushUpdate();
+  clearNotifications: (profileId?: string | null) => {
+    const key = getProfileKey(profileId);
+    notificationsByProfile.set(key, []);
+    pushUpdate(key);
   },
 
-  markRead: (id: string) => {
+  markAllRead: (profileId?: string | null) => {
+    const key = getProfileKey(profileId);
+    ensureProfileEntry(key);
+    const updated = (notificationsByProfile.get(key) ?? []).map((notification) => ({
+      ...notification,
+      read: true,
+    }));
+    notificationsByProfile.set(key, updated);
+    pushUpdate(key);
+  },
+
+  markRead: (id: string, profileId?: string | null) => {
+    const key = getProfileKey(profileId);
+    const entries = notificationsByProfile.get(key);
+    if (!entries) {
+      return;
+    }
     let changed = false;
-    notifications = notifications.map((notification) => {
+    const updated = entries.map((notification) => {
       if (notification.id === id && !notification.read) {
         changed = true;
         return { ...notification, read: true };
@@ -83,7 +135,18 @@ export const NotificationCenter = {
       return notification;
     });
     if (changed) {
-      pushUpdate();
+      notificationsByProfile.set(key, updated);
+      pushUpdate(key);
     }
   },
+
+  setActiveProfileId: (profileId: string | null) => {
+    activeProfileId = profileId;
+    activeProfileKey =
+      profileId && profileId.length > 0 ? `${PROFILE_PREFIX}${profileId}` : DEFAULT_PROFILE_KEY;
+    ensureProfileEntry(activeProfileKey);
+    pushUpdate(activeProfileKey);
+  },
+
+  getActiveProfileId: () => activeProfileId,
 };

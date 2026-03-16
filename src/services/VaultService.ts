@@ -1,4 +1,4 @@
-import { getDatabase } from '../database';
+import { GUEST_PROFILE_ID, getDatabase } from '../database';
 import Document from '../database/models/Document';
 import AppSettings from '../database/models/AppSettings';
 import { Q } from '@nozbe/watermelondb';
@@ -6,10 +6,12 @@ import RNFS from 'react-native-fs';
 import { NotificationScheduler } from './NotificationScheduler';
 import { DocumentInput } from './DocumentInput';
 import { SyncService } from './SyncService';
-import { SupabaseService } from './SupabaseService';
+import { documentMetadataSyncService } from './DocumentMetadataSyncService';
+import { vaultRemoteCleanupService } from './VaultRemoteCleanupService';
 import { uuidv4 } from '../utils/uuid';
 import { ProfileService } from './ProfileService';
 import { VaultStorageService } from './VaultStorageService';
+import NetInfo from '@react-native-community/netinfo';
 
 const localUriCache = new Map<string, string>();
 const localVersionCache = new Map<string, number>();
@@ -63,6 +65,59 @@ const buildMetaFromInput = (
   });
 
   return meta;
+};
+
+const METADATA_KEYS: Array<keyof DocumentInput> = [
+  'name',
+  'type',
+  'icon',
+  'date',
+  'memberId',
+  'sharedWithIds',
+  'meta',
+  'reminderDaysBefore',
+  'category',
+  'expiryDate',
+  'purchaseDate',
+  'warrantyTillDate',
+  'billAmount',
+  'billDate',
+  'provider',
+  'policyNumber',
+  'premiumAmount',
+  'serviceDate',
+  'nextServiceDate',
+  'cost',
+  'reminderRules',
+];
+
+const shouldBumpMetadataVersion = (updates: DocumentInput): boolean =>
+  METADATA_KEYS.some(key => updates[key] !== undefined);
+
+const deleteLocalFile = async (...uris: Array<string | undefined | null>) => {
+  const seen = new Set<string>();
+  for (const uri of uris) {
+    if (!uri) {
+      continue;
+    }
+    const normalized = uri.startsWith('file://') ? uri.replace(/^file:\/\//, '') : uri;
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    try {
+      const exists = await RNFS.exists(normalized);
+      if (exists) {
+        await RNFS.unlink(normalized);
+      }
+    } catch (error) {
+      console.warn('VaultService: Failed to delete local file', { uri: normalized, error });
+    }
+  }
+};
+
+type DeleteDocumentResult = {
+  remoteDeleteQueued: boolean;
 };
 
 const resolveProfileId = ProfileService.getActiveProfileId;
@@ -257,6 +312,8 @@ export const VaultService = {
             d.updatedAt = now;
             d.deleted = false;
             d.version = 1;
+            d.metadataVersion = 1;
+            d.remoteDeletePending = false;
             if (typeof data.reminderDaysBefore === 'number') {
               d.reminderDaysBefore = data.reminderDaysBefore;
             }
@@ -294,6 +351,8 @@ export const VaultService = {
       'warrantyTillDate',
       'nextServiceDate',
     ];
+    const metadataNeedsIncrement = shouldBumpMetadataVersion(updates);
+    let metadataVersionToSync: number | undefined;
     try {
       await getDatabase().write(async () => {
         const doc = await getDatabase().get<Document>('documents').find(id);
@@ -347,11 +406,19 @@ export const VaultService = {
           if (typeof updates.reminderDaysBefore === 'number') {
             d.reminderDaysBefore = updates.reminderDaysBefore;
           }
+          if (metadataNeedsIncrement) {
+            d.metadataVersion = (d.metadataVersion ?? 0) + 1;
+            metadataVersionToSync = d.metadataVersion;
+          }
           d.updatedAt = Date.now();
           d.version = (d.version ?? 0) + 1;
         });
         updatedDoc = doc;
       });
+
+      if (metadataNeedsIncrement && metadataVersionToSync !== undefined) {
+        void documentMetadataSyncService.markDocumentDirty(id, metadataVersionToSync);
+      }
 
       if (updatedDoc) {
         NotificationScheduler.syncDocumentReminders(updatedDoc).catch(err =>
@@ -364,12 +431,17 @@ export const VaultService = {
     }
   },
 
-  deleteDocument: async (id: string) => {
+  deleteDocument: async (id: string): Promise<DeleteDocumentResult> => {
     const profileId = await resolveProfileId();
     if (!profileId) {
       console.error('VaultService: cannot delete document without profile id');
-      return;
+      return { remoteDeleteQueued: false };
     }
+
+    const isGuestMode = profileId === GUEST_PROFILE_ID;
+    let snapshot:
+      | { localUri?: string | null; filePath?: string | null; remotePath?: string | null; profileId?: string }
+      | null = null;
 
     try {
       await getDatabase().write(async () => {
@@ -380,16 +452,54 @@ export const VaultService = {
           );
           return;
         }
+        snapshot = {
+          localUri: doc.localUri,
+          filePath: doc.filePath,
+          remotePath: doc.remotePath,
+          profileId: doc.profileId,
+        };
         await doc.update(d => {
           d.deleted = true;
           d.updatedAt = Date.now();
           d.version = (d.version ?? 0) + 1;
+          d.remoteDeletePending = !isGuestMode;
         });
       });
+
       cacheLocalUri(id);
+      if (!snapshot) {
+        syncAfterWrite();
+        return { remoteDeleteQueued: false };
+      }
+
+      await deleteLocalFile(snapshot.localUri, snapshot.filePath);
+
       syncAfterWrite();
+
+      if (isGuestMode) {
+        return { remoteDeleteQueued: false };
+      }
+
+      let online = false;
+      try {
+        const state = await NetInfo.fetch();
+        online = Boolean(state.isConnected && state.isInternetReachable !== false);
+      } catch (error) {
+        console.warn('VaultService: failed to determine network state before deletion', error);
+      }
+
+      const remoteResult = await vaultRemoteCleanupService.scheduleDeletion(
+        {
+          documentId: id,
+          profileId: snapshot.profileId ?? profileId,
+          remotePath: snapshot.remotePath,
+        },
+        online,
+      );
+      return { remoteDeleteQueued: remoteResult.queued };
     } catch (error) {
       console.error('Error deleting document:', error);
+      return { remoteDeleteQueued: true };
     }
   },
 };

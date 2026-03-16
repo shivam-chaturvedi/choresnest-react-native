@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setActiveProfile, GUEST_PROFILE_ID as DATABASE_GUEST_PROFILE_ID } from '../database';
+import { NotificationCenter } from '../services/NotificationCenter';
 
 const ACTIVE_PROFILE_KEY = 'ACTIVE_PROFILE_ID';
 const GUEST_PROFILE_KEY = 'GUEST_PROFILE_ID';
@@ -45,9 +46,11 @@ export const ProfileService = {
         if (profileId) {
             setActiveProfile(profileId);
             await persistActiveProfile(profileId);
+            NotificationCenter.setActiveProfileId(profileId);
         } else {
             setActiveProfile(DATABASE_GUEST_PROFILE_ID);
             await persistActiveProfile(null);
+            NotificationCenter.setActiveProfileId(null);
         }
     },
 
@@ -103,6 +106,7 @@ export const ProfileService = {
         await AsyncStorage.setItem(GUEST_PROFILE_KEY, DATABASE_GUEST_PROFILE_ID);
         await persistActiveProfile(DATABASE_GUEST_PROFILE_ID);
         setActiveProfile(DATABASE_GUEST_PROFILE_ID);
+        NotificationCenter.setActiveProfileId(DATABASE_GUEST_PROFILE_ID);
     },
 
     /**
@@ -119,6 +123,8 @@ export const ProfileService = {
             await AsyncStorage.removeItem(IS_GUEST_KEY);
         } catch (error) {
             console.error('ProfileService: Failed to clear AsyncStorage during reset', error);
+        } finally {
+            NotificationCenter.setActiveProfileId(null);
         }
     }
 };

@@ -38,7 +38,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { GettingStartedTutorial } from '../components/tutorial/GettingStartedTutorial';
 import { GlobalSearch } from '../components/search/GlobalSearch';
 import { useSidebar } from '../contexts/SidebarContext';
-import { AppIcon, AppIconName } from '../components/ui/AppIcon';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { AppIcon, AppIconName, isAppIconName } from '../components/ui/AppIcon';
 import { MemberIcon } from '../components/ui/MemberIcon';
 import { PROFILE_COLORS } from '../constants/profileColors';
 import { parseDateTimeInZone, safeTimeZone } from '../utils/SafeDateUtils';
@@ -259,14 +260,19 @@ const HomeScreenContent: React.FC = () => {
   >([]);
   const [manualNotifications, setManualNotifications] = useState<
     AppNotification[]
-  >(NotificationCenter.getNotifications());
+  >([]);
 
   useEffect(() => {
-    const unsubscribe = NotificationCenter.subscribe(items => {
-      setManualNotifications(items);
-    });
-    return unsubscribe;
-  }, []);
+    NotificationCenter.setActiveProfileId(profileId ?? null);
+    setManualNotifications(NotificationCenter.getNotifications(profileId));
+    const unsubscribe = NotificationCenter.subscribe(
+      items => {
+        setManualNotifications(items);
+      },
+      profileId,
+    );
+    return () => unsubscribe();
+  }, [profileId]);
 
   const todaysDateLabel = useMemo(
     () => new Date().toISOString().split('T')[0],
@@ -472,7 +478,7 @@ const HomeScreenContent: React.FC = () => {
     isManual: boolean,
   ) => {
     if (isManual) {
-      NotificationCenter.markRead(notification.id);
+      NotificationCenter.markRead(notification.id, profileId);
     } else {
       markDynamicAlertRead(notification.id);
     }
@@ -576,7 +582,7 @@ const HomeScreenContent: React.FC = () => {
 
   const handleClearAllNotifications = () => {
     setNotificationAlerts([]);
-    NotificationCenter.clearNotifications();
+    NotificationCenter.clearNotifications(profileId);
     setShowNotifications(false);
   };
 
@@ -584,7 +590,7 @@ const HomeScreenContent: React.FC = () => {
     setNotificationAlerts(prev =>
       prev.map(alert => ({ ...alert, read: true })),
     );
-    NotificationCenter.markAllRead();
+    NotificationCenter.markAllRead(profileId);
   };
 
   const quickActions: {
@@ -1757,9 +1763,17 @@ const HomeScreenContent: React.FC = () => {
                       { backgroundColor: colors.primary + '15' },
                     ]}
                   >
-                    <Text style={[styles.detailIcon, { color: accentColor }]}>
-                      {selectedEvent.icon || '📅'}
-                    </Text>
+                    {selectedEvent.icon ? (
+                      isAppIconName(selectedEvent.icon) ? (
+                        <AppIcon name={selectedEvent.icon} size={24} color={accentColor} />
+                      ) : (
+                        <MaterialCommunityIcons name={selectedEvent.icon} size={24} color={accentColor} />
+                      )
+                    ) : (
+                      <Text style={[styles.detailIcon, { color: accentColor }]}>
+                        📅
+                      </Text>
+                    )}
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text
@@ -1790,7 +1804,11 @@ const HomeScreenContent: React.FC = () => {
                   <AppIcon name="x" size={20} color={colors.mutedForeground} />
                 </Pressable>
               </View>
-              <ScrollView contentContainerStyle={styles.detailContent}>
+              <ScrollView
+                style={styles.detailModalScroll}
+                contentContainerStyle={styles.detailContent}
+                showsVerticalScrollIndicator
+              >
                 {renderDetailRow('Description', selectedEvent.description)}
                 {renderPairRow(
                   'Schedule Start',
@@ -2106,7 +2124,7 @@ const styles = StyleSheet.create({
   },
   detailModal: {
     width: '100%',
-    maxHeight: '70%',
+    maxHeight: '90%',
     overflow: 'hidden',
     borderWidth: 1,
     shadowOffset: { width: 0, height: 10 },
@@ -2145,6 +2163,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 24,
     flexGrow: 1,
+  },
+  detailModalScroll: {
+    maxHeight: '90%',
+    width: '100%',
   },
   detailRow: {
     borderWidth: 1,

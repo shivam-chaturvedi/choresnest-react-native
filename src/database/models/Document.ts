@@ -28,4 +28,6 @@ export default class Document extends Model {
     @field('created_at') createdAt!: number;
     @field('updated_at') updatedAt!: number;
     @field('deleted') deleted!: boolean;
+    @field('metadata_version') metadataVersion!: number;
+    @field('remote_delete_pending') remoteDeletePending!: boolean;
 }

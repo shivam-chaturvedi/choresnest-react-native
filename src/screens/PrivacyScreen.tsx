@@ -686,34 +686,6 @@ export const PrivacyScreen: React.FC = () => {
                         { color: colors.mutedForeground },
                       ]}
                     >
-                      User ID
-                    </Text>
-                    <Text
-                      style={[
-                        styles.profileValue,
-                        { color: colors.foreground },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {(() => {
-                        const id = profileData?.id || user?.id;
-                        if (!id) return '—';
-                        return `${id.substring(0, 8)}...${id.substring(
-                          id.length - 8,
-                        )}`;
-                      })()}
-                    </Text>
-                  </View>
-                  <View
-                    style={[styles.divider, { backgroundColor: colors.border }]}
-                  />
-                  <View style={styles.profileRow}>
-                    <Text
-                      style={[
-                        styles.profileLabel,
-                        { color: colors.mutedForeground },
-                      ]}
-                    >
                       Current Active Member
                     </Text>
                     <View style={styles.memberInfo}>

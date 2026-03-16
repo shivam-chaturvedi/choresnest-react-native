@@ -134,3 +134,13 @@ export const getCategoryCounts = (documents: VaultDocument[]): Record<string, nu
 
     return counts;
 };
+
+export const CATEGORY_ICON_MAP: Record<string, string> = {
+    warranty: 'shield-check',
+    bill: 'receipt',
+    insurance: 'clipboard-text',
+    service: 'wrench',
+    certificate: 'certificate',
+    receipt: 'receipt',
+    other: 'file-document',
+};

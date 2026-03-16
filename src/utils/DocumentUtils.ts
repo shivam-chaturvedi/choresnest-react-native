@@ -86,28 +86,40 @@ export const saveFileToStorage = async (uri: string, fileName: string): Promise<
 
 export const pickDocument = async (): Promise<SavedDocument | null> => {
     try {
-        const hasPermission = await requestStoragePermission();
-        if (!hasPermission) {
-            Alert.alert("Permission Denied", "Storage permission is required to access documents.");
-            // Proceeding anyway because on some Android versions the picker works without it, 
-            // but alerting might be what the user wants if it fails. 
-            // Actually, let's just warn but proceed or return? 
-            // User wants "asking", so if they deny, we probably shouldn't proceed?
-            // However, scoped storage means we might not NEED it.
-            // Let's just return null if denied to be strict as requested.
-            return null;
+        const shouldRequestStoragePermission =
+            Platform.OS === 'android' && Number(Platform.Version) < 33;
+        if (shouldRequestStoragePermission) {
+            const hasPermission = await requestStoragePermission();
+            if (!hasPermission) {
+                Alert.alert("Permission Denied", "Storage permission is required to access documents.");
+                return null;
+            }
         }
 
         const results = await pick({
             type: [types.allFiles],
             mode: 'open',
+            allowMultiSelection: false,
+            allowVirtualFiles: false,
         });
 
         if (!results || results.length === 0) {
             return null;
         }
 
-        const result = results[0];
+        const uniqueResults = results.filter((entry, index, self) => {
+            if (!entry.uri) {
+                return false;
+            }
+            return (
+                self.findIndex(item => item.uri === entry.uri) === index
+            );
+        });
+        const result = uniqueResults[0];
+
+        if (!result) {
+            return null;
+        }
 
         if (!result.uri) {
             throw new Error("Could not get file URI");

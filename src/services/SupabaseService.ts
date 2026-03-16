@@ -38,6 +38,7 @@ export class SupabaseService {
                 data: {
                     name: name,
                 },
+                emailRedirectTo: 'https://choresnest.com/confirm-email',
             },
         });
         this.logError(error, 'signUp');

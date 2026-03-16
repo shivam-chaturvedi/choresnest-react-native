@@ -36,6 +36,9 @@ import { withDeferredScreen } from '../components/layout/DeferredScreen';
 import NetInfo from '@react-native-community/netinfo';
 import { SyncService } from '../services/SyncService';
 import { trackScreen } from '../services/analytics';
+import Share from 'react-native-share';
+import { useToast } from '../hooks/useToast';
+import { exportService } from '../services/ExportService';
 
 const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 
@@ -288,6 +291,7 @@ const ListsScreenContent: React.FC = () => {
   } = useFamily();
   const { generateGroceryList } = useMealPlan();
   const defaultCategoryId = shoppingCategories[0]?.id ?? 'Groceries';
+  const { showToast } = useToast();
   useEffect(() => {
     void trackScreen('ListsScreen');
   }, []);
@@ -302,6 +306,7 @@ const ListsScreenContent: React.FC = () => {
   const [categoryFilterId, setCategoryFilterId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   // State to track expanded categories. Default all expanded.
   const [activeTab, setActiveTab] = useState<'current' | 'purchased'>(
@@ -324,6 +329,8 @@ const ListsScreenContent: React.FC = () => {
     }
   }, [currentPalette, colors.foreground, isMidnight]);
   const primaryIconColor = isMidnight ? colors.foreground : colors.primary;
+  const isPurchasedCreamTheme =
+    activeTab === 'purchased' && appearanceMode === 'cream';
 
   // Purchase history filters
   const [historyCategoryFilter, setHistoryCategoryFilter] = useState<
@@ -625,8 +632,60 @@ const ListsScreenContent: React.FC = () => {
       Alert.alert('Error', 'Failed to import all items.');
     }
   };
+  const handleExportCurrentBag = useCallback(async () => {
+    if (currentTodoItems.length === 0) {
+      showToast({
+        type: 'warning',
+        title: 'No items',
+        description: 'Add items to your bag before exporting.',
+      });
+      return;
+    }
+    setIsExportingPdf(true);
+    try {
+      const filePath = await exportService.exportShoppingListAsPDF(
+        currentTodoItems,
+      );
+      const shareUrl = ensureFileUri(filePath);
+      await Share.open({
+        title: 'Current Bag Items',
+        subject: 'Current Bag Items',
+        url: shareUrl,
+        type: 'application/pdf',
+      });
+    } catch (error: any) {
+      const userCancelled =
+        error?.error === 'User did not share' ||
+        error?.message === 'User did not share' ||
+        error?.message === 'User did not share.';
+      if (userCancelled) {
+        return;
+      }
+      const alreadyRunning =
+        error?.message === 'A PDF export is already in progress. Please wait.';
+      if (alreadyRunning) {
+        return;
+      }
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Unable to export items. Please try again later.';
+      showToast({
+        type: 'error',
+        title: 'Export failed',
+        description: message,
+      });
+    } finally {
+      setIsExportingPdf(false);
+    }
+  }, [currentTodoItems, showToast]);
 
   // The callbacks above already expose optimized handler hooks.
+
+  const ensureFileUri = (path: string) =>
+    path.startsWith('file://') || path.startsWith('content://')
+      ? path
+      : `file://${path}`;
 
   const handleBulkDelete = () => {
     const targetItems =
@@ -1249,6 +1308,40 @@ const ListsScreenContent: React.FC = () => {
                     </View>
                   )}
 
+                  <View style={styles.exportRow}>
+                    <Text
+                      style={[
+                        styles.sectionTitle,
+                        { color: colors.foreground, marginBottom: 0 },
+                      ]}
+                    >
+                     Export your bag
+                    </Text>
+                    <Pressable
+                      onPress={handleExportCurrentBag}
+                      disabled={isExportingPdf}
+                      style={({ pressed }) => [
+                        styles.exportBtn,
+                        {
+                          backgroundColor: colors.primary,
+                          opacity: isExportingPdf ? 0.6 : pressed ? 0.8 : 1,
+                        },
+                      ]}
+                    >
+                      {isExportingPdf ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <AppIcon
+                          name="download"
+                          size={14}
+                          color="#fff"
+                          style={{ marginRight: 6 }}
+                        />
+                      )}
+                      <Text style={styles.exportBtnText}>Export PDF</Text>
+                    </Pressable>
+                  </View>
+
                   {/* Single List for Current Items */}
                   {currentTodoItems.length === 0 ? (
                     <View style={styles.emptyState}>
@@ -1464,65 +1557,77 @@ const ListsScreenContent: React.FC = () => {
                                 },
                           ]}
                         >
+                          <CategoryIcon
+                            icon="package"
+                            size={12}
+                            color={
+                              isPurchasedCreamTheme && !historyCategoryFilter
+                                ? colors.primaryForeground
+                                : historyCategoryFilter
+                                ? filterAccentColor
+                                : colors.foreground
+                            }
+                            style={{ marginRight: 4 }}
+                          />
                           <Text
                             style={[
                               styles.miniChipText,
                               {
-                                color: historyCategoryFilter
-                                  ? filterAccentColor
-                                  : colors.foreground,
+                                color:
+                                  isPurchasedCreamTheme && !historyCategoryFilter
+                                    ? colors.primaryForeground
+                                    : colors.foreground,
                               },
                             ]}
                           >
                             All
                           </Text>
                         </Pressable>
-                        {shoppingCategories.map(cat => {
-                          const isCategoryActive =
-                            historyCategoryFilter === cat.id;
-                          return (
-                            <Pressable
-                              key={cat.id}
-                              onPress={() => setHistoryCategoryFilter(cat.id)}
-                              style={[
-                                styles.miniChip,
+                      {shoppingCategories.map(cat => {
+                        const isCategoryActive =
+                          historyCategoryFilter === cat.id;
+                        const activeBorderColor = colors.primary;
+                        return (
+                          <Pressable
+                            key={cat.id}
+                            onPress={() => setHistoryCategoryFilter(cat.id)}
+                            style={[
+                              styles.miniChip,
+                              {
+                                backgroundColor: colors.background,
+                                borderColor: isCategoryActive
+                                  ? activeBorderColor
+                                  : colors.border,
+                                borderWidth: isCategoryActive ? 1.5 : 1,
+                              },
+                            ]}
+                          >
+                            <CategoryIcon
+                              icon={cat.icon}
+                              library={cat.library}
+                              size={12}
+                              color={
                                 isCategoryActive
-                                  ? {
-                                      backgroundColor: colors.primary,
-                                      borderColor: colors.primary,
-                                    }
-                                  : {
-                                      backgroundColor: colors.background,
-                                      borderColor: colors.border,
-                                    },
+                                  ? activeBorderColor
+                                  : filterAccentColor
+                              }
+                              style={{ marginRight: 4 }}
+                            />
+                            <Text
+                              style={[
+                                styles.miniChipText,
+                                {
+                                  color: isCategoryActive
+                                    ? activeBorderColor
+                                    : colors.foreground,
+                                },
                               ]}
                             >
-                              <CategoryIcon
-                                icon={cat.icon}
-                                library={cat.library}
-                                size={12}
-                                color={
-                                  isCategoryActive
-                                    ? colors.primary
-                                    : filterAccentColor
-                                }
-                                style={{ marginRight: 4 }}
-                              />
-                              <Text
-                                style={[
-                                  styles.miniChipText,
-                                  {
-                                    color: isCategoryActive
-                                      ? colors.primaryForeground
-                                      : colors.foreground,
-                                  },
-                                ]}
-                              >
-                                {cat.name}
-                              </Text>
-                            </Pressable>
-                          );
-                        })}
+                              {cat.name}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
                       </ScrollView>
 
                       <View style={styles.dateTimeFilterRow}>
@@ -2020,6 +2125,10 @@ const styles = StyleSheet.create({
   modalContent: {
     marginBottom: 0,
   },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
   importItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2064,6 +2173,25 @@ const styles = StyleSheet.create({
   guideText: {
     fontSize: 13,
     lineHeight: 18,
+  },
+  exportRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  exportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+  },
+  exportBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#fff',
   },
   swipedAction: {
     justifyContent: 'center',

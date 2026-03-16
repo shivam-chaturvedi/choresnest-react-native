@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export default appSchema({
-    version: 20,
+    version: 21,
     tables: [
         tableSchema({
             name: 'users',
@@ -226,6 +226,8 @@ export default appSchema({
                 { name: 'notification_ids_json', type: 'string', isOptional: true },
                 { name: 'reminder_days_before', type: 'number', isOptional: true },
                 { name: 'version', type: 'number' },
+                { name: 'metadata_version', type: 'number' },
+                { name: 'remote_delete_pending', type: 'boolean' },
             ],
         }),
         tableSchema({

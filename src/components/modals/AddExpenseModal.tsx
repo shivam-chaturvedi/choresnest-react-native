@@ -14,7 +14,6 @@ export interface ExpenseData {
     amount: number;
     category: string;
     date: string;
-    notes: string;
     type: 'expense' | 'income';
 }
 
@@ -60,7 +59,6 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     };
 
     const [date, setDate] = useState(getLocalYYYYMMDD(new Date()));
-    const [notes, setNotes] = useState('');
     const [type, setType] = useState<'expense' | 'income'>('expense');
     const [showDatePicker, setShowDatePicker] = useState(false);
 
@@ -123,7 +121,6 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
             amount: parseFloat(amount),
             category,
             date,
-            notes: notes.trim(),
             type,
         });
 
@@ -132,7 +129,6 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
         setAmount('');
         setCategory('groceries');
         setDate(getLocalYYYYMMDD(new Date()));
-        setNotes('');
         setErrors({});
         onClose();
     };
@@ -369,20 +365,6 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                                     </Button>
                                 </View>
                             )}
-                        </View>
-
-                        {/* Notes Input */}
-                        <View style={styles.inputGroup}>
-                            <Text style={[styles.label, { color: colors.foreground }]}>Notes (optional)</Text>
-                            <TextInput
-                                style={[styles.input, styles.textArea, { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground }]}
-                                placeholder="Add any notes..."
-                                placeholderTextColor={colors.mutedForeground}
-                                value={notes}
-                                onChangeText={setNotes}
-                                multiline
-                                numberOfLines={3}
-                            />
                         </View>
 
                         <Button

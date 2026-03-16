@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { AppLayout } from '../components/layout';
-import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
+import { useTheme, useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import { useFinance, Transaction } from '../contexts/FinanceContext';
 import { DateTimePicker } from '../components/ui/SimpleDatePicker';
 import { ChevronLeft } from 'lucide-react-native';
@@ -40,6 +40,8 @@ export const ExpensesHistoryScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const colors = useThemeColors();
   const radius = useThemeRadius();
+  const { appearanceMode } = useTheme();
+  const isLightAppearance = appearanceMode === 'light' || appearanceMode === 'cream';
   const { transactions } = useFinance();
   const { formatCurrency } = useCountry();
 
@@ -190,30 +192,36 @@ export const ExpensesHistoryScreen: React.FC = () => {
         </View>
         <View style={styles.filterControls}>
           {historyFilter === 'month' && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.monthScroll}
-            >
-                {(monthOptions.length ? monthOptions : [{ value: formatMonthKey(new Date()), label: formatMonthLabel(formatMonthKey(new Date())) }]).map(monthValue => (
-                  <Pressable
-                    key={monthValue.value}
-                    onPress={() => setHistoryMonth(monthValue.value)}
-                    style={[
-                      styles.monthOption,
-                      { borderColor: colors.border },
-                      historyMonth === monthValue.value && {
-                        borderColor: colors.primary,
-                        backgroundColor: colors.primary + '20',
-                      },
-                    ]}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.monthScroll}
+          >
+              {(monthOptions.length ? monthOptions : [{ value: formatMonthKey(new Date()), label: formatMonthLabel(formatMonthKey(new Date())) }]).map(monthValue => (
+                <Pressable
+                  key={monthValue.value}
+                  onPress={() => setHistoryMonth(monthValue.value)}
+                  style={[
+                    styles.monthOption,
+                    { borderColor: colors.border },
+                    historyMonth === monthValue.value && {
+                      borderColor: colors.primary,
+                      backgroundColor: colors.primary + '20',
+                    },
+                  ]}
+                >
+                  <Text
+                    style={{
+                      color: historyMonth === monthValue.value
+                        ? isLightAppearance ? '#0f172a' : colors.primaryForeground
+                        : isLightAppearance ? '#0f172a' : colors.foreground,
+                    }}
                   >
-                    <Text style={{ color: historyMonth === monthValue.value ? colors.primaryForeground : colors.foreground }}>
-                      {monthValue.label}
-                    </Text>
-                  </Pressable>
-                ))}
-            </ScrollView>
+                    {monthValue.label}
+                  </Text>
+                </Pressable>
+              ))}
+          </ScrollView>
           )}
           {historyFilter === 'week' && (
             <View style={styles.weekSelector}>
@@ -239,30 +247,36 @@ export const ExpensesHistoryScreen: React.FC = () => {
             </View>
           )}
           {historyFilter === 'year' && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.yearScroll}
-            >
-                {normalizedYearOptions.map(yearValue => (
-                  <Pressable
-                    key={yearValue}
-                    onPress={() => setHistoryYear(yearValue)}
-                    style={[
-                      styles.monthOption,
-                      { borderColor: colors.border },
-                      historyYear === yearValue && {
-                        borderColor: colors.primary,
-                        backgroundColor: colors.primary + '20',
-                      },
-                    ]}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.yearScroll}
+          >
+              {normalizedYearOptions.map(yearValue => (
+                <Pressable
+                  key={yearValue}
+                  onPress={() => setHistoryYear(yearValue)}
+                  style={[
+                    styles.monthOption,
+                    { borderColor: colors.border },
+                    historyYear === yearValue && {
+                      borderColor: colors.primary,
+                      backgroundColor: colors.primary + '20',
+                    },
+                  ]}
+                >
+                  <Text
+                    style={{
+                      color: historyYear === yearValue
+                        ? isLightAppearance ? '#0f172a' : colors.primaryForeground
+                        : isLightAppearance ? '#0f172a' : colors.foreground,
+                    }}
                   >
-                    <Text style={{ color: historyYear === yearValue ? colors.primaryForeground : colors.foreground }}>
-                      {yearValue}
-                    </Text>
-                  </Pressable>
-                ))}
-            </ScrollView>
+                    {yearValue}
+                  </Text>
+                </Pressable>
+              ))}
+          </ScrollView>
           )}
           {historyFilter === 'custom' && (
             <View style={styles.customRangeRow}>
