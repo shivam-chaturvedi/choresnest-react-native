@@ -15,6 +15,7 @@ import { VaultService } from '../services/VaultService';
 import { supabase } from '../config/supabase';
 import { ProfileService } from '../services/ProfileService';
 import { useAuth } from './AuthContext';
+import { GUEST_PROFILE_ID } from '../database';
 
 // Re-export interfaces (keeping compatibility or updating as needed)
 export interface FamilyMember {
@@ -190,7 +191,10 @@ const FamilyProviderInner: React.FC<{
   isGuest: boolean;
   children: ReactNode;
   reloadLocalData: () => void;
-}> = ({ profileId, isGuest, children, reloadLocalData }) => {
+  reloadKey: number;
+}> = ({ profileId, isGuest, children, reloadLocalData, reloadKey }) => {
+  const resolvedProfileId =
+    profileId ?? (isGuest ? GUEST_PROFILE_ID : null);
   const [familyName, setFamilyNameState] = useState('Chores Nest');
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [rawEvents, setRawEvents] = useState<any[]>([]);
@@ -266,12 +270,12 @@ const FamilyProviderInner: React.FC<{
 
   // --- Family Name Subscription ---
   useEffect(() => {
-    if (!profileId) {
+    if (!resolvedProfileId) {
       setFamilyNameState('Chores Nest');
       return;
     }
     try {
-      const sub = FamilyService.observeFamilyName(profileId).subscribe({
+      const sub = FamilyService.observeFamilyName(resolvedProfileId).subscribe({
         next: setFamilyNameState,
         error: error => {
           console.error('FamilyContext: Failed to observe family name', error);
@@ -284,14 +288,14 @@ const FamilyProviderInner: React.FC<{
         error,
       );
     }
-  }, [profileId]);
+  }, [resolvedProfileId, reloadKey]);
 
   useEffect(() => {
-    if (!profileId || isGuest) {
+    if (!resolvedProfileId || isGuest) {
       DocumentUploadScheduler.stop();
       return;
     }
-    DocumentUploadScheduler.startForUser(profileId);
+    DocumentUploadScheduler.startForUser(resolvedProfileId);
     return () => {
       DocumentUploadScheduler.stop();
     };
@@ -299,7 +303,7 @@ const FamilyProviderInner: React.FC<{
 
   const setFamilyName = async (name: string): Promise<void> => {
     const effectiveProfileId =
-      profileId || (await ProfileService.getActiveProfileId());
+      resolvedProfileId || (await ProfileService.getActiveProfileId());
     if (!effectiveProfileId) {
       console.warn(
         'FamilyContext: Profile ID unavailable while setting family name — write skipped',
@@ -311,12 +315,12 @@ const FamilyProviderInner: React.FC<{
 
   // --- Observe Members ---
   useEffect(() => {
-    if (!profileId) {
+    if (!resolvedProfileId) {
       setMembers([]);
       return;
     }
     try {
-      const sub = FamilyService.observeMembers(profileId).subscribe({
+      const sub = FamilyService.observeMembers(resolvedProfileId).subscribe({
         next: rawMembers => {
           try {
             const mapped = rawMembers.map(m => ({
@@ -340,7 +344,7 @@ const FamilyProviderInner: React.FC<{
     } catch (error) {
       console.error('Error setting up members subscription:', error);
     }
-  }, [profileId]);
+  }, [resolvedProfileId, reloadKey]);
 
   // --- Active Member Helper ---
   const activeMember = useMemo(() => {
@@ -351,13 +355,13 @@ const FamilyProviderInner: React.FC<{
   const setActiveMember = useCallback(
     async (member: FamilyMember) => {
       try {
-        if (!profileId) {
+        if (!resolvedProfileId) {
           console.warn(
             'FamilyContext: Profile ID unavailable for active member update',
           );
           return;
         }
-        await FamilyService.setActiveMember(profileId, member.id);
+        await FamilyService.setActiveMember(resolvedProfileId, member.id);
 
         // Reschedule notifications for the new active profile
         const { NotificationScheduler } = await import(
@@ -383,23 +387,23 @@ const FamilyProviderInner: React.FC<{
   }, [members, setActiveMember]);
 
   const ensureProfileId = () => {
-    if (!profileId) {
+    if (!resolvedProfileId) {
       console.warn('FamilyContext: Profile ID unavailable for member mutation');
       return null;
     }
-    return profileId;
+    return resolvedProfileId;
   };
 
   // --- Observe Events ---
   useEffect(() => {
-    if (!profileId) {
+    if (!resolvedProfileId) {
       setRawEvents([]);
       return;
     }
     // Clear immediately so no stale data shows while waiting for new subscription
     setRawEvents([]);
     try {
-      const sub = TaskService.observeEvents(profileId).subscribe({
+      const sub = TaskService.observeEvents(resolvedProfileId).subscribe({
         next: rawEvents => {
           console.log(
             `FamilyContext: Received ${rawEvents.length} events from DB for profile ${profileId}`,
@@ -414,17 +418,17 @@ const FamilyProviderInner: React.FC<{
     } catch (error) {
       console.error('Error setting up events subscription:', error);
     }
-  }, [profileId]);
+  }, [resolvedProfileId, reloadKey]);
 
   useEffect(() => {
-    if (!profileId) {
+    if (!resolvedProfileId) {
       setRawTasks([]);
       return;
     }
     // Clear immediately so no stale data shows while waiting for new subscription
     setRawTasks([]);
     try {
-      const sub = TaskService.observeTasks(profileId).subscribe({
+      const sub = TaskService.observeTasks(resolvedProfileId).subscribe({
         next: rawTasks => {
           console.log(
             `FamilyContext: Received ${rawTasks.length} tasks from DB for profile ${profileId}`,
@@ -439,7 +443,7 @@ const FamilyProviderInner: React.FC<{
     } catch (error) {
       console.error('Error setting up tasks subscription:', error);
     }
-  }, [profileId]);
+  }, [resolvedProfileId, reloadKey]);
 
   const addTask = async (t: any, options: { source?: string } = {}) => {
     try {
@@ -514,14 +518,14 @@ const FamilyProviderInner: React.FC<{
 
   // --- Observe Vault ---
   useEffect(() => {
-    if (!profileId) {
+    if (!resolvedProfileId) {
       setGlobalVault([]);
       setMemberVaults({});
       return;
     }
 
     try {
-      const sub = VaultService.observeAllDocuments(profileId).subscribe({
+      const sub = VaultService.observeAllDocuments(resolvedProfileId).subscribe({
         next: docs => {
           try {
             const g: any[] = [];
@@ -565,16 +569,16 @@ const FamilyProviderInner: React.FC<{
     } catch (error) {
       console.error('Error setting up vault subscription:', error);
     }
-  }, [profileId]);
+  }, [resolvedProfileId, reloadKey]);
 
   // --- Observe Grocery List ---
   useEffect(() => {
-    if (!profileId) {
+    if (!resolvedProfileId) {
       setRawGroceryItems([]);
       return;
     }
     try {
-      const sub = ListService.observeShoppingListItems(profileId).subscribe({
+      const sub = ListService.observeShoppingListItems(resolvedProfileId).subscribe({
         next: items => {
           setRawGroceryItems(items);
         },
@@ -586,7 +590,7 @@ const FamilyProviderInner: React.FC<{
     } catch (error) {
       console.error('Error setting up grocery list subscription:', error);
     }
-  }, [profileId]);
+  }, [resolvedProfileId, reloadKey]);
 
   // ... Expose methods ...
 
@@ -701,6 +705,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({
       profileId={profileId}
       isGuest={isGuest}
       reloadLocalData={reloadLocalData}
+      reloadKey={reloadKey}
     >
       {children}
     </FamilyProviderInner>

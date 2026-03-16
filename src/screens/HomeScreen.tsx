@@ -118,6 +118,8 @@ const HomeScreenContent: React.FC = () => {
   const [showFamilyOnboarding, setShowFamilyOnboarding] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isReloadingMembers, setIsReloadingMembers] = useState(false);
+  const reloadBannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleRefresh = async () => {
     try {
@@ -240,6 +242,14 @@ const HomeScreenContent: React.FC = () => {
     return () => {
       navTimers.current.forEach(timer => clearTimeout(timer));
       navTimers.current = [];
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (reloadBannerTimer.current) {
+        clearTimeout(reloadBannerTimer.current);
+      }
     };
   }, []);
 
@@ -806,7 +816,7 @@ const HomeScreenContent: React.FC = () => {
             </Text>
           </View>
 
-          {!isGuest && (members || []).length === 0 && (
+          {(members || []).length === 0 && (
             <View
               style={[
                 styles.reloadBanner,
@@ -816,11 +826,23 @@ const HomeScreenContent: React.FC = () => {
               <Text
                 style={[styles.reloadBannerText, { color: colors.foreground }]}
               >
-                No members are loaded locally yet. Tap refresh to re-read the
-                database.
+                {isGuest
+                  ? 'Guest mode does not load members automatically. Tap reload to re-read local data and refresh the Home screen.'
+                  : 'No members are loaded locally yet. Tap reload to re-read the database.'}
               </Text>
               <Pressable
-                onPress={reloadLocalData}
+                onPress={() => {
+                  if (reloadBannerTimer.current) {
+                    clearTimeout(reloadBannerTimer.current);
+                  }
+                  setIsReloadingMembers(true);
+                  reloadLocalData();
+                  reloadBannerTimer.current = setTimeout(
+                    () => setIsReloadingMembers(false),
+                    1500,
+                  );
+                }}
+                disabled={isReloadingMembers}
                 style={({ pressed }) => [
                   styles.reloadButton,
                   {
@@ -828,6 +850,7 @@ const HomeScreenContent: React.FC = () => {
                       ? `${colors.primary}cc`
                       : colors.primary,
                     borderRadius: radius.sm,
+                    opacity: isReloadingMembers ? 0.6 : 1,
                   },
                 ]}
               >
@@ -837,7 +860,7 @@ const HomeScreenContent: React.FC = () => {
                     { color: colors.primaryForeground },
                   ]}
                 >
-                  Reload local data
+                  {isReloadingMembers ? 'Reloading…' : 'Reload local data'}
                 </Text>
               </Pressable>
             </View>

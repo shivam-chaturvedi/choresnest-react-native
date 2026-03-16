@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import {
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -12,7 +13,7 @@ import {
 import { Check } from "lucide-react-native";
 
 const SCREEN_HEIGHT = Dimensions.get("window").height;
-const MODAL_HEIGHT = SCREEN_HEIGHT * 0.65;
+const MODAL_HEIGHT = SCREEN_HEIGHT * 0.70;
 
 import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { useFamily } from "../../contexts/FamilyContext";
@@ -162,126 +163,131 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, m
           ]}
           onPress={(e) => e.stopPropagation()}
         >
-          <View style={styles.headerRow}>
-            <Text style={[styles.heading, { color: colors.foreground }]}>{memberToEdit ? "Edit Member" : "Add New Member"}</Text>
-            <Pressable onPress={onClose} style={({ pressed }) => [styles.closeButton, pressed && { opacity: 0.6 }]}> 
-              <AppIcon name="x" size={20} color={colors.mutedForeground} />
-            </Pressable>
-          </View>
-          {error ? <Text style={{ color: colors.danger, marginBottom: 12 }}>{error}</Text> : null}
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.headerRow}>
+              <Text style={[styles.heading, { color: colors.foreground }]}>{memberToEdit ? "Edit Member" : "Add New Member"}</Text>
+              <Pressable onPress={onClose} style={({ pressed }) => [styles.closeButton, pressed && { opacity: 0.6 }]}> 
+                <AppIcon name="x" size={20} color={colors.mutedForeground} />
+              </Pressable>
+            </View>
+            {error ? <Text style={{ color: colors.danger, marginBottom: 12 }}>{error}</Text> : null}
 
-          <TextInput
-            value={name}
-            onChangeText={setName}
-            placeholder="Member name"
-            placeholderTextColor={colors.mutedForeground}
-            style={[
-              styles.input,
-              {
-                borderColor: colors.border,
-                backgroundColor: colors.background,
-                color: colors.foreground,
-                borderRadius: radius.md
-              }
-            ]}
-          />
-
-          {/* Avatar Selection */}
-          <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>Avatar</Text>
-          <View style={styles.grid}>
-            {MEMBER_ICON_OPTIONS.map((avatar) => {
-              const isSelected = selectedAvatar === avatar;
-              return (
-                <Pressable
-                  key={avatar}
-                  onPress={() => setSelectedAvatar(avatar)}
-                  style={[
-                    styles.avatarItem,
-                    {
-                      backgroundColor: isSelected ? colors.primary : colors.muted,
-                      borderRadius: radius.sm
-                    }
-                  ]}
-                >
-                  <AppIcon source={avatar} size={28} color={isSelected ? colors.background : colors.foreground} />
-                </Pressable>
-              )
-            })}
-          </View>
-
-          {/* Color Selection */}
-          <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>Profile Color</Text>
-          <View style={styles.grid}>
-            {availableColors.map((color) => {
-              const isSelected = selectedColor === color.value;
-              return (
-                <Pressable
-                  key={color.id}
-                  onPress={() => setSelectedColor(color.value)}
-                  style={[
-                    styles.colorItem,
-                    {
-                      backgroundColor: color.hex,
-                      borderRadius: radius.sm,
-                      borderWidth: isSelected ? 2 : 0,
-                      borderColor: colors.card
-                    }
-                  ]}
-                >
-                  {isSelected && <Check size={16} color="#fff" strokeWidth={3} />}
-                </Pressable>
-              )
-            })}
-          </View>
-
-          {/* Action Button */}
-          <View style={{ marginTop: 24 }}>
-            <Pressable
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder="Member name"
+              placeholderTextColor={colors.mutedForeground}
               style={[
-                styles.addButton,
+                styles.input,
                 {
-                  backgroundColor: colors.card,
                   borderColor: colors.border,
-                  borderWidth: 1,
+                  backgroundColor: colors.background,
+                  color: colors.foreground,
                   borderRadius: radius.md
                 }
               ]}
-              onPress={handleSave}
-            >
-              <Text style={[styles.addButtonText, { color: colors.foreground }]}>{memberToEdit ? "Update Member" : "Add Member"}</Text>
-            </Pressable>
-            <Pressable
-              style={[
-                styles.cancelButton,
-                {
-                  borderColor: colors.border,
-                  borderRadius: radius.md,
-                  marginTop: 12,
-                }
-              ]}
-              onPress={onClose}
-            >
-              <Text style={[styles.cancelButtonText, { color: colors.mutedForeground }]}>Cancel</Text>
-            </Pressable>
-            {memberToEdit && (
+            />
+
+            {/* Avatar Selection */}
+            <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>Avatar</Text>
+            <View style={styles.grid}>
+              {MEMBER_ICON_OPTIONS.map((avatar) => {
+                const isSelected = selectedAvatar === avatar;
+                return (
+                  <Pressable
+                    key={avatar}
+                    onPress={() => setSelectedAvatar(avatar)}
+                    style={[
+                      styles.avatarItem,
+                      {
+                        backgroundColor: isSelected ? colors.primary : colors.muted,
+                        borderRadius: radius.sm
+                      }
+                    ]}
+                  >
+                    <AppIcon source={avatar} size={28} color={isSelected ? colors.background : colors.foreground} />
+                  </Pressable>
+                )
+              })}
+            </View>
+
+            {/* Color Selection */}
+            <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>Profile Color</Text>
+            <View style={styles.grid}>
+              {availableColors.map((color) => {
+                const isSelected = selectedColor === color.value;
+                return (
+                  <Pressable
+                    key={color.id}
+                    onPress={() => setSelectedColor(color.value)}
+                    style={[
+                      styles.colorItem,
+                      {
+                        backgroundColor: color.hex,
+                        borderRadius: radius.sm,
+                        borderWidth: isSelected ? 2 : 0,
+                        borderColor: colors.card
+                      }
+                    ]}
+                  >
+                    {isSelected && <Check size={16} color="#fff" strokeWidth={3} />}
+                  </Pressable>
+                )
+              })}
+            </View>
+
+            {/* Action Button */}
+            <View style={{ marginTop: 24 }}>
               <Pressable
                 style={[
-                  styles.deleteButton,
+                  styles.addButton,
                   {
-                    marginTop: 12,
-                    borderRadius: radius.md,
-                    borderColor: colors.danger,
-                    backgroundColor: colors.danger + '15',
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    borderWidth: 1,
+                    borderRadius: radius.md
                   }
                 ]}
-                onPress={handleDelete}
-                disabled={isDeleting}
+                onPress={handleSave}
               >
-                <Text style={[styles.deleteButtonText, { color: colors.danger }]}>Delete Member</Text>
+                <Text style={[styles.addButtonText, { color: colors.foreground }]}>{memberToEdit ? "Update Member" : "Add Member"}</Text>
               </Pressable>
-            )}
-          </View>
-
+              <Pressable
+                style={[
+                  styles.cancelButton,
+                  {
+                    borderColor: colors.border,
+                    borderRadius: radius.md,
+                    marginTop: 12,
+                  }
+                ]}
+                onPress={onClose}
+              >
+                <Text style={[styles.cancelButtonText, { color: colors.mutedForeground }]}>Cancel</Text>
+              </Pressable>
+              {memberToEdit && (
+                <Pressable
+                  style={[
+                    styles.deleteButton,
+                    {
+                      marginTop: 12,
+                      borderRadius: radius.md,
+                      borderColor: colors.danger,
+                      backgroundColor: colors.danger + '15',
+                    }
+                  ]}
+                  onPress={handleDelete}
+                  disabled={isDeleting}
+                >
+                  <Text style={[styles.deleteButtonText, { color: colors.danger }]}>Delete Member</Text>
+                </Pressable>
+              )}
+            </View>
+          </ScrollView>
         </Pressable>
       </Pressable>
     </Modal>
@@ -320,6 +326,10 @@ const styles = StyleSheet.create({
   closeButton: {
     padding: 4,
     borderRadius: 999,
+  },
+  scrollContent: {
+    paddingBottom: 24,
+    flexGrow: 1,
   },
   sectionLabel: {
     fontSize: 14,
