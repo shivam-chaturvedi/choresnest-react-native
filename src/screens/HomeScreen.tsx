@@ -108,7 +108,8 @@ const HomeScreenContent: React.FC = () => {
   };
   const [showSearch, setShowSearch] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
-
+  const [showFamilyInfo, setShowFamilyInfo] = useState(true);
+  
   // Modals
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [showAddTask, setShowAddTask] = useState(false);
@@ -898,6 +899,21 @@ const HomeScreenContent: React.FC = () => {
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Pressable
+                  onPress={() => setShowFamilyInfo((prev) => !prev)}
+                  style={({ pressed }) => ({
+                    marginRight: 8,
+                    padding: 6,
+                    borderRadius: radius.full,
+                    opacity: pressed ? 0.6 : 1,
+                  })}
+                >
+                  <MaterialCommunityIcons
+                    name="information-outline"
+                    size={18}
+                    color={accentColor}
+                  />
+                </Pressable>
+                <Pressable
                   onPress={() => setShowFamilyOnboarding(true)}
                   style={{
                     flexDirection: 'row',
@@ -912,32 +928,34 @@ const HomeScreenContent: React.FC = () => {
                     style={{ marginRight: 4 }}
                   />
                   <Text style={{ color: accentColor, fontWeight: '600' }}>
-                    Setup
+                    Edit
                   </Text>
                 </Pressable>
               </View>
             </View>
-            <View
-              style={[
-                styles.profileInfoBox,
-                {
-                  borderRadius: radius.sm,
-                  backgroundColor: colors.background,
-                  borderColor: colors.border,
-                },
-              ]}
-            >
-              <Text
+            {showFamilyInfo && (
+              <View
                 style={[
-                  styles.profileInfoText,
-                  { color: colors.mutedForeground },
+                  styles.profileInfoBox,
+                  {
+                    borderRadius: radius.sm,
+                    backgroundColor: colors.background,
+                    borderColor: colors.border,
+                  },
                 ]}
               >
-                Profiles keep each member's tasks and reminders separate. Tap
-                any avatar to switch to their view or hit the + button to invite
-                someone new so the whole family stays tracked together.
-              </Text>
-            </View>
+                <Text
+                  style={[
+                    styles.profileInfoText,
+                    { color: colors.mutedForeground },
+                  ]}
+                >
+                  Profiles keep each member's tasks and reminders separate. Tap
+                  any avatar to switch to their view or hit the + button to invite
+                  someone new so the whole family stays tracked together.
+                </Text>
+              </View>
+            )}
             <Text
               style={{
                 fontSize: 11,

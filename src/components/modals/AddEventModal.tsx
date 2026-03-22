@@ -23,6 +23,7 @@ import { NotificationScheduler } from '../../services/NotificationScheduler';
 import { SyncService } from '../../services/SyncService';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useExactAlarmPermission } from '../../hooks/useExactAlarmPermission';
+import { useNavigation } from '@react-navigation/native';
 
 interface AddEventModalProps {
   open: boolean;
@@ -109,6 +110,13 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   const isMidnight = appearanceMode === 'midnight';
   const accentColor = isMidnight ? colors.foreground : colors.primary;
   const { currentCountry } = useCountry();
+  const navigation = useNavigation<any>();
+  const openNotificationPreferences = () => {
+    navigation.navigate('MainTabs', {
+      screen: 'more',
+      params: { screen: 'Notifications' },
+    });
+  };
 
   const getPriorityMeta = (priority: string = 'medium') => {
     switch (priority) {
@@ -1690,8 +1698,8 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                       Assign to
                     </Text>
                   </View>
-                  <View style={styles.chipsContainer}>
-                    {members.map((member: any) => {
+                <View style={styles.chipsContainer}>
+                  {members.map((member: any) => {
                       const profileColor =
                         PROFILE_COLORS.find(c => c.value === member.color)
                           ?.hex || colors.primary;
@@ -1727,11 +1735,51 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                           >
                             {member.name}
                           </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
+                      </Pressable>
+                    );
+                  })}
                 </View>
+              </View>
+
+              {activeTab === 'task' && (
+                <View
+                  style={[
+                    styles.notificationNotice,
+                    {
+                      backgroundColor: colors.card,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <View style={styles.notificationNoticeContent}>
+                    <AppIcon name="bell" size={18} color={colors.primary} />
+                    <Text
+                      style={[
+                        styles.notificationNoticeText,
+                        { color: colors.foreground },
+                      ]}
+                    >
+                      Reminder lead times for tasks are managed on the Notifications screen. Tap below to update the shared preference that drives every task reminder.
+                    </Text>
+                  </View>
+                  <Pressable
+                    style={[
+                      styles.notificationNoticeButton,
+                      { backgroundColor: colors.primary },
+                    ]}
+                    onPress={openNotificationPreferences}
+                  >
+                    <Text
+                      style={[
+                        styles.notificationNoticeButtonText,
+                        { color: colors.primaryForeground },
+                      ]}
+                    >
+                      Update notification preferences
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
 
                 {/* Notes - EVENT ONLY */}
                 {activeTab === 'event' && (
@@ -2097,6 +2145,33 @@ const styles = StyleSheet.create({
   memberChipText: {
     fontSize: 14,
     fontWeight: '500',
+  },
+  notificationNotice: {
+    marginTop: 8,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  notificationNoticeContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  notificationNoticeText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  notificationNoticeButton: {
+    marginTop: 12,
+    alignSelf: 'flex-start',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+  },
+  notificationNoticeButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   footer: {
     padding: 16, // Reduced from 20

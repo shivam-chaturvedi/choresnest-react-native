@@ -273,11 +273,11 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       { icon: Utensils, label: 'Recipes', route: 'Recipes' },
       { icon: Calendar, label: 'Meal Plan', route: 'MealPlan' },
     ] : []),
-    { icon: ClipboardList, label: 'Shopping Lists', route: 'lists' }, // Fixed route name to lowercase 'lists' tab
+    { icon: ClipboardList, label: 'Lists', route: 'lists' },
     { icon: FileText, label: 'Vault', route: 'Vault' },
-    { icon: DollarSign, label: 'Expenses', route: 'Expenses' },
+    { icon: DollarSign, label: 'Expenses & Finance', route: 'Expenses' },
     { icon: StickyNote, label: 'Notes', route: 'Notes' },
-    { icon: Check, label: 'Tasks', route: 'Tasks' },
+    { icon: Check, label: 'Tasks & Chores', route: 'Tasks' },
   ];
 
   const bottomLinks = [

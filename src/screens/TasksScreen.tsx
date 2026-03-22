@@ -18,6 +18,7 @@ import { AppIcon } from '../components/ui/AppIcon';
 import { ChoreRotationSystem } from '../components/chores/ChoreRotationSystem';
 import { useFamily, Task } from '../contexts/FamilyContext';
 import { trackScreen } from '../services/analytics';
+import { safeFormat } from '../utils/SafeDateUtils';
 
 const tabs = ['My Tasks', 'Family Tasks'];
 
@@ -31,7 +32,7 @@ const initialTasks: Task[] = [
     due: 'Today',
     assignee: 'You',
     tab: 'My Tasks',
-    date: new Date().toISOString().split('T')[0],
+    date: safeFormat(new Date(), 'yyyy-MM-dd'),
   },
   {
     id: 't2',
@@ -42,7 +43,7 @@ const initialTasks: Task[] = [
     due: 'Today',
     assignee: 'You',
     tab: 'My Tasks',
-    date: new Date().toISOString().split('T')[0],
+    date: safeFormat(new Date(), 'yyyy-MM-dd'),
   },
   {
     id: 't3',
@@ -53,7 +54,7 @@ const initialTasks: Task[] = [
     due: 'Done',
     assignee: 'You',
     tab: 'My Tasks',
-    date: new Date().toISOString().split('T')[0],
+    date: safeFormat(new Date(), 'yyyy-MM-dd'),
   },
   {
     id: 't4',
@@ -64,7 +65,7 @@ const initialTasks: Task[] = [
     due: 'Done',
     assignee: 'You',
     tab: 'My Tasks',
-    date: new Date().toISOString().split('T')[0],
+    date: safeFormat(new Date(), 'yyyy-MM-dd'),
   },
 
   {
@@ -76,7 +77,7 @@ const initialTasks: Task[] = [
     due: 'Tomorrow',
     assignee: 'Mom',
     tab: 'Family Tasks',
-    date: new Date().toISOString().split('T')[0],
+    date: safeFormat(new Date(), 'yyyy-MM-dd'),
   },
   {
     id: 't6',
@@ -179,14 +180,8 @@ export const TasksScreen: React.FC = () => {
 
   const handleSaveTask = (taskData: any) => {
     try {
-      // Format date as YYYY-MM-DD using local time
-      const formattedDate = taskData.dueDate.toISOString().split('T')[0];
-
-      // Format time as HH:MM AM/PM
-      const formattedTime = taskData.dueDate.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-      });
+      const formattedDate = safeFormat(taskData.dueDate, 'yyyy-MM-dd');
+      const formattedTime = safeFormat(taskData.dueDate, 'hh:mm aa');
 
       const taskPayload = {
         name: taskData.name,
@@ -195,6 +190,7 @@ export const TasksScreen: React.FC = () => {
         dateString: formattedDate,
         dueDisplay: formattedTime,
         assigneeId: taskData.person,
+        reminderEnabled: taskData.reminderEnabled ?? true,
         // Removed static tab property - filtering now done dynamically based on assignee
       };
 

@@ -48,13 +48,6 @@ const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 
 const notificationSettings = [
   {
-    id: 'tasks',
-    icon: CheckSquare,
-    label: 'Task Reminders',
-    description: 'Due dates and assignments',
-    enabled: true,
-  },
-  {
     id: 'vault',
     icon: Bell,
     label: 'Document Alerts',
@@ -160,37 +153,37 @@ const TimeSelector: React.FC<TimeSelectorProps> = ({
               </Pressable>
             </View>
             <ScrollView style={{ maxHeight: 300 }}>
-              {options.map(option => (
-                <Pressable
-                  key={option.value}
-                  style={[
-                    styles.modalOption,
-                    { borderRadius: radius.sm },
-                    value === option.value && { backgroundColor: colors.muted },
-                  ]}
-                  onPress={() => {
-                    onSelect(option.value);
-                    onClose();
-                  }}
-                >
-                  <Text
+              {options.map(option => {
+                const isSelected = value === option.value;
+                return (
+                  <Pressable
+                    key={option.value}
                     style={[
-                      styles.modalOptionText,
-                      {
-                        color:
-                          value === option.value
-                            ? colors.primary
-                            : colors.foreground,
-                      },
+                      styles.modalOption,
+                      { borderRadius: radius.sm },
+                      isSelected && { backgroundColor: colors.muted },
                     ]}
+                    onPress={() => {
+                      onSelect(option.value);
+                      onClose();
+                    }}
                   >
-                    {option.label}
-                  </Text>
-                  {value === option.value && (
-                    <Text style={{ color: colors.primary }}>✓</Text>
-                  )}
-                </Pressable>
-              ))}
+                    <Text
+                      style={[
+                        styles.modalOptionText,
+                        {
+                          color: isSelected ? colors.success : colors.foreground,
+                        },
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                    {isSelected && (
+                      <Text style={{ color: colors.success }}>✓</Text>
+                    )}
+                  </Pressable>
+                );
+              })}
             </ScrollView>
           </View>
         </Pressable>
@@ -215,6 +208,9 @@ export const NotificationsScreen: React.FC = () => {
   const [mealPrepReminders, setMealPrepReminders] = useState(true);
   const [eventReminderTime, setEventReminderTime] = useState(30);
   const [mealPrepTime, setMealPrepTime] = useState(60);
+  const [taskReminders, setTaskReminders] = useState(true);
+  const [taskReminderTime, setTaskReminderTime] = useState(15);
+  const [showTaskPicker, setShowTaskPicker] = useState(false);
 
   // Delivery Methods State
   const [pushEnabled, setPushEnabled] = useState(true);
@@ -259,6 +255,8 @@ export const NotificationsScreen: React.FC = () => {
 
       setEventReminders(prefs.eventReminders);
       setEventReminderTime(prefs.eventReminderTime);
+      setTaskReminders(prefs.taskReminders);
+      setTaskReminderTime(prefs.taskReminderTime);
       setMealPrepReminders(prefs.mealPrepReminders);
       setMealPrepTime(prefs.mealPrepTime);
 
@@ -327,6 +325,38 @@ export const NotificationsScreen: React.FC = () => {
     };
     saveEventPrefs();
   }, [eventReminders, eventReminderTime]);
+
+  const taskPrefsInitialized = useRef(false);
+  useEffect(() => {
+    const saveTaskPrefs = async () => {
+      if (!taskPrefsInitialized.current) {
+        taskPrefsInitialized.current = true;
+        return;
+      }
+      try {
+        if (taskReminders) {
+          const permissionGranted = await ensureNotificationPermission();
+          if (!permissionGranted) {
+            setTaskReminders(false);
+            return;
+          }
+        }
+        await NotificationPreferencesService.toggleCategory(
+          'tasks',
+          taskReminders,
+        );
+        if (taskReminders) {
+          await NotificationPreferencesService.saveReminderTime(
+            'tasks',
+            taskReminderTime,
+          );
+        }
+      } catch (error) {
+        console.error('Error saving task preferences:', error);
+      }
+    };
+    saveTaskPrefs();
+  }, [taskReminders, taskReminderTime]);
 
   // Save meal prep reminders when changed
   const mealPrefsInitialized = useRef(false);
@@ -562,6 +592,59 @@ export const NotificationsScreen: React.FC = () => {
                   visible={showEventPicker}
                   onOpen={() => setShowEventPicker(true)}
                   onClose={() => setShowEventPicker(false)}
+                />
+              </View>
+            )}
+          </View>
+
+          <View style={styles.settingSection}>
+            <View style={styles.settingHeader}>
+              <View
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}
+              >
+                <CheckSquare size={20} color={colors.primary} />
+                <View>
+                  <Text
+                    style={[styles.labelTitle, { color: colors.foreground }]}
+                  >
+                    Task Reminders
+                  </Text>
+                  <Text
+                    style={[
+                      styles.labelDesc,
+                      { color: colors.mutedForeground },
+                    ]}
+                  >
+                    Due dates and assignments
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={taskReminders}
+                onValueChange={setTaskReminders}
+                trackColor={{ false: colors.muted, true: colors.primary }}
+              />
+            </View>
+            {taskReminders && (
+              <View style={styles.subSetting}>
+                <View
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
+                >
+                  <Clock size={16} color={colors.mutedForeground} />
+                  <Text
+                    style={[styles.subLabel, { color: colors.mutedForeground }]}
+                  >
+                    Remind me
+                  </Text>
+                </View>
+                <TimeSelector
+                  label="Task Reminder Time"
+                  value={taskReminderTime}
+                  options={eventReminderOptions}
+                  onSelect={setTaskReminderTime}
+                  visible={showTaskPicker}
+                  onOpen={() => setShowTaskPicker(true)}
+                  onClose={() => setShowTaskPicker(false)}
                 />
               </View>
             )}

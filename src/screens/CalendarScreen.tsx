@@ -1096,6 +1096,14 @@ const CalendarScreenContent: React.FC = () => {
     return Array.from({ length: 7 }).map((_, i) => addDays(start, i));
   }, [selectedDate, weekOptions]);
 
+  const visibleMonthYear = useMemo(() => {
+    const referenceDate =
+      activeView === 'Week' && weekDays.length > 0
+        ? weekDays[0]
+        : selectedDate;
+    return formatZoned(referenceDate, 'MMMM yyyy');
+  }, [activeView, weekDays, selectedDate, formatZoned]);
+
   // ---------------------------------------------------------
   // Pre-process month events ONLY for the current month view
   // ---------------------------------------------------------
@@ -1906,25 +1914,7 @@ const CalendarScreenContent: React.FC = () => {
               >
                 <AppIcon name="menu" size={20} color="#fff" />
               </Pressable>
-              {!showSearch && (
-                <View style={styles.monthSelector}>
-                  <Pressable
-                    onPress={() => navigateDate(-1)}
-                    style={{ padding: 4 }}
-                  >
-                    <AppIcon name="chevronLeft" size={20} color="#fff" />
-                  </Pressable>
-                  <Text style={[styles.monthTitle, { marginHorizontal: 8 }]}>
-                    {formatZoned(selectedDate, 'MMMM yyyy')}
-                  </Text>
-                  <Pressable
-                    onPress={() => navigateDate(1)}
-                    style={{ padding: 4 }}
-                  >
-                    <AppIcon name="chevronRight" size={20} color="#fff" />
-                  </Pressable>
-                </View>
-              )}
+              <Text style={styles.calendarTitle}>Calendar</Text>
             </View>
 
             <View style={styles.headerRight}>
@@ -2106,19 +2096,46 @@ const CalendarScreenContent: React.FC = () => {
           </ScrollView>
 
           <View style={styles.dateNav}>
-            <Pressable
-              onPress={() => navigateDate(-1)}
-              style={[
-                styles.navArrow,
-                {
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
-                  borderRadius: radius.sm,
-                },
-              ]}
-            >
-              <AppIcon name="chevronLeft" size={20} color={colors.foreground} />
-            </Pressable>
+            <View style={styles.visibleMonthGroup}>
+              <Pressable
+                onPress={() => navigateDate(-1)}
+                style={[
+                  styles.navArrow,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    borderRadius: radius.sm,
+                  },
+                ]}
+              >
+                <AppIcon name="chevronLeft" size={20} color={colors.foreground} />
+              </Pressable>
+              <Text
+                style={[
+                  styles.visibleMonthLabel,
+                  { color: colors.foreground },
+                ]}
+              >
+                {visibleMonthYear}
+              </Text>
+              <Pressable
+                onPress={() => navigateDate(1)}
+                style={[
+                  styles.navArrow,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    borderRadius: radius.sm,
+                  },
+                ]}
+              >
+                <AppIcon
+                  name="chevronRight"
+                  size={20}
+                  color={colors.foreground}
+                />
+              </Pressable>
+            </View>
             <Pressable
               onPress={() => {
                 const now = toZonedTime(new Date(), timeZone);
@@ -2133,26 +2150,7 @@ const CalendarScreenContent: React.FC = () => {
                 },
               ]}
             >
-              <Text style={[styles.todayText, { color: accentColor }]}>
-                Today
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => navigateDate(1)}
-              style={[
-                styles.navArrow,
-                {
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
-                  borderRadius: radius.sm,
-                },
-              ]}
-            >
-              <AppIcon
-                name="chevronRight"
-                size={20}
-                color={colors.foreground}
-              />
+              <Text style={[styles.todayText, { color: accentColor }]}>Show Today</Text>
             </Pressable>
           </View>
 
@@ -2344,8 +2342,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
-    paddingBottom: 20,
+    paddingTop: Platform.OS === 'ios' ? 70 : 52,
+    paddingBottom: 28,
     paddingHorizontal: 16,
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
@@ -2354,6 +2352,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 5,
+    overflow: 'visible',
   },
   headerTop: {
     flexDirection: 'row',
@@ -2365,6 +2364,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  calendarTitle: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#fff',
+    marginLeft: 12,
   },
   headerRight: {
     flexDirection: 'row',
@@ -2397,16 +2402,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.12)',
-  },
-  monthSelector: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  monthTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#fff',
   },
   addBtn: {
     flexDirection: 'row',
@@ -2469,6 +2464,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
+    gap: 16,
   },
   navArrow: {
     padding: 8,
@@ -2479,6 +2475,16 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   todayText: {
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  visibleMonthGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  visibleMonthLabel: {
+    fontSize: 16,
     fontWeight: '600',
   },
   card: {

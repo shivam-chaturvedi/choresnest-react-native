@@ -1,0 +1,14 @@
+Changelog v1.0.6
+===============
+
+1. **Sidebar & home messaging polish**
+   - The sidebar quick-access shortcut now labels the lists tab simply as “Lists” and further clarifies the profile card on the home screen with an info-button toggle so the descriptive text can be hidden or revealed without rerouting the rest of the layout.
+
+2. **Reminders controlled from the Notifications settings**
+   - Both the Tasks screen’s Add Task modal and the Calendar screen’s task tab now drop the inline reminder toggle/chip wall and instead surface a compact notice that points users to the Notifications screen, with a button that navigates to `MainTabs → more → Notifications` for updating reminder lead times.
+ - The same notice appears when editing a task via the calendar modal, keeping reminder preferences centralized and preventing divergent per-task lead-time state.
+  - The notification pickers for event/task reminders now render their selected option text and check mark in the theme’s success (dark green) color so the active choice is always obvious, even in midnight mode.
+  - The “Notification Types” card now only lists document/meal settings so the task reminder toggle isn’t duplicated below the dedicated Task Reminders card.
+
+3. **Task dates stay in the local calendar day**
+   - When saving new tasks from TasksScreen we now format the date/time with `safeFormat` (no UTC conversions) so the `dateString` and `dueDisplay` fields match the user’s chosen date/time and the calendar immediately reflects the new entry on the expected day.
