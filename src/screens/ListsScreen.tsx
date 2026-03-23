@@ -14,7 +14,12 @@ import {
   PanGestureHandler,
   State,
 } from 'react-native-gesture-handler';
-import { useRoute, RouteProp } from '@react-navigation/native';
+import {
+  useRoute,
+  useNavigation,
+  NavigationProp,
+  RouteProp,
+} from '@react-navigation/native';
 import { AppLayout } from '../components/layout';
 import { useFamily, GroceryItem } from '../contexts/FamilyContext';
 import { useMealPlan } from '../contexts/MealPlanContext';
@@ -28,7 +33,6 @@ import { useSidebar } from '../contexts/SidebarContext';
 import { AppIcon, CustomDateTimePicker } from '../components/ui';
 import { MemberIcon } from '../components/ui/MemberIcon';
 import { ScreenErrorView } from '../components/ui/ScreenErrorView';
-import { AddShoppingItemModal } from '../components/modals/AddShoppingItemModal';
 import { CategoryIcon, IconLibrary } from '../components/ui/CategoryIcon';
 import { shoppingCategories } from '../constants/shoppingCategories';
 import Config from 'react-native-config';
@@ -39,6 +43,7 @@ import { trackScreen } from '../services/analytics';
 import Share from 'react-native-share';
 import { useToast } from '../hooks/useToast';
 import { exportService } from '../services/ExportService';
+import { ListsStackParamList } from '../navigation/ListsStackParams';
 
 const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
 
@@ -289,6 +294,7 @@ const ListsScreenContent: React.FC = () => {
     activeMember,
     members,
   } = useFamily();
+  const navigation = useNavigation<NavigationProp<ListsStackParamList>>();
   const { generateGroceryList } = useMealPlan();
   const defaultCategoryId = shoppingCategories[0]?.id ?? 'Groceries';
   const { showToast } = useToast();
@@ -299,7 +305,6 @@ const ListsScreenContent: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
   const [memberFilterId, setMemberFilterId] = useState<string | null>(null);
   const [updatedDateFilter, setUpdatedDateFilter] = useState<Date | null>(null);
@@ -557,27 +562,6 @@ const ListsScreenContent: React.FC = () => {
       ? Math.round((currentDoneItems.length / filteredItems.length) * 100)
       : 0;
 
-  const handleAddItem = (item: {
-    name: string;
-    quantity: number;
-    unit: string;
-    category: string;
-  }) => {
-    try {
-      addGroceryItem({
-        name: item.name,
-        quantity: item.quantity,
-        unit: item.unit,
-        category: item.category,
-        addedBy: activeMember?.id || '1',
-        completed: false,
-      });
-    } catch (error) {
-      handleScreenError('handleAddItem', error);
-      Alert.alert('Error', 'Failed to add item. Please try again.');
-    }
-  };
-
   const handleOpenImport = () => {
     try {
       const items = generateGroceryList();
@@ -776,7 +760,7 @@ const ListsScreenContent: React.FC = () => {
     <>
       <AppLayout
         showAddButton={true}
-        onAddPress={() => setShowAddModal(true)}
+        onAddPress={() => navigation.navigate('CreateListFlow')}
         showNav={false}
       >
         <PanGestureHandler
@@ -1703,13 +1687,6 @@ const ListsScreenContent: React.FC = () => {
           </View>
         </PanGestureHandler>
       </AppLayout>
-
-      {/* Add Item Modal */}
-      <AddShoppingItemModal
-        visible={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        onAdd={handleAddItem}
-      />
 
       {/* Import Modal */}
       <Modal

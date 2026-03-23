@@ -14,6 +14,7 @@ import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { AppIcon } from "../ui/AppIcon";
 import { CategoryIcon } from "../ui/CategoryIcon";
 import { shoppingCategories } from "../../constants/shoppingCategories";
+import { shoppingUnits } from "../../constants/units";
 
 interface AddShoppingItemModalProps {
     visible: boolean;
@@ -26,20 +27,6 @@ interface AddShoppingItemModalProps {
     }) => void;
     preSelectedCategory?: string;
 }
-
-const UNITS = [
-    "pcs",
-    "kg",
-    "g",
-    "L",
-    "ml",
-    "pack",
-    "box",
-    "bag",
-    "can",
-    "oz",
-    "lb",
-];
 
 export const AddShoppingItemModal: React.FC<AddShoppingItemModalProps> = ({
     visible,
@@ -311,7 +298,7 @@ export const AddShoppingItemModal: React.FC<AddShoppingItemModalProps> = ({
                                         </Pressable>
                                     </View>
                                     <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator={false}>
-                                        {UNITS.map((u) => (
+                                {shoppingUnits.map((u) => (
                                             <Pressable
                                                 key={u}
                                                 style={[

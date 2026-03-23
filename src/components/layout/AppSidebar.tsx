@@ -84,6 +84,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   const navigation = useNavigation<NavigationProp<Record<string, undefined>>>();
   const { members, activeMember, setActiveMember, familyName, updateMemberColor } = useFamily();
   const { logout, isGuest, user } = useAuth();
+  const guestSignInLinkColor = isMidnight && isGuest ? colors.successDark : theme.colors.primary;
 
   useEffect(() => {
     openRef.current = open;
@@ -581,8 +582,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                     try { await logout(); } catch (e) { console.error(e); }
                   }}
                 >
-                  <LogOut size={20} color={theme.colors.primary} style={styles.linkIcon} />
-                  <Text style={[styles.linkText, { color: theme.colors.primary }]}>Sign In / Create Account</Text>
+                  <LogOut size={20} color={guestSignInLinkColor} style={styles.linkIcon} />
+                  <Text style={[styles.linkText, { color: guestSignInLinkColor }]}>Sign In / Create Account</Text>
                 </Pressable>
               ) : (
                 <Pressable

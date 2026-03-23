@@ -6,8 +6,10 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import HomeScreen from "../screens/HomeScreen";
 import { CalendarScreen } from "../screens/CalendarScreen";
 import { ListsScreen } from "../screens/ListsScreen";
+import { CreateListFlowScreen } from "../screens/CreateListFlowScreen";
 import { MoreScreen } from "../screens/MoreScreen";
 import { BottomNavigation, BottomNavRoute } from "../components/layout/BottomNavigation";
+import { ListsStackParamList } from "./ListsStackParams";
 
 // Home Stack Screens
 import { RecipesScreen } from "../screens/RecipesScreen";
@@ -34,6 +36,7 @@ import { DebugScreen } from "../screens/DebugScreen";
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
+const ListsNativeStack = createNativeStackNavigator<ListsStackParamList>();
 
 const HomeStack = () => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -49,6 +52,16 @@ const HomeStack = () => (
     <Stack.Screen name="Notes" component={NotesScreen} />
     <Stack.Screen name="NoteDetail" component={NoteDetailScreen} />
   </Stack.Navigator>
+);
+
+const ListsStack = () => (
+  <ListsNativeStack.Navigator screenOptions={{ headerShown: false }}>
+    <ListsNativeStack.Screen name="ListsMain" component={ListsScreen} />
+    <ListsNativeStack.Screen
+      name="CreateListFlow"
+      component={CreateListFlowScreen}
+    />
+  </ListsNativeStack.Navigator>
 );
 
 const MoreStack = () => (
@@ -138,7 +151,7 @@ export const TabNavigator = () => (
   >
     <Tab.Screen name="home" component={HomeStack} />
     <Tab.Screen name="calendar" component={CalendarScreen} />
-    <Tab.Screen name="lists" component={ListsScreen} />
+    <Tab.Screen name="lists" component={ListsStack} />
     <Tab.Screen name="more" component={MoreStack} />
   </Tab.Navigator>
 );
