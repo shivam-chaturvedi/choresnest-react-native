@@ -42,7 +42,10 @@ import { SyncService } from '../services/SyncService';
 import { trackScreen } from '../services/analytics';
 import Share from 'react-native-share';
 import { useToast } from '../hooks/useToast';
-import { exportService } from '../services/ExportService';
+import {
+  exportService,
+  ShoppingListExportMode,
+} from '../services/ExportService';
 import { ListsStackParamList } from '../navigation/ListsStackParams';
 
 const ENABLE_RECIPE_AND_MEALS = Config.ENABLE_RECIPE_AND_MEALS !== 'false';
@@ -616,7 +619,54 @@ const ListsScreenContent: React.FC = () => {
       Alert.alert('Error', 'Failed to import all items.');
     }
   };
-  const handleExportCurrentBag = useCallback(async () => {
+  const [showExportModal, setShowExportModal] = useState(false);
+
+  const runPdfExport = useCallback(
+    async (mode: ShoppingListExportMode) => {
+      setIsExportingPdf(true);
+      setShowExportModal(false);
+      try {
+        const filePath = await exportService.exportShoppingListAsPDF(
+          currentTodoItems,
+          mode,
+        );
+        const shareUrl = ensureFileUri(filePath);
+        await Share.open({
+          title: 'Current Bag Items',
+          subject: 'Current Bag Items',
+          url: shareUrl,
+          type: 'application/pdf',
+        });
+      } catch (error: any) {
+        const userCancelled =
+          error?.error === 'User did not share' ||
+          error?.message === 'User did not share' ||
+          error?.message === 'User did not share.';
+        if (userCancelled) {
+          return;
+        }
+        const alreadyRunning =
+          error?.message === 'A PDF export is already in progress. Please wait.';
+        if (alreadyRunning) {
+          return;
+        }
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : 'Unable to export items. Please try again later.';
+        showToast({
+          type: 'error',
+          title: 'Export failed',
+          description: message,
+        });
+      } finally {
+        setIsExportingPdf(false);
+      }
+    },
+    [currentTodoItems, showToast],
+  );
+
+  const handleExportCurrentBag = useCallback(() => {
     if (currentTodoItems.length === 0) {
       showToast({
         type: 'warning',
@@ -625,44 +675,8 @@ const ListsScreenContent: React.FC = () => {
       });
       return;
     }
-    setIsExportingPdf(true);
-    try {
-      const filePath = await exportService.exportShoppingListAsPDF(
-        currentTodoItems,
-      );
-      const shareUrl = ensureFileUri(filePath);
-      await Share.open({
-        title: 'Current Bag Items',
-        subject: 'Current Bag Items',
-        url: shareUrl,
-        type: 'application/pdf',
-      });
-    } catch (error: any) {
-      const userCancelled =
-        error?.error === 'User did not share' ||
-        error?.message === 'User did not share' ||
-        error?.message === 'User did not share.';
-      if (userCancelled) {
-        return;
-      }
-      const alreadyRunning =
-        error?.message === 'A PDF export is already in progress. Please wait.';
-      if (alreadyRunning) {
-        return;
-      }
-      const message =
-        error instanceof Error && error.message
-          ? error.message
-          : 'Unable to export items. Please try again later.';
-      showToast({
-        type: 'error',
-        title: 'Export failed',
-        description: message,
-      });
-    } finally {
-      setIsExportingPdf(false);
-    }
-  }, [currentTodoItems, showToast]);
+    setShowExportModal(true);
+  }, [currentTodoItems.length, showToast]);
 
   // The callbacks above already expose optimized handler hooks.
 
@@ -1807,6 +1821,90 @@ const ListsScreenContent: React.FC = () => {
         </View>
       </Modal>
 
+      <Modal
+        visible={showExportModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowExportModal(false)}
+      >
+        <Pressable
+          style={styles.exportOverlay}
+          onPress={() => setShowExportModal(false)}
+        />
+        <View style={styles.exportOverlay}>
+          <View
+            style={[
+              styles.exportCard,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <View style={styles.exportHeader}>
+              <View
+                style={[
+                  styles.exportPillar,
+                  { backgroundColor: colors.primary },
+                ]}
+              />
+              <Text style={[styles.exportTitle, { color: colors.foreground }]}>
+                Export PDF
+              </Text>
+            </View>
+            <View style={styles.exportOptions}>
+              <Pressable
+                onPress={() => runPdfExport('formal')}
+                style={({ pressed }) => [
+                  styles.exportOption,
+                  pressed && { opacity: 0.6 },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.exportOptionText,
+                    { color: colors.foreground },
+                  ]}
+                >
+                  Machine Writing (Table)
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => runPdfExport('raw')}
+                style={({ pressed }) => [
+                  styles.exportOption,
+                  pressed && { opacity: 0.6 },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.exportOptionText,
+                    { color: colors.foreground },
+                  ]}
+                >
+                  Handwritten (Simple List)
+                </Text>
+              </Pressable>
+            </View>
+            <Pressable
+              onPress={() => setShowExportModal(false)}
+              style={({ pressed }) => [
+                styles.exportCancel,
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.exportCancelText,
+                  { color: colors.primary },
+                ]}
+              >
+                Cancel
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
       <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} />
     </>
   );
@@ -2233,6 +2331,61 @@ const styles = StyleSheet.create({
   dateTimeFilterRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
+  },
+  exportOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 28,
+    zIndex: 1000,
+  },
+  exportCard: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 14,
+  },
+  exportHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  exportPillar: {
+    width: 4,
+    height: 32,
+    borderRadius: 2,
+  },
+  exportTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  exportOptions: {
+    gap: 6,
+  },
+  exportOption: {
+    paddingVertical: 14,
+    paddingHorizontal: 6,
+    borderRadius: 12,
+  },
+  exportOptionText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  exportCancel: {
+    marginTop: 18,
+    alignSelf: 'flex-end',
+  },
+  exportCancelText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

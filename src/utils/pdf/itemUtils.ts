@@ -4,6 +4,7 @@ export type PdfItem = {
   name: string;
   quantity: number;
   unit: string;
+  categoryId?: string;
 };
 
 const normalizeKey = (name: string, unit: string) =>
@@ -15,6 +16,7 @@ export const collapseShoppingItems = (items: GroceryItem[]): PdfItem[] => {
       name: (it.name || '').trim(),
       quantity: Number(it.quantity ?? 0) || 0,
       unit: (it.unit || 'pcs').trim() || 'pcs',
+      categoryId: (it.category || 'Other').trim() || 'Other',
     }))
     .filter(it => it.name.length > 0);
 

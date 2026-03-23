@@ -52,8 +52,11 @@ export const CreateListFlowScreen: React.FC = () => {
   const { showToast } = useToast();
   const insets = useSafeAreaInsets();
 
+  const defaultCategoryId = shoppingCategories[0]?.id ?? 'Other';
   const [step, setStep] = useState<FlowStep>('category');
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>(
+    defaultCategoryId,
+  );
   const [items, setItems] = useState<RapidEntryRow[]>([createEmptyRow()]);
   const [unitPickerRowId, setUnitPickerRowId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -74,12 +77,12 @@ export const CreateListFlowScreen: React.FC = () => {
     };
   }, []);
 
-  const selectedCategory = useMemo(
-    () =>
-      shoppingCategories.find(category => category.id === selectedCategoryId) ||
-      shoppingCategories[0],
-    [selectedCategoryId],
-  );
+  const selectedCategory = useMemo(() => {
+    const match = shoppingCategories.find(
+      category => category.id === selectedCategoryId,
+    );
+    return match ?? shoppingCategories[0] ?? null;
+  }, [selectedCategoryId]);
 
   const addNewRow = useCallback(() => {
     const newRow = createEmptyRow();
@@ -178,6 +181,7 @@ export const CreateListFlowScreen: React.FC = () => {
   };
 
   const persistItemsInBackground = async (rows: RapidEntryRow[]) => {
+    const targetCategoryId = selectedCategoryId || defaultCategoryId;
     try {
       await Promise.all(
         rows.map(row => {
@@ -188,7 +192,7 @@ export const CreateListFlowScreen: React.FC = () => {
             name: row.name.trim(),
             quantity,
             unit: (row.unit || 'pcs').trim() || 'pcs',
-            category: selectedCategoryId!,
+            category: targetCategoryId,
             addedBy: activeMember?.id || '1',
             completed: false,
           });
@@ -618,6 +622,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 12,
     marginTop: 4,
+    alignSelf: 'flex-end',
   },
   addRowText: {
     marginLeft: 8,
