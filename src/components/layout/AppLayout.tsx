@@ -85,12 +85,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       <View style={[styles.container, { backgroundColor: theme.colors.background }, style]}>
         <StatusBar
           translucent={false}
-          backgroundColor={
-            appearanceMode === "midnight" ? "#03040A" : theme.colors.background
-          }
-          barStyle={
-            appearanceMode === "midnight" ? "light-content" : "dark-content"
-          }
+          backgroundColor={theme.colors.background}
+          barStyle="dark-content"
         />
         {disableScroll ? (
           <View style={[styles.scrollView, styles.content]}>{children}</View>

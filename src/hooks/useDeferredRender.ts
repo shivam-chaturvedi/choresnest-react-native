@@ -1,5 +1,5 @@
 import { InteractionManager } from 'react-native';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 /**
  * Returns true after interactions settle (and optional delay) so screens can render
@@ -7,21 +7,38 @@ import { useEffect, useState } from 'react';
  */
 export const useDeferredRender = (delay = 0): boolean => {
     const [ready, setReady] = useState(false);
+    const readyRef = useRef(false);
 
     useEffect(() => {
         let timeout: ReturnType<typeof setTimeout> | null = null;
+        let fallback: ReturnType<typeof setTimeout> | null = null;
+
+        const markReady = () => {
+            if (readyRef.current) return;
+            readyRef.current = true;
+            setReady(true);
+        };
+
         const task = InteractionManager.runAfterInteractions(() => {
             if (delay > 0) {
-                timeout = setTimeout(() => setReady(true), delay);
+                timeout = setTimeout(markReady, delay);
             } else {
-                setReady(true);
+                markReady();
             }
         });
 
+        fallback = setTimeout(() => {
+            markReady();
+        }, Math.max(delay, 800));
+
         return () => {
+
             task.cancel();
             if (timeout) {
                 clearTimeout(timeout);
+            }
+            if (fallback) {
+                clearTimeout(fallback);
             }
         };
     }, [delay]);
