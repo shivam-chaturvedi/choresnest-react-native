@@ -86,9 +86,9 @@ export const createThemeColors = (paletteKey: PaletteKey, mode: AppearanceMode) 
 
     border: borderPalette[mode],
 
-    success: "#22C55E",
+    success: "#15803D",
     successLight: "#DCFCE7",
-    successDark: "#15803D",
+    successDark: "#0F3A24",
     info: p.mediumDark,
     infoLight: p.light,
     infoDark: p.mediumDark,

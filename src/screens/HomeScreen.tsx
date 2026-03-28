@@ -108,7 +108,7 @@ const HomeScreenContent: React.FC = () => {
   };
   const [showSearch, setShowSearch] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
-  const [showFamilyInfo, setShowFamilyInfo] = useState(true);
+  const [showFamilyInfo, setShowFamilyInfo] = useState(false);
   
   // Modals
   const [showAddEvent, setShowAddEvent] = useState(false);
@@ -880,7 +880,7 @@ const HomeScreenContent: React.FC = () => {
             ]}
           >
             <View style={styles.cardHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={styles.cardHeaderLeft}>
                 <AppIcon
                   name="users"
                   size={20}
@@ -888,16 +888,14 @@ const HomeScreenContent: React.FC = () => {
                   style={{ marginRight: 8 }}
                 />
                 <Text
-                  style={{
-                    fontSize: 18,
-                    fontWeight: '700',
-                    color: colors.foreground,
-                  }}
+                  style={[styles.familyNameText, { color: colors.foreground }]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
                 >
                   {familyName}
                 </Text>
               </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={styles.cardHeaderRight}>
                 <Pressable
                   onPress={() => setShowFamilyInfo((prev) => !prev)}
                   style={({ pressed }) => ({
@@ -2003,6 +2001,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 16,
+    flexWrap: 'wrap',
+  },
+  cardHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  cardHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 12,
+    flexShrink: 0,
+  },
+  familyNameText: {
+    fontSize: 18,
+    fontWeight: '700',
+    flexShrink: 1,
   },
   membersRow: {
     flexDirection: 'row',

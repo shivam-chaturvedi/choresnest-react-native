@@ -315,6 +315,8 @@ const ListsScreenContent: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [showFiltersPanel, setShowFiltersPanel] = useState(false);
+  const [showHistoryFilters, setShowHistoryFilters] = useState(false);
 
   // State to track expanded categories. Default all expanded.
   const [activeTab, setActiveTab] = useState<'current' | 'purchased'>(
@@ -939,6 +941,40 @@ const ListsScreenContent: React.FC = () => {
                 </Pressable>
               </View>
               {activeTab === 'current' && (
+                <View style={styles.filterToggleRow}>
+                  <Pressable
+                    onPress={() => setShowFiltersPanel(prev => !prev)}
+                    style={({ pressed }) => [
+                      styles.filterToggleButton,
+                      {
+                        borderColor: colors.primary,
+                        backgroundColor: showFiltersPanel
+                          ? colors.primary + '15'
+                          : colors.card,
+                        opacity: pressed ? 0.75 : 1,
+                      },
+                    ]}
+                  >
+                    <AppIcon
+                      name="filter"
+                      size={14}
+                      color={colors.primary}
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text
+                      style={[
+                        styles.filterToggleText,
+                        {
+                          color: colors.primary,
+                        },
+                      ]}
+                    >
+                      Filters
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
+              {activeTab === 'current' && showFiltersPanel && (
                 <View
                   style={[
                     styles.filterRow,
@@ -1385,19 +1421,50 @@ const ListsScreenContent: React.FC = () => {
                 </>
               ) : (
                 <>
+                  <View style={styles.filterToggleRow}>
+                    <Pressable
+                      onPress={() => setShowHistoryFilters(prev => !prev)}
+                      style={({ pressed }) => [
+                        styles.filterToggleButton,
+                        {
+                          borderColor: colors.primary,
+                          backgroundColor: showHistoryFilters
+                            ? colors.primary + '15'
+                            : colors.card,
+                          opacity: pressed ? 0.75 : 1,
+                        },
+                      ]}
+                    >
+                      <AppIcon
+                        name="filter"
+                        size={14}
+                        color={colors.primary}
+                        style={{ marginRight: 6 }}
+                      />
+                      <Text
+                        style={[
+                          styles.filterToggleText,
+                          { color: colors.primary },
+                        ]}
+                      >
+                        Filters
+                      </Text>
+                    </Pressable>
+                  </View>
                   {/* History Filters Section */}
-                  <View
-                    style={[
-                      styles.historyFilterCard,
-                      {
-                        backgroundColor: colors.card,
-                        borderRadius: radius.lg,
-                        borderColor: colors.border,
-                        borderWidth: 1,
-                        marginBottom: 20,
-                      },
-                    ]}
-                  >
+                  {showHistoryFilters && (
+                    <View
+                      style={[
+                        styles.historyFilterCard,
+                        {
+                          backgroundColor: colors.card,
+                          borderRadius: radius.lg,
+                          borderColor: colors.border,
+                          borderWidth: 1,
+                          marginBottom: 20,
+                        },
+                      ]}
+                    >
                     <View style={styles.filterSectionHeader}>
                       <View
                         style={{
@@ -1651,6 +1718,7 @@ const ListsScreenContent: React.FC = () => {
                       </View>
                     </View>
                   </View>
+                  )}
 
                   {historyItems.length === 0 ? (
                     <View style={styles.emptyState}>
@@ -2113,11 +2181,29 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: 16,
   },
+  filterToggleRow: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: 12,
+  },
   memberFilterRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
+  },
+  filterToggleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  filterToggleText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   memberFilterScroll: {
     flexDirection: 'row',
