@@ -18,6 +18,7 @@ import { ThemeProvider } from './src/contexts/ThemeContext';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { databaseService } from './src/services/DBService';
+import { checkForUpdate } from './src/services/UpdateChecker';
 import { getDatabase } from './src/database';
 import Event from './src/database/models/Event';
 import Task from './src/database/models/Task';
@@ -83,6 +84,10 @@ const App = () => {
     return () => {
       mounted = false;
     };
+  }, []);
+
+  useEffect(() => {
+    checkForUpdate();
   }, []);
 
   useEffect(() => {

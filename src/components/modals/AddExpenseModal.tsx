@@ -8,6 +8,7 @@ import { useCountry } from '../../contexts/CountryContext';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { CategoryColorService } from '../../services/CategoryColorService';
 import { CATEGORY_COLOR_FALLBACK } from '../../constants/categoryColors';
+import { useToast } from '../ui/Toast';
 
 export interface ExpenseData {
     name: string;
@@ -54,6 +55,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     const colors = useThemeColors();
     const nameInputRef = useRef<TextInput>(null);
     const amountInputRef = useRef<TextInput>(null);
+    const { showToast } = useToast();
     const [name, setName] = useState('');
     const [amount, setAmount] = useState('');
     const [category, setCategory] = useState('groceries');
@@ -71,6 +73,8 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     const [entryStage, setEntryStage] = useState<'category' | 'entry'>('category');
     const [recentEntries, setRecentEntries] = useState<ExpenseData[]>([]);
     const [recentIncomeEntries, setRecentIncomeEntries] = useState<ExpenseData[]>([]);
+    const expenseAddedCountRef = useRef(0);
+    const incomeAddedCountRef = useRef(0);
 
     const selectedCategory = categories.find(c => c.id === category);
     const selectedCategoryColorKey = CategoryColorService.normalizeCategoryKey(selectedCategory?.id || 'groceries');
@@ -92,6 +96,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
         setShowDatePicker(false);
         nameInputRef.current?.focus();
     };
+
     const resetAllFields = () => {
         setName('');
         setAmount('');
@@ -99,6 +104,32 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
         resetDateToToday();
         setErrors({});
         setShowDatePicker(false);
+    };
+
+    const handleClose = () => {
+        const expenseCount = expenseAddedCountRef.current;
+        const incomeCount = incomeAddedCountRef.current;
+
+        if (expenseCount > 0) {
+            showToast({
+                title: 'Expenses added',
+                description: 'All expenses were added successfully.',
+                type: 'success',
+            });
+        }
+
+        if (incomeCount > 0) {
+            showToast({
+                title: 'Income recorded',
+                description: 'Income entry was saved successfully.',
+                type: 'success',
+            });
+        }
+
+        expenseAddedCountRef.current = 0;
+        incomeAddedCountRef.current = 0;
+
+        onClose();
     };
 
     const handleAmountChange = (text: string) => {
@@ -157,20 +188,16 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
         };
         onAdd(payload);
         if (type === 'expense') {
+            expenseAddedCountRef.current += 1;
             setRecentEntries(prev => [payload, ...prev]);
             resetExpenseEntry();
             return;
         }
+
+        incomeAddedCountRef.current += 1;
         setRecentIncomeEntries(prev => [payload, ...prev]);
         resetAllFields();
-
-        if (type === 'expense') {
-            resetExpenseEntry();
-            return;
-        }
-
-        resetAllFields();
-        onClose();
+        handleClose();
     };
 
     const handleDateChange = (event: any, selectedDate?: Date) => {
@@ -199,9 +226,9 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
             visible={visible}
             animationType="slide"
             transparent={true}
-            onRequestClose={onClose}
+            onRequestClose={handleClose}
         >
-            <Pressable style={styles.overlay} onPress={onClose}>
+            <Pressable style={styles.overlay} onPress={handleClose}>
                 <Pressable
                     style={[styles.modalContainer, { backgroundColor: colors.background }]}
                     onPress={(e) => e.stopPropagation()}
@@ -213,7 +240,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                             </View>
                             <Text style={[styles.title, { color: colors.foreground }]}>Add Transaction</Text>
                         </View>
-                        <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                        <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
                             <X size={24} color={colors.mutedForeground} />
                         </TouchableOpacity>
                     </View>
