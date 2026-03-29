@@ -1,4 +1,10 @@
-import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import React, {
+  useMemo,
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+} from 'react';
 import {
   View,
   Text,
@@ -64,224 +70,6 @@ const isSameLocalDay = (
   );
 };
 
-type GroceryRowProps = {
-  item: GroceryItem;
-  isPurchased: boolean;
-  categoryColor?: string;
-  categoryIcon?: string;
-  categoryLibrary?: IconLibrary;
-  colors: ReturnType<typeof useThemeColors>;
-  radius: ReturnType<typeof useThemeRadius>;
-  onToggle: (id: string) => void;
-  onRemove: (id: string) => void;
-  memberSymbol?: string;
-  memberName?: string;
-};
-
-const GroceryRow = React.memo<GroceryRowProps>(
-  ({
-    item,
-    isPurchased,
-    categoryColor,
-    categoryIcon,
-    categoryLibrary,
-    colors,
-    radius,
-    onToggle,
-    onRemove,
-    memberSymbol,
-    memberName,
-  }) => {
-    const renderRightActions = useCallback(
-      () => (
-        <Pressable
-          style={[styles.swipedAction, { backgroundColor: colors.danger }]}
-          onPress={() => onRemove(item.id)}
-        >
-          <AppIcon name="trash" size={20} color="#fff" />
-          <Text style={styles.actionText}>Delete</Text>
-        </Pressable>
-      ),
-      [colors.danger, item.id, onRemove],
-    );
-
-    const renderLeftActions = useCallback(
-      () => (
-        <Pressable
-          style={[
-            styles.swipedAction,
-            styles.leftAction,
-            { backgroundColor: colors.success },
-          ]}
-          onPress={() => {
-            if (!item.completed) onToggle(item.id);
-          }}
-        >
-          <AppIcon name="check" size={20} color="#fff" />
-          <Text style={styles.actionText}>Done</Text>
-        </Pressable>
-      ),
-      [colors.success, item, onToggle],
-    );
-
-    return (
-      <Swipeable
-        renderRightActions={renderRightActions}
-        renderLeftActions={renderLeftActions}
-        onSwipeableRightOpen={() => onRemove(item.id)}
-        onSwipeableLeftOpen={() => !item.completed && onToggle(item.id)}
-        containerStyle={{ marginBottom: 10 }}
-      >
-        <View
-          style={[
-            styles.itemRow,
-            {
-              backgroundColor: colors.card,
-              borderRadius: radius.md,
-              padding: 12,
-              borderWidth: 1,
-              borderColor: colors.border,
-            },
-          ]}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-            <View
-              style={[
-                styles.categoryIconSmall,
-                { backgroundColor: (categoryColor || colors.muted) + '20' },
-              ]}
-            >
-              {categoryIcon ? (
-                <CategoryIcon
-                  icon={categoryIcon}
-                  library={categoryLibrary}
-                  size={20}
-                  color={colors.foreground}
-                />
-              ) : (
-                <Text style={{ fontSize: 16 }}>📦</Text>
-              )}
-            </View>
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text
-                style={[
-                  styles.itemName,
-                  {
-                    color: colors.foreground,
-                    textDecorationLine: isPurchased ? 'line-through' : 'none',
-                    opacity: isPurchased ? 0.7 : 1,
-                  },
-                ]}
-              >
-                {item.name}
-              </Text>
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  marginTop: 2,
-                }}
-              >
-                <Text
-                  style={[styles.itemDetail, { color: colors.mutedForeground }]}
-                >
-                  {item.quantity} {item.unit}
-                </Text>
-                <View
-                  style={[
-                    styles.addedByBadge,
-                    {
-                      backgroundColor: colors.muted,
-                      borderRadius: radius.sm,
-                      marginLeft: 8,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      paddingHorizontal: 6,
-                    },
-                  ]}
-                >
-                  <MemberIcon
-                    symbol={memberSymbol}
-                    size={14}
-                    color={colors.foreground}
-                  />
-                  <Text
-                    style={{
-                      fontSize: 11,
-                      marginLeft: 4,
-                      color: colors.foreground,
-                    }}
-                  >
-                    {memberName || 'Family Member'}
-                  </Text>
-                </View>
-                {isPurchased && item.purchasedAt && (
-                  <Text
-                    style={[
-                      styles.itemDetail,
-                      { color: colors.mutedForeground, marginLeft: 8 },
-                    ]}
-                  >
-                    {new Date(item.purchasedAt).toLocaleDateString()} at{' '}
-                    {new Date(item.purchasedAt).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </Text>
-                )}
-              </View>
-            </View>
-          </View>
-
-          {!isPurchased ? (
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <Pressable
-                onPress={() => onRemove(item.id)}
-                style={[styles.actionIconBtn, { backgroundColor: '#fff' }]}
-              >
-                <AppIcon name="trash" size={18} color={colors.danger} />
-              </Pressable>
-              <Pressable
-                onPress={() => onToggle(item.id)}
-                style={[
-                  styles.doneBtn,
-                  { backgroundColor: colors.success, borderRadius: radius.sm },
-                ]}
-              >
-                <Text
-                  style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}
-                >
-                  Done
-                </Text>
-              </Pressable>
-            </View>
-          ) : (
-            <Pressable
-              onPress={() => onToggle(item.id)}
-              style={[styles.actionIconBtn, { backgroundColor: colors.muted }]}
-            >
-              <AppIcon
-                name="rotateCw"
-                size={18}
-                color={colors.mutedForeground}
-              />
-            </Pressable>
-          )}
-        </View>
-      </Swipeable>
-    );
-  },
-  (prev, next) => {
-    return (
-      prev.item.id === next.item.id &&
-      prev.item.completed === next.item.completed &&
-      prev.onToggle === next.onToggle &&
-      prev.onRemove === next.onRemove &&
-      prev.isPurchased === next.isPurchased
-    );
-  },
-);
-
 const ListsScreenContent: React.FC = () => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
@@ -317,6 +105,31 @@ const ListsScreenContent: React.FC = () => {
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
   const [showHistoryFilters, setShowHistoryFilters] = useState(false);
+  const [categoryScrollX, setCategoryScrollX] = useState(0);
+  const [categoryContainerWidth, setCategoryContainerWidth] = useState(0);
+  const [categoryContentWidth, setCategoryContentWidth] = useState(0);
+  const categoryScrollRef = useRef<ScrollView>(null);
+  const canScrollLeft = categoryScrollX > 10;
+  const canScrollRight =
+    categoryContentWidth > categoryContainerWidth &&
+    categoryScrollX + categoryContainerWidth + 10 < categoryContentWidth;
+
+  const scrollCategory = useCallback(
+    (direction: 'left' | 'right') => {
+      if (!categoryScrollRef.current) {
+        return;
+      }
+      const maxOffset = Math.max(0, categoryContentWidth - categoryContainerWidth);
+      const target =
+        direction === 'left'
+          ? Math.max(0, categoryScrollX - categoryContainerWidth)
+          : Math.min(maxOffset, categoryScrollX + categoryContainerWidth);
+      categoryScrollRef.current.scrollTo({ x: target, animated: true });
+    },
+    [categoryContentWidth, categoryContainerWidth, categoryScrollX],
+  );
+  const [exportCategorySelection, setExportCategorySelection] = useState<string[]>([]);
+  const [exportMode, setExportMode] = useState<ShoppingListExportMode>('formal');
 
   // State to track expanded categories. Default all expanded.
   const [activeTab, setActiveTab] = useState<'current' | 'purchased'>(
@@ -398,10 +211,16 @@ const ListsScreenContent: React.FC = () => {
   const categoriesById = useMemo(() => {
     const map = new Map<
       string,
-      { color?: string; icon?: string; library?: IconLibrary }
+      {
+        name: string;
+        color?: string;
+        icon?: string;
+        library?: IconLibrary;
+      }
     >();
     shoppingCategories.forEach(cat =>
       map.set(cat.id, {
+        name: cat.name,
         icon: cat.icon,
         color: cat.color,
         library: cat.library,
@@ -410,15 +229,38 @@ const ListsScreenContent: React.FC = () => {
     return map;
   }, []);
 
-  const getMemberMeta = useCallback(
-    (memberId: string) => {
-      const member = members.find(m => m.id === memberId);
-      return {
-        symbol: member?.symbol,
-        name: member?.name,
-      };
+  const fallbackCategoryMeta = useMemo(
+    () => ({
+      name: 'Other',
+      icon: 'package',
+      color: colors.primary,
+      library: 'MaterialCommunityIcons' as IconLibrary,
+    }),
+    [colors.primary],
+  );
+
+  const buildCategoryCards = useCallback(
+    (items: GroceryItem[]) => {
+      const totals = new Map<string, number>();
+      items.forEach(item => {
+        const categoryKey = item.category || defaultCategoryId;
+        totals.set(categoryKey, (totals.get(categoryKey) ?? 0) + 1);
+      });
+      return Array.from(totals.entries())
+        .map(([categoryId, count]) => {
+          const meta = categoriesById.get(categoryId) ?? fallbackCategoryMeta;
+          return {
+            categoryId,
+            count,
+            name: meta.name || fallbackCategoryMeta.name,
+            icon: meta.icon || fallbackCategoryMeta.icon,
+            color: meta.color || fallbackCategoryMeta.color,
+            library: meta.library,
+          };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
     },
-    [members],
+    [categoriesById, defaultCategoryId, fallbackCategoryMeta],
   );
 
   const handleToggleItem = useCallback(
@@ -445,40 +287,19 @@ const ListsScreenContent: React.FC = () => {
     [removeGroceryItem],
   );
 
-  const renderItemCard = useCallback(
-    (item: GroceryItem, _index: number, _isHistory: boolean) => {
-      const categoryMeta = categoriesById.get(item.category || '') || {
-        color: colors.muted,
-        icon: 'cube-outline',
-        library: 'MaterialCommunityIcons',
-      };
-
-      const memberMeta = getMemberMeta(item.addedBy || '');
-      return (
-        <GroceryRow
-          key={item.id}
-          item={item}
-          isPurchased={item.completed}
-          categoryColor={categoryMeta.color}
-          categoryIcon={categoryMeta.icon}
-          categoryLibrary={categoryMeta.library}
-          colors={colors}
-          radius={radius}
-          onToggle={handleToggleItem}
-          onRemove={handleRemoveItem}
-          memberSymbol={memberMeta.symbol}
-          memberName={memberMeta.name}
-        />
-      );
+  const handleOpenCategory = useCallback(
+    (categoryId: string, mode: 'current' | 'purchased') => {
+      const meta = categoriesById.get(categoryId);
+      navigation.navigate('CategoryDetail', {
+        categoryId,
+        mode,
+        categoryName: meta?.name,
+        categoryIcon: meta?.icon,
+        categoryLibrary: meta?.library,
+        categoryColor: meta?.color,
+      });
     },
-    [
-      categoriesById,
-      colors,
-      radius,
-      handleRemoveItem,
-      handleToggleItem,
-      getMemberMeta,
-    ],
+    [categoriesById, navigation],
   );
 
   const baseItems = useMemo(() => {
@@ -517,6 +338,10 @@ const ListsScreenContent: React.FC = () => {
   const currentTodoItems = useMemo(
     () => applyDateFilter(baseTodoItems, updatedDateFilter),
     [baseTodoItems, updatedDateFilter, applyDateFilter],
+  );
+  const currentCategoryCards = useMemo(
+    () => buildCategoryCards(currentTodoItems),
+    [buildCategoryCards, currentTodoItems],
   );
   const currentDoneItems = useMemo(
     () => applyDateFilter(baseDoneItems, updatedDateFilter),
@@ -561,6 +386,10 @@ const ListsScreenContent: React.FC = () => {
       (a, b) => (b.purchasedAt || 0) - (a.purchasedAt || 0),
     );
   }, [baseDoneItems, historyCategoryFilter, historyDate, historyTime]);
+  const purchasedCategoryCards = useMemo(
+    () => buildCategoryCards(historyItems),
+    [buildCategoryCards, historyItems],
+  );
 
   const progress =
     filteredItems.length > 0
@@ -624,12 +453,12 @@ const ListsScreenContent: React.FC = () => {
   const [showExportModal, setShowExportModal] = useState(false);
 
   const runPdfExport = useCallback(
-    async (mode: ShoppingListExportMode) => {
+    async (items: GroceryItem[], mode: ShoppingListExportMode) => {
       setIsExportingPdf(true);
       setShowExportModal(false);
       try {
         const filePath = await exportService.exportShoppingListAsPDF(
-          currentTodoItems,
+          items,
           mode,
         );
         const shareUrl = ensureFileUri(filePath);
@@ -665,8 +494,59 @@ const ListsScreenContent: React.FC = () => {
         setIsExportingPdf(false);
       }
     },
-    [currentTodoItems, showToast],
+    [showToast],
   );
+
+  const handleExportCategoryToggle = useCallback((categoryId: string) => {
+    setExportCategorySelection(prev =>
+      prev.includes(categoryId)
+        ? prev.filter(id => id !== categoryId)
+        : [...prev, categoryId],
+    );
+  }, []);
+
+  const allExportCategoriesSelected =
+    currentCategoryCards.length > 0 &&
+    exportCategorySelection.length === currentCategoryCards.length;
+
+  const handleExportSelectAllToggle = useCallback(() => {
+    if (allExportCategoriesSelected) {
+      setExportCategorySelection([]);
+      return;
+    }
+    setExportCategorySelection(currentCategoryCards.map(card => card.categoryId));
+  }, [allExportCategoriesSelected, currentCategoryCards]);
+
+  const handleConfirmExport = useCallback(() => {
+    if (exportCategorySelection.length === 0) {
+      showToast({
+        type: 'warning',
+        title: 'No categories selected',
+        description: 'Select at least one category to export.',
+      });
+      return;
+    }
+    const itemsToExport = currentTodoItems.filter(item =>
+      exportCategorySelection.includes(item.category || defaultCategoryId),
+    );
+    if (itemsToExport.length === 0) {
+      showToast({
+        type: 'warning',
+        title: 'Empty selection',
+        description:
+          'The selected categories do not contain any current bag items.',
+      });
+      return;
+    }
+    runPdfExport(itemsToExport, exportMode);
+  }, [
+    currentTodoItems,
+    defaultCategoryId,
+    exportCategorySelection,
+    exportMode,
+    runPdfExport,
+    showToast,
+  ]);
 
   const handleExportCurrentBag = useCallback(() => {
     if (currentTodoItems.length === 0) {
@@ -677,8 +557,10 @@ const ListsScreenContent: React.FC = () => {
       });
       return;
     }
+    setExportCategorySelection(currentCategoryCards.map(card => card.categoryId));
+    setExportMode('formal');
     setShowExportModal(true);
-  }, [currentTodoItems.length, showToast]);
+  }, [currentCategoryCards, currentTodoItems.length, showToast]);
 
   // The callbacks above already expose optimized handler hooks.
 
@@ -1377,7 +1259,7 @@ const ListsScreenContent: React.FC = () => {
                   </View>
 
                   {/* Single List for Current Items */}
-                  {currentTodoItems.length === 0 ? (
+                  {currentCategoryCards.length === 0 ? (
                     <View style={styles.emptyState}>
                       <View
                         style={[
@@ -1412,11 +1294,64 @@ const ListsScreenContent: React.FC = () => {
                       </Text>
                     </View>
                   ) : (
-                    <View style={styles.listContainer}>
-                      {currentTodoItems.map((item, index) =>
-                        renderItemCard(item, index, false),
-                      )}
-                    </View>
+                    <>
+                      <Text
+                        style={[
+                          styles.categorySectionTitle,
+                          { color: colors.foreground },
+                        ]}
+                      >
+                        Tap a category to view its items
+                      </Text>
+                      <View style={styles.categoryGrid}>
+                        {currentCategoryCards.map(card => (
+                          <Pressable
+                            key={card.categoryId}
+                            onPress={() => handleOpenCategory(card.categoryId, 'current')}
+                            style={[
+                              styles.categoryCard,
+                              {
+                                backgroundColor: colors.card,
+                                borderColor: colors.border,
+                              },
+                            ]}
+                          >
+                            <View
+                              style={[
+                                styles.categoryIconBadge,
+                                {
+                                  backgroundColor:
+                                    (card.color || colors.primary) + '20',
+                                },
+                              ]}
+                            >
+                              <CategoryIcon
+                                icon={card.icon}
+                                library={card.library}
+                                size={18}
+                                color={card.color || colors.primary}
+                              />
+                            </View>
+                            <Text
+                              style={[
+                                styles.categoryCardLabel,
+                                { color: colors.foreground },
+                              ]}
+                            >
+                              {card.name}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.categoryCardCount,
+                                { color: colors.mutedForeground },
+                              ]}
+                            >
+                              {card.count} item{card.count === 1 ? '' : 's'}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </>
                   )}
                 </>
               ) : (
@@ -1720,7 +1655,7 @@ const ListsScreenContent: React.FC = () => {
                   </View>
                   )}
 
-                  {historyItems.length === 0 ? (
+                  {purchasedCategoryCards.length === 0 ? (
                     <View style={styles.emptyState}>
                       <View
                         style={[
@@ -1755,11 +1690,66 @@ const ListsScreenContent: React.FC = () => {
                       </Text>
                     </View>
                   ) : (
-                    <View style={styles.listContainer}>
-                      {historyItems.map((item, index) =>
-                        renderItemCard(item, index, true),
-                      )}
-                    </View>
+                    <>
+                      <Text
+                        style={[
+                          styles.categorySectionTitle,
+                          { color: colors.foreground },
+                        ]}
+                      >
+                        Tap a category to view purchased items
+                      </Text>
+                      <View style={styles.categoryGrid}>
+                        {purchasedCategoryCards.map(card => (
+                          <Pressable
+                            key={card.categoryId}
+                            onPress={() =>
+                              handleOpenCategory(card.categoryId, 'purchased')
+                            }
+                            style={[
+                              styles.categoryCard,
+                              {
+                                backgroundColor: colors.card,
+                                borderColor: colors.border,
+                              },
+                            ]}
+                          >
+                            <View
+                              style={[
+                                styles.categoryIconBadge,
+                                {
+                                  backgroundColor:
+                                    (card.color || colors.primary) + '20',
+                                },
+                              ]}
+                            >
+                              <CategoryIcon
+                                icon={card.icon}
+                                library={card.library}
+                                size={18}
+                                color={card.color || colors.primary}
+                              />
+                            </View>
+                            <Text
+                              style={[
+                                styles.categoryCardLabel,
+                                { color: colors.foreground },
+                              ]}
+                            >
+                              {card.name}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.categoryCardCount,
+                                { color: colors.mutedForeground },
+                              ]}
+                            >
+                              {card.count} item{card.count === 1 ? '' : 's'}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </>
                   )}
                 </>
               )}
@@ -1920,56 +1910,252 @@ const ListsScreenContent: React.FC = () => {
                 Export PDF
               </Text>
             </View>
-            <View style={styles.exportOptions}>
-              <Pressable
-                onPress={() => runPdfExport('formal')}
-                style={({ pressed }) => [
-                  styles.exportOption,
-                  pressed && { opacity: 0.6 },
-                ]}
-              >
+            <ScrollView
+              style={styles.exportScroll}
+              contentContainerStyle={styles.exportContent}
+            >
+              <View style={styles.exportSectionHeader}>
                 <Text
                   style={[
-                    styles.exportOptionText,
+                    styles.exportSectionTitle,
                     { color: colors.foreground },
                   ]}
                 >
-                  Machine Writing (Table)
+                  Select categories
+                </Text>
+                <Pressable
+                  onPress={handleExportSelectAllToggle}
+                  style={({ pressed }) => [
+                    styles.exportSelectAllChip,
+                    {
+                      borderColor: allExportCategoriesSelected
+                        ? colors.primary
+                        : colors.border,
+                      backgroundColor: allExportCategoriesSelected
+                        ? colors.primary
+                        : 'transparent',
+                      opacity: pressed ? 0.8 : 1,
+                    },
+                  ]}
+                >
+                  <AppIcon
+                    name={allExportCategoriesSelected ? 'checkSquare' : 'stop'}
+                    size={14}
+                    color={
+                      allExportCategoriesSelected ? '#fff' : colors.foreground
+                    }
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text
+                    style={[
+                      styles.exportSelectAllText,
+                      allExportCategoriesSelected && { color: '#fff' },
+                    ]}
+                  >
+                    {allExportCategoriesSelected ? 'Deselect all' : 'Select all'}
+                  </Text>
+                </Pressable>
+              </View>
+              {currentCategoryCards.length === 0 ? (
+                <Text style={{ color: colors.mutedForeground }}>
+                  Add items to your bag to unlock export categories.
+                </Text>
+              ) : (
+                <View style={styles.exportCategoryRow}>
+                  <Pressable
+                    onPress={() => scrollCategory('left')}
+                    disabled={!canScrollLeft}
+                    style={[
+                      styles.exportCategoryArrow,
+                      styles.exportCategoryArrowLeft,
+                      {
+                        borderColor: colors.border,
+                        backgroundColor: colors.card,
+                      },
+                      !canScrollLeft && styles.exportArrowHidden,
+                    ]}
+                  >
+                    <AppIcon name="chevronLeft" size={18} color={colors.foreground} />
+                  </Pressable>
+                  <ScrollView
+                    ref={categoryScrollRef}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.exportCategoryScroll}
+                    style={{ flex: 1 }}
+                    onLayout={event =>
+                      setCategoryContainerWidth(event.nativeEvent.layout.width)
+                    }
+                    onContentSizeChange={(width) => setCategoryContentWidth(width)}
+                    onScroll={event =>
+                      setCategoryScrollX(event.nativeEvent.contentOffset.x)
+                    }
+                    scrollEventThrottle={16}
+                  >
+                    {currentCategoryCards.map(card => {
+                      const isActive = exportCategorySelection.includes(
+                        card.categoryId,
+                      );
+                      return (
+                        <Pressable
+                          key={card.categoryId}
+                          onPress={() => handleExportCategoryToggle(card.categoryId)}
+                          style={[
+                            styles.exportCategoryChip,
+                            {
+                              borderColor: isActive ? colors.primary : colors.border,
+                              backgroundColor: isActive
+                                ? colors.primary + '15'
+                                : colors.card,
+                            },
+                          ]}
+                        >
+                          <View
+                            style={[
+                              styles.exportCategoryIcon,
+                              {
+                                backgroundColor:
+                                  (card.color || colors.primary) + '20',
+                              },
+                            ]}
+                          >
+                            <CategoryIcon
+                              icon={card.icon}
+                              library={card.library}
+                              size={18}
+                              color={card.color || colors.primary}
+                            />
+                          </View>
+                          <View style={{ flexShrink: 1 }}>
+                            <Text
+                              style={[
+                                styles.exportCategoryLabel,
+                                { color: colors.foreground },
+                              ]}
+                              numberOfLines={2}
+                            >
+                              {card.name}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.exportCategoryCount,
+                                { color: colors.mutedForeground },
+                              ]}
+                            >
+                              {card.count} item{card.count === 1 ? '' : 's'}
+                            </Text>
+                          </View>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                  <Pressable
+                    onPress={() => scrollCategory('right')}
+                    disabled={!canScrollRight}
+                    style={[
+                      styles.exportCategoryArrow,
+                      styles.exportCategoryArrowRight,
+                      {
+                        borderColor: colors.border,
+                        backgroundColor: colors.card,
+                      },
+                      !canScrollRight && styles.exportArrowHidden,
+                    ]}
+                  >
+                    <AppIcon name="chevronRight" size={18} color={colors.foreground} />
+                  </Pressable>
+                </View>
+              )}
+            <Text
+              style={[
+                  styles.exportSectionTitle,
+                  { color: colors.foreground, marginTop: 8 },
+                ]}
+              >
+                Export style
+              </Text>
+              <View style={styles.exportStyleRow}>
+                {[
+                  {
+                    mode: 'formal' as ShoppingListExportMode,
+                    label: 'Machine',
+                    hint: 'Organized table layout',
+                  },
+                  {
+                    mode: 'raw' as ShoppingListExportMode,
+                    label: 'Handwritten',
+                    hint: 'Casual simple list',
+                  },
+                ].map(option => {
+                  const isActive = exportMode === option.mode;
+                  return (
+                    <Pressable
+                      key={option.mode}
+                      onPress={() => setExportMode(option.mode)}
+                      style={[
+                        styles.exportStyleChip,
+                        isActive && styles.exportStyleChipActive,
+                        {
+                          borderColor: isActive ? colors.primary : colors.border,
+                          backgroundColor: isActive
+                            ? colors.primary + '15'
+                            : colors.card,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.exportStyleLabel,
+                          isActive && { color: colors.primary },
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.exportStyleHint,
+                          { color: colors.mutedForeground },
+                        ]}
+                      >
+                        {option.hint}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </ScrollView>
+            <View style={styles.exportFooter}>
+              <Pressable
+                onPress={() => setShowExportModal(false)}
+                style={({ pressed }) => [
+                  styles.exportActionBtn,
+                  {
+                    borderColor: colors.border,
+                    backgroundColor: colors.card,
+                    opacity: pressed ? 0.8 : 1,
+                  },
+                ]}
+              >
+                <Text style={{ color: colors.foreground, fontWeight: '600' }}>
+                  Cancel
                 </Text>
               </Pressable>
               <Pressable
-                onPress={() => runPdfExport('raw')}
+                onPress={handleConfirmExport}
+                disabled={isExportingPdf}
                 style={({ pressed }) => [
-                  styles.exportOption,
-                  pressed && { opacity: 0.6 },
+                  styles.exportActionBtn,
+                  {
+                    backgroundColor: colors.primary,
+                    opacity: pressed || isExportingPdf ? 0.8 : 1,
+                  },
                 ]}
               >
-                <Text
-                  style={[
-                    styles.exportOptionText,
-                    { color: colors.foreground },
-                  ]}
-                >
-                  Handwritten (Simple List)
+                <Text style={[styles.exportActionText, { color: '#fff' }]}>
+                  {isExportingPdf ? 'Exporting…' : 'Export PDF'}
                 </Text>
               </Pressable>
             </View>
-            <Pressable
-              onPress={() => setShowExportModal(false)}
-              style={({ pressed }) => [
-                styles.exportCancel,
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.exportCancelText,
-                  { color: colors.primary },
-                ]}
-              >
-                Cancel
-              </Text>
-            </Pressable>
           </View>
         </View>
       </Modal>
@@ -2130,46 +2316,39 @@ const styles = StyleSheet.create({
     fontSize: 14,
     maxWidth: 240,
   },
-  listContainer: {
-    gap: 0,
-  },
-  itemRow: {
-    flexDirection: 'row',
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  itemName: {
-    fontSize: 16,
+  categorySectionTitle: {
+    fontSize: 14,
     fontWeight: '600',
+    marginBottom: 12,
   },
-  itemDetail: {
-    fontSize: 12,
+  categoryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 6,
   },
-  addedByBadge: {
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
+  categoryCard: {
+    flexBasis: '48%',
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    alignItems: 'flex-start',
+    marginBottom: 12,
   },
-  categoryIconSmall: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionIconBtn: {
+  categoryIconBadge: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  doneBtn: {
-    paddingHorizontal: 16,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
+  categoryCardLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  categoryCardCount: {
+    fontSize: 12,
+    fontWeight: '500',
   },
   filterContainer: {
     paddingVertical: 10,
@@ -2339,7 +2518,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 16,
     marginBottom: 8,
   },
   exportBtn: {
@@ -2353,21 +2531,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#fff',
-  },
-  swipedAction: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 80,
-    height: '100%',
-  },
-  leftAction: {
-    flexDirection: 'row',
-  },
-  actionText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 12,
-    marginTop: 4,
   },
   historyFilterCard: {
     overflow: 'hidden',
@@ -2453,25 +2616,137 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
   },
-  exportOptions: {
-    gap: 6,
+  exportScroll: {
+    maxHeight: 300,
   },
-  exportOption: {
-    paddingVertical: 14,
-    paddingHorizontal: 6,
+  exportContent: {
+    paddingBottom: 12,
+  },
+  exportSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  exportSectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  exportSelectAllChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  exportSelectAllText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  exportCategoryScroll: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingBottom: 8,
+  },
+  exportCategoryChip: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    width: 170, // fixed width instead of min/max
+    height: 70, // fixed height Instead of minHeight
+    marginRight: 10,
+    marginBottom: 10,
+  },
+  exportCategoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    position: 'relative', // for absolute arrow positioning
+  },
+  exportCategoryArrow: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#cbd5f5',
+    backgroundColor: '#fff',
+    position: 'absolute',
+    top: '50%',
+    marginTop: -22, // adjust vertically relative to category height
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  exportCategoryArrowLeft: {
+    left: 4,
+  },
+  exportCategoryArrowRight: {
+    right: 4,
+  },
+  exportArrowHidden: {
+    opacity: 0,
+  },
+  exportCategoryIcon: {
+    width: 36,
+    height: 36,
     borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
   },
-  exportOptionText: {
-    fontSize: 16,
+  exportCategoryLabel: {
+    fontSize: 14,
     fontWeight: '600',
   },
-  exportCancel: {
-    marginTop: 18,
-    alignSelf: 'flex-end',
+  exportCategoryCount: {
+    fontSize: 12,
+    marginTop: 2,
   },
-  exportCancelText: {
-    fontSize: 16,
-    fontWeight: '600',
+  exportStyleRow: {
+    flexDirection: 'row',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  exportStyleChip: {
+    flex: 1,
+    minWidth: 140,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  exportStyleChipActive: {
+    borderWidth: 2,
+  },
+  exportStyleLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  exportStyleHint: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+  exportFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  exportActionBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  exportActionText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
 });
 

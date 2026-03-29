@@ -38,6 +38,11 @@ const categories = [
     { id: 'other', name: 'Other', icon: 'package-variant' },
 ];
 
+const transactionTypeOptions = [
+    { type: 'expense', label: 'Expense', icon: 'cash-minus' },
+    { type: 'income', label: 'Income', icon: 'cash-plus' },
+];
+
 export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     visible,
     onClose,
@@ -75,6 +80,8 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     const newAmount = parseFloat(amount) || 0;
     const willExceedBudget = type === 'expense' && categoryBudget > 0 && (currentCategorySpending + newAmount) > categoryBudget;
     const percentOfBudget = categoryBudget > 0 ? ((currentCategorySpending + newAmount) / categoryBudget) * 100 : 0;
+    const submitIconName = type === 'expense' ? 'cash-minus' : 'cash-plus';
+    const submitLabel = type === 'expense' ? 'Add Entry' : 'Add Income';
 
     const resetDateToToday = () => setDate(getLocalYYYYMMDD(new Date()));
     const resetExpenseEntry = () => {
@@ -214,38 +221,42 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
                         {/* Type Toggle */}
                         <View style={[styles.toggleContainer, { backgroundColor: colors.muted }]}>
-                            <TouchableOpacity
-                                style={[
-                                    styles.toggleButton,
-                                    type === 'expense' && { backgroundColor: colors.danger }
-                                ]}
-                                onPress={() => {
-                                    setType('expense');
-                                    setEntryStage('category');
-                                }}
-                            >
-                                <Text style={[
-                                    styles.toggleText,
-                                    { color: colors.mutedForeground },
-                                    type === 'expense' && styles.activeToggleText
-                                ]}>💸 Expense</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[
-                                    styles.toggleButton,
-                                    type === 'income' && { backgroundColor: colors.success }
-                                ]}
-                                onPress={() => {
-                                    setType('income');
-                                    setEntryStage('entry');
-                                }}
-                            >
-                                <Text style={[
-                                    styles.toggleText,
-                                    { color: colors.mutedForeground },
-                                    type === 'income' && styles.activeToggleText
-                                ]}>💰 Income</Text>
-                            </TouchableOpacity>
+                            {transactionTypeOptions.map((option) => {
+                                const isActive = type === option.type;
+                                return (
+                                    <TouchableOpacity
+                                        key={option.type}
+                                        style={[
+                                            styles.toggleButton,
+                                            isActive && {
+                                                backgroundColor: option.type === 'expense' ? colors.danger : colors.success,
+                                            },
+                                        ]}
+                                        onPress={() => {
+                                            setType(option.type as 'expense' | 'income');
+                                            setEntryStage(option.type === 'expense' ? 'category' : 'entry');
+                                        }}
+                                    >
+                                        <View style={styles.toggleContent}>
+                                            <MaterialCommunityIcons
+                                                name={option.icon}
+                                                size={16}
+                                                color={isActive ? '#fff' : colors.mutedForeground}
+                                                style={styles.toggleIcon}
+                                            />
+                                            <Text
+                                                style={[
+                                                    styles.toggleText,
+                                                    { color: isActive ? '#fff' : colors.mutedForeground },
+                                                    isActive && styles.activeToggleText,
+                                                ]}
+                                            >
+                                                {option.label}
+                                            </Text>
+                                        </View>
+                                    </TouchableOpacity>
+                                );
+                            })}
                         </View>
 
                         {type === 'expense' && entryStage === 'category' && (
@@ -470,7 +481,15 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                                     onPress={handleSubmit}
                                     style={[styles.submitButton, { backgroundColor: type === 'expense' ? colors.primary : colors.success }]}
                                 >
-                                    {type === 'expense' ? '💸 Add Entry' : '💰 Add Income'}
+                                    <View style={styles.submitButtonContent}>
+                                        <MaterialCommunityIcons
+                                            name={submitIconName}
+                                            size={18}
+                                            color="#fff"
+                                            style={styles.submitButtonIcon}
+                                        />
+                                        <Text style={styles.submitButtonText}>{submitLabel}</Text>
+                                    </View>
                                 </Button>
                                 {type === 'expense' && recentEntries.length > 0 && (
                                     <View style={[styles.recentList, { borderColor: colors.border }]}>
@@ -598,6 +617,14 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
         alignItems: 'center',
         borderRadius: 10,
+    },
+    toggleContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    toggleIcon: {
+        marginRight: 6,
     },
     toggleText: {
         fontSize: 14,
@@ -758,6 +785,19 @@ const styles = StyleSheet.create({
     },
     submitButton: {
         marginTop: 8,
+    },
+    submitButtonContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    submitButtonIcon: {
+        marginRight: 6,
+    },
+    submitButtonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '700',
     },
     errorText: {
         fontSize: 14,

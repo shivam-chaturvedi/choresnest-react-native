@@ -7,6 +7,7 @@ import HomeScreen from "../screens/HomeScreen";
 import { CalendarScreen } from "../screens/CalendarScreen";
 import { ListsScreen } from "../screens/ListsScreen";
 import { CreateListFlowScreen } from "../screens/CreateListFlowScreen";
+import { ListCategoryDetailScreen } from "../screens/ListCategoryDetailScreen";
 import { MoreScreen } from "../screens/MoreScreen";
 import { BottomNavigation, BottomNavRoute } from "../components/layout/BottomNavigation";
 import { ListsStackParamList } from "./ListsStackParams";
@@ -60,6 +61,10 @@ const ListsStack = () => (
     <ListsNativeStack.Screen
       name="CreateListFlow"
       component={CreateListFlowScreen}
+    />
+    <ListsNativeStack.Screen
+      name="CategoryDetail"
+      component={ListCategoryDetailScreen}
     />
   </ListsNativeStack.Navigator>
 );

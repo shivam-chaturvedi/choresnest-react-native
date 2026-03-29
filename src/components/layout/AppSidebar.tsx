@@ -303,7 +303,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         >
           {/* Profile Section (Gradient Header) */}
           {/* Profile Section (Gradient Header) */}
-          <View style={[styles.headerGradient, { backgroundColor: isMidnight ? colors.card : theme.colors.primary }]}>
+          <View style={[styles.headerGradient, { backgroundColor: isMidnight ? colors.card : theme.colors.primary }]}> 
             <Pressable onPress={onClose} style={styles.closeIcon}>
               <X size={24} color="#f5f8ff" />
             </Pressable>
@@ -681,6 +681,7 @@ const styles = StyleSheet.create({
   },
   profileContent: {
     alignItems: 'flex-start',
+    paddingRight: 48,
   },
   avatar: {
     width: 64,
