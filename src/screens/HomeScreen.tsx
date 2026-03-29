@@ -108,7 +108,8 @@ const HomeScreenContent: React.FC = () => {
   };
   const [showSearch, setShowSearch] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
-
+  const [showFamilyInfo, setShowFamilyInfo] = useState(false);
+  
   // Modals
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [showAddTask, setShowAddTask] = useState(false);
@@ -118,6 +119,8 @@ const HomeScreenContent: React.FC = () => {
   const [showFamilyOnboarding, setShowFamilyOnboarding] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isReloadingMembers, setIsReloadingMembers] = useState(false);
+  const reloadBannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleRefresh = async () => {
     try {
@@ -240,6 +243,14 @@ const HomeScreenContent: React.FC = () => {
     return () => {
       navTimers.current.forEach(timer => clearTimeout(timer));
       navTimers.current = [];
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (reloadBannerTimer.current) {
+        clearTimeout(reloadBannerTimer.current);
+      }
     };
   }, []);
 
@@ -806,7 +817,7 @@ const HomeScreenContent: React.FC = () => {
             </Text>
           </View>
 
-          {!isGuest && (members || []).length === 0 && (
+          {(members || []).length === 0 && (
             <View
               style={[
                 styles.reloadBanner,
@@ -816,11 +827,23 @@ const HomeScreenContent: React.FC = () => {
               <Text
                 style={[styles.reloadBannerText, { color: colors.foreground }]}
               >
-                No members are loaded locally yet. Tap refresh to re-read the
-                database.
+                {isGuest
+                  ? 'Guest mode does not load members automatically. Tap reload to re-read local data and refresh the Home screen.'
+                  : 'No members are loaded locally yet. Tap reload to re-read the database.'}
               </Text>
               <Pressable
-                onPress={reloadLocalData}
+                onPress={() => {
+                  if (reloadBannerTimer.current) {
+                    clearTimeout(reloadBannerTimer.current);
+                  }
+                  setIsReloadingMembers(true);
+                  reloadLocalData();
+                  reloadBannerTimer.current = setTimeout(
+                    () => setIsReloadingMembers(false),
+                    1500,
+                  );
+                }}
+                disabled={isReloadingMembers}
                 style={({ pressed }) => [
                   styles.reloadButton,
                   {
@@ -828,6 +851,7 @@ const HomeScreenContent: React.FC = () => {
                       ? `${colors.primary}cc`
                       : colors.primary,
                     borderRadius: radius.sm,
+                    opacity: isReloadingMembers ? 0.6 : 1,
                   },
                 ]}
               >
@@ -837,7 +861,7 @@ const HomeScreenContent: React.FC = () => {
                     { color: colors.primaryForeground },
                   ]}
                 >
-                  Reload local data
+                  {isReloadingMembers ? 'Reloading…' : 'Reload local data'}
                 </Text>
               </Pressable>
             </View>
@@ -856,7 +880,7 @@ const HomeScreenContent: React.FC = () => {
             ]}
           >
             <View style={styles.cardHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={styles.cardHeaderLeft}>
                 <AppIcon
                   name="users"
                   size={20}
@@ -864,16 +888,29 @@ const HomeScreenContent: React.FC = () => {
                   style={{ marginRight: 8 }}
                 />
                 <Text
-                  style={{
-                    fontSize: 18,
-                    fontWeight: '700',
-                    color: colors.foreground,
-                  }}
+                  style={[styles.familyNameText, { color: colors.foreground }]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
                 >
                   {familyName}
                 </Text>
               </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={styles.cardHeaderRight}>
+                <Pressable
+                  onPress={() => setShowFamilyInfo((prev) => !prev)}
+                  style={({ pressed }) => ({
+                    marginRight: 8,
+                    padding: 6,
+                    borderRadius: radius.full,
+                    opacity: pressed ? 0.6 : 1,
+                  })}
+                >
+                  <MaterialCommunityIcons
+                    name="information-outline"
+                    size={18}
+                    color={accentColor}
+                  />
+                </Pressable>
                 <Pressable
                   onPress={() => setShowFamilyOnboarding(true)}
                   style={{
@@ -889,32 +926,34 @@ const HomeScreenContent: React.FC = () => {
                     style={{ marginRight: 4 }}
                   />
                   <Text style={{ color: accentColor, fontWeight: '600' }}>
-                    Setup
+                    Edit
                   </Text>
                 </Pressable>
               </View>
             </View>
-            <View
-              style={[
-                styles.profileInfoBox,
-                {
-                  borderRadius: radius.sm,
-                  backgroundColor: colors.background,
-                  borderColor: colors.border,
-                },
-              ]}
-            >
-              <Text
+            {showFamilyInfo && (
+              <View
                 style={[
-                  styles.profileInfoText,
-                  { color: colors.mutedForeground },
+                  styles.profileInfoBox,
+                  {
+                    borderRadius: radius.sm,
+                    backgroundColor: colors.background,
+                    borderColor: colors.border,
+                  },
                 ]}
               >
-                Profiles keep each member's tasks and reminders separate. Tap
-                any avatar to switch to their view or hit the + button to invite
-                someone new so the whole family stays tracked together.
-              </Text>
-            </View>
+                <Text
+                  style={[
+                    styles.profileInfoText,
+                    { color: colors.mutedForeground },
+                  ]}
+                >
+                  Profiles keep each member's tasks and reminders separate. Tap
+                  any avatar to switch to their view or hit the + button to invite
+                  someone new so the whole family stays tracked together.
+                </Text>
+              </View>
+            )}
             <Text
               style={{
                 fontSize: 11,
@@ -1962,6 +2001,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 16,
+    flexWrap: 'wrap',
+  },
+  cardHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  cardHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 12,
+    flexShrink: 0,
+  },
+  familyNameText: {
+    fontSize: 18,
+    fontWeight: '700',
+    flexShrink: 1,
   },
   membersRow: {
     flexDirection: 'row',

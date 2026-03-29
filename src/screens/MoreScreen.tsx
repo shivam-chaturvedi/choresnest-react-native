@@ -539,7 +539,7 @@ const MoreScreenContent: React.FC = () => {
             <Text style={[styles.logoutText, { color: colors.danger }]}>Sign Out</Text>
           </Pressable>
 
-          <Text style={[styles.version, { color: colors.mutedForeground }]}>Chores Nest v1.0.4 · Made with ❤️ families</Text>
+          <Text style={[styles.version, { color: colors.mutedForeground }]}>Chores Nest v1.0.6 · Made with ❤️ families</Text>
         </View>
       </AppLayout>
 

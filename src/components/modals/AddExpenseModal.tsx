@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ScrollView, Platform, Pressable } from 'react-native';
 import { useThemeColors } from '../../contexts/ThemeContext';
-import { Calendar as CalendarIcon, DollarSign, Tag, FileText, AlertTriangle, X } from 'lucide-react-native';
+import { Calendar as CalendarIcon, DollarSign, FileText, AlertTriangle, X } from 'lucide-react-native';
 import { Button } from '../ui/Button';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useCountry } from '../../contexts/CountryContext';
@@ -38,6 +38,11 @@ const categories = [
     { id: 'other', name: 'Other', icon: 'package-variant' },
 ];
 
+const transactionTypeOptions = [
+    { type: 'expense', label: 'Expense', icon: 'cash-minus' },
+    { type: 'income', label: 'Income', icon: 'cash-plus' },
+];
+
 export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     visible,
     onClose,
@@ -47,6 +52,8 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     categoryColors = {},
 }) => {
     const colors = useThemeColors();
+    const nameInputRef = useRef<TextInput>(null);
+    const amountInputRef = useRef<TextInput>(null);
     const [name, setName] = useState('');
     const [amount, setAmount] = useState('');
     const [category, setCategory] = useState('groceries');
@@ -61,13 +68,38 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     const [date, setDate] = useState(getLocalYYYYMMDD(new Date()));
     const [type, setType] = useState<'expense' | 'income'>('expense');
     const [showDatePicker, setShowDatePicker] = useState(false);
+    const [entryStage, setEntryStage] = useState<'category' | 'entry'>('category');
+    const [recentEntries, setRecentEntries] = useState<ExpenseData[]>([]);
+    const [recentIncomeEntries, setRecentIncomeEntries] = useState<ExpenseData[]>([]);
 
     const selectedCategory = categories.find(c => c.id === category);
+    const selectedCategoryColorKey = CategoryColorService.normalizeCategoryKey(selectedCategory?.id || 'groceries');
+    const selectedCategoryColor = categoryColors[selectedCategoryColorKey] ?? CATEGORY_COLOR_FALLBACK;
     const currentCategorySpending = currentSpending[category] || 0;
     const categoryBudget = budgets[category] || 0;
     const newAmount = parseFloat(amount) || 0;
     const willExceedBudget = type === 'expense' && categoryBudget > 0 && (currentCategorySpending + newAmount) > categoryBudget;
     const percentOfBudget = categoryBudget > 0 ? ((currentCategorySpending + newAmount) / categoryBudget) * 100 : 0;
+    const submitIconName = type === 'expense' ? 'cash-minus' : 'cash-plus';
+    const submitLabel = type === 'expense' ? 'Add Entry' : 'Add Income';
+
+    const resetDateToToday = () => setDate(getLocalYYYYMMDD(new Date()));
+    const resetExpenseEntry = () => {
+        setName('');
+        setAmount('');
+        resetDateToToday();
+        setErrors({});
+        setShowDatePicker(false);
+        nameInputRef.current?.focus();
+    };
+    const resetAllFields = () => {
+        setName('');
+        setAmount('');
+        setCategory('groceries');
+        resetDateToToday();
+        setErrors({});
+        setShowDatePicker(false);
+    };
 
     const handleAmountChange = (text: string) => {
         // Only allow numbers, decimal point, and negative sign
@@ -116,20 +148,28 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
 
         // Clear errors and submit
         setErrors({});
-        onAdd({
+        const payload: ExpenseData = {
             name: name.trim(),
             amount: parseFloat(amount),
             category,
             date,
             type,
-        });
+        };
+        onAdd(payload);
+        if (type === 'expense') {
+            setRecentEntries(prev => [payload, ...prev]);
+            resetExpenseEntry();
+            return;
+        }
+        setRecentIncomeEntries(prev => [payload, ...prev]);
+        resetAllFields();
 
-        // Reset form
-        setName('');
-        setAmount('');
-        setCategory('groceries');
-        setDate(getLocalYYYYMMDD(new Date()));
-        setErrors({});
+        if (type === 'expense') {
+            resetExpenseEntry();
+            return;
+        }
+
+        resetAllFields();
         onClose();
     };
 
@@ -144,6 +184,15 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     };
 
     const { currentCountry } = useCountry();
+
+    useEffect(() => {
+        if (visible) {
+            setEntryStage(type === 'expense' ? 'category' : 'entry');
+        } else {
+            setRecentEntries([]);
+            setRecentIncomeEntries([]);
+        }
+    }, [visible, type]);
 
     return (
         <Modal
@@ -172,99 +221,56 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
                         {/* Type Toggle */}
                         <View style={[styles.toggleContainer, { backgroundColor: colors.muted }]}>
-                            <TouchableOpacity
-                                style={[
-                                    styles.toggleButton,
-                                    type === 'expense' && { backgroundColor: colors.danger }
-                                ]}
-                                onPress={() => setType('expense')}
-                            >
-                                <Text style={[
-                                    styles.toggleText,
-                                    { color: colors.mutedForeground },
-                                    type === 'expense' && styles.activeToggleText
-                                ]}>💸 Expense</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[
-                                    styles.toggleButton,
-                                    type === 'income' && { backgroundColor: colors.success }
-                                ]}
-                                onPress={() => setType('income')}
-                            >
-                                <Text style={[
-                                    styles.toggleText,
-                                    { color: colors.mutedForeground },
-                                    type === 'income' && styles.activeToggleText
-                                ]}>💰 Income</Text>
-                            </TouchableOpacity>
+                            {transactionTypeOptions.map((option) => {
+                                const isActive = type === option.type;
+                                return (
+                                    <TouchableOpacity
+                                        key={option.type}
+                                        style={[
+                                            styles.toggleButton,
+                                            isActive && {
+                                                backgroundColor: option.type === 'expense' ? colors.danger : colors.success,
+                                            },
+                                        ]}
+                                        onPress={() => {
+                                            setType(option.type as 'expense' | 'income');
+                                            setEntryStage(option.type === 'expense' ? 'category' : 'entry');
+                                        }}
+                                    >
+                                        <View style={styles.toggleContent}>
+                                            <MaterialCommunityIcons
+                                                name={option.icon}
+                                                size={16}
+                                                color={isActive ? '#fff' : colors.mutedForeground}
+                                                style={styles.toggleIcon}
+                                            />
+                                            <Text
+                                                style={[
+                                                    styles.toggleText,
+                                                    { color: isActive ? '#fff' : colors.mutedForeground },
+                                                    isActive && styles.activeToggleText,
+                                                ]}
+                                            >
+                                                {option.label}
+                                            </Text>
+                                        </View>
+                                    </TouchableOpacity>
+                                );
+                            })}
                         </View>
 
-                        {/* Description Input */}
-                        <View style={styles.inputGroup}>
-                            <View style={styles.labelContainer}>
-                                <FileText size={16} color={colors.mutedForeground} />
-                                <Text style={[styles.label, { color: colors.foreground }]}>Description</Text>
-                                {errors.name && <Text style={[styles.errorText, { color: colors.danger }]}> *</Text>}
-                            </View>
-                            <TextInput
-                                style={[
-                                    styles.input,
-                                    { backgroundColor: colors.card, borderColor: errors.name ? colors.danger : colors.border, color: colors.foreground }
-                                ]}
-                                placeholder="e.g., Grocery shopping, Salary..."
-                                placeholderTextColor={colors.mutedForeground}
-                                value={name}
-                                onChangeText={(text) => {
-                                    setName(text);
-                                    if (errors.name) {
-                                        setErrors({ ...errors, name: undefined });
-                                    }
-                                }}
-                            />
-                            {errors.name && (
-                                <Text style={[styles.errorMessage, { color: colors.danger }]}>{errors.name}</Text>
-                            )}
-                        </View>
-
-                        {/* Amount Input */}
-                        <View style={styles.inputGroup}>
-                            <View style={styles.labelContainer}>
-                                <DollarSign size={16} color={colors.mutedForeground} />
-                                <Text style={[styles.label, { color: colors.foreground }]}>Amount</Text>
-                                {errors.amount && <Text style={[styles.errorText, { color: colors.danger }]}> *</Text>}
-                            </View>
-                            <View style={styles.amountContainer}>
-                                <Text style={[styles.currencySymbol, { color: colors.mutedForeground }]}>
-                                    {currentCountry.currencySymbol}
+                        {type === 'expense' && entryStage === 'category' && (
+                            <View style={[
+                                styles.categoryPanel,
+                                { backgroundColor: colors.card, borderColor: colors.border },
+                            ]}>
+                                <Text style={[styles.sectionLabel, { color: colors.foreground }]}>
+                                    Select a category
                                 </Text>
-                                <TextInput
-                                    style={[
-                                        styles.input,
-                                        styles.amountInput,
-                                        { backgroundColor: colors.card, borderColor: errors.amount ? colors.danger : colors.border, color: colors.foreground }
-                                    ]}
-                                    placeholder="0.00"
-                                    placeholderTextColor={colors.mutedForeground}
-                                    keyboardType="numeric"
-                                    value={amount}
-                                    onChangeText={handleAmountChange}
-                                />
-                            </View>
-                            {errors.amount && (
-                                <Text style={[styles.errorMessage, { color: colors.danger }]}>{errors.amount}</Text>
-                            )}
-                        </View>
-
-                        {/* Category Selection */}
-                        {type === 'expense' && (
-                            <View style={styles.inputGroup}>
-                                <View style={styles.labelContainer}>
-                                    <Tag size={16} color={colors.mutedForeground} />
-                                    <Text style={[styles.label, { color: colors.foreground }]}>Category</Text>
-                                    {errors.category && <Text style={[styles.errorText, { color: colors.danger }]}> *</Text>}
-                                </View>
-                                <View style={styles.categoriesGrid}>
+                                <ScrollView
+                                    showsVerticalScrollIndicator={false}
+                                    contentContainerStyle={styles.categoryList}
+                                >
                                     {categories.map((cat) => {
                                         const normalizedKey = CategoryColorService.normalizeCategoryKey(cat.id);
                                         const catColor = categoryColors[normalizedKey] ?? CATEGORY_COLOR_FALLBACK;
@@ -272,45 +278,46 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                                             <TouchableOpacity
                                                 key={cat.id}
                                                 style={[
-                                                    styles.categoryItem,
-                                                    { backgroundColor: colors.muted },
-                                                    category === cat.id && { backgroundColor: colors.primary + '20', borderColor: colors.primary }
+                                                    styles.categoryRow,
+                                                    { borderColor: colors.border },
                                                 ]}
-                                                onPress={() => setCategory(cat.id)}
+                                                onPress={() => {
+                                                    setCategory(cat.id);
+                                                    setEntryStage('entry');
+                                                }}
                                             >
+                                                <View style={styles.categoryRowInfo}>
+                                                    <MaterialCommunityIcons
+                                                        name={cat.icon}
+                                                        size={20}
+                                                        color={catColor}
+                                                        style={styles.categoryRowIcon}
+                                                    />
+                                                    <View>
+                                                        <Text
+                                                            style={[
+                                                                styles.categoryRowName,
+                                                                { color: colors.foreground },
+                                                            ]}
+                                                        >
+                                                            {cat.name}
+                                                        </Text>
+                                                    </View>
+                                                </View>
                                                 <MaterialCommunityIcons
-                                                    name={cat.icon}
-                                                    size={28}
-                                                    color={catColor}
-                                                    style={{ marginBottom: 4 }}
-                                                />
-                                                <Text
-                                                    style={[
-                                                        styles.categoryName,
-                                                        { color: colors.foreground },
-                                                        category === cat.id && { color: colors.primary, fontWeight: '700' }
-                                                    ]}
-                                                    numberOfLines={1}
-                                                >
-                                                    {cat.name.split(' ')[0]}
-                                                </Text>
-                                                <View
-                                                    style={[
-                                                        styles.categoryColorDot,
-                                                        { backgroundColor: catColor, borderColor: colors.border }
-                                                    ]}
+                                                    name="chevron-right"
+                                                    size={20}
+                                                    color={colors.mutedForeground}
                                                 />
                                             </TouchableOpacity>
                                         );
                                     })}
-                                </View>
-                                {errors.category && (
-                                    <Text style={[styles.errorMessage, { color: colors.danger }]}>{errors.category}</Text>
-                                )}
+                                </ScrollView>
                             </View>
                         )}
 
-                        {/* Budget Alert */}
+                        {(type === 'income' || entryStage === 'entry') && (
+                            <>
                         {type === 'expense' && willExceedBudget && (
                             <View style={[styles.alertContainer, { backgroundColor: colors.danger + '20', borderColor: colors.danger + '40' }]}>
                                 <View style={styles.alertHeader}>
@@ -336,43 +343,218 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                             </View>
                         )}
 
-                        {/* Date Input */}
-                        <View style={styles.inputGroup}>
-                            <View style={styles.labelContainer}>
-                                <CalendarIcon size={16} color={colors.mutedForeground} />
-                                <Text style={[styles.label, { color: colors.foreground }]}>Date</Text>
-                            </View>
-                            <TouchableOpacity
-                                style={[styles.input, { justifyContent: 'center', backgroundColor: colors.card, borderColor: colors.border }]}
-                                onPress={() => setShowDatePicker(true)}
-                            >
-                                <Text style={{ color: colors.foreground, fontSize: 16 }}>
-                                    {date || "Select Date"}
-                                </Text>
-                            </TouchableOpacity>
-                            {showDatePicker && (
-                                <DateTimePicker
-                                    value={new Date(date)}
-                                    mode="date"
-                                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                                    onChange={handleDateChange}
-                                />
-                            )}
-                            {Platform.OS === 'ios' && showDatePicker && (
-                                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 }}>
-                                    <Button size="sm" variant="ghost" onPress={() => setShowDatePicker(false)}>
-                                        <Text>Done</Text>
-                                    </Button>
-                                </View>
-                            )}
-                        </View>
+                                {type === 'expense' && entryStage === 'entry' && (
+                                    <View style={[
+                                        styles.entryHeader,
+                                        { borderColor: colors.border },
+                                    ]}>
+                                        <TouchableOpacity onPress={() => setEntryStage('category')}>
+                                            <MaterialCommunityIcons
+                                                name="arrow-left"
+                                                size={20}
+                                                color={colors.foreground}
+                                            />
+                                        </TouchableOpacity>
+                                        <View style={styles.entryHeaderInfo}>
+                                            <MaterialCommunityIcons
+                                                name={selectedCategory?.icon || 'cart'}
+                                                size={22}
+                                                color={selectedCategoryColor}
+                                                style={{ marginRight: 6 }}
+                                            />
+                                            <Text style={[styles.entryHeaderTitle, { color: colors.foreground }]}>
+                                                {selectedCategory?.name || 'Category'}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                )}
 
-                        <Button
-                            onPress={handleSubmit}
-                            style={[styles.submitButton, { backgroundColor: type === 'expense' ? colors.primary : colors.success }]}
-                        >
-                            {type === 'expense' ? '💸 Add Expense' : '💰 Add Income'}
-                        </Button>
+                                <View style={[styles.entryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                <View style={styles.entryFieldsRow}>
+                                    <View style={[styles.entryFieldBlock, { flex: 2 }]}>
+                                        <View style={styles.labelContainer}>
+                                            <FileText size={16} color={colors.mutedForeground} />
+                                            <Text style={[styles.label, { color: colors.foreground }]}>Description</Text>
+                                            {errors.name && <Text style={[styles.errorText, { color: colors.danger }]}> *</Text>}
+                                        </View>
+                                        <TextInput
+                                            ref={nameInputRef}
+                                            autoFocus
+                                            style={[
+                                                styles.input,
+                                                {
+                                                    backgroundColor: colors.card,
+                                                    borderColor: errors.name ? colors.danger : colors.border,
+                                                    color: colors.foreground,
+                                                },
+                                            ]}
+                                            placeholder="e.g., Grocery shopping"
+                                            placeholderTextColor={colors.mutedForeground}
+                                            value={name}
+                                            onChangeText={text => {
+                                                setName(text);
+                                                if (errors.name) setErrors({ ...errors, name: undefined });
+                                            }}
+                                            returnKeyType="next"
+                                            onSubmitEditing={() => amountInputRef.current?.focus()}
+                                        />
+                                        {errors.name && (
+                                            <Text style={[styles.errorMessage, { color: colors.danger }]}>{errors.name}</Text>
+                                        )}
+                                    </View>
+                                    <View style={[styles.entryFieldBlock, { flex: 1, marginLeft: 8 }]}>
+                                        <View style={styles.labelContainer}>
+                                            <DollarSign size={16} color={colors.mutedForeground} />
+                                            <Text style={[styles.label, { color: colors.foreground }]}>Amount</Text>
+                                            {errors.amount && <Text style={[styles.errorText, { color: colors.danger }]}> *</Text>}
+                                        </View>
+                                        <View style={[
+                                            styles.amountContainer,
+                                            {
+                                                borderColor: errors.amount ? colors.danger : colors.border,
+                                                backgroundColor: colors.card,
+                                            },
+                                        ]}>
+                                            <Text style={[styles.currencyLabel, { color: colors.mutedForeground }]}>
+                                                {currentCountry.currencySymbol}
+                                            </Text>
+                                            <TextInput
+                                                ref={amountInputRef}
+                                                style={[
+                                                    styles.input,
+                                                    styles.flexInput,
+                                                    { borderWidth: 0, backgroundColor: 'transparent', color: colors.foreground }
+                                                ]}
+                                                placeholder="0.00"
+                                                placeholderTextColor={colors.mutedForeground}
+                                                keyboardType="numeric"
+                                                value={amount}
+                                                onChangeText={handleAmountChange}
+                                                returnKeyType="done"
+                                                onSubmitEditing={handleSubmit}
+                                            />
+                                        </View>
+                                        {errors.amount && (
+                                            <Text style={[styles.errorMessage, { color: colors.danger }]}>{errors.amount}</Text>
+                                        )}
+                                    </View>
+                                </View>
+                                <View style={[styles.inputGroup, { marginTop: 12 }]}>
+                                    <View style={styles.labelContainer}>
+                                        <CalendarIcon size={16} color={colors.mutedForeground} />
+                                        <Text style={[styles.label, { color: colors.foreground }]}>Date</Text>
+                                    </View>
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.input,
+                                            {
+                                                justifyContent: 'center',
+                                                backgroundColor: colors.card,
+                                                borderColor: colors.border,
+                                            },
+                                        ]}
+                                        onPress={() => setShowDatePicker(true)}
+                                    >
+                                        <Text style={{ color: colors.foreground, fontSize: 16 }}>
+                                            {date || 'Select Date'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                    {showDatePicker && (
+                                        <DateTimePicker
+                                            value={new Date(date)}
+                                            mode="date"
+                                            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                            onChange={handleDateChange}
+                                        />
+                                    )}
+                                    {Platform.OS === 'ios' && showDatePicker && (
+                                        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 }}>
+                                            <Button size="sm" variant="ghost" onPress={() => setShowDatePicker(false)}>
+                                                <Text>Done</Text>
+                                            </Button>
+                                        </View>
+                                    )}
+                                </View>
+                                </View>
+
+                                <Button
+                                    onPress={handleSubmit}
+                                    style={[styles.submitButton, { backgroundColor: type === 'expense' ? colors.primary : colors.success }]}
+                                >
+                                    <View style={styles.submitButtonContent}>
+                                        <MaterialCommunityIcons
+                                            name={submitIconName}
+                                            size={18}
+                                            color="#fff"
+                                            style={styles.submitButtonIcon}
+                                        />
+                                        <Text style={styles.submitButtonText}>{submitLabel}</Text>
+                                    </View>
+                                </Button>
+                                {type === 'expense' && recentEntries.length > 0 && (
+                                    <View style={[styles.recentList, { borderColor: colors.border }]}>
+                                        <Text style={[styles.sectionLabel, { color: colors.foreground }]}>
+                                            Added this session
+                                        </Text>
+                                        <ScrollView
+                                            style={styles.recentScroll}
+                                            contentContainerStyle={{ gap: 8, paddingBottom: 8 }}
+                                            showsVerticalScrollIndicator={true}
+                                            nestedScrollEnabled={true}
+                                            scrollEnabled={true}
+                                            scrollEventThrottle={16}
+                                            decelerationRate="fast"
+                                        >
+                                            {recentEntries.map((entry, index) => (
+                                                <View key={`${entry.name}-${index}`} style={styles.recentRow}>
+                                                    <View>
+                                                        <Text style={[styles.recentName, { color: colors.foreground }]}>
+                                                            {entry.name}
+                                                        </Text>
+                                                        <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>
+                                                            {entry.date}
+                                                        </Text>
+                                                    </View>
+                                                    <Text style={{ color: colors.foreground, fontWeight: '700' }}>
+                                                        {currentCountry.currencySymbol}
+                                                        {entry.amount.toFixed(2)}
+                                                    </Text>
+                                                </View>
+                                            ))}
+                                        </ScrollView>
+                                    </View>
+                                )}
+                                {type === 'income' && recentIncomeEntries.length > 0 && (
+                                    <View style={[styles.recentList, { borderColor: colors.border }]}>
+                                        <Text style={[styles.sectionLabel, { color: colors.foreground }]}>
+                                            Added this session
+                                        </Text>
+                                        <ScrollView
+                                            style={styles.recentScroll}
+                                            contentContainerStyle={{ gap: 8, paddingBottom: 8 }}
+                                            showsVerticalScrollIndicator={true}
+                                        >
+                                            {recentIncomeEntries.map((entry, index) => (
+                                                <View key={`income-${entry.name}-${index}`} style={styles.recentRow}>
+                                                    <View>
+                                                        <Text style={[styles.recentName, { color: colors.foreground }]}>
+                                                            {entry.name || 'Income'}
+                                                        </Text>
+                                                        <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>
+                                                            {entry.date}
+                                                        </Text>
+                                                    </View>
+                                                    <Text style={{ color: colors.foreground, fontWeight: '700' }}>
+                                                        {currentCountry.currencySymbol}
+                                                        {entry.amount.toFixed(2)}
+                                                    </Text>
+                                                </View>
+                                            ))}
+                                        </ScrollView>
+                                    </View>
+                                )}
+                            </>
+                        )}
 
                         {/* Bottom spacer for keyboard */}
                         <View style={{ height: 20 }} />
@@ -436,6 +618,14 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderRadius: 10,
     },
+    toggleContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    toggleIcon: {
+        marginRight: 6,
+    },
     toggleText: {
         fontSize: 14,
         fontWeight: '600',
@@ -462,53 +652,98 @@ const styles = StyleSheet.create({
         padding: 12,
         fontSize: 16,
     },
-    amountContainer: {
-        position: 'relative',
+    entryFieldsRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 8,
     },
-    currencySymbol: {
-        position: 'absolute',
-        left: 12,
-        top: 12,
+    entryFieldBlock: {
+        flex: 1,
+        gap: 6,
+    },
+    fieldStack: {
+        gap: 8,
+    },
+    amountContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        gap: 8,
+    },
+    currencyLabel: {
         fontSize: 16,
         fontWeight: '600',
-        zIndex: 1,
     },
-    amountInput: {
-        paddingLeft: 28,
+    flexInput: {
+        flex: 1,
         fontWeight: '600',
     },
     textArea: {
         height: 80,
         textAlignVertical: 'top',
     },
-    categoriesGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        marginHorizontal: -4,
-    },
-    categoryItem: {
-        width: '23%',
-        margin: '1%',
-        borderRadius: 12,
-        padding: 8,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 2,
-        borderColor: 'transparent',
-        position: 'relative',
-    },
-    categoryName: {
-        fontSize: 11,
-        fontWeight: '500',
-    },
-    categoryColorDot: {
-        position: 'absolute',
-        top: 8,
-        right: 8,
-        width: 10,
-        height: 10,
-        borderRadius: 5,
+    categoryPanel: {
         borderWidth: 1,
+        borderRadius: 18,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        marginBottom: 16,
+    },
+    sectionLabel: {
+        fontSize: 12,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+        marginBottom: 8,
+    },
+    categoryList: {
+        paddingBottom: 8,
+    },
+    categoryRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderWidth: 1,
+        borderRadius: 16,
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+        marginBottom: 10,
+    },
+    categoryRowInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    categoryRowIcon: {
+        marginRight: 4,
+    },
+    categoryRowName: {
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    entryHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderRadius: 18,
+        padding: 12,
+        marginBottom: 16,
+    },
+    entryHeaderInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginLeft: 12,
+    },
+    entryHeaderTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+    },
+    entryCard: {
+        borderWidth: 1,
+        borderRadius: 18,
+        padding: 16,
+        marginBottom: 12,
     },
     alertContainer: {
         borderWidth: 1,
@@ -551,6 +786,19 @@ const styles = StyleSheet.create({
     submitButton: {
         marginTop: 8,
     },
+    submitButtonContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    submitButtonIcon: {
+        marginRight: 6,
+    },
+    submitButtonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '700',
+    },
     errorText: {
         fontSize: 14,
         fontWeight: '600',
@@ -558,6 +806,29 @@ const styles = StyleSheet.create({
     errorMessage: {
         fontSize: 12,
         marginTop: 4,
-        marginLeft: 24,
+        marginLeft: 4,
+    },
+    recentList: {
+        borderWidth: 1,
+        borderRadius: 18,
+        padding: 12,
+        marginTop: 12,
+        backgroundColor: 'transparent',
+    },
+    recentScroll: {
+        maxHeight: 180,
+    },
+    recentRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(0,0,0,0.05)',
+        paddingVertical: 10,
+        gap: 8,
+    },
+    recentName: {
+        fontSize: 14,
+        fontWeight: '600',
     },
 });

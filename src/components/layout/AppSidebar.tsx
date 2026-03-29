@@ -84,6 +84,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   const navigation = useNavigation<NavigationProp<Record<string, undefined>>>();
   const { members, activeMember, setActiveMember, familyName, updateMemberColor } = useFamily();
   const { logout, isGuest, user } = useAuth();
+  const guestSignInLinkColor = isMidnight && isGuest ? colors.successDark : theme.colors.primary;
 
   useEffect(() => {
     openRef.current = open;
@@ -273,11 +274,11 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       { icon: Utensils, label: 'Recipes', route: 'Recipes' },
       { icon: Calendar, label: 'Meal Plan', route: 'MealPlan' },
     ] : []),
-    { icon: ClipboardList, label: 'Shopping Lists', route: 'lists' }, // Fixed route name to lowercase 'lists' tab
+    { icon: ClipboardList, label: 'Lists', route: 'lists' },
     { icon: FileText, label: 'Vault', route: 'Vault' },
-    { icon: DollarSign, label: 'Expenses', route: 'Expenses' },
+    { icon: DollarSign, label: 'Expenses & Finance', route: 'Expenses' },
     { icon: StickyNote, label: 'Notes', route: 'Notes' },
-    { icon: Check, label: 'Tasks', route: 'Tasks' },
+    { icon: Check, label: 'Tasks & Chores', route: 'Tasks' },
   ];
 
   const bottomLinks = [
@@ -302,7 +303,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         >
           {/* Profile Section (Gradient Header) */}
           {/* Profile Section (Gradient Header) */}
-          <View style={[styles.headerGradient, { backgroundColor: isMidnight ? colors.card : theme.colors.primary }]}>
+          <View style={[styles.headerGradient, { backgroundColor: isMidnight ? colors.card : theme.colors.primary }]}> 
             <Pressable onPress={onClose} style={styles.closeIcon}>
               <X size={24} color="#f5f8ff" />
             </Pressable>
@@ -581,8 +582,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                     try { await logout(); } catch (e) { console.error(e); }
                   }}
                 >
-                  <LogOut size={20} color={theme.colors.primary} style={styles.linkIcon} />
-                  <Text style={[styles.linkText, { color: theme.colors.primary }]}>Sign In / Create Account</Text>
+                  <LogOut size={20} color={guestSignInLinkColor} style={styles.linkIcon} />
+                  <Text style={[styles.linkText, { color: guestSignInLinkColor }]}>Sign In / Create Account</Text>
                 </Pressable>
               ) : (
                 <Pressable
@@ -680,6 +681,7 @@ const styles = StyleSheet.create({
   },
   profileContent: {
     alignItems: 'flex-start',
+    paddingRight: 48,
   },
   avatar: {
     width: 64,

@@ -1,0 +1,20 @@
+Changelog v1.0.6
+===============
+
+1. **Sidebar & home messaging polish**
+   - The sidebar quick-access shortcut now labels the lists tab simply as “Lists” and further clarifies the profile card on the home screen with an info-button toggle so the descriptive text can be hidden or revealed without rerouting the rest of the layout.
+
+2. **Reminders controlled from the Notifications settings**
+   - Both the Tasks screen’s Add Task modal and the Calendar screen’s task tab now drop the inline reminder toggle/chip wall and instead surface a compact notice that points users to the Notifications screen, with a button that navigates to `MainTabs → more → Notifications` for updating reminder lead times.
+ - The same notice appears when editing a task via the calendar modal, keeping reminder preferences centralized and preventing divergent per-task lead-time state.
+  - The notification pickers for event/task reminders now render their selected option text and check mark in the theme’s success (dark green) color so the active choice is always obvious, even in midnight mode.
+  - The “Notification Types” card now only lists document/meal settings so the task reminder toggle isn’t duplicated below the dedicated Task Reminders card.
+
+3. **Task dates stay in the local calendar day**
+   - When saving new tasks from TasksScreen we now format the date/time with `safeFormat` (no UTC conversions) so the `dateString` and `dueDisplay` fields match the user’s chosen date/time and the calendar immediately reflects the new entry on the expected day.
+
+4. **Faster shopping + richer PDF exports**
+   - Clicking the Lists tab’s ➕ now launches the new CreateListFlow with category selection first and a rapid-entry screen that keeps the keyboard up, auto-focuses the next row, lets users add quantity/unit inline, and shows an overlay for longer saves so the list renders in under a second even while background persistence continues.
+   - Exporting a bag now pops a custom modal (“Export PDF”) that lists the machine-writing (table) option first, the handwritten simple list second, and a cancel button along the bottom-right edge, triggering the Share sheet only after the user picks an option.
+   - Shopping list PDF exports now collapse duplicate items, embed offline Inter and Patrick Hand fonts, and offer two styles: a structured table with categories or a navy pen-ink handwritten list with oversized spacing, ensuring the existing Supabase/WatermelonDB schema stays untouched.
+   - The deferred-loading placeholder is capped at 1 second so midnight-mode lists show data quickly while additional rows finish streaming in the background.

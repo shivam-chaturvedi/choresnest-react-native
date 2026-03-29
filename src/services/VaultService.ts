@@ -312,7 +312,7 @@ export const VaultService = {
             d.updatedAt = now;
             d.deleted = false;
             d.version = 1;
-            d.metadataVersion = 1;
+            d.metadataVersion = 0;
             d.remoteDeletePending = false;
             if (typeof data.reminderDaysBefore === 'number') {
               d.reminderDaysBefore = data.reminderDaysBefore;

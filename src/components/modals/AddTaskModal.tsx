@@ -9,6 +9,7 @@ import {
   View,
   Platform,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import { useTheme, useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
 import { useFamily } from "../../contexts/FamilyContext";
 import { PROFILE_COLORS } from "../../constants/profileColors";
@@ -30,6 +31,7 @@ interface TaskData {
   priority: string;
   dueDate: Date;
   person: string;
+  reminderEnabled: boolean;
 }
 
 const taskIcons = ["format-list-checks", "phone", "pill", "email", "school", "wrench", "package-variant", "broom", "basket", "silverware", "bed", "dog"];
@@ -52,15 +54,25 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
   const defaultMemberId = members?.[0]?.id;
   const buildLocalizedNow = () => toZonedTime(new Date(), currentCountry.timeZone);
 
+  const navigation = useNavigation<any>();
+  const openNotificationPreferences = () => {
+    navigation.navigate('MainTabs', {
+      screen: 'more',
+      params: { screen: 'Notifications' },
+    });
+  };
+
   const createDefaultTaskData = useCallback((): TaskData => ({
     name: "",
     icon: "format-list-checks",
     priority: "medium",
     dueDate: buildLocalizedNow(),
     person: activeMember?.id || defaultMemberId || "1",
+    reminderEnabled: true,
   }), [currentCountry.timeZone, activeMember?.id, defaultMemberId]);
 
   const [formData, setFormData] = useState<TaskData>(createDefaultTaskData);
+
 
   useEffect(() => {
     if (!open) return;
@@ -90,27 +102,28 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
         }
       }
 
-      setFormData({
-        name: taskToEdit.name || '',
-        icon: taskToEdit.icon || 'format-list-checks',
-        priority: taskToEdit.priority || 'medium',
-        dueDate: dueDate,
-        person: taskToEdit.assignee || activeMember?.id || defaultMemberId || '1',
-      });
-    } else {
-      // Reset to default for new task
-      setFormData(createDefaultTaskData());
-    }
-  }, [open, taskToEdit, createDefaultTaskData, activeMember?.id, defaultMemberId]);
+    setFormData({
+      name: taskToEdit.name || '',
+      icon: taskToEdit.icon || 'format-list-checks',
+      priority: taskToEdit.priority || 'medium',
+      dueDate: dueDate,
+      person: taskToEdit.assignee || activeMember?.id || defaultMemberId || '1',
+      reminderEnabled: taskToEdit.reminderEnabled ?? true,
+    });
+  } else {
+    // Reset to default for new task
+    setFormData(createDefaultTaskData());
+  }
+}, [open, taskToEdit, createDefaultTaskData, activeMember?.id, defaultMemberId]);
 
 
   const handleSave = () => {
     try {
-      if (formData.name.trim()) {
-        onSave?.(formData);
-        setFormData(createDefaultTaskData());
-        onClose();
-      }
+    if (formData.name.trim()) {
+      onSave?.({ ...formData });
+      setFormData(createDefaultTaskData());
+      onClose();
+    }
     } catch (error) {
       console.error("Error saving task:", error);
       import('react-native').then(({ Alert }) => {
@@ -254,6 +267,41 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
               </View>
             </View>
 
+            <View
+              style={[
+                styles.notificationNotice,
+                { backgroundColor: colors.card, borderColor: colors.border },
+              ]}
+            >
+              <View style={styles.notificationNoticeContent}>
+                <AppIcon name="bell" size={18} color={colors.primary} />
+                <Text
+                  style={[
+                    styles.notificationNoticeText,
+                    { color: colors.foreground },
+                  ]}
+                >
+                  Reminder lead times are centralized on the Notifications screen.
+                  Tap below to adjust how far in advance task reminders should fire.
+                </Text>
+              </View>
+              <Pressable
+                style={[
+                  styles.notificationNoticeButton,
+                  { backgroundColor: colors.primary },
+                ]}
+                onPress={openNotificationPreferences}
+              >
+                <Text
+                  style={[
+                    styles.notificationNoticeButtonText,
+                    { color: colors.primaryForeground },
+                  ]}
+                >
+                  Update notification preferences
+                </Text>
+              </Pressable>
+            </View>
             {/* Footer Buttons */}
             <View style={styles.footer}>
               <Pressable
@@ -388,6 +436,33 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   saveButtonText: {
+    fontWeight: "600",
+  },
+  notificationNotice: {
+    marginTop: 8,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  notificationNoticeContent: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  notificationNoticeText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  notificationNoticeButton: {
+    marginTop: 12,
+    alignSelf: "flex-start",
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+  },
+  notificationNoticeButtonText: {
+    fontSize: 13,
     fontWeight: "600",
   },
 });

@@ -114,6 +114,10 @@ case "$( uname )" in                #(
   NONSTOP* )        nonstop=true ;;
 esac
 
+if $darwin ; then
+  PATH="/opt/homebrew/bin:$PATH"
+fi
+
 CLASSPATH="\\\"\\\""
 
 

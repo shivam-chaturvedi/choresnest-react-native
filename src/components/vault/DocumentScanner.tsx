@@ -587,6 +587,12 @@ const DocumentScannerInner: React.FC<DocumentScannerProps> = ({
                                 </View>
                             </View>
 
+                            {selectedFile && (
+                                <Text style={[styles.selectedFileLabel, { color: colors.success, marginTop: 12 }]}>
+                                    Attached file: {selectedFile.name}
+                                </Text>
+                            )}
+
                             {renderCategoryFields()}
                             {shouldShowReminderControl && renderReminderSettings()}
 
@@ -733,6 +739,10 @@ const styles = StyleSheet.create({
     categoryChipText: {
         fontSize: 13,
         fontWeight: '500',
+    },
+    selectedFileLabel: {
+        fontSize: 13,
+        fontWeight: '600',
     },
     buttonGroup: {
         flexDirection: 'row',

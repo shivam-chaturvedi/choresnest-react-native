@@ -1,0 +1,8 @@
+## v1.0.7
+
+- Reworked the Finance “Add” modal into a stateful two-stage experience: vertical category selection followed by a list-style entry form that keeps description/amount/date aligned, supports multiple adds for both expenses and incomes, and surfaces scrollable “Added this session” cards per tab without mixing the streams. Form state resets per tab and closing the modal clears the session history. (src/components/modals/AddExpenseModal.tsx)
+- Tweaked the Finance Add flow so budget alerts live outside the input block and the entry card now scrolls smoothly through recent session entries while keeping an income-only list for that tab. (src/components/modals/AddExpenseModal.tsx)
+- Added toggles around the Grocery list filters and history filters so both sections start collapsed, with Home screen family info also defaulting to hidden for a cleaner dashboard. (src/screens/ListsScreen.tsx & src/screens/HomeScreen.tsx)
+- Hardened the Home screen family card header so extremely long family names truncate with ellipses, don’t overlap the info/edit buttons, and keep the buttons spaced away even when the title wraps. (src/screens/HomeScreen.tsx)
+- Swapped the shared “success” color definitions to a darker green for combo tables and other highlights. (src/theme.ts)
+

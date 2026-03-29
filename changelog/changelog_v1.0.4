@@ -23,3 +23,5 @@ Changelog v1.0.4
 5. **Migrations & schema upkeep**
    - Added the new metadata columns to `src/migrations/schema.sql`, WatermelonDB schema/migrations files, and updated `Document` model/serialization so the database always knows about the new fields.
    - Coherent version bump ensures existing installs will run the `metadata_version` migration before the new services attempt to read or write it.
+
+6. Made reminder notifications dynamic and polished by showing the actual event/task titles plus formatted date/time, countdown text, location/priority details, and richer bell-list entries instead of generic “coming soon” copy.

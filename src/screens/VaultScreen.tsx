@@ -1968,10 +1968,10 @@ const styles = StyleSheet.create({
   docRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
     marginBottom: 8,
-    position: 'relative',
-    paddingRight: 96,
+    backgroundColor: 'transparent',
   },
   docRowInfo: {
     flexDirection: 'row',
@@ -1982,10 +1982,6 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   docRowControls: {
-    position: 'absolute',
-    right: 12,
-    top: '50%',
-    transform: [{ translateY: -16 }],
     flexDirection: 'row',
     alignItems: 'center',
   },
