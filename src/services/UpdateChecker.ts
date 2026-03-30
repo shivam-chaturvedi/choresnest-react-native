@@ -1,6 +1,9 @@
 import { Platform } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
-import SpInAppUpdates, { IAUUpdateKind } from 'sp-react-native-in-app-updates';
+import SpInAppUpdates, {
+  IAUUpdateKind,
+  AndroidStartUpdateOptions,
+} from 'sp-react-native-in-app-updates';
 
 const inAppUpdates = new SpInAppUpdates(false);
 
@@ -21,9 +24,10 @@ export const checkForUpdate = async () => {
     }
 
     if (Platform.OS === 'android') {
-      await inAppUpdates.startUpdate({
+      const androidOptions: AndroidStartUpdateOptions = {
         updateType: IAUUpdateKind.FLEXIBLE,
-      });
+      };
+      await inAppUpdates.startUpdate(androidOptions);
       return;
     }
 

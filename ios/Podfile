@@ -1,4 +1,9 @@
+# CocoaPods sources
+source 'https://github.com/CocoaPods/Specs.git'
+source 'https://cdn.cocoapods.org/'
+
 # Resolve react_native_pods.rb with node to allow for hoisting
+# A helper so we can use scripts bundled within node_modules.
 def node_require(script)
   require Pod::Executable.execute_command('node', ['-p',
     "require.resolve(
@@ -7,13 +12,15 @@ def node_require(script)
     )", __dir__]).strip
 end
 
+# Ensure the RN pods helper and permissions setup script are loaded.
 node_require('react-native/scripts/react_native_pods.rb')
 node_require('react-native-permissions/scripts/setup.rb')
 
+ENV['NODE_BINARY'] = '/opt/homebrew/bin/node'
 
 platform :ios, min_ios_version_supported
+use_modular_headers!
 prepare_react_native_project!
-
 linkage = ENV['USE_FRAMEWORKS']
 if linkage != nil
   Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
@@ -23,6 +30,12 @@ end
 target 'ChoresNest' do
   config = use_native_modules!
   pod 'simdjson', path: '../node_modules/@nozbe/simdjson', modular_headers: true
+  pod 'FirebaseAnalytics', :modular_headers => true
+  pod 'FirebaseCore', :modular_headers => true
+  pod 'FirebaseCoreInternal', :modular_headers => true
+  pod 'FirebaseInstallations', :modular_headers => true
+  pod 'GoogleUtilities', :modular_headers => true
+  pod 'Sentry', :modular_headers => true
 
   setup_permissions([
     'Camera',
