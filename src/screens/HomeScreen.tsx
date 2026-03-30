@@ -27,6 +27,8 @@ import { AddEventModal } from '../components/modals/AddEventModal';
 import { AddTaskModal } from '../components/modals/AddTaskModal';
 import { AddShoppingItemModal } from '../components/modals/AddShoppingItemModal';
 import { AddMemberModal } from '../components/modals/AddMemberModal';
+import { InviteOptionsModal } from '../components/modals/InviteOptionsModal';
+import { ManualInviteModal } from '../components/modals/ManualInviteModal';
 import { FamilyOnboarding } from '../components/family/FamilyOnboarding';
 import { NotificationPanel } from '../components/notifications/NotificationPanel';
 import {
@@ -115,6 +117,8 @@ const HomeScreenContent: React.FC = () => {
   const [showAddTask, setShowAddTask] = useState(false);
   const [showAddItem, setShowAddItem] = useState(false);
   const [showMemberModal, setShowMemberModal] = useState(false);
+  const [showInviteOptions, setShowInviteOptions] = useState(false);
+  const [showManualInvite, setShowManualInvite] = useState(false);
   const [editingMember, setEditingMember] = useState<any>(null); // FamilyMember
   const [showFamilyOnboarding, setShowFamilyOnboarding] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
@@ -1060,7 +1064,7 @@ const HomeScreenContent: React.FC = () => {
               {/* Add Member Button */}
               <Pressable
                 style={[styles.memberCard]}
-                onPress={() => setShowMemberModal(true)}
+                onPress={() => setShowInviteOptions(true)}
               >
                 <View
                   style={[
@@ -1913,6 +1917,23 @@ const HomeScreenContent: React.FC = () => {
         visible={showAddItem}
         onClose={() => setShowAddItem(false)}
         onAdd={handleAddItem}
+      />
+      <InviteOptionsModal
+        open={showInviteOptions}
+        onClose={() => setShowInviteOptions(false)}
+        onInviteManually={() => {
+          setShowInviteOptions(false);
+          setShowManualInvite(true);
+        }}
+        onCreateChildAccount={() => {
+          setShowInviteOptions(false);
+          setEditingMember(null);
+          setShowMemberModal(true);
+        }}
+      />
+      <ManualInviteModal
+        open={showManualInvite}
+        onClose={() => setShowManualInvite(false)}
       />
       <AddMemberModal
         open={showMemberModal}

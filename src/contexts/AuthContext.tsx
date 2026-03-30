@@ -56,6 +56,8 @@ interface AuthContextType {
   isPasswordRecoveryFlow: boolean;
   passwordRecoveryAccessToken: string | null;
   completePasswordRecoveryFlow: () => void;
+  pendingInviteSlug: string | null;
+  clearPendingInvite: () => void;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(
@@ -70,6 +72,25 @@ interface AuthProviderProps {
 const FALLBACK_OAUTH_SCHEME = 'com.choresnest';
 const FALLBACK_OAUTH_HOST = 'auth-callback';
 const GOOGLE_OAUTH_REDIRECT_URI = 'https://choresnest.com/auth/callback';
+
+const resolveFamilyProfileId = async (userId: string): Promise<string> => {
+  try {
+    const { data, error } = await SupabaseService.from('members')
+      .select('profile_id')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error) {
+      console.warn('AuthContext: Unable to resolve member profile', error);
+      return userId;
+    }
+
+    return data?.profile_id ?? userId;
+  } catch (error) {
+    console.error('AuthContext: Unexpected error resolving member profile', error);
+    return userId;
+  }
+};
 
 async function proxyLogin(email: string, pass: string) {
   await proxyLoginUser(email, pass);
@@ -93,6 +114,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
   const [isPasswordRecoveryFlow, setIsPasswordRecoveryFlow] = useState(false);
   const [passwordRecoveryAccessToken, setPasswordRecoveryAccessToken] =
     useState<string | null>(null);
+  const [pendingInviteSlug, setPendingInviteSlug] = useState<string | null>(null);
 
   // Ref copy so async callbacks can read the latest epoch without closure capture
   const epochRef = useRef(0);
@@ -227,9 +249,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
         AsyncStorage.removeItem('IS_GUEST');
         AsyncStorage.removeItem('GUEST_PROFILE_ID');
         AsyncStorage.setItem('AUTH_USER', JSON.stringify(userData));
-        // Bind the new user's ID as the active profile before any query runs
-        AsyncStorage.setItem('ACTIVE_PROFILE_ID', session.user.id);
-        void ProfileService.setActiveProfileId(session.user.id);
+        // Bind the new user's family profile (owner) so invited members load shared data
+        const resolvedActiveProfileId = await resolveFamilyProfileId(session.user.id);
+        AsyncStorage.setItem('ACTIVE_PROFILE_ID', resolvedActiveProfileId);
+        void ProfileService.setActiveProfileId(resolvedActiveProfileId);
         DocumentUploadScheduler.startForUser(session.user.id);
 
         // Cache user record locally for guest-mode discovery
@@ -392,6 +415,36 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
       }
     };
 
+    const tryHandleInviteLink = (rawUrl?: string) => {
+      if (!rawUrl) {
+        return false;
+      }
+      try {
+        const parsed = new URL(rawUrl);
+        const normalizedHost = parsed.host.replace(/^www\./, '');
+
+        const nativeInviteSlug =
+          parsed.protocol === 'com.choresnest:' && parsed.host === 'invite'
+            ? parsed.pathname.replace(/^\/+/, '')
+            : null;
+        const webInviteSlug =
+          parsed.protocol === 'https:' &&
+          normalizedHost === 'choresnest.com' &&
+          parsed.pathname.startsWith('/invite/')
+            ? parsed.pathname.replace(/^\/invite\/+/, '')
+            : null;
+        const inviteSlug = nativeInviteSlug || webInviteSlug;
+
+        if (inviteSlug) {
+          setPendingInviteSlug(inviteSlug);
+          return true;
+        }
+      } catch (error) {
+        console.warn('AuthContext: failed to parse invite link', error);
+      }
+      return false;
+    };
+
     const processOAuthCallback = async (rawUrl?: string) => {
       if (!rawUrl) {
         return;
@@ -460,13 +513,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
     };
 
     const handleUrlEvent = ({ url }: { url: string }) => {
+      if (tryHandleInviteLink(url)) {
+        return;
+      }
       void processOAuthCallback(url);
     };
 
     void Linking.getInitialURL()
       .then(initialUrl => {
         if (initialUrl) {
-          void processOAuthCallback(initialUrl);
+          if (!tryHandleInviteLink(initialUrl)) {
+            void processOAuthCallback(initialUrl);
+          }
         }
       })
       .catch(error => {
@@ -481,6 +539,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
       subscription.remove();
     };
   }, []);
+
+  const clearPendingInvite = () => {
+    setPendingInviteSlug(null);
+  };
 
   const USE_PROXY_AUTH = Config.USE_PROXY_AUTH === 'true';
 
@@ -715,6 +777,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
         isPasswordRecoveryFlow,
         passwordRecoveryAccessToken,
         completePasswordRecoveryFlow,
+        pendingInviteSlug,
+        clearPendingInvite,
       }}
     >
       {children}

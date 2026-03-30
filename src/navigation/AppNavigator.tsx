@@ -3,17 +3,17 @@ import {
   DefaultTheme,
   DarkTheme,
   NavigationContainer,
-  NavigationContainerRef,
+  createNavigationContainerRef,
 } from '@react-navigation/native';
 import { theme } from '../theme';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-
 import { SplashScreen } from '../screens/SplashScreen';
 import { OnboardingScreen } from '../screens/OnboardingScreen';
 import { AuthScreen } from '../screens/AuthScreen';
 import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
 import { PrivacyScreen } from '../screens/PrivacyScreen';
 import { InitialSetupScreen } from '../screens/InitialSetupScreen';
+import { InviteOnboardingScreen } from '../screens/InviteOnboardingScreen';
 import { ResetPasswordScreen } from '../screens/ResetPasswordScreen';
 import { TabNavigator } from './TabNavigator';
 import { AppSidebar } from '../components/layout/AppSidebar';
@@ -39,10 +39,25 @@ import { reactNavigationIntegration } from '../services/SentryNavigation';
 
 const Stack = createNativeStackNavigator();
 
+type RootStackParamList = {
+  ResetPassword: undefined;
+  InitialSetup: undefined;
+  MainTabs: undefined;
+  Onboarding: undefined;
+  Auth: undefined;
+  InviteOnboarding: undefined;
+  Privacy: undefined;
+  ForgotPassword: undefined;
+};
+
+const navigationRef = createNavigationContainerRef<RootStackParamList>();
+
 export const AppNavigator = () => {
   const { isDark } = useTheme();
+  const { pendingInviteSlug, isAuthenticated } = useAuth();
   const [navState, setNavState] = React.useState<any>();
-  const navigationRef = React.useRef<NavigationContainerRef>(null);
+  const [isNavigationReady, setIsNavigationReady] = React.useState(false);
+  const [hadPendingInvite, setHadPendingInvite] = React.useState(false);
 
   // Construct React Navigation compatible theme
   const navigationTheme = {
@@ -64,7 +79,48 @@ export const AppNavigator = () => {
         navigationRef.current,
       );
     }
+    setIsNavigationReady(true);
   };
+
+  React.useEffect(() => {
+    if (pendingInviteSlug) {
+      setHadPendingInvite(true);
+    }
+  }, [pendingInviteSlug]);
+
+  React.useEffect(() => {
+    if (!pendingInviteSlug || isAuthenticated || !isNavigationReady) {
+      return;
+    }
+
+    if (!navigationRef.isReady()) {
+      return;
+    }
+
+    const currentRoute = navigationRef.getCurrentRoute();
+    if (currentRoute?.name === 'InviteOnboarding') {
+      return;
+    }
+
+    navigationRef.navigate('InviteOnboarding');
+  }, [pendingInviteSlug, isAuthenticated, isNavigationReady]);
+
+  React.useEffect(() => {
+    if (
+      !hadPendingInvite ||
+      !isAuthenticated ||
+      !isNavigationReady ||
+      !navigationRef.isReady()
+    ) {
+      return;
+    }
+
+    navigationRef.reset({
+      index: 0,
+      routes: [{ name: 'MainTabs' }],
+    });
+    setHadPendingInvite(false);
+  }, [hadPendingInvite, isAuthenticated, isNavigationReady]);
 
   const handleStateChange = (state: any) => {
     setNavState(state);
@@ -98,6 +154,8 @@ const AppNavigatorInner = () => {
     completeOnboarding,
     isPasswordRecoveryFlow,
     sessionEpoch,
+    pendingInviteSlug,
+    clearPendingInvite,
   } = useAuth();
   const [showSplash, setShowSplash] = React.useState(true);
   const [hasMembersInDB, setHasMembersInDB] = React.useState<boolean | null>(
@@ -632,7 +690,19 @@ const AppNavigatorInner = () => {
           )
         ) : (
           <>
-            {!hasCompletedOnboarding && (
+            {pendingInviteSlug && (
+              <Stack.Screen name="InviteOnboarding">
+                {() => (
+                  <InviteOnboardingScreen
+                    slug={pendingInviteSlug}
+                    onComplete={() => {
+                      clearPendingInvite();
+                    }}
+                  />
+                )}
+              </Stack.Screen>
+            )}
+            {!pendingInviteSlug && !hasCompletedOnboarding && (
               <Stack.Screen name="Onboarding">
                 {() => (
                   <OnboardingScreen

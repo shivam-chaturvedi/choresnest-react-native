@@ -45,10 +45,10 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, m
   // Initialize form when modal opens or memberToEdit changes
   React.useEffect(() => {
     if (open) {
-        if (memberToEdit) {
-          setName(memberToEdit.name);
-          setSelectedAvatar(memberToEdit.symbol || DEFAULT_MEMBER_ICON);
-          setSelectedColor(memberToEdit.color);
+      if (memberToEdit) {
+        setName(memberToEdit.name);
+        setSelectedAvatar(memberToEdit.symbol || DEFAULT_MEMBER_ICON);
+        setSelectedColor(memberToEdit.color);
       } else {
         setName("");
         setSelectedAvatar(DEFAULT_MEMBER_ICON);
@@ -169,7 +169,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, m
             keyboardShouldPersistTaps="handled"
           >
             <View style={styles.headerRow}>
-              <Text style={[styles.heading, { color: colors.foreground }]}>{memberToEdit ? "Edit Member" : "Add New Member"}</Text>
+              <Text style={[styles.heading, { color: colors.foreground }]}>{memberToEdit ? "Edit Member" : "Create child account"}</Text>
               <Pressable onPress={onClose} style={({ pressed }) => [styles.closeButton, pressed && { opacity: 0.6 }]}> 
                 <AppIcon name="x" size={20} color={colors.mutedForeground} />
               </Pressable>
