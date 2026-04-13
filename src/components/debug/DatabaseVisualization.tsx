@@ -6,7 +6,6 @@ import { Cloud, Database as DatabaseIcon } from 'lucide-react-native';
 
 const TABLE_NAMES = [
     'users',
-    'members',
     'events',
     'tasks',
     'lists',
@@ -28,7 +27,7 @@ const TABLE_NAMES = [
     'app_settings',
 ];
 
-const SYNCED_TABLES = ['members', 'settings', 'user_preferences'];
+const SYNCED_TABLES = ['users', 'settings', 'user_preferences'];
 
 interface TableStat {
     name: string;

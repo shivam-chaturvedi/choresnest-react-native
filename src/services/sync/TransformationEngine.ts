@@ -286,13 +286,6 @@ export const transformRecordForSupabase = (
     const localVersion = coerceVersion(transformed.version ?? record.version ?? 0);
     transformed.version = localVersion;
 
-    if (table === 'members') {
-        delete transformed.is_active;
-        delete transformed.isActive;
-        const memberFieldsToRemove = ['is_active', 'isActive'];
-        changedFields = changedFields.filter(field => !memberFieldsToRemove.includes(field));
-    }
-
     if (table === 'users') {
         const {
             is_guest,

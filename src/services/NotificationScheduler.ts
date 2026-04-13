@@ -5,13 +5,14 @@ import { Q } from '@nozbe/watermelondb';
 import Event from '../database/models/Event';
 import Task from '../database/models/Task';
 import Document from '../database/models/Document';
-import Member from '../database/models/Member';
+import User from '../database/models/User';
 import { NotificationPreferencesService } from './NotificationPreferencesService';
 import { parseReminderDateTime } from '../utils/ReminderDateTimeUtils';
 import { checkPermission, requestPermission } from '../utils/permissions';
 import { NotificationCenter, NotificationRoute } from './NotificationCenter';
 import { AppIconName } from '../components/ui/AppIcon';
 import { ProfileService } from './ProfileService';
+import { resolveOwnerId } from './ownerHelper';
 
 /**
  * NotificationScheduler
@@ -531,11 +532,19 @@ export const getActiveMemberId = async (): Promise<string | null> => {
             console.warn('NotificationScheduler: Cannot resolve active member without profile id');
             return null;
         }
-        const members = await getDatabase().get<Member>('members').query(
-            Q.where('profile_id', profileId),
-            Q.where('is_active', true)
+        const ownerId = await resolveOwnerId(profileId);
+        if (!ownerId) {
+            return null;
+        }
+        const members = await getDatabase().get<User>('users').query(
+            Q.where('owner_id', ownerId),
+            Q.where('deleted', false)
         ).fetch();
-        return members.length > 0 ? members[0].id : null;
+        const active =
+            members.find(user => user.isActive) ||
+            members.find(user => user.role === 'owner') ||
+            members[0];
+        return active?.id ?? null;
     } catch (error) {
         console.error('Failed to get active member:', error);
         return null;

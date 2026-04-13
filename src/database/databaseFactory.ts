@@ -5,7 +5,6 @@ import SQLiteAdapter from '@nozbe/watermelondb/adapters/sqlite';
 import schema from './schema';
 import migrations from './migrations';
 import User from './models/User';
-import Member from './models/Member';
 import Setting from './models/Setting';
 import AppSettings from './models/AppSettings';
 import Event from './models/Event';
@@ -24,7 +23,6 @@ import CategoryColorMapping from './models/CategoryColorMapping';
 
 const modelClasses = [
     User,
-    Member,
     Setting,
     AppSettings,
     Event,

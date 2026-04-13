@@ -217,7 +217,7 @@ export const DataCleanupService = {
 
             let databaseRecords = 0;
             try {
-                const collections = ['members', 'events', 'tasks', 'grocery_items', 'vault_documents', 'recipes', 'meals', 'notes'];
+                const collections = ['users', 'events', 'tasks', 'grocery_items', 'vault_documents', 'recipes', 'meals', 'notes'];
                 for (const collectionName of collections) {
                     try {
                         const collection = getDatabase().get(collectionName);

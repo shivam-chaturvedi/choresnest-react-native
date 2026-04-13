@@ -79,24 +79,26 @@ serve(async (req: Request) => {
     const now = Date.now();
 
     if (expiresAt && expiresAt < now) {
-      return logAndRespond(
+      console.warn("invite-user: invite expired", inviteRecord.id);
+      return sendJson(
         {
           valid: false,
           error: "expired",
           message: "Invite expired",
         },
-        400,
+        200,
       );
     }
 
     if (inviteRecord.invitation_limit !== null && inviteRecord.invitation_limit <= 0) {
-      return logAndRespond(
+      console.warn("invite-user: invite already used", inviteRecord.id);
+      return sendJson(
         {
           valid: false,
           error: "already_used",
           message: "Invite already used",
         },
-        400,
+        200,
       );
     }
 
@@ -134,17 +136,26 @@ serve(async (req: Request) => {
       );
     }
 
+    const now = new Date().toISOString();
     const profilePayload = {
       id: userData.user.id,
       email,
       name,
+      owner_id: inviteRecord.profile_id,
+      symbol: avatar || "account",
+      color: color || "member-blue",
+      role: "member",
+      is_active: true,
       is_guest: false,
-      active_profile_id: inviteRecord.profile_id,
+      deleted: false,
+      version: 1,
+      created_at: now,
+      updated_at: now,
     };
 
     const { error: profileError } = await supabase
       .from("profiles")
-      .upsert([profilePayload], { onConflict: "id" });
+      .insert(profilePayload);
 
     if (profileError) {
       return logAndRespond(
@@ -153,32 +164,6 @@ serve(async (req: Request) => {
           stage: "create_profile",
           error: profileError.message,
           profilePayload,
-        },
-        500,
-      );
-    }
-
-    const memberPayload = {
-      id: userData.user.id,
-      profile_id: inviteRecord.profile_id,
-      name,
-      symbol: avatar || "account",
-      color: color || "member-blue",
-      role: "member",
-      is_active: true,
-    };
-
-    const { error: memberError } = await supabase
-      .from("members")
-      .insert(memberPayload);
-
-    if (memberError) {
-      return logAndRespond(
-        {
-          success: false,
-          stage: "create_member",
-          error: memberError.message,
-          memberPayload,
         },
         500,
       );

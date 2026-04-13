@@ -3,7 +3,7 @@ export const REALTIME_WATCH_TABLES = [
     'list_items',
     'events',
     'tasks',
-    'members',
+    'profiles',
     'settings',
     'app_settings',
     'recipes',

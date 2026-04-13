@@ -23,7 +23,6 @@ export type TableSyncConfig = {
 
 export const SYNC_TABLES: TableSyncConfig[] = [
     { key: 'users', remoteTable: 'profiles', hasProfileId: false, addProfileId: false, phase: 1 },
-    { key: 'members', phase: 1 },
     // settings uses (profile_id, key) as its natural unique key — not just id
     { key: 'settings', phase: 1, conflictKey: 'profile_id,key', hasProfileId: true, addProfileId: true },
     { key: 'user_preferences', phase: 1 },

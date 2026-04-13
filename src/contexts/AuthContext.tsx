@@ -75,17 +75,24 @@ const GOOGLE_OAUTH_REDIRECT_URI = 'https://choresnest.com/auth/callback';
 
 const resolveFamilyProfileId = async (userId: string): Promise<string> => {
   try {
-    const { data, error } = await SupabaseService.from('members')
-      .select('profile_id')
+    const { data: profileData, error: profileError } = await SupabaseService.from('profiles')
+      .select('id, owner_id')
       .eq('id', userId)
       .maybeSingle();
 
-    if (error) {
-      console.warn('AuthContext: Unable to resolve member profile', error);
+    if (profileError) {
+      console.warn('AuthContext: Unexpected error querying profiles table', profileError);
       return userId;
     }
 
-    return data?.profile_id ?? userId;
+    if (profileData) {
+      if (profileData.owner_id && profileData.owner_id !== profileData.id) {
+        return profileData.owner_id;
+      }
+      return profileData.id ?? userId;
+    }
+
+    return userId;
   } catch (error) {
     console.error('AuthContext: Unexpected error resolving member profile', error);
     return userId;
@@ -249,10 +256,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
         AsyncStorage.removeItem('IS_GUEST');
         AsyncStorage.removeItem('GUEST_PROFILE_ID');
         AsyncStorage.setItem('AUTH_USER', JSON.stringify(userData));
-        // Bind the new user's family profile (owner) so invited members load shared data
-        const resolvedActiveProfileId = await resolveFamilyProfileId(session.user.id);
-        AsyncStorage.setItem('ACTIVE_PROFILE_ID', resolvedActiveProfileId);
-        void ProfileService.setActiveProfileId(resolvedActiveProfileId);
+        // Bind the new user's profile immediately so AppNavigator doesn't stall
+        const defaultProfileId = session.user.id;
+        AsyncStorage.setItem('ACTIVE_PROFILE_ID', defaultProfileId);
+        void ProfileService.setActiveProfileId(defaultProfileId);
+        setTimeout(() => {
+          resolveFamilyProfileId(session.user.id)
+            .then(resolvedId => {
+              if (resolvedId && resolvedId !== defaultProfileId) {
+                console.log(
+                  `AuthContext: Resolved family profile id ${resolvedId} for user ${session.user.id}`,
+                );
+                AsyncStorage.setItem('ACTIVE_PROFILE_ID', resolvedId);
+                void ProfileService.setActiveProfileId(resolvedId);
+              }
+            })
+            .catch(error => {
+              console.error('AuthContext: Failed to resolve family profile id', error);
+            });
+        }, 5000);
         DocumentUploadScheduler.startForUser(session.user.id);
 
         // Cache user record locally for guest-mode discovery

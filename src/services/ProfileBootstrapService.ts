@@ -1,6 +1,6 @@
 import { getDatabase } from '../database';
 import { SupabaseService } from './SupabaseService';
-import Member from '../database/models/Member';
+import User from '../database/models/User';
 import Setting from '../database/models/Setting';
 import { Q } from '@nozbe/watermelondb';
 import { SyncService } from './SyncService';
@@ -12,13 +12,21 @@ interface SupabaseSettingRecord {
   deleted?: boolean | null;
 }
 
-interface SupabaseMemberRecord {
+interface SupabaseProfileRecord {
   id: string;
-  name: string;
-  symbol: string;
-  color: string;
+  email?: string | null;
+  name?: string | null;
+  symbol?: string | null;
+  color?: string | null;
   role?: string | null;
+  is_active?: boolean | null;
+  owner_id?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
   deleted?: boolean | null;
+  version?: number | null;
+  active_profile_id?: string | null;
+  is_guest?: boolean | null;
 }
 
 export interface ProfileBootstrapResult {
@@ -34,6 +42,8 @@ let pendingPromise: Promise<ProfileBootstrapResult> | null = null;
 const syncAfterWrite = () => {
   void SyncService.requestSyncSoon();
 };
+
+const getUsersCollection = () => getDatabase().collections.get<User>('users');
 
 const writeFamilyName = async (profileId: string, familySetting: SupabaseSettingRecord) => {
   const now = Date.now();
@@ -67,50 +77,58 @@ const writeFamilyName = async (profileId: string, familySetting: SupabaseSetting
   });
 };
 
-  const writeMembers = async (profileId: string, remoteMembers: SupabaseMemberRecord[]) => {
+  const writeProfiles = async (ownerId: string, remoteMembers: SupabaseProfileRecord[]) => {
     if (remoteMembers.length === 0) {
       return 0;
     }
-  const now = Date.now();
-  const membersCollection = getDatabase().collections.get<Member>('members');
-  const existing = await membersCollection.query(
-    Q.where('profile_id', profileId)
-  ).fetch();
-  const existingById = new Map(existing.map(record => [record.id, record]));
-  await getDatabase().write(async () => {
-    for (const remote of remoteMembers) {
-      const isDeleted = remote.deleted ?? false;
-      const local = existingById.get(remote.id);
-      if (local) {
-        await local.update(record => {
-          record.name = remote.name;
-          record.symbol = remote.symbol;
-          record.color = remote.color;
-          record.role = remote.role ?? '';
-          record.updatedAt = now;
-          record.version = (record.version ?? 0) + 1;
-          record.deleted = isDeleted;
-        });
-      } else if (!isDeleted) {
-        await membersCollection.create(member => {
-          const raw = member._raw as any;
-          raw.id = remote.id;
-          member.profileId = profileId;
-          member.name = remote.name;
-          member.symbol = remote.symbol;
-          member.color = remote.color;
-          member.role = remote.role ?? '';
-          member.isActive = false;
-          member.createdAt = now;
-          member.updatedAt = now;
-          member.version = 1;
-          member.deleted = false;
-        });
+    const now = Date.now();
+    const usersCollection = getDatabase().collections.get<User>('users');
+    const existing = await usersCollection.query(
+      Q.where('owner_id', ownerId)
+    ).fetch();
+    const existingById = new Map(existing.map(record => [record.id, record]));
+    await getDatabase().write(async () => {
+      for (const remote of remoteMembers) {
+        const isDeleted = remote.deleted ?? false;
+        const local = existingById.get(remote.id);
+        const createdAt = remote.created_at ? new Date(remote.created_at).getTime() : now;
+        const updatedAt = remote.updated_at ? new Date(remote.updated_at).getTime() : now;
+        if (local) {
+          await local.update(record => {
+            record.email = remote.email ?? record.email;
+            record.name = remote.name ?? record.name;
+            record.symbol = remote.symbol ?? record.symbol;
+            record.color = remote.color ?? record.color;
+            record.role = remote.role ?? record.role;
+            record.isActive = remote.is_active ?? record.isActive;
+            record.ownerId = remote.owner_id ?? ownerId;
+            record.deleted = isDeleted;
+            record.updatedAt = updatedAt;
+            record.version = remote.version ?? (record.version ?? 0);
+          });
+        } else if (!isDeleted) {
+          await usersCollection.create(user => {
+            const raw = user._raw as any;
+            raw.id = remote.id;
+            user.email = remote.email ?? '';
+            user.name = remote.name ?? '';
+            user.symbol = remote.symbol ?? 'account';
+            user.color = remote.color ?? 'member-blue';
+            user.role = remote.role ?? 'member';
+            user.isActive = remote.is_active ?? false;
+            user.ownerId = remote.owner_id ?? ownerId;
+            user.deleted = false;
+            user.version = remote.version ?? 1;
+            user.createdAt = createdAt;
+            user.updatedAt = updatedAt;
+            user.activeProfileId = remote.active_profile_id ?? '';
+            user.isGuest = remote.is_guest ?? false;
+          });
+        }
       }
-    }
-  });
-  return remoteMembers.filter(member => !member.deleted).length;
-};
+    });
+    return remoteMembers.filter(member => !member.deleted).length;
+  };
 
 export const ProfileBootstrapService = {
   async bootstrap(profileId: string): Promise<ProfileBootstrapResult> {
@@ -157,15 +175,27 @@ export const ProfileBootstrapService = {
       }
 
       try {
-        const membersResponse = await SupabaseService.from('members')
-          .select('id, name, symbol, color, role, deleted')
-          .eq('profile_id', profileId);
+        let ownerId = profileId;
+        const ownerResponse = await SupabaseService.from('profiles')
+          .select('owner_id')
+          .eq('id', profileId)
+          .single();
+        if (ownerResponse.data?.owner_id) {
+          ownerId = ownerResponse.data.owner_id;
+        }
 
-        if (membersResponse.error) {
-          console.warn('ProfileBootstrapService: failed to fetch members', membersResponse.error);
-        } else if (membersResponse.data) {
+        const profilesResponse = await SupabaseService.from('profiles')
+          .select(
+            'id, email, name, symbol, color, role, is_active, owner_id, created_at, updated_at, deleted, version, active_profile_id, is_guest'
+          )
+          .eq('owner_id', ownerId)
+          .order('updated_at', { ascending: false });
+
+        if (profilesResponse.error) {
+          console.warn('ProfileBootstrapService: failed to fetch profiles', profilesResponse.error);
+        } else if (profilesResponse.data) {
           membersFetchSuccess = true;
-          memberCount = await writeMembers(profileId, membersResponse.data as SupabaseMemberRecord[]);
+          memberCount = await writeProfiles(ownerId, profilesResponse.data as SupabaseProfileRecord[]);
           hasMembers = memberCount > 0;
         }
       } catch (error) {

@@ -31,8 +31,9 @@ import { SyncService } from '../services/SyncService';
 import NetInfo from '@react-native-community/netinfo';
 import { AppState, AppStateStatus } from 'react-native';
 import { AppSettingsService } from '../services/AppSettingsService';
-import Member from '../database/models/Member';
+import User from '../database/models/User';
 import { ProfileBootstrapService } from '../services/ProfileBootstrapService';
+import { resolveOwnerId } from '../services/ownerHelper';
 import { ProfileService, GUEST_PROFILE_ID } from '../services/ProfileService';
 import { LocalCacheService } from '../services/LocalCacheService';
 import { reactNavigationIntegration } from '../services/SentryNavigation';
@@ -512,14 +513,16 @@ const AppNavigatorInner = () => {
           return;
         }
 
-        // 1a. FAST PATH: Check if we already have members locally for this profile
-        const membersCollection =
-          getDatabase().collections.get<Member>('members');
-        let localQuery = membersCollection.query();
-        // Filter by profile_id if we have one so we don't pick up another profile's rows
-        if (pid) {
+        // 1a. FAST PATH: Check if we already have family members locally for this profile
+        const ownerId = await resolveOwnerId(pid);
+        const usersCollection = getDatabase().collections.get<User>('users');
+        let localQuery = usersCollection.query();
+        if (ownerId) {
           const { Q: WQ } = require('@nozbe/watermelondb');
-          localQuery = membersCollection.query(WQ.where('profile_id', pid));
+          localQuery = usersCollection.query(
+            WQ.where('owner_id', ownerId),
+            WQ.where('deleted', false),
+          );
         }
         const localMembers = await localQuery.fetch();
         const existsLocally = localMembers.length > 0;
@@ -671,15 +674,24 @@ const AppNavigatorInner = () => {
           shouldShowInitialSetup ? (
             <Stack.Screen name="InitialSetup">
               {() => (
-                <InitialSetupScreen
-                  onComplete={async () => {
-                    const membersCollection = getDatabase().get('members');
-                    const members = await membersCollection.query().fetch();
-
-                    setHasMembersInDB(members.length > 0);
-                    setLocalOnboardingLoaded(true);
-                  }}
-                />
+                    <InitialSetupScreen
+                      onComplete={async () => {
+                        const pid = await ProfileService.getActiveProfileId();
+                        const ownerId = await resolveOwnerId(pid);
+                        const { Q: WQ } = require('@nozbe/watermelondb');
+                        const usersCollection = getDatabase().get<User>('users');
+                        let query = usersCollection.query();
+                        if (ownerId) {
+                          query = usersCollection.query(
+                            WQ.where('owner_id', ownerId),
+                            WQ.where('deleted', false),
+                          );
+                        }
+                        const members = await query.fetch();
+                        setHasMembersInDB(members.length > 0);
+                        setLocalOnboardingLoaded(true);
+                      }}
+                    />
               )}
             </Stack.Screen>
           ) : (

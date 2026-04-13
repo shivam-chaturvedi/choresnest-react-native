@@ -1,0 +1,7 @@
+
+nwo for safetly check before deleeting tge mmenrs ytable check any more refrences and code for mmebers tabel in any part of cod e, search for all fiels in pages , and compoennets firts for memebrs table just searcfh work "members" or "member" works in all fiels on e by oen cna chnavek are awe using it anywher ein compoenents , pages , or sytcn , realting , aro anywhere in all file in the code again
+
+also do alcghecj all Remove the members entry from TableRegistry, SyncOrchestrator, RealtimeWatchList, and any export code (including ExportService.addTableData).
+Delete the Member model and database schema/migrations (plus the manual SQLs).
+Create the drop-table migration in src/migrations/41_drop_members.sql.
+Remove any remaining Supabase-side references (triggers, policies, grants) so the new migration can drop public.members cleanly 

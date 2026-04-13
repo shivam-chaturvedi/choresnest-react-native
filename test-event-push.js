@@ -5,14 +5,15 @@ const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function test() {
-  // fetch a valid member id
-  const { data: members } = await supabase.from('members').select('id, profile_id').limit(1);
-  if (!members || members.length === 0) {
+  // fetch a valid profile (owner_id indicates the family owner)
+  const { data: profiles } = await supabase.from('profiles').select('id, owner_id').limit(1);
+  if (!profiles || profiles.length === 0) {
     console.log('No members found');
     return;
   }
-  const member = members[0];
-  console.log('Using member', member);
+  const member = profiles[0];
+  const ownerId = member.owner_id || member.id;
+  console.log('Using profile', member);
 
   const res = await supabase.from('events').insert({
     id: 'test-event-12345',
@@ -21,7 +22,7 @@ async function test() {
     time: '12:00 PM',
     icon: 'calendar-star',
     member_id: member.id,
-    profile_id: member.profile_id,
+    profile_id: ownerId,
     visibility: 'default',
     reminder_offset_minutes: 15,
     is_recurring: false

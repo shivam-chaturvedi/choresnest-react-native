@@ -90,7 +90,7 @@ export class SupabaseService {
     // Check connection/health
     static async checkConnection(): Promise<boolean> {
         try {
-            const { data, error } = await supabase.from('members').select('count', { count: 'exact', head: true });
+        const { data, error } = await supabase.from('profiles').select('count', { count: 'exact', head: true });
             this.logError(error, 'checkConnection');
             if (error) {
                 console.warn("Supabase check connection warning:", error.message);

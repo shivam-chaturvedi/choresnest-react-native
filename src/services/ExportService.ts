@@ -73,7 +73,6 @@ export const exportService = {
                 wmTransactions,
                 wmBudgets,
                 users,
-                members,
                 settings,
                 notifPrefs,
                 quietHours,
@@ -94,7 +93,6 @@ export const exportService = {
                 getDatabase().collections.get('transactions').query(Q.where('profile_id', profileId)).fetchCount(),
                 getDatabase().collections.get('budgets').query(Q.where('profile_id', profileId)).fetchCount(),
                 getDatabase().collections.get('users').query().fetchCount(), // Users is global
-                getDatabase().collections.get('members').query(Q.where('profile_id', profileId)).fetchCount(),
                 getDatabase().collections.get('settings').query(Q.where('profile_id', profileId)).fetchCount(),
                 getDatabase().collections.get('notification_preferences').query(Q.where('profile_id', profileId)).fetchCount(),
                 getDatabase().collections.get('quiet_hours').query(Q.where('profile_id', profileId)).fetchCount(),
@@ -118,7 +116,7 @@ export const exportService = {
                 notes: notes + folders,
                 // Combine DB + Async Storage
                 expenses: wmTransactions + wmBudgets,
-                system: users + members + settings + notifPrefs + quietHours + appLock + userPrefs,
+                system: users + settings + notifPrefs + quietHours + appLock + userPrefs,
             };
         } catch (error) {
             console.error('Failed to get export stats:', error);
@@ -245,7 +243,6 @@ export const exportService = {
         }
         if (selectedData.includes('system')) {
             await addTableData('users', 'users', true);
-            await addTableData('members', 'members');
             await addTableData('settings', 'settings');
             await addTableData('notification_preferences', 'notification_preferences');
             await addTableData('quiet_hours', 'quiet_hours');
@@ -549,8 +546,8 @@ export const exportService = {
         }
 
         // MEMBERS
-        if (data.members) {
-            html += renderTable('Family Members', data.members, [
+        if (data.users) {
+            html += renderTable('Family Members', data.users, [
                 {
                     header: 'Name',
                     key: 'name',

@@ -6,6 +6,8 @@ import { pullTableChangesWithCursor } from './PullCursorEngine';
 import { pushTableChanges } from './PushEngine';
 import { SYNC_TABLES } from './TableRegistry';
 import { TableChangeSet, TableFetchDescriptor } from './types';
+import User from '../../database/models/User';
+import { resolveOwnerId } from '../ownerHelper';
 
 const logChangeSetSummary = (table: string, changeSet: TableChangeSet): void => {
     if (Config.NODE_ENV === 'production') {
@@ -169,18 +171,22 @@ export class SyncOrchestrator {
         // and another logs in on the same device, Watermelon will try to push
         // Account A's pending changes using Account B's auth headers, causing
         // RLS violations (42501).
-        // we must fetch ALL members belonging to this user to get the list of 
+        // We must fetch all synchronized users tied to this owner to build the list of
         // allowed profile IDs.
         const allowedProfiles = new Set<string>();
+        const addProfile = (pid?: string | null) => {
+            if (pid && pid !== 'guest') {
+                allowedProfiles.add(pid);
+            }
+        };
+        addProfile(this.userId);
         try {
-            const memberRecords = await getDatabase().get('members').query(
+            const ownerId = (await resolveOwnerId(this.userId)) ?? this.userId;
+            const userRecords = await getDatabase().get<User>('users').query(
+                Q.where('owner_id', ownerId),
                 Q.where('deleted', Q.notEq(true))
             ).fetch();
-            // In our system, members table records that exist locally for this 
-            // instance are assumed valid for the current account context if they 
-            // haven't been wiped. However, more accurately, we only filter for 
-            // tables that actually HAVE profile_id.
-            memberRecords.forEach((m: any) => allowedProfiles.add(m.profileId));
+            userRecords.forEach(u => addProfile(u.id));
         } catch (e) {
             console.error('SyncOrchestrator: Failed to fetch allowed profile IDs:', e);
         }

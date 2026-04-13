@@ -1,14 +1,16 @@
 import { getDatabase } from '../database';
-import Member from '../database/models/Member';
+import User from '../database/models/User';
 import Task from '../database/models/Task';
 import Event from '../database/models/Event';
 import Document from '../database/models/Document';
 import { ListItem } from '../database/models/List';
 import Setting from '../database/models/Setting';
 import { Q } from '@nozbe/watermelondb';
-import { EMPTY } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { EMPTY, from } from 'rxjs';
+import { map, switchMap } from 'rxjs/operators';
 import { SyncService } from './SyncService';
+import { uuidv4 } from '../utils/uuid';
+import { getUsersCollection, resolveOwnerId } from './ownerHelper';
 
 const OBSERVE_COLUMNS: string[] = ['updated_at', 'deleted', 'value'];
 
@@ -24,16 +26,26 @@ const requireProfileId = (profileId?: string | null): string | null => {
   return profileId;
 };
 
+
 export const FamilyService = {
   observeMembers: (profileId?: string | null) => {
     if (!profileId) {
       return EMPTY;
     }
-    return getDatabase().get<Member>('members').query(
-      Q.where('profile_id', profileId),
-      Q.where('deleted', false),
-      Q.sortBy('updated_at', Q.desc)
-    ).observeWithColumns(OBSERVE_COLUMNS);
+    return from(resolveOwnerId(profileId)).pipe(
+      switchMap(ownerId => {
+        if (!ownerId) {
+          return EMPTY;
+        }
+        return getUsersCollection()
+          .query(
+            Q.where('owner_id', ownerId),
+            Q.where('deleted', false),
+            Q.sortBy('updated_at', Q.desc)
+          )
+          .observeWithColumns(OBSERVE_COLUMNS);
+      })
+    );
   },
 
   observeFamilyName: (profileId?: string | null) => {
@@ -96,33 +108,41 @@ export const FamilyService = {
       return;
     }
 
-    const now = Date.now();
     await getDatabase().write(async () => {
-      await getDatabase().get<Member>('members').create(member => {
-        member.profileId = effectiveProfileId;
-        member.name = name;
-        member.symbol = symbol;
-        member.color = color;
-        member.role = '';
-        member.isActive = isActive;
-        member.createdAt = now;
-        member.updatedAt = now;
-        member.version = 1;
-        member.deleted = false;
+      const ownerId = await resolveOwnerId(effectiveProfileId);
+      if (!ownerId) {
+        console.warn('FamilyService: Unable to resolve owner_id for addMember');
+        return;
+      }
+      await getUsersCollection().create(user => {
+        const raw = user._raw as any;
+        raw.id = uuidv4();
+        user.name = name;
+        user.symbol = symbol;
+        user.color = color;
+        user.role = 'member';
+        user.isActive = isActive;
+        user.ownerId = ownerId;
+        user.deleted = false;
+        user.version = 1;
+        const now = Date.now();
+        user.createdAt = now;
+        user.updatedAt = now;
       });
     });
     syncAfterWrite();
   },
 
-  updateMember: async (profileId: string | null | undefined, id: string, updates: Partial<Member>) => {
+  updateMember: async (profileId: string | null | undefined, id: string, updates: Partial<User>) => {
     const effectiveProfileId = requireProfileId(profileId);
     if (!effectiveProfileId) {
       return;
     }
     const now = Date.now();
     await getDatabase().write(async () => {
-      const member = await getDatabase().get<Member>('members').find(id);
-      if (member.profileId !== effectiveProfileId) {
+      const member = await getUsersCollection().find(id);
+      const ownerId = await resolveOwnerId(effectiveProfileId);
+      if (ownerId && member.ownerId !== ownerId && member.id !== ownerId) {
         return;
       }
       await member.update(record => {
@@ -155,8 +175,9 @@ export const FamilyService = {
     }
     const now = Date.now();
     await getDatabase().write(async () => {
-      const member = await getDatabase().get<Member>('members').find(id);
-      if (member.profileId !== effectiveProfileId) {
+      const member = await getUsersCollection().find(id);
+      const ownerId = await resolveOwnerId(effectiveProfileId);
+      if (ownerId && member.ownerId !== ownerId && member.id !== ownerId) {
         return;
       }
       await member.update(record => {
@@ -175,10 +196,16 @@ export const FamilyService = {
     }
     const now = Date.now();
     await getDatabase().write(async () => {
-      const members = await getDatabase().get<Member>('members').query(
-        Q.where('profile_id', effectiveProfileId),
-        Q.where('deleted', false)
-      ).fetch();
+      const ownerId = await resolveOwnerId(effectiveProfileId);
+      if (!ownerId) {
+        return;
+      }
+      const members = await getUsersCollection()
+        .query(
+          Q.where('owner_id', ownerId),
+          Q.where('deleted', false)
+        )
+        .fetch();
 
       const updates = members.map(member =>
         member.prepareUpdate(record => {
@@ -204,8 +231,9 @@ export const FamilyService = {
 
     await getDatabase().write(async () => {
       const batchOps: any[] = [];
-      const memberRecord = await getDatabase().get<Member>('members').find(memberId);
-      if (memberRecord.profileId !== effectiveProfileId) {
+      const memberRecord = await getUsersCollection().find(memberId);
+      const ownerId = await resolveOwnerId(effectiveProfileId);
+      if (ownerId && memberRecord.ownerId !== ownerId && memberRecord.id !== ownerId) {
         return;
       }
 

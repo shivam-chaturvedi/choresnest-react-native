@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export default appSchema({
-    version: 22,
+    version: 26,
     tables: [
         tableSchema({
             name: 'users',
@@ -11,21 +11,14 @@ export default appSchema({
                 { name: 'is_guest', type: 'boolean' },
                 { name: 'has_completed_onboarding', type: 'boolean' },
                 { name: 'active_profile_id', type: 'string', isOptional: true },
-                { name: 'version', type: 'number' },
-            ],
-        }),
-        tableSchema({
-            name: 'members', // Family Members
-            columns: [
-                { name: 'profile_id', type: 'string', isIndexed: true },
+                { name: 'symbol', type: 'string', isOptional: true },
+                { name: 'color', type: 'string', isOptional: true },
+                { name: 'role', type: 'string', isOptional: true },
+                { name: 'is_active', type: 'boolean', isOptional: true },
+                { name: 'owner_id', type: 'string', isOptional: true },
                 { name: 'created_at', type: 'number' },
                 { name: 'updated_at', type: 'number' },
                 { name: 'deleted', type: 'boolean' },
-                { name: 'name', type: 'string' },
-                { name: 'symbol', type: 'string' },
-                { name: 'color', type: 'string' },
-                { name: 'role', type: 'string', isOptional: true },
-                { name: 'is_active', type: 'boolean' },
                 { name: 'version', type: 'number' },
             ],
         }),

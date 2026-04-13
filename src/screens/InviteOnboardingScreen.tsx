@@ -7,6 +7,7 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
+  Modal,
 } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
 import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
@@ -20,7 +21,60 @@ import { supabase } from "../config/supabase";
 const webInviteBase = "https://choresnest.com/invite";
 const INVITE_FUNCTION_NAME = "invite-user";
 
-type InviteStatus = "loading" | "valid" | "expired" | "invalid" | "error";
+type InviteStatus =
+  | "loading"
+  | "valid"
+  | "expired"
+  | "invalid"
+  | "error"
+  | "already_used";
+
+const parseEdgeFunctionPayload = (
+  raw?: string | null,
+): Record<string, any> | null => {
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
+const getMessageForStatus = (status: InviteStatus): string => {
+  switch (status) {
+    case "expired":
+      return "This invite has already expired. Ask your family administrator to send a fresh link.";
+    case "already_used":
+      return "This invite has already been used. Ask your family administrator or another member to send a new link.";
+    case "invalid":
+      return "This invite could not be verified. Ask your family member for help.";
+    default:
+      return "";
+  }
+};
+
+const mapPayloadToStatus = (
+  payload: Record<string, any> | null,
+): { status: InviteStatus; message: string } | null => {
+  if (!payload) {
+    return null;
+  }
+  if (payload.valid === false) {
+    const errorKey = payload.error;
+    let status: InviteStatus = "invalid";
+    if (errorKey === "expired") {
+      status = "expired";
+    } else if (errorKey === "already_used") {
+      status = "already_used";
+    }
+    const message = payload.message || getMessageForStatus(status);
+    return { status, message };
+  }
+  return null;
+};
 
 export interface InviteOnboardingScreenProps {
   slug: string;
@@ -47,6 +101,9 @@ export const InviteOnboardingScreen: React.FC<InviteOnboardingScreenProps> = ({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [avatar, setAvatar] = useState(MEMBER_ICON_OPTIONS[0]);
   const [selectedColor, setSelectedColor] = useState(PROFILE_COLORS[0]);
+  const [inviteErrorModalVisible, setInviteErrorModalVisible] = useState(false);
+  const [inviteErrorTitle, setInviteErrorTitle] = useState("");
+  const [inviteErrorDescription, setInviteErrorDescription] = useState("");
 
   const webInviteUrl = `${webInviteBase}/${slug}`;
 
@@ -66,6 +123,8 @@ export const InviteOnboardingScreen: React.FC<InviteOnboardingScreenProps> = ({
       return;
     }
 
+    setInviteErrorModalVisible(false);
+
     let isActive = true;
     const validateInvite = async () => {
       try {
@@ -77,16 +136,22 @@ export const InviteOnboardingScreen: React.FC<InviteOnboardingScreenProps> = ({
         });
         if (!isActive) return;
         if (error) {
-          const message = (error?.message as string) || "Unable to verify invite.";
+          const parsed =
+            mapPayloadToStatus(parseEdgeFunctionPayload(error?.details ?? null));
+          if (parsed) {
+            setInviteStatus(parsed.status);
+            setInviteMessage(parsed.message);
+            return;
+          }
           setInviteStatus("invalid");
-          setInviteMessage(message);
+          setInviteMessage(getMessageForStatus("invalid"));
           return;
         }
         const payload = data as Record<string, any>;
-        if (!payload?.valid) {
-          const errorKey = payload?.error;
-          setInviteStatus(errorKey === "expired" ? "expired" : "invalid");
-          setInviteMessage(payload?.message || errorKey || "This invite is no longer valid.");
+        const parsed = mapPayloadToStatus(payload);
+        if (parsed) {
+          setInviteStatus(parsed.status);
+          setInviteMessage(parsed.message);
           return;
         }
         setInviteStatus("valid");
@@ -104,6 +169,28 @@ export const InviteOnboardingScreen: React.FC<InviteOnboardingScreenProps> = ({
       isActive = false;
     };
   }, [isOffline, slug]);
+
+  useEffect(() => {
+    if (inviteStatus === "expired") {
+      setInviteErrorTitle("Invite expired");
+      setInviteErrorDescription(
+        "This invite has already expired. Ask your family administrator to send a fresh link."
+      );
+      setInviteErrorModalVisible(true);
+    } else if (inviteStatus === "already_used") {
+      setInviteErrorTitle("Invite already used");
+      setInviteErrorDescription(
+        "This invite has already been used. Ask your family administrator or another member to send a new link."
+      );
+      setInviteErrorModalVisible(true);
+    } else if (inviteStatus === "invalid") {
+      setInviteErrorTitle("Invalid invite");
+      setInviteErrorDescription(
+        inviteMessage || "This invite could not be verified. Ask your family member for help."
+      );
+      setInviteErrorModalVisible(true);
+    }
+  }, [inviteStatus, inviteMessage]);
 
   const canSubmit =
     !isOffline &&
@@ -187,6 +274,37 @@ export const InviteOnboardingScreen: React.FC<InviteOnboardingScreenProps> = ({
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}> 
+      <Modal visible={inviteErrorModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalCard,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>
+              {inviteErrorTitle}
+            </Text>
+            <Text
+              style={[styles.modalDescription, { color: colors.mutedForeground }]}
+            >
+              {inviteErrorDescription}
+            </Text>
+            <Pressable
+              onPress={() => setInviteErrorModalVisible(false)}
+              style={({ pressed }) => [
+                styles.modalButton,
+                { borderColor: colors.primary },
+                pressed && { opacity: 0.8 },
+              ]}
+            >
+              <Text style={[styles.modalButtonText, { color: colors.primary }]}>
+                Got it
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
@@ -381,5 +499,38 @@ const styles = StyleSheet.create({
   submitText: {
     fontSize: 16,
     fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCard: {
+    width: '80%',
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 20,
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  modalDescription: {
+    fontSize: 15,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  modalButton: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  modalButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

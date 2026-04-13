@@ -667,5 +667,74 @@ export default schemaMigrations({
                 unsafeExecuteSql(`ALTER TABLE documents_new RENAME TO documents;`),
             ],
         },
+        {
+            toVersion: 23,
+            steps: [
+                addColumns({
+                    table: 'users',
+                    columns: [
+                        { name: 'symbol', type: 'string', isOptional: true },
+                        { name: 'color', type: 'string', isOptional: true },
+                        { name: 'role', type: 'string', isOptional: true },
+                        { name: 'is_active', type: 'boolean', isOptional: true },
+                    ],
+                }),
+                unsafeExecuteSql(`
+                    UPDATE users
+                    SET symbol = COALESCE(symbol, 'account'),
+                        color = COALESCE(color, 'member-blue'),
+                        role = COALESCE(role, 'owner'),
+                        is_active = COALESCE(is_active, 1)
+                    WHERE symbol IS NULL
+                       OR color IS NULL
+                       OR role IS NULL
+                       OR is_active IS NULL;
+                `),
+            ],
+        },
+        {
+            toVersion: 24,
+            steps: [
+                addColumns({
+                    table: 'users',
+                    columns: [
+                        { name: 'owner_id', type: 'string', isOptional: true },
+                    ],
+                }),
+                unsafeExecuteSql(`
+                    UPDATE users
+                    SET owner_id = id
+                    WHERE owner_id IS NULL OR owner_id = '';
+                `),
+            ],
+        },
+        {
+            toVersion: 25,
+            steps: [
+                addColumns({
+                    table: 'users',
+                    columns: [
+                        { name: 'created_at', type: 'number' },
+                        { name: 'updated_at', type: 'number' },
+                        { name: 'deleted', type: 'boolean' },
+                    ],
+                }),
+                unsafeExecuteSql(`
+                    UPDATE users
+                    SET created_at = COALESCE(created_at, strftime('%s','now') * 1000),
+                        updated_at = COALESCE(updated_at, strftime('%s','now') * 1000),
+                        deleted = COALESCE(deleted, 0)
+                    WHERE created_at IS NULL
+                       OR updated_at IS NULL
+                       OR deleted IS NULL;
+                `),
+            ],
+        },
+        {
+            toVersion: 26,
+            steps: [
+                unsafeExecuteSql('DROP TABLE IF EXISTS members;'),
+            ],
+        },
     ],
 });
