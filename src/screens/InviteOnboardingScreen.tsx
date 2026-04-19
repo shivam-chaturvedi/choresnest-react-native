@@ -10,13 +10,14 @@ import {
   Modal,
 } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
-import { useThemeColors, useThemeRadius } from "../contexts/ThemeContext";
+import { useThemeColors, useThemeRadius, useTheme } from "../contexts/ThemeContext";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../components/ui/Toast";
 import { PROFILE_COLORS } from "../constants/profileColors";
 import { MEMBER_ICON_OPTIONS } from "../constants/memberIcons";
 import { MemberIcon } from "../components/ui/MemberIcon";
 import { supabase } from "../config/supabase";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 
 const webInviteBase = "https://choresnest.com/invite";
 const INVITE_FUNCTION_NAME = "invite-user";
@@ -76,6 +77,41 @@ const mapPayloadToStatus = (
   return null;
 };
 
+const extractFunctionErrorMessage = async (
+  error: unknown,
+  data?: { error?: string },
+): Promise<string | null> => {
+  if (data?.error) {
+    return data.error;
+  }
+
+  if (!error) {
+    return null;
+  }
+
+  if (error instanceof FunctionsHttpError) {
+    try {
+      const payload = await error.context.json();
+      if (payload && typeof payload === "object") {
+        if (typeof payload.error === "string") {
+          return payload.error;
+        }
+        if (typeof payload.message === "string") {
+          return payload.message;
+        }
+      }
+    } catch (parseError) {
+      console.warn("InviteOnboarding: failed to parse function error body", parseError);
+    }
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
+};
+
 export interface InviteOnboardingScreenProps {
   slug: string;
   onComplete?: () => void;
@@ -87,6 +123,7 @@ export const InviteOnboardingScreen: React.FC<InviteOnboardingScreenProps> = ({
 }) => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
+  const { appearanceMode } = useTheme();
   const { login } = useAuth();
   const { showToast } = useToast();
 
@@ -223,7 +260,8 @@ export const InviteOnboardingScreen: React.FC<InviteOnboardingScreenProps> = ({
       });
 
       if (error || !data?.success) {
-        const message = (error?.message as string) || data?.error || "Unable to accept invite.";
+        const message =
+          (await extractFunctionErrorMessage(error, data)) || "Unable to accept invite.";
         showToast({
           type: "error",
           title: "Invite Failed",
@@ -239,8 +277,24 @@ export const InviteOnboardingScreen: React.FC<InviteOnboardingScreenProps> = ({
       });
 
       const signedIn = await login(email.trim(), password);
-      if (signedIn && onComplete) {
-        onComplete();
+      if (signedIn) {
+        try {
+          const { ProfileService } = await import("../services/ProfileService");
+          let checks = 0;
+          let pid = await ProfileService.getActiveProfileId();
+          while (!pid && checks < 20) {
+            await new Promise(r => setTimeout(r, 200));
+            pid = await ProfileService.getActiveProfileId();
+            checks++;
+          }
+          const { SyncService } = await import("../services/SyncService");
+          await SyncService.forceFullSync();
+        } catch (error) {
+          console.error("InviteOnboarding: failed to sync after login", error);
+        }
+        if (onComplete) {
+          onComplete();
+        }
       }
     } catch (error) {
       console.error("Invite acceptance error", error);
@@ -311,8 +365,22 @@ export const InviteOnboardingScreen: React.FC<InviteOnboardingScreenProps> = ({
       >
         <View style={[styles.card, { borderColor: colors.border, backgroundColor: colors.card }]}> 
           <Text style={[styles.title, { color: colors.foreground }]}>Join Chores Nest</Text>
-          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Activate the invite to join your family's workspace.</Text>
-          <Text style={[styles.url, { color: colors.primary }]}>{webInviteUrl}</Text>
+          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
+            Activate the invite to join your family's workspace.
+          </Text>
+          <Text
+            style={[
+              styles.url,
+              {
+                color:
+                  appearanceMode === "midnight"
+                    ? colors.successLight
+                    : colors.primary,
+              },
+            ]}
+          >
+            {webInviteUrl}
+          </Text>
           {statusText && (
             <Text style={[styles.statusText, { color: colors.danger }]}>{statusText}</Text>
           )}

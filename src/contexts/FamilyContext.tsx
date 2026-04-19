@@ -13,7 +13,7 @@ import { ListService } from '../services/ListService';
 import type { ListItemRecord } from '../services/ListService';
 import { VaultService } from '../services/VaultService';
 import { supabase } from '../config/supabase';
-import { ProfileService } from '../services/ProfileService';
+import { ProfileService, onActiveProfileChange } from '../services/ProfileService';
 import { useAuth } from './AuthContext';
 import { GUEST_PROFILE_ID } from '../database';
 
@@ -693,9 +693,16 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({
       }
     });
 
+    const unsubscribeActiveProfile = onActiveProfileChange(pid => {
+      if (mounted) {
+        setProfileId(pid);
+      }
+    });
+
     return () => {
       mounted = false;
       subscription?.unsubscribe();
+      unsubscribeActiveProfile();
     };
   }, [isGuest, user?.id]);
 
@@ -712,7 +719,7 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({
   );
 };
 
-const fallbackVoidAsync = async () => {};
+const fallbackVoidAsync = async () => { };
 const fallbackValueAsync = async () => undefined;
 
 const FALLBACK_FAMILY_CONTEXT: FamilyContextValue = {

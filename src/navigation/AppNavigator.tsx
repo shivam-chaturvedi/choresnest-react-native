@@ -37,6 +37,7 @@ import { resolveOwnerId } from '../services/ownerHelper';
 import { ProfileService, GUEST_PROFILE_ID } from '../services/ProfileService';
 import { LocalCacheService } from '../services/LocalCacheService';
 import { reactNavigationIntegration } from '../services/SentryNavigation';
+import { useFamily } from '../contexts/FamilyContext';
 
 const Stack = createNativeStackNavigator();
 
@@ -158,6 +159,7 @@ const AppNavigatorInner = () => {
     pendingInviteSlug,
     clearPendingInvite,
   } = useAuth();
+  const { activeMember } = useFamily();
   const [showSplash, setShowSplash] = React.useState(true);
   const [hasMembersInDB, setHasMembersInDB] = React.useState<boolean | null>(
     null,
@@ -642,7 +644,9 @@ const AppNavigatorInner = () => {
   }, [sessionEpoch, isAuthenticated]);
 
   const shouldShowInitialSetup =
-    hasMembersInDB === false && profileOnboardingComplete !== true;
+    activeMember?.role === 'owner' &&
+    hasMembersInDB === false &&
+    profileOnboardingComplete !== true;
 
   // Only show splash on initial load, not during auth operations
   // Don't wait for the member check; show UI once the essential boot sequence finishes
@@ -674,24 +678,24 @@ const AppNavigatorInner = () => {
           shouldShowInitialSetup ? (
             <Stack.Screen name="InitialSetup">
               {() => (
-                    <InitialSetupScreen
-                      onComplete={async () => {
-                        const pid = await ProfileService.getActiveProfileId();
-                        const ownerId = await resolveOwnerId(pid);
-                        const { Q: WQ } = require('@nozbe/watermelondb');
-                        const usersCollection = getDatabase().get<User>('users');
-                        let query = usersCollection.query();
-                        if (ownerId) {
-                          query = usersCollection.query(
-                            WQ.where('owner_id', ownerId),
-                            WQ.where('deleted', false),
-                          );
-                        }
-                        const members = await query.fetch();
-                        setHasMembersInDB(members.length > 0);
-                        setLocalOnboardingLoaded(true);
-                      }}
-                    />
+                <InitialSetupScreen
+                  onComplete={async () => {
+                    const pid = await ProfileService.getActiveProfileId();
+                    const ownerId = await resolveOwnerId(pid);
+                    const { Q: WQ } = require('@nozbe/watermelondb');
+                    const usersCollection = getDatabase().get<User>('users');
+                    let query = usersCollection.query();
+                    if (ownerId) {
+                      query = usersCollection.query(
+                        WQ.where('owner_id', ownerId),
+                        WQ.where('deleted', false),
+                      );
+                    }
+                    const members = await query.fetch();
+                    setHasMembersInDB(members.length > 0);
+                    setLocalOnboardingLoaded(true);
+                  }}
+                />
               )}
             </Stack.Screen>
           ) : (
@@ -749,7 +753,7 @@ const AppNavigatorInner = () => {
               name="ForgotPassword"
               component={ForgotPasswordScreen}
             />
- 
+
             <Stack.Screen
               name="Privacy"
               component={PrivacyScreen}

@@ -10,7 +10,7 @@ import {
   Dimensions,
 } from "react-native";
 
-import { useThemeColors, useThemeRadius } from "../../contexts/ThemeContext";
+import { useThemeColors, useThemeRadius, useTheme } from "../../contexts/ThemeContext";
 import { useFamily } from "../../contexts/FamilyContext";
 import { InviteService } from "../../services/InviteService";
 import { AppIcon } from "../ui/AppIcon";
@@ -34,6 +34,7 @@ export const InviteOptionsModal: React.FC<InviteOptionsModalProps> = ({
 }) => {
   const colors = useThemeColors();
   const radius = useThemeRadius();
+  const { appearanceMode } = useTheme();
   const { profileId } = useFamily();
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -102,7 +103,10 @@ export const InviteOptionsModal: React.FC<InviteOptionsModalProps> = ({
               <Text style={[styles.optionTitle, { color: colors.foreground }]}>Invite via link</Text>
               <Text style={[styles.optionSubtitle, { color: colors.mutedForeground }]}>Share a link instantly.</Text>
               <Text
-                style={[styles.linkText, { color: colors.primary }]}
+                style={[
+                  styles.linkText,
+                  { color: appearanceMode === "midnight" ? colors.successLight : colors.primary },
+                ]}
                 numberOfLines={1}
                 ellipsizeMode="middle"
               >

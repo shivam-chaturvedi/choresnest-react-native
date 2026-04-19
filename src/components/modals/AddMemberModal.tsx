@@ -22,7 +22,7 @@ import { AppIcon } from "../ui/AppIcon";
 import { MEMBER_ICON_OPTIONS, DEFAULT_MEMBER_ICON } from "../../constants/memberIcons";
 import { MemberIcon } from "../ui/MemberIcon";
 
-interface AddMemberModalProps {
+interface AddMemberModalProps { 
   open: boolean;
   onClose: () => void;
   memberToEdit?: any; // FamilyMember

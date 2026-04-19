@@ -12,3 +12,8 @@ BEGIN
 END;
 $$;
 DROP TABLE IF EXISTS public.members CASCADE;
+
+
+ALTER TABLE profiles DROP CONSTRAINT profiles_owner_id_fkey;
+
+ALTER TABLE profiles ALTER COLUMN owner_id DROP NOT NULL;

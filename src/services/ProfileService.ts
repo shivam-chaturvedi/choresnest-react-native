@@ -8,6 +8,7 @@ const IS_GUEST_KEY = 'IS_GUEST';
 
 // In-memory fast cache — avoids any AsyncStorage or Supabase call on the hot path
 let cachedProfileId: string | null = null;
+const activeProfileListeners = new Set<(profileId: string | null) => void>();
 
 const persistActiveProfile = async (profileId: string | null) => {
     if (profileId) {
@@ -17,6 +18,13 @@ const persistActiveProfile = async (profileId: string | null) => {
         cachedProfileId = null;
         await AsyncStorage.removeItem(ACTIVE_PROFILE_KEY);
     }
+    activeProfileListeners.forEach(listener => {
+        try {
+            listener(profileId);
+        } catch (error) {
+            console.error('ProfileService: Active profile listener threw', error);
+        }
+    });
 };
 
 /**
@@ -125,8 +133,20 @@ export const ProfileService = {
             console.error('ProfileService: Failed to clear AsyncStorage during reset', error);
         } finally {
             NotificationCenter.setActiveProfileId(null);
+            activeProfileListeners.forEach(listener => {
+                try {
+                    listener(null);
+                } catch (inner) {
+                    console.error('ProfileService: Active profile listener threw during reset', inner);
+                }
+            });
         }
     }
+};
+
+export const onActiveProfileChange = (listener: (profileId: string | null) => void) => {
+    activeProfileListeners.add(listener);
+    return () => activeProfileListeners.delete(listener);
 };
 
 export { DATABASE_GUEST_PROFILE_ID as GUEST_PROFILE_ID };

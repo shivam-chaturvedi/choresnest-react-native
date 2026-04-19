@@ -77,58 +77,58 @@ const writeFamilyName = async (profileId: string, familySetting: SupabaseSetting
   });
 };
 
-  const writeProfiles = async (ownerId: string, remoteMembers: SupabaseProfileRecord[]) => {
-    if (remoteMembers.length === 0) {
-      return 0;
-    }
-    const now = Date.now();
-    const usersCollection = getDatabase().collections.get<User>('users');
-    const existing = await usersCollection.query(
-      Q.where('owner_id', ownerId)
-    ).fetch();
-    const existingById = new Map(existing.map(record => [record.id, record]));
-    await getDatabase().write(async () => {
-      for (const remote of remoteMembers) {
-        const isDeleted = remote.deleted ?? false;
-        const local = existingById.get(remote.id);
-        const createdAt = remote.created_at ? new Date(remote.created_at).getTime() : now;
-        const updatedAt = remote.updated_at ? new Date(remote.updated_at).getTime() : now;
-        if (local) {
-          await local.update(record => {
-            record.email = remote.email ?? record.email;
-            record.name = remote.name ?? record.name;
-            record.symbol = remote.symbol ?? record.symbol;
-            record.color = remote.color ?? record.color;
-            record.role = remote.role ?? record.role;
-            record.isActive = remote.is_active ?? record.isActive;
-            record.ownerId = remote.owner_id ?? ownerId;
-            record.deleted = isDeleted;
-            record.updatedAt = updatedAt;
-            record.version = remote.version ?? (record.version ?? 0);
-          });
-        } else if (!isDeleted) {
-          await usersCollection.create(user => {
-            const raw = user._raw as any;
-            raw.id = remote.id;
-            user.email = remote.email ?? '';
-            user.name = remote.name ?? '';
-            user.symbol = remote.symbol ?? 'account';
-            user.color = remote.color ?? 'member-blue';
-            user.role = remote.role ?? 'member';
-            user.isActive = remote.is_active ?? false;
-            user.ownerId = remote.owner_id ?? ownerId;
-            user.deleted = false;
-            user.version = remote.version ?? 1;
-            user.createdAt = createdAt;
-            user.updatedAt = updatedAt;
-            user.activeProfileId = remote.active_profile_id ?? '';
-            user.isGuest = remote.is_guest ?? false;
-          });
-        }
+const writeProfiles = async (ownerId: string, remoteMembers: SupabaseProfileRecord[]) => {
+  if (remoteMembers.length === 0) {
+    return 0;
+  }
+  const now = Date.now();
+  const usersCollection = getDatabase().collections.get<User>('users');
+  const existing = await usersCollection.query(
+    Q.where('owner_id', ownerId)
+  ).fetch();
+  const existingById = new Map(existing.map(record => [record.id, record]));
+  await getDatabase().write(async () => {
+    for (const remote of remoteMembers) {
+      const isDeleted = remote.deleted ?? false;
+      const local = existingById.get(remote.id);
+      const createdAt = remote.created_at ? new Date(remote.created_at).getTime() : now;
+      const updatedAt = remote.updated_at ? new Date(remote.updated_at).getTime() : now;
+      if (local) {
+        await local.update(record => {
+          record.email = remote.email ?? record.email;
+          record.name = remote.name ?? record.name;
+          record.symbol = remote.symbol ?? record.symbol;
+          record.color = remote.color ?? record.color;
+          record.role = remote.role ?? record.role;
+          record.isActive = remote.is_active ?? record.isActive;
+          record.ownerId = remote.owner_id ?? ownerId;
+          record.deleted = isDeleted;
+          record.updatedAt = updatedAt;
+          record.version = remote.version ?? (record.version ?? 0);
+        });
+      } else if (!isDeleted) {
+        await usersCollection.create(user => {
+          const raw = user._raw as any;
+          raw.id = remote.id;
+          user.email = remote.email ?? '';
+          user.name = remote.name ?? '';
+          user.symbol = remote.symbol ?? 'account';
+          user.color = remote.color ?? 'member-blue';
+          user.role = remote.role ?? 'member';
+          user.isActive = remote.is_active ?? false;
+          user.ownerId = remote.owner_id ?? ownerId;
+          user.deleted = false;
+          user.version = remote.version ?? 1;
+          user.createdAt = createdAt;
+          user.updatedAt = updatedAt;
+          user.activeProfileId = remote.active_profile_id ?? '';
+          user.isGuest = remote.is_guest ?? false;
+        });
       }
-    });
-    return remoteMembers.filter(member => !member.deleted).length;
-  };
+    }
+  });
+  return remoteMembers.filter(member => !member.deleted).length;
+};
 
 export const ProfileBootstrapService = {
   async bootstrap(profileId: string): Promise<ProfileBootstrapResult> {

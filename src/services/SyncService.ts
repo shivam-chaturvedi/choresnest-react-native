@@ -599,6 +599,9 @@ export const SyncService = {
 
     async handleProfileSwitch(activeProfileId: string): Promise<void> {
         if (lastSyncedProfileId && lastSyncedProfileId !== activeProfileId) {
+            if (isSyncing) {
+                console.warn(`[SyncService] ALARM: Profile switched mid-sync (${lastSyncedProfileId} -> ${activeProfileId}). The running SyncOrchestrator will likely fail.`);
+            }
             // Profile changed: reset in-memory state only.
             // Do NOT reset sync cursors — each profile keeps its own continuation point
             // so switching back to a profile continues from where it left off.
@@ -802,6 +805,9 @@ export const SyncService = {
 };
 
 // Acceptance Checklist:
+// - Rapid calls to requestSyncSoon() should collapse into a single run and, if a sync is running, trigger exactly one follow-up sync.
+// - manualSyncNow() bypasses the debounce timer, waits for any active sync, runs a full sync, and then performs a final read-only pull to guarantee convergence.
+// - startPeriodicSync() produces a read-only pull every 5 minutes (skipping guests/offline) and only triggers write syncs when shouldDoWriteSync() allows.
 // - Rapid calls to requestSyncSoon() should collapse into a single run and, if a sync is running, trigger exactly one follow-up sync.
 // - manualSyncNow() bypasses the debounce timer, waits for any active sync, runs a full sync, and then performs a final read-only pull to guarantee convergence.
 // - startPeriodicSync() produces a read-only pull every 5 minutes (skipping guests/offline) and only triggers write syncs when shouldDoWriteSync() allows.

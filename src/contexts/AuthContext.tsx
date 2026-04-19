@@ -27,6 +27,39 @@ import {
 } from '../services/proxyAuthService';
 import * as Sentry from '@sentry/react-native';
 
+const logProfileOnAppStart = async () => {
+  try {
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) {
+      console.warn('AuthContext: logProfileOnAppStart supabase session error', sessionError);
+      return;
+    }
+
+    const userId = sessionData?.session?.user?.id;
+    if (!userId) {
+      return;
+    }
+
+    const { data: profileData, error: profileError } = await SupabaseService.from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (profileError) {
+      console.warn('AuthContext: logProfileOnAppStart query failed', profileError);
+      return;
+    }
+
+    console.log('app start profile dump', {
+      userId,
+      profileData,
+      serialized: profileData ? JSON.parse(JSON.stringify(profileData)) : null,
+    });
+  } catch (error) {
+    console.error('AuthContext: logProfileOnAppStart unexpected error', error);
+  }
+};
+
 interface User {
   id: string;
   email: string;
@@ -73,31 +106,7 @@ const FALLBACK_OAUTH_SCHEME = 'com.choresnest';
 const FALLBACK_OAUTH_HOST = 'auth-callback';
 const GOOGLE_OAUTH_REDIRECT_URI = 'https://choresnest.com/auth/callback';
 
-const resolveFamilyProfileId = async (userId: string): Promise<string> => {
-  try {
-    const { data: profileData, error: profileError } = await SupabaseService.from('profiles')
-      .select('id, owner_id')
-      .eq('id', userId)
-      .maybeSingle();
-
-    if (profileError) {
-      console.warn('AuthContext: Unexpected error querying profiles table', profileError);
-      return userId;
-    }
-
-    if (profileData) {
-      if (profileData.owner_id && profileData.owner_id !== profileData.id) {
-        return profileData.owner_id;
-      }
-      return profileData.id ?? userId;
-    }
-
-    return userId;
-  } catch (error) {
-    console.error('AuthContext: Unexpected error resolving member profile', error);
-    return userId;
-  }
-};
+import { ProfileResolver } from '../services/ProfileResolver';
 
 async function proxyLogin(email: string, pass: string) {
   await proxyLoginUser(email, pass);
@@ -122,6 +131,122 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
   const [passwordRecoveryAccessToken, setPasswordRecoveryAccessToken] =
     useState<string | null>(null);
   const [pendingInviteSlug, setPendingInviteSlug] = useState<string | null>(null);
+
+  const handleAuthenticatedSession = React.useCallback(
+    async (session: Session, shouldTriggerSync: boolean) => {
+      const userData = {
+        id: session.user.id,
+        email: session.user.email!,
+        name: session.user.user_metadata?.name,
+      };
+      setUser(userData);
+      console.log('current user data is', {
+        userId: userData.id,
+        email: userData.email,
+        name: userData.name,
+      });
+      Sentry.setUser({
+        id: userData.id,
+        email: userData.email ?? undefined,
+      });
+      setIsGuest(false);
+      supabase.auth.startAutoRefresh();
+      await AsyncStorage.multiRemove(['IS_GUEST', 'GUEST_PROFILE_ID']);
+      await AsyncStorage.setItem('AUTH_USER', JSON.stringify(userData));
+
+      let resolvedProfileId = session.user.id;
+      let resolvedRole: string | undefined;
+      let ownerId: string | undefined;
+      let isMember = false;
+      try {
+        const resolved = await ProfileResolver.resolveEffectiveProfileId(session.user.id);
+        resolvedProfileId = resolved.profileId;
+        resolvedRole = resolved.role;
+        ownerId = resolved.ownerId;
+        isMember = resolvedRole === 'member' && resolvedProfileId !== session.user.id;
+
+        console.log('[AuthContext] Identity resolved:', {
+          userId: session.user.id,
+          resolvedProfileId,
+          resolvedRole,
+          isMember,
+        });
+
+        // Atomic persistence of the correct identity BEFORE sync triggers
+        await AsyncStorage.setItem('ACTIVE_PROFILE_ID', resolvedProfileId);
+        await ProfileService.setActiveProfileId(resolvedProfileId);
+      } catch (error) {
+        console.error('AuthContext: Failed to resolve family profile id', error);
+        // Fallback to self if resolution fails entirely
+        await AsyncStorage.setItem('ACTIVE_PROFILE_ID', resolvedProfileId);
+        await ProfileService.setActiveProfileId(resolvedProfileId);
+      }
+
+      DocumentUploadScheduler.startForUser(session.user.id);
+
+      try {
+        await getDatabase().write(async () => {
+          const usersCol = getDatabase().get<UserRecord>('users');
+          const existing = await usersCol
+            .query(Q.where('id', session.user.id))
+            .fetch();
+          if (existing.length > 0) {
+            await existing[0].update(u => {
+              u.email = userData.email;
+              u.name = userData.name || '';
+              u.isActive = true;
+              u.ownerId = ownerId ?? session.user.id;
+              u.activeProfileId = resolvedProfileId;
+              u.version = (u.version ?? 0) + 1;
+            });
+          } else {
+            await usersCol.create(u => {
+              (u._raw as any).id = session.user.id;
+              u.email = userData.email;
+              u.name = userData.name || '';
+              u.isGuest = false;
+              u.hasCompletedOnboarding = true;
+              u.isActive = true;
+              u.ownerId = ownerId ?? session.user.id;
+              u.activeProfileId = resolvedProfileId;
+              u.version = 1;
+            });
+          }
+        });
+      } catch (e) {
+        console.error('AuthContext: Failed to cache user record:', e);
+      }
+
+      if (shouldTriggerSync) {
+        (async () => {
+          try {
+            const { SyncService } = await import('../services/SyncService');
+            if (!SyncService.getSyncStatus()) {
+              if (isMember) {
+                // Members must always force-pull from epoch so they get the owner's
+                // existing data (cursor reset clears any stale "nothing new" timestamp).
+                console.log('[AuthContext] Member login detected — triggering forceFullSync to pull family data from scratch');
+                SyncService.forceFullSync().catch(err => {
+                  if (!err?.message?.includes('Concurrent synchronization')) {
+                    console.error('Background force-sync failed:', err);
+                  }
+                });
+              } else {
+                SyncService.sync().catch(err => {
+                  if (!err?.message?.includes('Concurrent synchronization')) {
+                    console.error('Background sync failed:', err);
+                  }
+                });
+              }
+            }
+          } catch (err) {
+            console.error('Failed to load SyncService', err);
+          }
+        })();
+      }
+    },
+    [],
+  );
 
   // Ref copy so async callbacks can read the latest epoch without closure capture
   const epochRef = useRef(0);
@@ -149,7 +274,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
         console.log('AuthContext: Starting auth initialization...');
         const start = Date.now();
 
-        // Immediately check local cached user to prevent UI blocking
         const cachedUserStr = await AsyncStorage.getItem('AUTH_USER');
         if (cachedUserStr) {
           try {
@@ -163,48 +287,39 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
           } catch (e) {
             console.error('AuthContext: Failed to parse cached user', e);
           }
+        }
+
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
+
+        console.log('AuthContext: getSession result', {
+          hasSession: !!session,
+          userId: session?.user?.id ?? null,
+          sessionError,
+        });
+
+        if (session?.user) {
+          await handleAuthenticatedSession(session, false);
         } else {
-          // No AUTH_USER in our cache → user is logged-out.
-          //
-          // CRITICAL: If a stale/expired Supabase session exists in AsyncStorage,
-          // onAuthStateChange registration triggers _recoverAndRefresh internally,
-          // making a network token-refresh call that fails with "Network request failed".
-          //
-          // DO NOT call supabase.auth.signOut() — despite scope:'local', the SDK
-          // still makes a network attempt first and blocks for 46+ seconds on failure.
-          //
-          // Instead: directly delete Supabase's AsyncStorage keys. Zero network. Instant.
-          try {
-            const supabaseUrl =
-              (await AsyncStorage.getItem('__supabase_url__')) || '';
-            // Extract project ref from stored URL OR from known keys via getAllKeys
-            const allKeys = await AsyncStorage.getAllKeys();
-            const supabaseKeys = allKeys.filter(
-              k =>
-                k.startsWith('sb-') ||
-                k === 'supabase.auth.token' ||
-                k.includes('-auth-token') ||
-                k.includes('-auth-code-verifier'),
-            );
-            if (supabaseKeys.length > 0) {
-              await AsyncStorage.multiRemove(supabaseKeys);
-              console.log(
-                `AuthContext: Cleared ${supabaseKeys.length} stale Supabase session key(s) from AsyncStorage (no network)`,
-              );
-            }
-          } catch (e) {
-            // Ignore — stoarge error does not block auth init
-          }
           setUser(null);
           setIsGuest(false);
+          Sentry.setUser(null);
+          await AsyncStorage.multiRemove([
+            'AUTH_USER',
+            'ACTIVE_PROFILE_ID',
+            'IS_GUEST',
+            'GUEST_PROFILE_ID',
+          ]);
           DocumentUploadScheduler.stop();
         }
 
         // Check guest mode independently
         const guest = await AsyncStorage.getItem('IS_GUEST');
         if (guest === 'true') {
-            setIsGuest(true);
-            Sentry.setUser(null);
+          setIsGuest(true);
+          Sentry.setUser(null);
         }
 
         // Check Onboarding status globally across all profiles for this device
@@ -218,8 +333,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
         }
         setHasCompletedOnboarding(completed);
         console.log(
-          `AuthContext: Auth initialization total time: ${
-            Date.now() - start
+          `AuthContext: Auth initialization total time: ${Date.now() - start
           }ms`,
         );
       } catch (error) {
@@ -234,101 +348,32 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
     };
 
     initializeAuth();
+    void logProfileOnAppStart();
 
     // Listen for Supabase auth state changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      console.log('[AuthContext] onAuthStateChange', {
+        event: _event,
+        hasUser: !!session?.user,
+        userId: session?.user?.id ?? null,
+      });
+
       if (session?.user) {
-        const userData = {
-          id: session.user.id,
-          email: session.user.email!,
-          name: session.user.user_metadata?.name,
-        };
-        setUser(userData);
-        Sentry.setUser({
-          id: userData.id,
-          email: userData.email ?? undefined,
-        });
-        setIsGuest(false);
-        // Start token auto-refresh only when we have a real authenticated session
-        supabase.auth.startAutoRefresh();
-        AsyncStorage.removeItem('IS_GUEST');
-        AsyncStorage.removeItem('GUEST_PROFILE_ID');
-        AsyncStorage.setItem('AUTH_USER', JSON.stringify(userData));
-        // Bind the new user's profile immediately so AppNavigator doesn't stall
-        const defaultProfileId = session.user.id;
-        AsyncStorage.setItem('ACTIVE_PROFILE_ID', defaultProfileId);
-        void ProfileService.setActiveProfileId(defaultProfileId);
-        setTimeout(() => {
-          resolveFamilyProfileId(session.user.id)
-            .then(resolvedId => {
-              if (resolvedId && resolvedId !== defaultProfileId) {
-                console.log(
-                  `AuthContext: Resolved family profile id ${resolvedId} for user ${session.user.id}`,
-                );
-                AsyncStorage.setItem('ACTIVE_PROFILE_ID', resolvedId);
-                void ProfileService.setActiveProfileId(resolvedId);
-              }
-            })
-            .catch(error => {
-              console.error('AuthContext: Failed to resolve family profile id', error);
-            });
-        }, 5000);
-        DocumentUploadScheduler.startForUser(session.user.id);
-
-        // Cache user record locally for guest-mode discovery
-        try {
-          await getDatabase().write(async () => {
-            const usersCol = getDatabase().get<UserRecord>('users');
-            const existing = await usersCol
-              .query(Q.where('id', session.user.id))
-              .fetch();
-            if (existing.length > 0) {
-              await existing[0].update(u => {
-                u.email = userData.email;
-                u.name = userData.name || '';
-                u.isGuest = false;
-                u.version = (u.version ?? 0) + 1;
-              });
-            } else {
-              await usersCol.create(u => {
-                (u._raw as any).id = session.user.id;
-                u.email = userData.email;
-                u.name = userData.name || '';
-                u.isGuest = false;
-                u.hasCompletedOnboarding = true;
-                u.version = 1;
-              });
-            }
-          });
-        } catch (e) {
-          console.error('AuthContext: Failed to cache user record:', e);
-        }
-
-        // Trigger sync in background — AppNavigator handles INITIAL_SESSION with 8s delay
-        if (_event !== 'INITIAL_SESSION') {
-          (async () => {
-            try {
-              const { SyncService } = await import('../services/SyncService');
-              if (!SyncService.getSyncStatus()) {
-                SyncService.sync().catch(err => {
-                  if (!err?.message?.includes('Concurrent synchronization')) {
-                    console.error('Background sync failed:', err);
-                  }
-                });
-              }
-            } catch (err) {
-              console.error('Failed to load SyncService', err);
-            }
-          })();
-        }
+        await handleAuthenticatedSession(session, _event !== 'INITIAL_SESSION');
       } else {
-        // No session — stop background token refresh to prevent spurious network errors
+        console.log('[AuthContext] clearing auth state because session is null');
         supabase.auth.stopAutoRefresh();
         setUser(null);
+        setIsGuest(false);
         Sentry.setUser(null);
-        AsyncStorage.removeItem('AUTH_USER');
+        await AsyncStorage.multiRemove([
+          'AUTH_USER',
+          'ACTIVE_PROFILE_ID',
+          'IS_GUEST',
+          'GUEST_PROFILE_ID',
+        ]);
         DocumentUploadScheduler.stop();
       }
     });
@@ -451,8 +496,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
             : null;
         const webInviteSlug =
           parsed.protocol === 'https:' &&
-          normalizedHost === 'choresnest.com' &&
-          parsed.pathname.startsWith('/invite/')
+            normalizedHost === 'choresnest.com' &&
+            parsed.pathname.startsWith('/invite/')
             ? parsed.pathname.replace(/^\/invite\/+/, '')
             : null;
         const inviteSlug = nativeInviteSlug || webInviteSlug;

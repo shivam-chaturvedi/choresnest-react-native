@@ -5,25 +5,21 @@ import { ProfileService } from './ProfileService';
 const ACTIVE_PROFILE_KEY = 'ACTIVE_PROFILE_ID';
 
 class BootService {
-    private isValidProfileId(value?: string | null): value is string {
-        return typeof value === 'string' && value.trim().length > 0;
-    }
-
     async restoreLastActiveProfile(): Promise<string> {
+        // We now rely on AuthContext + ProfileResolver to deterministically 
+        // load the profile. BootService just performs an initial optimistic 
+        // read so the DB doesn't crash on very first query before AuthContext 
+        // mounts, but we do NOT overwrite it if null.
         try {
             const cachedProfile = await AsyncStorage.getItem(ACTIVE_PROFILE_KEY);
-            const validProfile = this.isValidProfileId(cachedProfile) ? cachedProfile! : null;
-            if (validProfile) {
-                await ProfileService.setActiveProfileId(validProfile);
-                console.log('[BootService] Restored active profile', validProfile);
-                return validProfile;
+            if (cachedProfile && cachedProfile.trim().length > 0) {
+                await ProfileService.setActiveProfileId(cachedProfile);
+                return cachedProfile;
             }
         } catch (error) {
             console.error('[BootService] Failed to read ACTIVE_PROFILE_ID', error);
         }
 
-        await ProfileService.setActiveProfileId(GUEST_PROFILE_ID);
-        console.log('[BootService] Falling back to guest profile');
         return GUEST_PROFILE_ID;
     }
 }

@@ -125,18 +125,31 @@ serve(async (req: Request) => {
       email_disabled: false,
     });
 
+    console.log(userData, userError);
+
     if (userError || !userData?.user) {
+      const friendlyMessage =
+        userError?.code === "email_exists"
+          ? "An account with that email already exists. Use a different address."
+          : userError?.message || "Failed to create user";
+
       return logAndRespond(
         {
           success: false,
           stage: "create_user",
-          error: userError?.message || "Failed to create user",
+          error: friendlyMessage,
+          details: {
+            code: userError?.code,
+            status: userError?.status,
+            hint: userError?.hint,
+            message: userError?.message,
+          },
         },
-        500,
+        userError?.status || 500,
       );
     }
 
-    const now = new Date().toISOString();
+    const isoNow = new Date().toISOString();
     const profilePayload = {
       id: userData.user.id,
       email,
@@ -149,13 +162,26 @@ serve(async (req: Request) => {
       is_guest: false,
       deleted: false,
       version: 1,
-      created_at: now,
-      updated_at: now,
+      created_at: isoNow,
+      updated_at: isoNow,
     };
 
     const { error: profileError } = await supabase
       .from("profiles")
-      .insert(profilePayload);
+      .update({
+        email,
+        name,
+        owner_id: inviteRecord.profile_id,
+        symbol: avatar || "account",
+        color: color || "member-blue",
+        role: "member",
+        is_active: true,
+        is_guest: false,
+        deleted: false,
+        version: 1,
+        updated_at: isoNow,
+      })
+      .eq("id", userData.user.id);
 
     if (profileError) {
       return logAndRespond(
@@ -164,6 +190,10 @@ serve(async (req: Request) => {
           stage: "create_profile",
           error: profileError.message,
           profilePayload,
+          details: {
+            code: profileError.code,
+            hint: profileError.hint,
+          },
         },
         500,
       );

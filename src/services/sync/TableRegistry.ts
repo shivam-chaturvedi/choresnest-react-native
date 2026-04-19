@@ -34,7 +34,7 @@ export const SYNC_TABLES: TableSyncConfig[] = [
     { key: 'collection_recipes', remoteTable: 'collection_recipes', phase: 3, hasProfileId: true, addProfileId: true },
     { key: 'folders', phase: 1 },
     { key: 'events', phase: 2, hasProfileId: true, addProfileId: true },
-    { key: 'tasks', phase: 2 },
+    { key: 'tasks', phase: 2, hasProfileId: true, addProfileId: true },
     { key: 'lists', remoteTable: 'lists', phase: 1, hasProfileId: true, addProfileId: true },
     { key: 'transactions', phase: 2 },
     { key: 'budgets', phase: 2 },
@@ -46,7 +46,7 @@ export const SYNC_TABLES: TableSyncConfig[] = [
         conflictKey: 'profile_id,category_key',
         localOnly: true,
     },
-    { key: 'meal_plans', hasProfileId: false, phase: 2 },
+    { key: 'meal_plans', phase: 2, hasProfileId: true, addProfileId: true },
     { key: 'list_items', remoteTable: 'list_items', hasProfileId: true, addProfileId: true, phase: 2 },
     // list_categories is a deprecated local-only table. It must remain in SYNC_TABLES
     // so WatermelonDB's synchronize() receives it in the pullChanges result (it requires

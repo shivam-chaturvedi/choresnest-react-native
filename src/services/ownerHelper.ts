@@ -9,17 +9,20 @@ export const resolveOwnerId = async (profileId?: string | null): Promise<string 
         return null;
     }
     try {
-        const user = await getUsersCollection().find(profileId);
-        if (!user) {
-            return null;
+        const matching = await getUsersCollection()
+            .query(Q.where('id', profileId))
+            .fetch();
+        if (matching.length === 0) {
+            return profileId;
         }
+        const user = matching[0];
         if (user.role === 'member' && user.ownerId) {
             return user.ownerId;
         }
         return user.id;
     } catch (error) {
         console.warn('ownerHelper: failed to resolve owner_id', error);
-        return null;
+        return profileId;
     }
 };
 
