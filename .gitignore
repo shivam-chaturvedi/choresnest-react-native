@@ -1,9 +1,7 @@
 # OSX
-#
 .DS_Store
 
 # Xcode
-#
 build/
 *.pbxuser
 !default.pbxuser
@@ -22,7 +20,7 @@ DerivedData
 *.xcuserstate
 **/.xcode.env.local
 
-# Env
+# Env files only (secrets)
 .env
 .env.local
 .env.development.local
@@ -31,8 +29,7 @@ DerivedData
 .env.development
 .env.production
 
-# Android/IntelliJ
-#
+# Android/IntelliJ build artifacts
 build/
 .idea
 .gradle
@@ -40,30 +37,14 @@ local.properties
 *.iml
 *.hprof
 .cxx/
-*.keystore
-!debug.keystore
 .kotlin/
-android/sentry.properties
-ios/sentry.properties
-
-# Android signing keys
-android/gradle.properties
-android/app/*.keystore
-android/app/*.jks
 
 # node.js
-#
 node_modules/
 npm-debug.log
 yarn-error.log
 
 # fastlane
-#
-# It is recommended to not store the screenshots in the git repo. Instead, use fastlane to re-generate the
-# screenshots whenever they are needed.
-# For more information about the recommended setup visit:
-# https://docs.fastlane.tools/best-practices/source-control/
-
 **/fastlane/report.xml
 **/fastlane/Preview.html
 **/fastlane/screenshots

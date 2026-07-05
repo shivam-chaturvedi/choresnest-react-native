@@ -88,8 +88,73 @@ def enableProguardInReleaseBuilds = true
  * this variant is about 6MiB larger per architecture than default.
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
+
+def resolveSentryAuthToken = {
+    def fromProcessEnv = System.getenv("SENTRY_AUTH_TOKEN")?.trim()
+    if (fromProcessEnv) {
+        return fromProcessEnv
+    }
+
+    if (project.hasProperty("env")) {
+        def fromDotEnv = project.env.get("SENTRY_AUTH_TOKEN")?.trim()
+        if (fromDotEnv) {
+            return fromDotEnv
+        }
+    }
+
+    def propsFile = rootProject.file("sentry.properties")
+    if (propsFile.exists()) {
+        def props = new Properties()
+        propsFile.withInputStream { props.load(it) }
+        def fromProps = props.getProperty("auth.token")?.trim()
+        if (fromProps) {
+            return fromProps
+        }
+    }
+
+    return null
+}
+
+def syncSentryAuthFromEnv = {
+    def token = resolveSentryAuthToken()
+    if (!token) {
+        return false
+    }
+
+    def propsFile = rootProject.file("sentry.properties")
+    def props = new Properties()
+    if (propsFile.exists()) {
+        propsFile.withInputStream { props.load(it) }
+    }
+
+    if (!props.getProperty("auth.token")?.trim()) {
+        props.setProperty("auth.token", token)
+        propsFile.withOutputStream { out ->
+            props.store(out, "Sentry config for release builds")
+        }
+        logger.lifecycle("Sentry: auth token loaded for source map upload.")
+    }
+
+    return true
+}
+
 apply from: new File(["/opt/homebrew/bin/node", "--print", "require.resolve('@sentry/react-native/package.json')"].execute().text.trim(), "../sentry.gradle")
 // apply from: new File(["node", "--print", "require.resolve('@sentry/react-native/package.json')"].execute().text.trim(), "../sentry.gradle")
+
+def sentryUploadEnabled = syncSentryAuthFromEnv()
+if (!sentryUploadEnabled) {
+    logger.lifecycle("Sentry: no auth token configured — skipping source map upload.")
+}
+
+afterEvaluate {
+    if (!sentryUploadEnabled) {
+        tasks.matching { task ->
+            task.name.contains("_SentryUpload_") || task.name.contains("_SentryCollectModules_")
+        }.configureEach { task ->
+            task.enabled = false
+        }
+    }
+}
 android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -100,8 +165,8 @@ android {
         applicationId "com.choresnest"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 8
-        versionName "1.0.7"
+        versionCode 10
+        versionName "1.0.9"
     }
     signingConfigs {
         debug {

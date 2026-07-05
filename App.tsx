@@ -37,9 +37,13 @@ import { bootService } from './src/services/BootService';
 import { AppUpdateHost } from './src/components/updates/AppUpdateHost';
 import * as Sentry from '@sentry/react-native';
 import { reactNavigationIntegration } from './src/services/SentryNavigation';
+import Config from 'react-native-config';
 
 Sentry.init({
-  dsn: 'https://89d6728a04ce8a7a66a67655e9bbe3fc@o4511009722466304.ingest.us.sentry.io/4511009726070784',
+  dsn:
+    Config.SENTRY_DSN ||
+    'https://89d6728a04ce8a7a66a67655e9bbe3fc@o4511009722466304.ingest.us.sentry.io/4511009726070784',
+  environment: Config.SENTRY_ENVIRONMENT || Config.NODE_ENV || 'production',
 
   // Adds more context data to events (IP address, cookies, user, etc.)
   // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
