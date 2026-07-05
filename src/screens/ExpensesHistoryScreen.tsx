@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   View,
   Text,
   StyleSheet,
@@ -12,10 +13,11 @@ import { AppLayout } from '../components/layout';
 import { useTheme, useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import { useFinance, Transaction } from '../contexts/FinanceContext';
 import { DateTimePicker } from '../components/ui/SimpleDatePicker';
-import { ChevronLeft } from 'lucide-react-native';
+import { ChevronLeft, Edit2, Trash2 } from 'lucide-react-native';
 import { formatMonthKey, formatMonthLabel, parseTransactionDate, toDate } from '../utils/financeDateUtils';
 import { useCountry } from '../contexts/CountryContext';
 import { IconGlyph } from '../components/ui/IconGlyph';
+import { EditTransactionModal } from '../components/modals/EditTransactionModal';
 
 type HistoryFilter = 'month' | 'week' | 'year' | 'custom';
 
@@ -42,8 +44,53 @@ export const ExpensesHistoryScreen: React.FC = () => {
   const radius = useThemeRadius();
   const { appearanceMode } = useTheme();
   const isLightAppearance = appearanceMode === 'light' || appearanceMode === 'cream';
-  const { transactions } = useFinance();
+  const { transactions, updateTransaction, deleteTransaction, categoryIcons, categoryColors } = useFinance();
   const { formatCurrency } = useCountry();
+
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(
+    null,
+  );
+
+  const openEditTransaction = useCallback((tx: Transaction) => {
+    setEditingTransaction(tx);
+    setEditModalOpen(true);
+  }, []);
+
+  const confirmDeleteTransaction = useCallback(
+    (tx: Transaction) => {
+      Alert.alert(
+        'Delete transaction?',
+        `Delete "${tx.name}" (${tx.type === 'income' ? '+' : '-'}${formatCurrency(
+          tx.amount,
+        )})?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: () => deleteTransaction(tx.id),
+          },
+        ],
+      );
+    },
+    [deleteTransaction, formatCurrency],
+  );
+
+  const handleSaveEdit = useCallback(
+    (payload: { name: string; amount: number; category: string }) => {
+      if (!editingTransaction) return;
+      updateTransaction(editingTransaction.id, {
+        name: payload.name,
+        amount: payload.amount,
+        category: payload.category,
+        icon: categoryIcons[payload.category] || editingTransaction.icon,
+      });
+      setEditModalOpen(false);
+      setEditingTransaction(null);
+    },
+    [categoryIcons, editingTransaction, updateTransaction],
+  );
 
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>('month');
   const [historyMonth, setHistoryMonth] = useState(formatMonthKey(new Date()));
@@ -156,7 +203,7 @@ export const ExpensesHistoryScreen: React.FC = () => {
     };
   }, [filteredTransactions]);
 
-  const weekPickerOpener = useRef<() => void>();
+  const weekPickerOpener = useRef<(() => void) | null>(null);
   const registerWeekPickerOpener = useCallback((openFn: () => void) => {
     weekPickerOpener.current = openFn;
   }, []);
@@ -318,12 +365,34 @@ export const ExpensesHistoryScreen: React.FC = () => {
           {item.category} • {item.dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
         </Text>
       </View>
-      <Text style={[
-        styles.txAmount,
-        item.type === 'income' ? { color: colors.success } : { color: colors.danger }
-      ]}>
-        {item.type === 'income' ? '+' : '-'}{formatCurrency(item.amount)}
-      </Text>
+      <View style={styles.txRight}>
+        <Text style={[
+          styles.txAmount,
+          item.type === 'income' ? { color: colors.success } : { color: colors.danger }
+        ]}>
+          {item.type === 'income' ? '+' : '-'}{formatCurrency(item.amount)}
+        </Text>
+        <View style={styles.txActions}>
+          <Pressable
+            onPress={() => openEditTransaction(item)}
+            style={[
+              styles.txActionBtn,
+              { backgroundColor: colors.muted, borderColor: colors.border, borderRadius: radius.sm },
+            ]}
+          >
+            <Edit2 size={16} color={colors.foreground} />
+          </Pressable>
+          <Pressable
+            onPress={() => confirmDeleteTransaction(item)}
+            style={[
+              styles.txActionBtn,
+              { backgroundColor: colors.muted, borderColor: colors.border, borderRadius: radius.sm },
+            ]}
+          >
+            <Trash2 size={16} color={colors.danger} />
+          </Pressable>
+        </View>
+      </View>
     </View>
   );
 
@@ -387,6 +456,18 @@ export const ExpensesHistoryScreen: React.FC = () => {
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         />
       </View>
+
+      <EditTransactionModal
+        visible={editModalOpen}
+        transaction={editingTransaction}
+        categoryIcons={categoryIcons}
+        categoryColors={categoryColors}
+        onClose={() => {
+          setEditModalOpen(false);
+          setEditingTransaction(null);
+        }}
+        onSave={handleSaveEdit}
+      />
     </AppLayout>
   );
 };
@@ -566,6 +647,21 @@ const styles = StyleSheet.create({
   txAmount: {
     fontSize: 16,
     fontWeight: '700',
+  },
+  txRight: {
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  txActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  txActionBtn: {
+    width: 32,
+    height: 32,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyState: {
     padding: 30,

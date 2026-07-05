@@ -47,10 +47,9 @@ export const ProfileResolver = {
 
       // 2. Offline fallback: Query WatermelonDB
       const usersCol = getDatabase().get<UserRecord>('users');
-      const localUsers = await usersCol.query(Q.where('id', userId)).fetch();
-
-      if (localUsers.length > 0) {
-        const localUser = localUsers[0];
+      try {
+        // WatermelonDB primary key lookup is best-effort via `find`.
+        const localUser = await usersCol.find(userId);
         let profileId = localUser.id;
 
         if (localUser.role === 'member' && localUser.ownerId && localUser.ownerId !== localUser.id) {
@@ -66,6 +65,8 @@ export const ProfileResolver = {
           role: localUser.role,
           ownerId: localUser.ownerId,
         };
+      } catch {
+        // not found -> continue to AsyncStorage fallback
       }
 
       console.warn('[ProfileResolver] Local DB fetch failed, checking AsyncStorage...');

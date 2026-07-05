@@ -9,19 +9,19 @@ export const resolveOwnerId = async (profileId?: string | null): Promise<string 
         return null;
     }
     try {
-        const matching = await getUsersCollection()
-            .query(Q.where('id', profileId))
-            .fetch();
-        if (matching.length === 0) {
-            return profileId;
-        }
-        const user = matching[0];
+        // WatermelonDB treats `id` as a special primary key; using `find` is the
+        // most reliable way to resolve it across adapters.
+        const user = await getUsersCollection().find(profileId);
         if (user.role === 'member' && user.ownerId) {
             return user.ownerId;
         }
         return user.id;
     } catch (error) {
-        console.warn('ownerHelper: failed to resolve owner_id', error);
+        // Record not found is expected when booting on a fresh DB; fall back to profileId.
+        const message = (error as any)?.message ?? String(error);
+        if (!message.includes('not found')) {
+            console.warn('ownerHelper: failed to resolve owner_id', error);
+        }
         return profileId;
     }
 };

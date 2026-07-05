@@ -270,46 +270,47 @@ export const FamilyOnboarding: React.FC<FamilyOnboardingProps> = ({
   };
 
   const handleComplete = async () => {
-    if (newFamilyName.trim()) {
-      setFamilyName(newFamilyName);
-    }
-
-    // Apply changes
-    // 1. Members to remove (in context but not in local)
-    const localIds = new Set(
-      localMembers.filter(m => m.id).map((m: any) => m.id),
-    );
-    members.forEach((m: FamilyMember) => {
-      if (!localIds.has(m.id)) removeMember(m.id);
-    });
-
-    // 2. Members to update or add
-    localMembers.forEach(m => {
-      if (m.id) {
-        updateMember(m.id, {
-          name: m.name,
-          symbol: m.avatar,
-          color: m.color,
-        });
-      } else {
-        addMember({
-          name: m.name,
-          symbol: m.avatar,
-          color: m.color,
-        });
-      }
-    });
-
     try {
-      await AppSettingsService.completeOnboarding();
-    } catch (error) {
-      console.error(
-        'FamilyOnboarding: failed to persist onboarding flag:',
-        error,
+      if (newFamilyName.trim()) {
+        await setFamilyName(newFamilyName);
+      }
+
+      // Apply changes
+      // 1. Members to remove (in context but not in local)
+      const localIds = new Set(
+        localMembers.filter(m => m.id).map((m: any) => m.id),
       );
+      await Promise.all(
+        members
+          .filter((m: FamilyMember) => !localIds.has(m.id))
+          .map((m: FamilyMember) => removeMember(m.id)),
+      );
+
+      // 2. Members to update or add
+      await Promise.all(
+        localMembers.map(m => {
+          if (m.id) {
+            return updateMember(m.id, {
+              name: m.name,
+              symbol: m.avatar,
+              color: m.color,
+            });
+          }
+          return addMember({
+            name: m.name,
+            symbol: m.avatar,
+            color: m.color,
+          });
+        }),
+      );
+
+      await AppSettingsService.completeOnboarding();
+      completeOnboarding();
+      onClose();
+    } catch (error) {
+      console.error('FamilyOnboarding: failed to save family setup', error);
+      Alert.alert('Error', 'Unable to save family members. Please try again.');
     }
-    completeOnboarding();
-    onClose();
   };
 
   return (

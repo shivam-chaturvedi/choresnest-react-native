@@ -33,8 +33,8 @@ const onboardingSlides = [
 ];
 
 interface OnboardingScreenProps {
-  onSkip: () => void;
-  onComplete: () => void;
+  onSkip: () => void | Promise<void>;
+  onComplete: () => void | Promise<void>;
 }
 
 export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
@@ -45,13 +45,17 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const slide = onboardingSlides[currentSlide];
   const radius = theme.radius;
 
-  const finishOnboarding = async (callback: () => void) => {
+  const finishOnboarding = async (callback: () => void | Promise<void>) => {
     try {
-      await AsyncStorage.setItem('HAS_SEEN_ONBOARDING', 'true');
+      await AsyncStorage.multiSet([
+        ['HAS_SEEN_ONBOARDING', 'true'],
+        // Back-compat: AppNavigator/AuthContext uses this key for gating.
+        ['HAS_COMPLETED_ONBOARDING', 'true'],
+      ]);
     } catch (e) {
       console.error("Failed to save onboarding flag", e);
     }
-    callback();
+    await callback();
   };
 
   const handleNext = () => {
@@ -69,7 +73,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   return (
     <View style={[styles.screenContainer, { backgroundColor: theme.colors.background }]}>
       <View style={styles.skipRow}>
-        <Pressable onPress={onSkip} style={[styles.skipButton, { backgroundColor: theme.colors.muted, borderRadius: radius.sm }]}>
+        <Pressable onPress={handleSkip} style={[styles.skipButton, { backgroundColor: theme.colors.muted, borderRadius: radius.sm }]}>
           <Text style={[styles.skipText, { color: theme.colors.foreground }]}>Skip</Text>
         </Pressable>
       </View>

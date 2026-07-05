@@ -46,10 +46,11 @@ export const SplashScreen = ({ onContinue, isLoading }: SplashScreenProps) => {
     let isMounted = true;
     const initSplash = async () => {
       try {
-        const [savedPalette, savedShape, savedMode, hasSeen] = await Promise.all([
+        const [savedPalette, savedShape, savedMode, hasCompleted, hasSeen] = await Promise.all([
           AsyncStorage.getItem('@app_theme_palette'),
           AsyncStorage.getItem('@app_theme_shape'),
           AsyncStorage.getItem('@app_theme_mode'),
+          AsyncStorage.getItem("HAS_COMPLETED_ONBOARDING"),
           AsyncStorage.getItem("HAS_SEEN_ONBOARDING")
         ]);
 
@@ -63,7 +64,8 @@ export const SplashScreen = ({ onContinue, isLoading }: SplashScreenProps) => {
 
         setSplashColors(colors);
         setSplashRadius(radius);
-        setNavigationTarget(hasSeen === "true" ? "Auth" : "Onboarding");
+        const completed = hasCompleted === "true" || hasSeen === "true";
+        setNavigationTarget(completed ? "Auth" : "Onboarding");
       } catch (error) {
         if (!isMounted) return;
         console.error("Splash error:", error);

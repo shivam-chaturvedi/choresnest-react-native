@@ -15,7 +15,9 @@ import { VaultService } from '../services/VaultService';
 import { supabase } from '../config/supabase';
 import { ProfileService, onActiveProfileChange } from '../services/ProfileService';
 import { useAuth } from './AuthContext';
-import { GUEST_PROFILE_ID } from '../database';
+import { GUEST_PROFILE_ID, getDatabase } from '../database';
+import UserRecord from '../database/models/User';
+import { PROFILE_COLORS } from '../constants/profileColors';
 
 // Re-export interfaces (keeping compatibility or updating as needed)
 export interface FamilyMember {
@@ -202,6 +204,98 @@ const FamilyProviderInner: React.FC<{
   const [globalVault, setGlobalVault] = useState<any[]>([]);
   const [memberVaults, setMemberVaults] = useState<Record<string, any[]>>({});
   const [rawGroceryItems, setRawGroceryItems] = useState<ListItemRecord[]>([]);
+
+  // Ensure the owner "member" row exists locally so the Home screen can render profiles
+  // immediately (even before a full sync has pulled the family graph).
+  useEffect(() => {
+    if (!resolvedProfileId || isGuest) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const db = getDatabase();
+        await db.write(async () => {
+          if (cancelled) return;
+          const usersCol = db.get<UserRecord>('users');
+          const now = Date.now();
+          let existing: UserRecord | null = null;
+          try {
+            existing = await usersCol.find(resolvedProfileId);
+          } catch {
+            existing = null;
+          }
+
+          if (existing) {
+            await existing.update(record => {
+              record.email = record.email ?? '';
+              if (!record.name || String(record.name).trim().length === 0) {
+                record.name = 'Admin';
+              }
+              record.isGuest = false;
+              record.hasCompletedOnboarding = true;
+              record.activeProfileId = record.activeProfileId || resolvedProfileId;
+              record.ownerId = record.ownerId || resolvedProfileId;
+              record.role = record.role || 'owner';
+              record.isActive = record.isActive ?? true;
+              if (!record.symbol || String(record.symbol).trim().length === 0) {
+                record.symbol = 'account';
+              }
+              if (!record.color || String(record.color).trim().length === 0) {
+                record.color = PROFILE_COLORS[0]?.value ?? 'member-blue';
+              }
+              record.deleted = false;
+              record.createdAt = record.createdAt ?? now;
+              record.updatedAt = now;
+              record.version = (record.version ?? 0) + 1;
+            });
+          }
+
+          if (!existing) {
+            await usersCol.create((record: UserRecord) => {
+              (record._raw as any).id = resolvedProfileId;
+              record.email = '';
+              record.name = 'Admin';
+              record.isGuest = false;
+              record.hasCompletedOnboarding = true;
+              record.activeProfileId = resolvedProfileId;
+              record.ownerId = resolvedProfileId;
+              record.role = 'owner';
+              record.isActive = true;
+              record.symbol = 'account';
+              record.color = PROFILE_COLORS[0]?.value ?? 'member-blue';
+              record.deleted = false;
+              record.createdAt = now;
+              record.updatedAt = now;
+              record.version = 1;
+            });
+          }
+        });
+
+        if (cancelled) return;
+        try {
+          const owner = await getDatabase().get<UserRecord>('users').find(resolvedProfileId);
+          const mapped = {
+            id: owner.id,
+            name: owner.name || 'Admin',
+            symbol: owner.symbol || 'account',
+            color: owner.color || (PROFILE_COLORS[0]?.value ?? 'member-blue'),
+            isActive: owner.isActive ?? true,
+            role: owner.role || 'owner',
+          };
+          setMembers(prev => (prev.length > 0 ? prev : [mapped]));
+        } catch {
+          // ignore — subscription will populate members when ready
+        }
+      } catch (error) {
+        console.warn('FamilyContext: failed to ensure owner member row', error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedProfileId, isGuest, reloadKey]);
 
   const membersById = useMemo(() => {
     const map = new Map<string, FamilyMember>();
@@ -677,7 +771,13 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({
   useEffect(() => {
     let mounted = true;
     const refreshProfile = async () => {
-      const pid = await ProfileService.getActiveProfileId();
+      let pid = await ProfileService.getActiveProfileId();
+      // Fallback: ensure we always have a profile while authenticated,
+      // even if AsyncStorage hydration is delayed.
+      if (!pid && !isGuest && user?.id) {
+        await ProfileService.setActiveProfileId(user.id);
+        pid = user.id;
+      }
       if (mounted) {
         setProfileId(pid);
       }
@@ -687,7 +787,11 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async () => {
-      const pid = await ProfileService.getActiveProfileId();
+      let pid = await ProfileService.getActiveProfileId();
+      if (!pid && !isGuest && user?.id) {
+        await ProfileService.setActiveProfileId(user.id);
+        pid = user.id;
+      }
       if (mounted) {
         setProfileId(pid);
       }

@@ -71,6 +71,7 @@ interface AuthContextType {
   isGuest: boolean;
   isAuthenticated: boolean;
   hasCompletedOnboarding: boolean;
+  onboardingLoaded: boolean;
   isLoading: boolean;
   /**
    * Monotonically-increasing integer. Incremented on every login / logout /
@@ -125,6 +126,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
   const [user, setUser] = useState<User | null>(null);
   const [isGuest, setIsGuest] = useState(false);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
+  const [onboardingLoaded, setOnboardingLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [sessionEpoch, setSessionEpoch] = useState(0);
   const [isPasswordRecoveryFlow, setIsPasswordRecoveryFlow] = useState(false);
@@ -151,7 +153,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
       });
       setIsGuest(false);
       supabase.auth.startAutoRefresh();
+      // Ensure guest-mode flags are cleared so the UI doesn't stay in guest mode
+      // even after a successful login.
       await AsyncStorage.multiRemove(['IS_GUEST', 'GUEST_PROFILE_ID']);
+      await AsyncStorage.setItem('IS_GUEST', 'false');
       await AsyncStorage.setItem('AUTH_USER', JSON.stringify(userData));
 
       let resolvedProfileId = session.user.id;
@@ -187,16 +192,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
       try {
         await getDatabase().write(async () => {
           const usersCol = getDatabase().get<UserRecord>('users');
-          const existing = await usersCol
-            .query(Q.where('id', session.user.id))
-            .fetch();
-          if (existing.length > 0) {
-            await existing[0].update(u => {
+          const now = Date.now();
+          let existing: UserRecord | null = null;
+          try {
+            existing = await usersCol.find(session.user.id);
+          } catch {
+            existing = null;
+          }
+
+          if (existing) {
+            await existing.update(u => {
               u.email = userData.email;
               u.name = userData.name || '';
               u.isActive = true;
               u.ownerId = ownerId ?? session.user.id;
               u.activeProfileId = resolvedProfileId;
+              u.isGuest = false;
+              u.hasCompletedOnboarding = true;
+              u.deleted = false;
+              u.createdAt = u.createdAt ?? now;
+              u.updatedAt = now;
               u.version = (u.version ?? 0) + 1;
             });
           } else {
@@ -209,7 +224,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
               u.isActive = true;
               u.ownerId = ownerId ?? session.user.id;
               u.activeProfileId = resolvedProfileId;
+              u.deleted = false;
               u.version = 1;
+              u.createdAt = now;
+              u.updatedAt = now;
             });
           }
         });
@@ -274,6 +292,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
         console.log('AuthContext: Starting auth initialization...');
         const start = Date.now();
 
+        // Onboarding flag should be read ASAP from AsyncStorage to prevent
+        // any transient navigation to the onboarding screen.
+        const [asyncComplete, asyncSeen] = await Promise.all([
+          AsyncStorage.getItem('HAS_COMPLETED_ONBOARDING'),
+          AsyncStorage.getItem('HAS_SEEN_ONBOARDING'),
+        ]);
+        const locallyCompleted =
+          asyncComplete === 'true' || asyncSeen === 'true';
+        if (locallyCompleted) {
+          setHasCompletedOnboarding(true);
+        }
+        setOnboardingLoaded(true);
+
         const cachedUserStr = await AsyncStorage.getItem('AUTH_USER');
         if (cachedUserStr) {
           try {
@@ -315,23 +346,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
           DocumentUploadScheduler.stop();
         }
 
-        // Check guest mode independently
-        const guest = await AsyncStorage.getItem('IS_GUEST');
-        if (guest === 'true') {
-          setIsGuest(true);
-          Sentry.setUser(null);
+        // Only treat the device as "guest" when there's no authenticated session.
+        if (!session?.user) {
+          const guest = await AsyncStorage.getItem('IS_GUEST');
+          if (guest === 'true') {
+            setIsGuest(true);
+            Sentry.setUser(null);
+          }
         }
 
         // Check Onboarding status globally across all profiles for this device
-        let completed =
-          await AppSettingsService.hasAnyProfileCompletedOnboarding();
+        let completed = locallyCompleted;
         if (!completed) {
-          const asyncComplete = await AsyncStorage.getItem(
-            'HAS_COMPLETED_ONBOARDING',
-          );
-          if (asyncComplete === 'true') completed = true;
+          completed = await AppSettingsService.hasAnyProfileCompletedOnboarding();
         }
-        setHasCompletedOnboarding(completed);
+        setHasCompletedOnboarding(prev => prev || completed);
         console.log(
           `AuthContext: Auth initialization total time: ${Date.now() - start
           }ms`,
@@ -340,10 +369,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
         console.error('Failed to initialize auth state:', error);
         setUser(null);
         setIsGuest(false);
-        setHasCompletedOnboarding(false);
+        // Never regress onboarding to false on transient errors.
+        try {
+          const asyncComplete = await AsyncStorage.getItem('HAS_COMPLETED_ONBOARDING');
+          const asyncSeen = await AsyncStorage.getItem('HAS_SEEN_ONBOARDING');
+          const completed = asyncComplete === 'true' || asyncSeen === 'true';
+          setHasCompletedOnboarding(prev => prev || completed);
+        } catch {
+          // keep previous state
+        }
       } finally {
         clearTimeout(timeoutId);
         setIsLoading(false);
+        setOnboardingLoaded(true);
       }
     };
 
@@ -792,7 +830,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
   const completeOnboarding = async () => {
     try {
       setHasCompletedOnboarding(true);
-      await AsyncStorage.setItem('HAS_COMPLETED_ONBOARDING', 'true');
+      await AsyncStorage.multiSet([
+        ['HAS_COMPLETED_ONBOARDING', 'true'],
+        // Back-compat: older onboarding flow used this key.
+        ['HAS_SEEN_ONBOARDING', 'true'],
+      ]);
     } catch (error) {
       console.error('Failed to save onboarding completion:', error);
       // Don't throw — onboarding is complete in memory even if storage fails
@@ -832,6 +874,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
         isGuest,
         isAuthenticated: !!user || isGuest,
         hasCompletedOnboarding,
+        onboardingLoaded,
         isLoading,
         sessionEpoch,
         login,

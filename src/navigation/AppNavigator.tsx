@@ -7,7 +7,6 @@ import {
 } from '@react-navigation/native';
 import { theme } from '../theme';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { SplashScreen } from '../screens/SplashScreen';
 import { OnboardingScreen } from '../screens/OnboardingScreen';
 import { AuthScreen } from '../screens/AuthScreen';
 import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
@@ -38,6 +37,7 @@ import { ProfileService, GUEST_PROFILE_ID } from '../services/ProfileService';
 import { LocalCacheService } from '../services/LocalCacheService';
 import { reactNavigationIntegration } from '../services/SentryNavigation';
 import { useFamily } from '../contexts/FamilyContext';
+import { InteractionManager } from 'react-native';
 
 const Stack = createNativeStackNavigator();
 
@@ -153,6 +153,7 @@ const AppNavigatorInner = () => {
     isLoading,
     isGuest,
     hasCompletedOnboarding,
+    onboardingLoaded,
     completeOnboarding,
     isPasswordRecoveryFlow,
     sessionEpoch,
@@ -160,23 +161,20 @@ const AppNavigatorInner = () => {
     clearPendingInvite,
   } = useAuth();
   const { activeMember } = useFamily();
-  const [showSplash, setShowSplash] = React.useState(true);
   const [hasMembersInDB, setHasMembersInDB] = React.useState<boolean | null>(
     null,
   );
-  const [membersReady, setMembersReady] = React.useState(false);
   const [profileOnboardingComplete, setProfileOnboardingComplete] =
     React.useState<boolean | null>(null);
   const [localOnboardingLoaded, setLocalOnboardingLoaded] =
     React.useState(false);
-  const [isBootChecking, setIsBootChecking] = React.useState(true);
   const [isCacheReady, setIsCacheReady] = React.useState(false);
 
   // Auto-sync hook - triggers sync on data changes (runs in background)
   // Hook checks isGuest internally, so it's safe to call always
   useAutoSync();
 
-  // Timeout to hide splash screen after maximum wait time (don't wait forever)
+  // Boot diagnostics (does not block UI)
   React.useEffect(() => {
     console.log('AppNavigator: Render State:', {
       isLoading,
@@ -185,62 +183,39 @@ const AppNavigatorInner = () => {
       hasMembersInDB,
       localOnboardingLoaded,
       profileOnboardingComplete,
-      showSplash,
+      isCacheReady,
     });
-
-    const rescueTimeout = setTimeout(() => {
-      const needsRescue = showSplash || isBootChecking || !isCacheReady;
-      if (needsRescue) {
-        console.warn(
-          'AppNavigator: RESCUE TIMEOUT TRIGGERED - Forcing boot sequence',
-          {
-            showSplash,
-            localOnboardingLoaded,
-            isBootChecking,
-            isCacheReady,
-            hasMembersInDB,
-          },
-        );
-        setShowSplash(false);
-        setLocalOnboardingLoaded(true);
-        setIsBootChecking(false);
-        setIsCacheReady(true);
-        if (hasMembersInDB === null) {
-          setHasMembersInDB(false);
-        }
-      }
-    }, 6000); // 6 seconds hard limit for splash/init
-
-    return () => clearTimeout(rescueTimeout);
   }, [
-    showSplash,
     isLoading,
     isAuthenticated,
     isGuest,
     hasMembersInDB,
     localOnboardingLoaded,
     profileOnboardingComplete,
-    isBootChecking,
     isCacheReady,
   ]);
 
-  // Sync isBootChecking with isLoading, but keep it true until checks settle
-  React.useEffect(() => {
-    if (isLoading) {
-      console.log('AppNavigator: Auth loading detected, locking boot sequence');
-      setIsBootChecking(true);
-    }
-  }, [isLoading]);
-
   // Ensure LocalCache is ready
   React.useEffect(() => {
-    const prepareCache = async () => {
-      console.log('AppNavigator: LocalCacheService preparation starting...');
-      await LocalCacheService.ensureReady();
-      console.log('AppNavigator: LocalCacheService is now ready');
-      setIsCacheReady(true);
+    let cancelled = false;
+    const task = InteractionManager.runAfterInteractions(() => {
+      (async () => {
+        try {
+          console.log('AppNavigator: LocalCacheService preparation starting...');
+          await LocalCacheService.ensureReady();
+          console.log('AppNavigator: LocalCacheService is now ready');
+        } finally {
+          if (!cancelled) {
+            setIsCacheReady(true);
+          }
+        }
+      })();
+    });
+
+    return () => {
+      cancelled = true;
+      task.cancel();
     };
-    prepareCache();
   }, []);
 
   // Comprehensive sync setup: app restart, foreground, network changes
@@ -342,12 +317,6 @@ const AppNavigatorInner = () => {
       if (hasMembersInDB !== false) {
         setHasMembersInDB(false);
       }
-      if (showSplash) {
-        setShowSplash(false);
-      }
-      if (isBootChecking) {
-        setIsBootChecking(false);
-      }
       if (!localOnboardingLoaded) {
         setLocalOnboardingLoaded(true);
       }
@@ -358,7 +327,7 @@ const AppNavigatorInner = () => {
         setProfileOnboardingComplete(false);
       }
     }
-  }, [isAuthenticated, isLoading, hasMembersInDB, showSplash, isBootChecking]);
+  }, [isAuthenticated, isLoading, hasMembersInDB, isCacheReady, localOnboardingLoaded, profileOnboardingComplete]);
 
   React.useEffect(() => {
     if (!SyncService.isEnabled()) {
@@ -605,41 +574,9 @@ const AppNavigatorInner = () => {
     };
   }, [isAuthenticated, isGuest, isLoading]);
 
-  // Release isBootChecking once all checks are settled and auth is not loading
-  React.useEffect(() => {
-    const essentialBootChecksDone = !isLoading && isCacheReady;
-    if (essentialBootChecksDone && isBootChecking) {
-      console.log('AppNavigator: All boot checks settled, releasing lock', {
-        isAuthenticated,
-        isGuest,
-        hasMembersInDB,
-        profileOnboardingComplete,
-      });
-      setIsBootChecking(false);
-      setShowSplash(false);
-    } else if (isBootChecking) {
-      console.log('AppNavigator: Still waiting for checks:', {
-        isLoading,
-        localOnboardingLoaded,
-        hasMembersInDB_is_null: hasMembersInDB === null,
-        isCacheReady,
-      });
-    }
-  }, [
-    isLoading,
-    localOnboardingLoaded,
-    hasMembersInDB,
-    isCacheReady,
-    isBootChecking,
-    isAuthenticated,
-    isGuest,
-    profileOnboardingComplete,
-  ]);
-
   React.useEffect(() => {
     if (sessionEpoch > 0 && !isAuthenticated) {
-      setShowSplash(false);
-      setIsBootChecking(false);
+      // No splash gating — nothing to do here.
     }
   }, [sessionEpoch, isAuthenticated]);
 
@@ -647,24 +584,6 @@ const AppNavigatorInner = () => {
     activeMember?.role === 'owner' &&
     hasMembersInDB === false &&
     profileOnboardingComplete !== true;
-
-  // Only show splash on initial load, not during auth operations
-  // Don't wait for the member check; show UI once the essential boot sequence finishes
-  if (showSplash || isLoading || isBootChecking || !isCacheReady) {
-    if (!showSplash && !isLoading && isBootChecking) {
-      // Optional: Add a transition spinner if it takes too long between splash and app
-    }
-    return (
-      <SplashScreen
-        onContinue={() => {
-          console.log(
-            'AppNavigator: Splash onContinue pressed - manual override',
-          );
-          setShowSplash(false);
-        }}
-      />
-    );
-  }
 
   return (
     <>
@@ -718,16 +637,12 @@ const AppNavigatorInner = () => {
                 )}
               </Stack.Screen>
             )}
-            {!pendingInviteSlug && !hasCompletedOnboarding && (
+            {!pendingInviteSlug && onboardingLoaded && !hasCompletedOnboarding && (
               <Stack.Screen name="Onboarding">
                 {() => (
                   <OnboardingScreen
-                    onSkip={() => {
-                      completeOnboarding();
-                    }}
-                    onComplete={() => {
-                      completeOnboarding();
-                    }}
+                    onSkip={completeOnboarding}
+                    onComplete={completeOnboarding}
                   />
                 )}
               </Stack.Screen>

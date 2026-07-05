@@ -12,7 +12,18 @@ import { SyncService } from './SyncService';
 import { uuidv4 } from '../utils/uuid';
 import { getUsersCollection, resolveOwnerId } from './ownerHelper';
 
-const OBSERVE_COLUMNS: string[] = ['updated_at', 'deleted', 'value'];
+const OBSERVE_SETTING_COLUMNS: string[] = ['updated_at', 'deleted', 'value'];
+
+const OBSERVE_USER_COLUMNS: string[] = [
+  'updated_at',
+  'deleted',
+  'name',
+  'symbol',
+  'color',
+  'role',
+  'is_active',
+  'owner_id',
+];
 
 const syncAfterWrite = () => {
   void SyncService.requestSyncSoon();
@@ -39,11 +50,16 @@ export const FamilyService = {
         }
         return getUsersCollection()
           .query(
-            Q.where('owner_id', ownerId),
-            Q.where('deleted', false),
+            // Include the owner row even if `owner_id` wasn't persisted for it yet.
+            Q.or(
+              Q.where('owner_id', ownerId),
+              Q.where('active_profile_id', ownerId),
+            ),
+            // Use notEq(true) so SQLite integer 0 (false) and synced rows both match.
+            Q.where('deleted', Q.notEq(true)),
             Q.sortBy('updated_at', Q.desc)
           )
-          .observeWithColumns(OBSERVE_COLUMNS);
+          .observeWithColumns(OBSERVE_USER_COLUMNS);
       })
     );
   },
@@ -63,7 +79,7 @@ export const FamilyService = {
         Q.where('deleted', Q.notEq(true)),
         Q.sortBy('updated_at', Q.desc)
       )
-      .observeWithColumns(OBSERVE_COLUMNS)
+      .observeWithColumns(OBSERVE_SETTING_COLUMNS)
       .pipe(map(records => (records.length > 0 ? records[0].value : 'Chores Nest')));
   },
 
@@ -116,7 +132,14 @@ export const FamilyService = {
       }
       await getUsersCollection().create(user => {
         const raw = user._raw as any;
-        raw.id = uuidv4();
+        const id = uuidv4();
+        raw.id = id;
+        // Required columns in schema
+        user.email = '';
+        user.isGuest = false;
+        user.hasCompletedOnboarding = true;
+        user.activeProfileId = effectiveProfileId;
+
         user.name = name;
         user.symbol = symbol;
         user.color = color;

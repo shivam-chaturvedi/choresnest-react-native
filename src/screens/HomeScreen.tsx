@@ -833,41 +833,70 @@ const HomeScreenContent: React.FC = () => {
               >
                 {isGuest
                   ? 'Guest mode does not load members automatically. Tap reload to re-read local data and refresh the Home screen.'
-                  : 'No members are loaded locally yet. Tap reload to re-read the database.'}
+                  : 'No members are loaded locally yet. Tap reload to re-read local data.'}
               </Text>
-              <Pressable
-                onPress={() => {
-                  if (reloadBannerTimer.current) {
-                    clearTimeout(reloadBannerTimer.current);
-                  }
-                  setIsReloadingMembers(true);
-                  reloadLocalData();
-                  reloadBannerTimer.current = setTimeout(
-                    () => setIsReloadingMembers(false),
-                    1500,
-                  );
-                }}
-                disabled={isReloadingMembers}
-                style={({ pressed }) => [
-                  styles.reloadButton,
-                  {
-                    backgroundColor: pressed
-                      ? `${colors.primary}cc`
-                      : colors.primary,
-                    borderRadius: radius.sm,
-                    opacity: isReloadingMembers ? 0.6 : 1,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.reloadButtonText,
-                    { color: colors.primaryForeground },
+              <View style={styles.reloadActionsRow}>
+                <Pressable
+                  onPress={() => {
+                    if (reloadBannerTimer.current) {
+                      clearTimeout(reloadBannerTimer.current);
+                    }
+                    setIsReloadingMembers(true);
+                    reloadLocalData();
+                    reloadBannerTimer.current = setTimeout(
+                      () => setIsReloadingMembers(false),
+                      1500,
+                    );
+                  }}
+                  disabled={isReloadingMembers}
+                  style={({ pressed }) => [
+                    styles.reloadButton,
+                    {
+                      backgroundColor: pressed
+                        ? `${colors.primary}cc`
+                        : colors.primary,
+                      borderRadius: radius.sm,
+                      opacity: isReloadingMembers ? 0.6 : 1,
+                      flex: 1,
+                    },
                   ]}
                 >
-                  {isReloadingMembers ? 'Reloading…' : 'Reload local data'}
-                </Text>
-              </Pressable>
+                  <Text
+                    style={[
+                      styles.reloadButtonText,
+                      { color: colors.primaryForeground, textAlign: 'center' },
+                    ]}
+                  >
+                    {isReloadingMembers ? 'Reloading…' : 'Reload local data'}
+                  </Text>
+                </Pressable>
+
+                {!isGuest && (
+                  <Pressable
+                    onPress={() => setShowFamilyOnboarding(true)}
+                    style={({ pressed }) => [
+                      styles.reloadButton,
+                      {
+                        backgroundColor: pressed
+                          ? `${colors.muted}cc`
+                          : colors.muted,
+                        borderRadius: radius.sm,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.reloadButtonText,
+                        { color: colors.foreground },
+                      ]}
+                    >
+                      Add member
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
             </View>
           )}
 
@@ -2063,6 +2092,11 @@ const styles = StyleSheet.create({
   reloadButtonText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  reloadActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
   },
   memberCard: {
     alignItems: 'center',

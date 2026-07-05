@@ -82,23 +82,32 @@ export const ProfileService = {
             const cachedActive = await AsyncStorage.getItem(ACTIVE_PROFILE_KEY);
             if (cachedActive) {
                 cachedProfileId = cachedActive;
+                // Ensure the WatermelonDB instance matches the resolved profile.
+                setActiveProfile(cachedActive);
+                NotificationCenter.setActiveProfileId(cachedActive);
                 return cachedActive;
             }
 
             // 3. Guest mode
             const isGuest = await AsyncStorage.getItem(IS_GUEST_KEY);
             if (isGuest === 'true') {
-                await persistActiveProfile(GUEST_PROFILE_ID);
-                await AsyncStorage.setItem(GUEST_PROFILE_KEY, GUEST_PROFILE_ID);
-                return GUEST_PROFILE_ID;
+                await persistActiveProfile(DATABASE_GUEST_PROFILE_ID);
+                await AsyncStorage.setItem(GUEST_PROFILE_KEY, DATABASE_GUEST_PROFILE_ID);
+                return DATABASE_GUEST_PROFILE_ID;
             }
 
-            // No cached profile found and no guest session.
-            // Do NOT fall through to a live Supabase network call here — calling
-            // supabase.auth.getSession() when unauthenticated produces repeated
-            // "Network request failed" errors on every effect cycle.
-            // The caller (AuthContext / AppNavigator) will handle the null case
-            // and redirect to the auth screen.
+            // 4. Offline fallback: read cached Supabase session from AsyncStorage.
+            // This avoids any network call but still gives us the userId so the app
+            // can write/read local data immediately while AuthContext hydrates.
+            const cachedUserId = await tryReadCachedSupabaseSession();
+            if (cachedUserId) {
+                setActiveProfile(cachedUserId);
+                await persistActiveProfile(cachedUserId);
+                NotificationCenter.setActiveProfileId(cachedUserId);
+                return cachedUserId;
+            }
+
+            // No cached profile found, no guest session, and no cached auth session.
             return null;
         } catch (error) {
             console.error('ProfileService: Unexpected error resolving profile ID:', error);
