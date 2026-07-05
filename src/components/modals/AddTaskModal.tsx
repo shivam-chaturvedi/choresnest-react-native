@@ -14,9 +14,14 @@ import { useTheme, useThemeColors, useThemeRadius } from "../../contexts/ThemeCo
 import { useFamily } from "../../contexts/FamilyContext";
 import { PROFILE_COLORS } from "../../constants/profileColors";
 import { AppIcon, CustomDateTimePicker } from "../ui";
-import { useCountry } from "../../contexts/CountryContext";
-import { toZonedTime } from "date-fns-tz";
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { TaskRecurrenceRule } from "../../utils/taskRecurrence";
+import { TaskRecurrenceFields } from "../tasks/TaskRecurrenceFields";
+import {
+  createDefaultTaskRecurrenceForm,
+  mapTaskToRecurrenceForm,
+  TaskRecurrenceFormValue,
+} from "../../utils/taskFormUtils";
 
 interface AddTaskModalProps {
   open: boolean;
@@ -32,9 +37,21 @@ interface TaskData {
   dueDate: Date;
   person: string;
   reminderEnabled: boolean;
+  isRecurring: boolean;
+  recurrenceRule?: TaskRecurrenceRule;
+  recurrenceInterval?: number;
+  recurrenceDaysOfWeek: number[];
+  recurrenceEndDate?: Date | null;
 }
 
 const taskIcons = ["format-list-checks", "phone", "pill", "email", "school", "wrench", "package-variant", "broom", "basket", "silverware", "bed", "dog"];
+
+const parseLocalDateString = (value?: string) => {
+  if (!value) return null;
+  const [year, month, day] = value.split('-').map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+};
 
 export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSave, taskToEdit }) => {
   const colors = useThemeColors();
@@ -43,7 +60,6 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
   const accentColor = isMidnight ? colors.foreground : colors.primary;
   const radius = useThemeRadius();
   const { members, activeMember } = useFamily();
-  const { currentCountry } = useCountry();
 
   const priorities = [
     { label: "High", value: "high", bgColor: colors.danger + "25", textColor: colors.danger },
@@ -52,7 +68,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
   ];
 
   const defaultMemberId = members?.[0]?.id;
-  const buildLocalizedNow = () => toZonedTime(new Date(), currentCountry.timeZone);
+  const buildLocalizedNow = () => new Date();
 
   const navigation = useNavigation<any>();
   const openNotificationPreferences = () => {
@@ -62,14 +78,20 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
     });
   };
 
-  const createDefaultTaskData = useCallback((): TaskData => ({
-    name: "",
-    icon: "format-list-checks",
-    priority: "medium",
-    dueDate: buildLocalizedNow(),
-    person: activeMember?.id || defaultMemberId || "1",
-    reminderEnabled: true,
-  }), [currentCountry.timeZone, activeMember?.id, defaultMemberId]);
+  const createDefaultTaskData = useCallback((): TaskData => {
+    const dueDate = buildLocalizedNow();
+    const recurrence = createDefaultTaskRecurrenceForm(dueDate);
+    return {
+      name: "",
+      icon: "format-list-checks",
+      priority: "medium",
+      dueDate,
+      person: activeMember?.id || defaultMemberId || "1",
+      reminderEnabled: true,
+      ...recurrence,
+      recurrenceDaysOfWeek: recurrence.recurrenceDaysOfWeek ?? [],
+    };
+  }, [activeMember?.id, defaultMemberId]);
 
   const [formData, setFormData] = useState<TaskData>(createDefaultTaskData);
 
@@ -109,6 +131,9 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
       dueDate: dueDate,
       person: taskToEdit.assignee || activeMember?.id || defaultMemberId || '1',
       reminderEnabled: taskToEdit.reminderEnabled ?? true,
+      ...mapTaskToRecurrenceForm(taskToEdit, dueDate),
+      recurrenceDaysOfWeek:
+        mapTaskToRecurrenceForm(taskToEdit, dueDate).recurrenceDaysOfWeek ?? [],
     });
   } else {
     // Reset to default for new task
@@ -130,6 +155,14 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
         Alert.alert("Error", "Failed to save task. Please try again.");
       });
     }
+  };
+
+  const handleRecurrenceChange = (recurrence: TaskRecurrenceFormValue) => {
+    setFormData(current => ({
+      ...current,
+      ...recurrence,
+      recurrenceDaysOfWeek: recurrence.recurrenceDaysOfWeek ?? [],
+    }));
   };
 
   return (
@@ -232,6 +265,18 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ open, onClose, onSav
                 </View>
               </View>
             </View>
+
+            <TaskRecurrenceFields
+              value={{
+                isRecurring: formData.isRecurring,
+                recurrenceRule: formData.recurrenceRule,
+                recurrenceInterval: formData.recurrenceInterval,
+                recurrenceDaysOfWeek: formData.recurrenceDaysOfWeek,
+                recurrenceEndDate: formData.recurrenceEndDate,
+              }}
+              onChange={handleRecurrenceChange}
+              dueDate={formData.dueDate}
+            />
 
             {/* Assign To */}
             <View style={styles.section}>
@@ -462,6 +507,76 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   notificationNoticeButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  toggleRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  toggleLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  togglePill: {
+    width: 18,
+    height: 18,
+    borderRadius: 999,
+  },
+  recurrenceOptions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 12,
+  },
+  recurrenceChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  recurrenceChipText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  inlineField: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 14,
+  },
+  inlineLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  intervalInput: {
+    minWidth: 60,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    textAlign: "center",
+    fontWeight: "600",
+  },
+  weekdayRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+    marginTop: 14,
+  },
+  weekdayButton: {
+    width: 38,
+    height: 38,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  weekdayButtonText: {
+    fontWeight: "700",
+  },
+  clearRecurrenceEnd: {
+    marginTop: 10,
+    alignSelf: "flex-start",
+  },
+  clearRecurrenceEndText: {
     fontSize: 13,
     fontWeight: "600",
   },

@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export default appSchema({
-    version: 22,
+    version: 23,
     tables: [
         tableSchema({
             name: 'users',
@@ -70,6 +70,15 @@ export default appSchema({
                 { name: 'tab', type: 'string' }, // "My Tasks", "Family Tasks"
                 { name: 'notification_id', type: 'string', isOptional: true },
                 { name: 'reminder_enabled', type: 'boolean' }, // default true
+                { name: 'is_recurring', type: 'boolean' },
+                { name: 'recurrence_rule', type: 'string', isOptional: true },
+                { name: 'recurrence_interval', type: 'number', isOptional: true },
+                { name: 'recurrence_days_of_week', type: 'string', isOptional: true },
+                { name: 'recurrence_end_date', type: 'string', isOptional: true },
+                { name: 'recurrence_occurrence_limit', type: 'number', isOptional: true },
+                { name: 'recurrence_completed_count', type: 'number' },
+                { name: 'recurrence_anchor_date', type: 'string', isOptional: true },
+                { name: 'recurrence_skipped_dates', type: 'string', isOptional: true },
                 { name: 'created_at', type: 'number' },
                 { name: 'updated_at', type: 'number' }, // ✅ CRITICAL for reactivity
                 { name: 'deleted', type: 'boolean' },

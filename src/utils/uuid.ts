@@ -1,29 +1,38 @@
-import uuidModule from 'react-native-uuid';
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-type UuidGenerator = () => string;
+const WATERMELON_ID_REGEX = /^[a-zA-Z0-9._-]{1,100}$/;
 
-const resolveGenerator = (): UuidGenerator | null => {
-    if (typeof uuidModule === 'function') {
-        return uuidModule;
-    }
+export const isUuid = (value: unknown): value is string =>
+  typeof value === 'string' && UUID_REGEX.test(value);
 
-    const maybeModule = uuidModule as Record<string, any>;
-    if (typeof maybeModule.v4 === 'function') {
-        return maybeModule.v4.bind(maybeModule);
-    }
+export const isWatermelonLocalId = (value: unknown): boolean =>
+  typeof value === 'string' &&
+  WATERMELON_ID_REGEX.test(value) &&
+  !isUuid(value);
 
-    if (maybeModule.default && typeof maybeModule.default.v4 === 'function') {
-        return maybeModule.default.v4.bind(maybeModule.default);
-    }
-
-    return null;
+export const resolveAuthProfileId = (
+  candidate: unknown,
+  authUserId: string,
+): string => {
+  if (isUuid(authUserId)) {
+    return authUserId;
+  }
+  if (isUuid(candidate)) {
+    return candidate;
+  }
+  return authUserId;
 };
 
-const uuidGenerator: UuidGenerator | null = resolveGenerator();
-
-export const uuidv4 = (): string => {
-    if (!uuidGenerator) {
-        throw new Error('UUID generator is not available');
-    }
-    return uuidGenerator();
+export const coerceAuthProfileId = (
+  candidate: unknown,
+  authUserId: string,
+): string | null => {
+  if (isUuid(authUserId)) {
+    return authUserId;
+  }
+  if (isUuid(candidate)) {
+    return candidate;
+  }
+  return null;
 };

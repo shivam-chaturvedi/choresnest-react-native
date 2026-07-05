@@ -35,7 +35,7 @@ export const SYNC_TABLES: TableSyncConfig[] = [
     { key: 'collection_recipes', remoteTable: 'collection_recipes', phase: 3, hasProfileId: true, addProfileId: true },
     { key: 'folders', phase: 1 },
     { key: 'events', phase: 2, hasProfileId: true, addProfileId: true },
-    { key: 'tasks', phase: 2 },
+    { key: 'tasks', phase: 2, hasProfileId: true, addProfileId: true },
     { key: 'lists', remoteTable: 'lists', phase: 1, hasProfileId: true, addProfileId: true },
     { key: 'transactions', phase: 2 },
     { key: 'budgets', phase: 2 },

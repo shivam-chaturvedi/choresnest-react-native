@@ -16,6 +16,8 @@ import { supabase } from '../config/supabase';
 import { ProfileService } from '../services/ProfileService';
 import { useAuth } from './AuthContext';
 import { GUEST_PROFILE_ID } from '../database';
+import { isUuid } from '../utils/uuid';
+import { normalizeVirtualCalendarId, parseVirtualCalendarOccurrenceDate } from '../utils/virtualId';
 
 // Re-export interfaces (keeping compatibility or updating as needed)
 export interface FamilyMember {
@@ -57,7 +59,59 @@ export interface Task {
   assignee?: string;
   tab?: string;
   icon?: string;
+  reminderEnabled?: boolean;
+  isRecurring?: boolean;
+  recurrenceRule?: string;
+  recurrenceInterval?: number;
+  recurrenceDaysOfWeek?: number[];
+  recurrenceEndDate?: string;
+  recurrenceOccurrenceLimit?: number;
+  recurrenceCompletedCount?: number;
+  recurrenceAnchorDate?: string;
+  recurrenceSkippedDates?: string[];
 }
+
+export interface DeleteTaskOptions {
+  mode?: 'series' | 'occurrence';
+  /** Calendar yyyy-MM-dd for the occurrence being skipped (virtual or displayed date). */
+  occurrenceDate?: string;
+}
+
+const parseStringArray = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === 'string');
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return parseStringArray(parsed);
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
+};
+
+const parseNumberArray = (value: unknown): number[] => {
+  if (Array.isArray(value)) {
+    return value.filter(
+      (item): item is number => typeof item === 'number' && Number.isFinite(item),
+    );
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return parseNumberArray(parsed);
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
+};
 
 export interface GroceryItem {
   id: string;
@@ -130,7 +184,7 @@ export interface FamilyContextValue {
   tasks: Task[];
   addTask: (task: any, options?: { source?: string }) => Promise<void>;
   updateTask: (id: string, updates: any) => Promise<void>;
-  deleteTask: (id: string) => Promise<void>;
+  deleteTask: (id: string, options?: DeleteTaskOptions) => Promise<void>;
   reloadLocalData: () => void;
   profileId: string | null;
 }
@@ -174,13 +228,17 @@ const mapTaskModelToTask = (
       : undefined,
   tab: taskModel.tab,
   icon: taskModel.icon,
+  reminderEnabled: taskModel.reminderEnabled,
+  isRecurring: taskModel.isRecurring,
+  recurrenceRule: taskModel.recurrenceRule,
+  recurrenceInterval: taskModel.recurrenceInterval,
+  recurrenceDaysOfWeek: parseNumberArray(taskModel.recurrenceDaysOfWeek),
+  recurrenceEndDate: taskModel.recurrenceEndDate,
+  recurrenceOccurrenceLimit: taskModel.recurrenceOccurrenceLimit,
+  recurrenceCompletedCount: taskModel.recurrenceCompletedCount,
+  recurrenceAnchorDate: taskModel.recurrenceAnchorDate,
+  recurrenceSkippedDates: parseStringArray(taskModel.recurrenceSkippedDates),
 });
-
-const normalizeVirtualId = (id: string): string => {
-  if (!id) return id;
-  const match = id.match(/^(.+?)_\d{4}-\d{2}-\d{2}_/);
-  return match && match[1] ? match[1] : id;
-};
 
 export const FamilyContext = createContext<FamilyContextValue | undefined>(
   undefined,
@@ -387,8 +445,8 @@ const FamilyProviderInner: React.FC<{
   }, [members, setActiveMember]);
 
   const ensureProfileId = () => {
-    if (!resolvedProfileId) {
-      console.warn('FamilyContext: Profile ID unavailable for member mutation');
+    if (!resolvedProfileId || !isUuid(resolvedProfileId)) {
+      console.warn('FamilyContext: Valid auth profile ID unavailable for mutation');
       return null;
     }
     return resolvedProfileId;
@@ -460,7 +518,7 @@ const FamilyProviderInner: React.FC<{
 
   const updateTask = async (id: string, updates: any) => {
     try {
-      const normalizedId = normalizeVirtualId(id);
+      const normalizedId = normalizeVirtualCalendarId(id);
       const previous = tasks.find(task => task.id === normalizedId);
       const prevStatus = previous?.status;
       const prevAssignee = previous?.assignee;
@@ -474,10 +532,17 @@ const FamilyProviderInner: React.FC<{
     }
   };
 
-  const deleteTask = async (id: string) => {
+  const deleteTask = async (id: string, options?: DeleteTaskOptions) => {
     try {
-      const normalizedId = normalizeVirtualId(id);
-      const result = await TaskService.deleteTask(normalizedId);
+      const normalizedId = normalizeVirtualCalendarId(id);
+      const occurrenceDate =
+        options?.occurrenceDate ??
+        parseVirtualCalendarOccurrenceDate(id) ??
+        undefined;
+      const result = await TaskService.deleteTask(normalizedId, {
+        ...options,
+        occurrenceDate,
+      });
       return result;
     } catch (error) {
       console.error('Failed to delete task:', error);
@@ -498,7 +563,7 @@ const FamilyProviderInner: React.FC<{
 
   const updateEvent = async (id: string, updates: any) => {
     try {
-      const normalizedId = normalizeVirtualId(id);
+      const normalizedId = normalizeVirtualCalendarId(id);
       await TaskService.updateEvent(normalizedId, updates);
     } catch (error) {
       console.error('Failed to update event:', error);
@@ -508,7 +573,7 @@ const FamilyProviderInner: React.FC<{
 
   const deleteEvent = async (id: string) => {
     try {
-      const normalizedId = normalizeVirtualId(id);
+      const normalizedId = normalizeVirtualCalendarId(id);
       await TaskService.deleteEvent(normalizedId);
     } catch (error) {
       console.error('Failed to delete event:', error);
@@ -753,7 +818,10 @@ const FALLBACK_FAMILY_CONTEXT: FamilyContextValue = {
     options?: { source?: string },
   ) => Promise<void>,
   updateTask: fallbackVoidAsync as (id: string, updates: any) => Promise<void>,
-  deleteTask: fallbackVoidAsync as (id: string) => Promise<void>,
+  deleteTask: fallbackVoidAsync as (
+    id: string,
+    options?: DeleteTaskOptions,
+  ) => Promise<void>,
   reloadLocalData: () => {
     console.warn(
       'FamilyContext: reloadLocalData called before provider was ready',

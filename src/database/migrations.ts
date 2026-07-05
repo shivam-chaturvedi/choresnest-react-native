@@ -667,5 +667,30 @@ export default schemaMigrations({
                 unsafeExecuteSql(`ALTER TABLE documents_new RENAME TO documents;`),
             ],
         },
+        {
+            toVersion: 23,
+            steps: [
+                addColumns({
+                    table: 'tasks',
+                    columns: [
+                        { name: 'is_recurring', type: 'boolean' },
+                        { name: 'recurrence_rule', type: 'string', isOptional: true },
+                        { name: 'recurrence_interval', type: 'number', isOptional: true },
+                        { name: 'recurrence_days_of_week', type: 'string', isOptional: true },
+                        { name: 'recurrence_end_date', type: 'string', isOptional: true },
+                        { name: 'recurrence_occurrence_limit', type: 'number', isOptional: true },
+                        { name: 'recurrence_completed_count', type: 'number' },
+                        { name: 'recurrence_anchor_date', type: 'string', isOptional: true },
+                        { name: 'recurrence_skipped_dates', type: 'string', isOptional: true },
+                    ],
+                }),
+                unsafeExecuteSql(`UPDATE tasks SET is_recurring = 0 WHERE is_recurring IS NULL;`),
+                unsafeExecuteSql(`
+                    UPDATE tasks
+                    SET recurrence_completed_count = 0
+                    WHERE recurrence_completed_count IS NULL;
+                `),
+            ],
+        },
     ],
 });

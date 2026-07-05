@@ -7,7 +7,15 @@ import Task from '../database/models/Task';
 import Document from '../database/models/Document';
 import Member from '../database/models/Member';
 import { NotificationPreferencesService } from './NotificationPreferencesService';
-import { parseReminderDateTime } from '../utils/ReminderDateTimeUtils';
+import { parseReminderDateTime, resolveNextTaskReminderDateTime } from '../utils/ReminderDateTimeUtils';
+import {
+    encodeTaskSkippedDates,
+    formatTaskDateString,
+    getNextRecurringTaskDate,
+    isTaskRecurring,
+    normalizeTaskSkippedDates,
+    parseTaskDateString,
+} from '../utils/taskRecurrence';
 import { checkPermission, requestPermission } from '../utils/permissions';
 import { NotificationCenter, NotificationRoute } from './NotificationCenter';
 import { AppIconName } from '../components/ui/AppIcon';
@@ -1458,6 +1466,41 @@ export const NotificationScheduler = {
 
             // === SCHEDULE PASS: Tasks ===
             for (const task of tasks) {
+                if (isTaskRecurring(task) && task.status !== 'done') {
+                    const taskDateOnly = parseTaskDateString(task.dateString);
+                    const todayDateOnly = parseTaskDateString(formatTaskDateString(new Date()));
+
+                    if (taskDateOnly && todayDateOnly && taskDateOnly < todayDateOnly) {
+                        const skippedDates = normalizeTaskSkippedDates(task.recurrenceSkippedDates);
+                        const nextDate = getNextRecurringTaskDate(task.dateString, {
+                            isRecurring: task.isRecurring,
+                            recurrenceRule: task.recurrenceRule,
+                            recurrenceInterval: task.recurrenceInterval,
+                            recurrenceDaysOfWeek: task.recurrenceDaysOfWeek,
+                            recurrenceEndDate: task.recurrenceEndDate,
+                            recurrenceOccurrenceLimit: task.recurrenceOccurrenceLimit,
+                            recurrenceCompletedCount: task.recurrenceCompletedCount,
+                            recurrenceAnchorDate: task.recurrenceAnchorDate,
+                            recurrenceSkippedDates: skippedDates,
+                        });
+
+                        await getDatabase().write(async () => {
+                            await task.update(t => {
+                                if (nextDate) {
+                                    t.dateString = nextDate;
+                                    t.status = 'pending';
+                                } else {
+                                    t.status = 'done';
+                                    t.reminderEnabled = false;
+                                }
+                                t.recurrenceSkippedDates = encodeTaskSkippedDates(skippedDates);
+                                t.updatedAt = Date.now();
+                                t.version = (t.version ?? 0) + 1;
+                            });
+                        });
+                    }
+                }
+
                 // Filter: Only schedule notifications for tasks assigned to active member
                 if (task.assigneeId !== activeMemberId) {
                     // Cancel notification if it exists but task is not for active member
@@ -1489,14 +1532,26 @@ export const NotificationScheduler = {
                 }
 
                 // Standard Scheduling Logic
-                const taskDate = parseReminderDateTime(task.dateString, task.dueDisplay);
-                if (!taskDate) continue;
+                const nextReminderDate = resolveNextTaskReminderDateTime({
+                    dateString: task.dateString,
+                    dueDisplay: task.dueDisplay,
+                    isRecurring: task.isRecurring,
+                    recurrenceRule: task.recurrenceRule,
+                    recurrenceInterval: task.recurrenceInterval,
+                    recurrenceDaysOfWeek: task.recurrenceDaysOfWeek,
+                    recurrenceEndDate: task.recurrenceEndDate,
+                    recurrenceOccurrenceLimit: task.recurrenceOccurrenceLimit,
+                    recurrenceCompletedCount: task.recurrenceCompletedCount,
+                    recurrenceAnchorDate: task.recurrenceAnchorDate,
+                    recurrenceSkippedDates: task.recurrenceSkippedDates,
+                });
+                if (!nextReminderDate) continue;
 
-                const triggerDate = new Date(taskDate.getTime() - defaultTaskReminder * 60000);
+                const triggerDate = new Date(nextReminderDate.getTime() - defaultTaskReminder * 60000);
                 if (triggerDate <= new Date()) continue;
 
                 const taskTitle = task.name?.trim() || 'Task reminder';
-                const taskBody = buildTaskNotificationBody(task, taskDate);
+                const taskBody = buildTaskNotificationBody(task, nextReminderDate);
                 const notificationId = await this.scheduleNotification(
                     'tasks',
                     {

@@ -15,6 +15,15 @@ export default class Task extends Model {
     @text('tab') tab!: string;
     @text('notification_id') notificationId?: string;
     @field('reminder_enabled') reminderEnabled!: boolean;
+    @field('is_recurring') isRecurring!: boolean;
+    @text('recurrence_rule') recurrenceRule?: string;
+    @field('recurrence_interval') recurrenceInterval?: number;
+    @text('recurrence_days_of_week') recurrenceDaysOfWeek?: string;
+    @text('recurrence_end_date') recurrenceEndDate?: string;
+    @field('recurrence_occurrence_limit') recurrenceOccurrenceLimit?: number;
+    @field('recurrence_completed_count') recurrenceCompletedCount!: number;
+    @text('recurrence_anchor_date') recurrenceAnchorDate?: string;
+    @text('recurrence_skipped_dates') recurrenceSkippedDates?: string;
     @field('updated_at') updatedAt!: number;
     @field('created_at') createdAt!: number;
     @field('version') version!: number;

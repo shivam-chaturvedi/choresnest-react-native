@@ -31,6 +31,20 @@ let lastProfileId: string | null = null;
 let lastResult: ProfileBootstrapResult | null = null;
 let pendingPromise: Promise<ProfileBootstrapResult> | null = null;
 
+const isMissingRemoteTableError = (error: any, tableName: string): boolean => {
+  const code = String(error?.code ?? '');
+  const message = String(error?.message ?? '').toLowerCase();
+  const hint = String(error?.hint ?? '').toLowerCase();
+  const table = tableName.toLowerCase();
+
+  return (
+    code === 'PGRST205' ||
+    message.includes(`could not find the table 'public.${table}'`) ||
+    message.includes(`could not find the table "${table}"`) ||
+    hint.includes(`perhaps you meant the table 'public.${table}'`)
+  );
+};
+
 const syncAfterWrite = () => {
   void SyncService.requestSyncSoon();
 };
@@ -162,14 +176,26 @@ export const ProfileBootstrapService = {
           .eq('profile_id', profileId);
 
         if (membersResponse.error) {
-          console.warn('ProfileBootstrapService: failed to fetch members', membersResponse.error);
+          if (isMissingRemoteTableError(membersResponse.error, 'members')) {
+            console.warn(
+              'ProfileBootstrapService: remote members table is missing. Apply the latest Supabase migrations before enabling sync.',
+            );
+          } else {
+            console.warn('ProfileBootstrapService: failed to fetch members', membersResponse.error);
+          }
         } else if (membersResponse.data) {
           membersFetchSuccess = true;
           memberCount = await writeMembers(profileId, membersResponse.data as SupabaseMemberRecord[]);
           hasMembers = memberCount > 0;
         }
       } catch (error) {
-        console.error('ProfileBootstrapService: unexpected error while fetching members', error);
+        if (isMissingRemoteTableError(error, 'members')) {
+          console.warn(
+            'ProfileBootstrapService: remote members table is missing. Apply the latest Supabase migrations before enabling sync.',
+          );
+        } else {
+          console.warn('ProfileBootstrapService: unexpected error while fetching members', error);
+        }
       }
 
       const result: ProfileBootstrapResult & { membersFetchSuccess?: boolean } = {

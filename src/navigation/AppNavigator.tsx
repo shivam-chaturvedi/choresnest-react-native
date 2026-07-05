@@ -41,8 +41,7 @@ const Stack = createNativeStackNavigator();
 
 export const AppNavigator = () => {
   const { isDark } = useTheme();
-  const [navState, setNavState] = React.useState<any>();
-  const navigationRef = React.useRef<NavigationContainerRef>(null);
+  const navigationRef = React.useRef<NavigationContainerRef<any>>(null);
 
   // Construct React Navigation compatible theme
   const navigationTheme = {
@@ -66,19 +65,13 @@ export const AppNavigator = () => {
     }
   };
 
-  const handleStateChange = (state: any) => {
-    setNavState(state);
-  };
-
   return (
     <AppLockProvider>
       <NotesProvider>
         <NavigationContainer
           ref={navigationRef}
           theme={navigationTheme}
-          initialState={navState}
           onReady={handleReady}
-          onStateChange={handleStateChange}
         >
           <AppNavigatorInner />
         </NavigationContainer>
@@ -582,6 +575,11 @@ const AppNavigatorInner = () => {
 
   const shouldShowInitialSetup =
     hasMembersInDB === false && profileOnboardingComplete !== true;
+  const navigatorKey = isPasswordRecoveryFlow
+    ? 'password-recovery'
+    : isAuthenticated
+      ? 'authenticated'
+      : 'unauthenticated';
 
   // Only show splash on initial load, not during auth operations
   // Don't wait for the member check; show UI once the essential boot sequence finishes
@@ -603,7 +601,7 @@ const AppNavigatorInner = () => {
 
   return (
     <>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator key={navigatorKey} screenOptions={{ headerShown: false }}>
         {isPasswordRecoveryFlow ? (
           <Stack.Screen
             name="ResetPassword"

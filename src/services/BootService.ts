@@ -1,12 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GUEST_PROFILE_ID } from '../database';
 import { ProfileService } from './ProfileService';
+import { isUuid } from '../utils/uuid';
 
 const ACTIVE_PROFILE_KEY = 'ACTIVE_PROFILE_ID';
 
 class BootService {
     private isValidProfileId(value?: string | null): value is string {
-        return typeof value === 'string' && value.trim().length > 0;
+        return isUuid(value);
     }
 
     async restoreLastActiveProfile(): Promise<string> {

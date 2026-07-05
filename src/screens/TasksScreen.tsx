@@ -3,105 +3,24 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   Pressable,
   Alert,
 } from 'react-native';
 import { AppLayout } from '../components/layout';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-
 import { AddTaskModal } from '../components/modals/AddTaskModal';
+import { buildTaskRecurrenceWritePayload } from '../utils/taskFormUtils';
 import { GlobalSearch } from '../components/search/GlobalSearch';
 import { useSidebar } from '../contexts/SidebarContext';
 import { useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
 import { AppIcon } from '../components/ui/AppIcon';
-import { ChoreRotationSystem } from '../components/chores/ChoreRotationSystem';
 import { useFamily, Task } from '../contexts/FamilyContext';
 import { trackScreen } from '../services/analytics';
 import { safeFormat } from '../utils/SafeDateUtils';
+import { getRecurringTaskLabel } from '../utils/taskRecurrence';
 
 const tabs = ['My Tasks', 'Family Tasks'];
-
-const initialTasks: Task[] = [
-  {
-    id: 't1',
-    icon: '📝',
-    name: 'Complete project report',
-    status: 'pending',
-    priority: 'high',
-    due: 'Today',
-    assignee: 'You',
-    tab: 'My Tasks',
-    date: safeFormat(new Date(), 'yyyy-MM-dd'),
-  },
-  {
-    id: 't2',
-    icon: '📞',
-    name: 'Call insurance company',
-    status: 'pending',
-    priority: 'medium',
-    due: 'Today',
-    assignee: 'You',
-    tab: 'My Tasks',
-    date: safeFormat(new Date(), 'yyyy-MM-dd'),
-  },
-  {
-    id: 't3',
-    icon: '💊',
-    name: 'Pick up medications',
-    status: 'done',
-    priority: 'high',
-    due: 'Done',
-    assignee: 'You',
-    tab: 'My Tasks',
-    date: safeFormat(new Date(), 'yyyy-MM-dd'),
-  },
-  {
-    id: 't4',
-    icon: '📧',
-    name: 'Reply to emails',
-    status: 'done',
-    priority: 'low',
-    due: 'Done',
-    assignee: 'You',
-    tab: 'My Tasks',
-    date: safeFormat(new Date(), 'yyyy-MM-dd'),
-  },
-
-  {
-    id: 't5',
-    icon: '🏫',
-    name: 'Sign permission slip',
-    status: 'done',
-    priority: 'high',
-    due: 'Tomorrow',
-    assignee: 'Mom',
-    tab: 'Family Tasks',
-    date: safeFormat(new Date(), 'yyyy-MM-dd'),
-  },
-  {
-    id: 't6',
-    icon: '🛠️',
-    name: 'Fix leaky faucet',
-    status: 'pending',
-    priority: 'medium',
-    due: 'This week',
-    assignee: 'Dad',
-    tab: 'Family Tasks',
-    date: new Date().toISOString().split('T')[0],
-  },
-  {
-    id: 't7',
-    icon: '📦',
-    name: 'Order birthday cake',
-    status: 'pending',
-    priority: 'high',
-    due: 'In 2 days',
-    assignee: 'You',
-    tab: 'Family Tasks',
-    date: new Date().toISOString().split('T')[0],
-  },
-];
 
 const getPriorityStyle = (priority: Task['priority'], colors: any) => {
   switch (priority) {
@@ -135,7 +54,8 @@ export const TasksScreen: React.FC = () => {
   const { openSidebar } = useSidebar();
   const colors = useThemeColors();
   const radius = useThemeRadius();
-  const { tasks, addTask, updateTask, members, activeMember } = useFamily();
+  const { tasks, addTask, updateTask, deleteTask, members, activeMember } =
+    useFamily();
 
   useEffect(() => {
     void trackScreen('TasksScreen');
@@ -143,12 +63,10 @@ export const TasksScreen: React.FC = () => {
 
   const filteredTasks = useMemo(() => {
     if (activeTab === 'My Tasks') {
-      // Show tasks assigned to the currently active member
       return tasks.filter((task: Task) => task.assignee === activeMember?.id);
-    } else {
-      // "Family Tasks" - Show tasks assigned to all OTHER members (not the active one)
-      return tasks.filter((task: Task) => task.assignee !== activeMember?.id);
     }
+
+    return tasks.filter((task: Task) => task.assignee !== activeMember?.id);
   }, [activeTab, tasks, activeMember]);
 
   const completedCount = filteredTasks.filter(
@@ -164,7 +82,7 @@ export const TasksScreen: React.FC = () => {
       if (!taskId) return;
       const task = tasks.find((t: Task) => t.id === taskId);
       if (task) {
-        updateTask(taskId, {
+        void updateTask(taskId, {
           status: task.status === 'done' ? 'pending' : 'done',
         });
       }
@@ -176,6 +94,51 @@ export const TasksScreen: React.FC = () => {
   const handleEditTask = (task: Task) => {
     setEditingTask(task);
     setShowAddTask(true);
+  };
+
+  const handleDeleteTask = (task: Task) => {
+    const clearEditingState = () => {
+      if (editingTask?.id === task.id) {
+        setEditingTask(undefined);
+      }
+    };
+
+    if (task.isRecurring) {
+      Alert.alert('Recurring Task', `What would you like to do with "${task.name}"?`, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Skip This Time',
+          onPress: () => {
+            void deleteTask(task.id, {
+              mode: 'occurrence',
+              occurrenceDate: task.date,
+            });
+            clearEditingState();
+          },
+        },
+        {
+          text: 'Delete Series',
+          style: 'destructive',
+          onPress: () => {
+            void deleteTask(task.id, { mode: 'series' });
+            clearEditingState();
+          },
+        },
+      ]);
+      return;
+    }
+
+    Alert.alert('Delete Task', `Delete "${task.name}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          void deleteTask(task.id, { mode: 'series' });
+          clearEditingState();
+        },
+      },
+    ]);
   };
 
   const handleSaveTask = (taskData: any) => {
@@ -191,13 +154,24 @@ export const TasksScreen: React.FC = () => {
         dueDisplay: formattedTime,
         assigneeId: taskData.person,
         reminderEnabled: taskData.reminderEnabled ?? true,
-        // Removed static tab property - filtering now done dynamically based on assignee
+        ...buildTaskRecurrenceWritePayload(
+          {
+            isRecurring: taskData.isRecurring ?? false,
+            recurrenceRule: taskData.recurrenceRule,
+            recurrenceInterval: taskData.recurrenceInterval,
+            recurrenceDaysOfWeek: taskData.recurrenceDaysOfWeek,
+            recurrenceEndDate: taskData.recurrenceEndDate,
+          },
+          formattedDate,
+          taskData.dueDate,
+          { includeAnchor: !editingTask },
+        ),
       };
 
       if (editingTask) {
-        updateTask(editingTask.id, taskPayload);
+        void updateTask(editingTask.id, taskPayload);
       } else {
-        addTask(
+        void addTask(
           {
             ...taskPayload,
             status: 'pending',
@@ -215,9 +189,282 @@ export const TasksScreen: React.FC = () => {
     }
   };
 
+  const renderHeader = () => (
+    <>
+      <View style={styles.header}>
+        <Pressable
+          onPress={openSidebar}
+          style={[
+            styles.menuButton,
+            { backgroundColor: colors.card, borderRadius: radius.md },
+          ]}
+        >
+          <AppIcon name="menu" size={20} color={colors.foreground} />
+        </Pressable>
+        <Text style={[styles.title, { color: colors.foreground }]}>Tasks</Text>
+        <View style={styles.headerActions}>
+          <Pressable
+            style={[
+              styles.roundAction,
+              { backgroundColor: colors.card, borderRadius: radius.md },
+            ]}
+            onPress={() => setShowSearch(true)}
+          >
+            <AppIcon source="🔍" size={18} color={colors.foreground} />
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.plusAction,
+              { backgroundColor: colors.primary, borderRadius: radius.lg },
+            ]}
+            onPress={() => {
+              setEditingTask(undefined);
+              setShowAddTask(true);
+            }}
+          >
+            <AppIcon
+              name="plus"
+              size={18}
+              color={colors.primaryForeground}
+            />
+          </Pressable>
+        </View>
+      </View>
+
+      <View
+        style={[
+          styles.tabs,
+          { backgroundColor: colors.muted, borderRadius: radius.lg },
+        ]}
+      >
+        {tabs.map(tab => {
+          const isActive = tab === activeTab;
+          return (
+            <Pressable
+              key={tab}
+              onPress={() => setActiveTab(tab)}
+              style={[
+                styles.tab,
+                { borderRadius: radius.md },
+                isActive && {
+                  backgroundColor: colors.card,
+                  shadowColor: '#000',
+                  shadowOpacity: 0.05,
+                  shadowRadius: 4,
+                  elevation: 2,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  {
+                    color: isActive ? colors.foreground : colors.mutedForeground,
+                  },
+                ]}
+              >
+                {tab}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <View
+        style={[
+          styles.progressCard,
+          {
+            backgroundColor: colors.card,
+            shadowColor: colors.border,
+            borderRadius: radius.card,
+          },
+        ]}
+      >
+        <View style={styles.progressHeader}>
+          <Text style={[styles.progressLabel, { color: colors.foreground }]}>
+            Progress: {completedCount}/{totalCount}
+          </Text>
+          <Text
+            style={[styles.progressPercent, { color: colors.mutedForeground }]}
+          >
+            {progress}%
+          </Text>
+        </View>
+        <View
+          style={[
+            styles.progressBar,
+            { backgroundColor: colors.muted, borderRadius: radius.sm },
+          ]}
+        >
+          <View
+            style={[
+              styles.progressFill,
+              {
+                width: `${progress}%`,
+                backgroundColor: colors.primary,
+                borderRadius: radius.sm,
+              },
+            ]}
+          />
+        </View>
+      </View>
+    </>
+  );
+
+  const renderTask = ({ item: task }: { item: Task }) => {
+    const priorityStyle = getPriorityStyle(task.priority, colors);
+    const assignee =
+      members.find((m: any) => m.id === task.assignee)?.name || 'Unassigned';
+    const recurrenceLabel = getRecurringTaskLabel(task);
+
+    return (
+      <View
+        style={[
+          styles.taskCard,
+          {
+            backgroundColor: colors.card,
+            shadowColor: colors.border,
+            borderRadius: radius.card,
+          },
+          task.status === 'done' && { opacity: 0.6 },
+        ]}
+      >
+        <Pressable
+          style={[
+            styles.checkCircle,
+            {
+              borderColor: colors.mutedForeground,
+              borderRadius: radius.sm,
+            },
+            task.status === 'done' && {
+              backgroundColor: colors.success,
+              borderColor: colors.success,
+            },
+          ]}
+          onPress={() => toggleTask(task.id)}
+          hitSlop={8}
+        >
+          {task.status === 'done' && <Text style={styles.checkMark}>✓</Text>}
+        </Pressable>
+
+        <Pressable
+          onPress={() => handleEditTask(task)}
+          style={styles.taskContentPressable}
+        >
+          <View style={styles.taskDetails}>
+            <View style={styles.taskTitleRow}>
+              <MaterialCommunityIcons
+                name={
+                  task.icon && task.icon.trim()
+                    ? task.icon
+                    : 'format-list-checks'
+                }
+                size={22}
+                color={colors.primary}
+                style={{ marginRight: 8 }}
+              />
+              <Text
+                style={[
+                  styles.taskTitle,
+                  { color: colors.foreground },
+                  task.status === 'done' && {
+                    color: colors.mutedForeground,
+                  },
+                ]}
+              >
+                {task.name}
+              </Text>
+            </View>
+
+            <View style={styles.metaRow}>
+              <View
+                style={[
+                  styles.priorityBadge,
+                  {
+                    backgroundColor: priorityStyle.background,
+                    borderRadius: radius.full,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.priorityText,
+                    { color: priorityStyle.color },
+                  ]}
+                >
+                  {priorityStyle.label}
+                </Text>
+              </View>
+              <View style={styles.metaItem}>
+                <AppIcon
+                  name="clock"
+                  size={14}
+                  color={colors.mutedForeground}
+                  style={styles.metaIcon}
+                />
+                <Text
+                  style={[
+                    styles.metaText,
+                    { color: colors.mutedForeground },
+                  ]}
+                >
+                  {task.due}
+                </Text>
+              </View>
+              <View style={styles.metaItem}>
+                <AppIcon
+                  name="user"
+                  size={14}
+                  color={colors.mutedForeground}
+                  style={styles.metaIcon}
+                />
+                <Text
+                  style={[
+                    styles.metaText,
+                    { color: colors.mutedForeground },
+                  ]}
+                >
+                  {assignee}
+                </Text>
+              </View>
+              {recurrenceLabel && (
+                <View style={styles.metaItem}>
+                  <AppIcon
+                    name="repeat"
+                    size={14}
+                    color={colors.mutedForeground}
+                    style={styles.metaIcon}
+                  />
+                  <Text
+                    style={[
+                      styles.metaText,
+                      { color: colors.mutedForeground },
+                    ]}
+                  >
+                    {recurrenceLabel}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
+        </Pressable>
+
+        <Pressable
+          onPress={() => handleDeleteTask(task)}
+          hitSlop={10}
+          style={styles.deleteTaskButton}
+        >
+          <AppIcon name="trash" size={16} color={colors.danger} />
+        </Pressable>
+      </View>
+    );
+  };
+
   return (
     <>
       <AppLayout
+        disableScroll={true}
         showAddButton={true}
         showNav={false}
         onAddPress={() => {
@@ -225,280 +472,45 @@ export const TasksScreen: React.FC = () => {
           setShowAddTask(true);
         }}
       >
-        <ScrollView contentContainerStyle={styles.container}>
-          <View style={styles.header}>
-            <Pressable
-              onPress={openSidebar}
-              style={[
-                styles.menuButton,
-                { backgroundColor: colors.card, borderRadius: radius.md },
-              ]}
-            >
-              <AppIcon name="menu" size={20} color={colors.foreground} />
-            </Pressable>
-            <Text style={[styles.title, { color: colors.foreground }]}>
-              Tasks
-            </Text>
-            <View style={styles.headerActions}>
-              <Pressable
-                style={[
-                  styles.roundAction,
-                  { backgroundColor: colors.card, borderRadius: radius.md },
-                ]}
-                onPress={() => setShowSearch(true)}
+        <FlatList
+          data={filteredTasks}
+          keyExtractor={item => item.id}
+          renderItem={renderTask}
+          contentContainerStyle={styles.container}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={renderHeader}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+                No tasks here yet
+              </Text>
+              <Text
+                style={[styles.emptyText, { color: colors.mutedForeground }]}
               >
-                <AppIcon source="🔍" size={18} color={colors.foreground} />
-              </Pressable>
-
-              <Pressable
-                style={[
-                  styles.plusAction,
-                  { backgroundColor: colors.primary, borderRadius: radius.lg },
-                ]}
-                onPress={() => {
-                  setEditingTask(undefined);
-                  setShowAddTask(true);
-                }}
-              >
-                <AppIcon
-                  name="plus"
-                  size={18}
-                  color={colors.primaryForeground}
-                />
-              </Pressable>
+                Add your first {activeTab === 'My Tasks' ? 'personal' : 'family'} task to get started.
+              </Text>
             </View>
-          </View>
-
-          <View
-            style={[
-              styles.tabs,
-              { backgroundColor: colors.muted, borderRadius: radius.lg },
-            ]}
-          >
-            {tabs.map(tab => {
-              const isActive = tab === activeTab;
-              return (
-                <Pressable
-                  key={tab}
-                  onPress={() => setActiveTab(tab)}
-                  style={[
-                    styles.tab,
-                    { borderRadius: radius.md },
-                    isActive && {
-                      backgroundColor: colors.card,
-                      shadowColor: '#000',
-                      shadowOpacity: 0.05,
-                      shadowRadius: 4,
-                      elevation: 2,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.tabText,
-                      {
-                        color: isActive
-                          ? colors.foreground
-                          : colors.mutedForeground,
-                      },
-                    ]}
-                  >
-                    {tab}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          {activeTab === 'Kids Chores' ? (
-            <ChoreRotationSystem />
-          ) : (
-            <>
-              <View
-                style={[
-                  styles.progressCard,
-                  {
-                    backgroundColor: colors.card,
-                    shadowColor: colors.border,
-                    borderRadius: radius.card,
-                  },
-                ]}
-              >
-                <View style={styles.progressHeader}>
-                  <Text
-                    style={[styles.progressLabel, { color: colors.foreground }]}
-                  >
-                    Progress: {completedCount}/{totalCount}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.progressPercent,
-                      { color: colors.mutedForeground },
-                    ]}
-                  >
-                    {progress}%
-                  </Text>
-                </View>
-                <View
-                  style={[
-                    styles.progressBar,
-                    { backgroundColor: colors.muted, borderRadius: radius.sm },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.progressFill,
-                      {
-                        width: `${progress}%`,
-                        backgroundColor: colors.primary,
-                        borderRadius: radius.sm,
-                      },
-                    ]}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.taskList}>
-                {filteredTasks.map((task: Task) => {
-                  const priorityStyle = getPriorityStyle(task.priority, colors);
-                  const assignee =
-                    members.find((m: any) => m.id === task.assignee)?.name ||
-                    'Unassigned';
-
-                  return (
-                    <Pressable
-                      key={task.id}
-                      onPress={() => handleEditTask(task)}
-                      style={[
-                        styles.taskCard,
-                        {
-                          backgroundColor: colors.card,
-                          shadowColor: colors.border,
-                          borderRadius: radius.card,
-                        },
-                        task.status === 'done' && { opacity: 0.6 },
-                      ]}
-                    >
-                      <Pressable
-                        style={[
-                          styles.checkCircle,
-                          {
-                            borderColor: colors.mutedForeground,
-                            borderRadius: radius.sm,
-                          },
-                          task.status === 'done' && {
-                            backgroundColor: colors.success,
-                            borderColor: colors.success,
-                          },
-                        ]}
-                        onPress={() => toggleTask(task.id)}
-                      >
-                        {task.status === 'done' && (
-                          <Text style={styles.checkMark}>✓</Text>
-                        )}
-                      </Pressable>
-                      <View style={styles.taskDetails}>
-                        <View style={styles.taskTitleRow}>
-                          <MaterialCommunityIcons
-                            name={
-                              task.icon && task.icon.trim()
-                                ? task.icon
-                                : 'format-list-checks'
-                            }
-                            size={22}
-                            color={colors.primary}
-                            style={{ marginRight: 8 }}
-                          />
-                          <Text
-                            style={[
-                              styles.taskTitle,
-                              { color: colors.foreground },
-                              task.status === 'done' && {
-                                color: colors.mutedForeground,
-                              },
-                            ]}
-                          >
-                            {task.name}
-                          </Text>
-                        </View>
-                        <View style={styles.metaRow}>
-                          <View
-                            style={[
-                              styles.priorityBadge,
-                              {
-                                backgroundColor: priorityStyle.background,
-                                borderRadius: radius.full,
-                              },
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.priorityText,
-                                { color: priorityStyle.color },
-                              ]}
-                            >
-                              {priorityStyle.label}
-                            </Text>
-                          </View>
-                          <View style={styles.metaItem}>
-                            <AppIcon
-                              name="clock"
-                              size={14}
-                              color={colors.mutedForeground}
-                              style={styles.metaIcon}
-                            />
-                            <Text
-                              style={[
-                                styles.metaText,
-                                { color: colors.mutedForeground },
-                              ]}
-                            >
-                              {task.due}
-                            </Text>
-                          </View>
-                          <View style={styles.metaItem}>
-                            <AppIcon
-                              name="user"
-                              size={14}
-                              color={colors.mutedForeground}
-                              style={styles.metaIcon}
-                            />
-                            <Text
-                              style={[
-                                styles.metaText,
-                                { color: colors.mutedForeground },
-                              ]}
-                            >
-                              {assignee}
-                            </Text>
-                          </View>
-                        </View>
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              <Pressable
-                style={[styles.addNewRow]}
-                onPress={() => {
-                  setEditingTask(undefined);
-                  setShowAddTask(true);
-                }}
-              >
-                <AppIcon
-                  name="plus"
-                  size={16}
-                  color={colors.primary}
-                  style={styles.addNewIcon}
-                />
-                <Text style={[styles.addNewText, { color: colors.primary }]}>
-                  Add new task
-                </Text>
-              </Pressable>
-            </>
-          )}
-        </ScrollView>
+          }
+          ListFooterComponent={
+            <Pressable
+              style={styles.addNewRow}
+              onPress={() => {
+                setEditingTask(undefined);
+                setShowAddTask(true);
+              }}
+            >
+              <AppIcon
+                name="plus"
+                size={16}
+                color={colors.primary}
+                style={styles.addNewIcon}
+              />
+              <Text style={[styles.addNewText, { color: colors.primary }]}>
+                Add new task
+              </Text>
+            </Pressable>
+          }
+        />
       </AppLayout>
       <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} />
       <AddTaskModal
@@ -515,7 +527,6 @@ const styles = StyleSheet.create({
   container: {
     padding: 20,
     paddingBottom: 120,
-    // Background handled by AppLayout
   },
   header: {
     flexDirection: 'row',
@@ -603,9 +614,6 @@ const styles = StyleSheet.create({
   progressFill: {
     height: '100%',
   },
-  taskList: {
-    marginBottom: 24,
-  },
   taskCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -628,6 +636,9 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
   },
+  taskContentPressable: {
+    flex: 1,
+  },
   taskDetails: {
     flex: 1,
   },
@@ -636,10 +647,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 6,
   },
+  deleteTaskButton: {
+    marginLeft: 12,
+    padding: 6,
+  },
   taskTitle: {
     fontSize: 16,
     fontWeight: '700',
     marginBottom: 6,
+    flexShrink: 1,
   },
   metaRow: {
     flexDirection: 'row',
@@ -650,6 +666,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginLeft: 8,
+    marginTop: 4,
   },
   metaIcon: {
     marginRight: 4,
@@ -657,6 +674,7 @@ const styles = StyleSheet.create({
   priorityBadge: {
     paddingHorizontal: 16,
     paddingVertical: 4,
+    marginTop: 4,
   },
   priorityText: {
     fontWeight: '700',
@@ -677,5 +695,19 @@ const styles = StyleSheet.create({
   addNewText: {
     fontWeight: '700',
     fontSize: 18,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 28,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  emptyText: {
+    textAlign: 'center',
+    fontSize: 14,
+    lineHeight: 20,
   },
 });

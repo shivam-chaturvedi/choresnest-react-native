@@ -71,6 +71,32 @@ const FALLBACK_OAUTH_SCHEME = 'com.choresnest';
 const FALLBACK_OAUTH_HOST = 'auth-callback';
 const GOOGLE_OAUTH_REDIRECT_URI = 'https://choresnest.com/auth/callback';
 
+const isRecognizedAuthCallbackUrl = (rawUrl?: string | null) => {
+  if (!rawUrl) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(rawUrl);
+    const normalizedPath = parsed.pathname.replace(/\/$/, '');
+    const normalizedHost = parsed.host.replace(/^www\./, '');
+
+    const isFallbackScheme =
+      parsed.protocol === `${FALLBACK_OAUTH_SCHEME}:` &&
+      parsed.host === FALLBACK_OAUTH_HOST;
+
+    const isVerifiedLink =
+      parsed.protocol === 'https:' &&
+      normalizedHost === 'choresnest.com' &&
+      (normalizedPath === '/auth/callback' ||
+        normalizedPath === '/reset-password');
+
+    return isFallbackScheme || isVerifiedLink;
+  } catch {
+    return false;
+  }
+};
+
 async function proxyLogin(email: string, pass: string) {
   await proxyLoginUser(email, pass);
   return { data: null, error: null };
@@ -96,6 +122,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
 
   // Ref copy so async callbacks can read the latest epoch without closure capture
   const epochRef = useRef(0);
+  const authInitCompleteRef = useRef(false);
+  const authRedirectInFlightRef = useRef(false);
   const bumpEpoch = () => {
     epochRef.current += 1;
     setSessionEpoch(epochRef.current);
@@ -107,18 +135,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
 
   useEffect(() => {
     const initializeAuth = async () => {
+      authInitCompleteRef.current = false;
       const timeoutId = setTimeout(() => {
         if (isLoading) {
           console.warn(
             'AuthContext: initializeAuth timed out after 5s - forcing loading to false',
           );
-          setIsLoading(false);
+          authInitCompleteRef.current = true;
+          if (!authRedirectInFlightRef.current) {
+            setIsLoading(false);
+          }
         }
       }, 5000);
 
       try {
         console.log('AuthContext: Starting auth initialization...');
         const start = Date.now();
+        const initialUrl = await Linking.getInitialURL().catch(error => {
+          ErrorLogger.logError(error, {
+            component: 'AuthContext',
+            action: 'initializeAuth.getInitialURL',
+          });
+          return null;
+        });
+        const launchedFromAuthRedirect = isRecognizedAuthCallbackUrl(initialUrl);
 
         // Immediately check local cached user to prevent UI blocking
         const cachedUserStr = await AsyncStorage.getItem('AUTH_USER');
@@ -135,40 +175,46 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
             console.error('AuthContext: Failed to parse cached user', e);
           }
         } else {
-          // No AUTH_USER in our cache → user is logged-out.
+          // No AUTH_USER in our cache does not always mean the user is logged-out.
+          // On cold starts from a Google/Supabase redirect, the incoming deep link
+          // may still be restoring the session. Clearing Supabase storage here races
+          // that restore and can bounce the user back to the login screen.
           //
-          // CRITICAL: If a stale/expired Supabase session exists in AsyncStorage,
-          // onAuthStateChange registration triggers _recoverAndRefresh internally,
-          // making a network token-refresh call that fails with "Network request failed".
-          //
-          // DO NOT call supabase.auth.signOut() — despite scope:'local', the SDK
-          // still makes a network attempt first and blocks for 46+ seconds on failure.
-          //
-          // Instead: directly delete Supabase's AsyncStorage keys. Zero network. Instant.
-          try {
-            const supabaseUrl =
-              (await AsyncStorage.getItem('__supabase_url__')) || '';
-            // Extract project ref from stored URL OR from known keys via getAllKeys
-            const allKeys = await AsyncStorage.getAllKeys();
-            const supabaseKeys = allKeys.filter(
-              k =>
-                k.startsWith('sb-') ||
-                k === 'supabase.auth.token' ||
-                k.includes('-auth-token') ||
-                k.includes('-auth-code-verifier'),
-            );
-            if (supabaseKeys.length > 0) {
-              await AsyncStorage.multiRemove(supabaseKeys);
-              console.log(
-                `AuthContext: Cleared ${supabaseKeys.length} stale Supabase session key(s) from AsyncStorage (no network)`,
+          if (!launchedFromAuthRedirect && !authRedirectInFlightRef.current) {
+            // CRITICAL: If a stale/expired Supabase session exists in AsyncStorage,
+            // onAuthStateChange registration triggers _recoverAndRefresh internally,
+            // making a network token-refresh call that fails with "Network request failed".
+            //
+            // DO NOT call supabase.auth.signOut() — despite scope:'local', the SDK
+            // still makes a network attempt first and blocks for 46+ seconds on failure.
+            //
+            // Instead: directly delete Supabase's AsyncStorage keys. Zero network. Instant.
+            try {
+              const allKeys = await AsyncStorage.getAllKeys();
+              const supabaseKeys = allKeys.filter(
+                k =>
+                  k.startsWith('sb-') ||
+                  k === 'supabase.auth.token' ||
+                  k.includes('-auth-token') ||
+                  k.includes('-auth-code-verifier'),
               );
+              if (supabaseKeys.length > 0) {
+                await AsyncStorage.multiRemove(supabaseKeys);
+                console.log(
+                  `AuthContext: Cleared ${supabaseKeys.length} stale Supabase session key(s) from AsyncStorage (no network)`,
+                );
+              }
+            } catch (e) {
+              // Ignore — storage error does not block auth init
             }
-          } catch (e) {
-            // Ignore — stoarge error does not block auth init
+            setUser(null);
+            setIsGuest(false);
+            DocumentUploadScheduler.stop();
+          } else {
+            console.log(
+              'AuthContext: Deferring stale-session cleanup while auth redirect is being restored.',
+            );
           }
-          setUser(null);
-          setIsGuest(false);
-          DocumentUploadScheduler.stop();
         }
 
         // Check guest mode independently
@@ -200,7 +246,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
         setHasCompletedOnboarding(false);
       } finally {
         clearTimeout(timeoutId);
-        setIsLoading(false);
+        authInitCompleteRef.current = true;
+        if (!authRedirectInFlightRef.current) {
+          setIsLoading(false);
+        }
       }
     };
 
@@ -210,6 +259,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (
+        !session?.user &&
+        authRedirectInFlightRef.current &&
+        (_event === 'INITIAL_SESSION' || _event === 'SIGNED_OUT')
+      ) {
+        console.log(
+          `[AuthContext] Ignoring transient ${_event} while OAuth redirect is still being processed.`,
+        );
+        return;
+      }
+
       if (session?.user) {
         const userData = {
           id: session.user.id,
@@ -429,12 +489,39 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
           return;
         }
 
+        authRedirectInFlightRef.current = true;
+        setIsLoading(true);
+
         const providerError =
           parsed.searchParams.get('error_description') ??
           parsed.searchParams.get('error');
         if (providerError) {
           const decodedMessage = decodeURIComponent(providerError);
           onErrorRef.current?.('Google Sign-In Failed', decodedMessage);
+          return;
+        }
+
+        const authCode = parsed.searchParams.get('code');
+        if (authCode) {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(
+            authCode,
+          );
+          if (error) {
+            const message = getHumanReadableMessage(error, 'oauth');
+            onErrorRef.current?.('Google Sign-In Failed', message);
+            ErrorLogger.logError(error, {
+              component: 'AuthContext',
+              action: 'exchangeCodeForSession',
+              additionalData: { url: rawUrl },
+            });
+            return;
+          }
+
+          setIsPasswordRecoveryFlow(false);
+          setPasswordRecoveryAccessToken(null);
+          console.log('[AuthContext] OAuth code exchanged successfully', {
+            userId: data?.user?.id,
+          });
           return;
         }
 
@@ -456,6 +543,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
           action: 'processGoogleOAuthRedirect',
           additionalData: { url: rawUrl },
         });
+      } finally {
+        authRedirectInFlightRef.current = false;
+        if (authInitCompleteRef.current) {
+          setIsLoading(false);
+        }
       }
     };
 

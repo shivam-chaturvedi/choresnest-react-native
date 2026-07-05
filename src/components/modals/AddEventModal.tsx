@@ -15,7 +15,6 @@ import {
 } from 'react-native';
 import { useFamily, CalendarEvent } from '../../contexts/FamilyContext';
 import { useThemeColors, useTheme } from '../../contexts/ThemeContext';
-import { useCountry } from '../../contexts/CountryContext';
 import { AppIcon, AppIconName, CustomDateTimePicker } from '../ui';
 import { PROFILE_COLORS } from '../../constants/profileColors';
 import { NotificationPreferencesService } from '../../services/NotificationPreferencesService';
@@ -24,6 +23,19 @@ import { SyncService } from '../../services/SyncService';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useExactAlarmPermission } from '../../hooks/useExactAlarmPermission';
 import { useNavigation } from '@react-navigation/native';
+import { TaskRecurrenceFields } from '../tasks/TaskRecurrenceFields';
+import {
+  buildTaskRecurrenceWritePayload,
+  createDefaultTaskRecurrenceForm,
+  mapTaskToRecurrenceForm,
+  TaskRecurrenceFormValue,
+} from '../../utils/taskFormUtils';
+import { normalizeVirtualCalendarId, parseVirtualCalendarOccurrenceDate } from '../../utils/virtualId';
+import {
+  combineLocalDateAndTime,
+  formatDueDisplayTime,
+  getDeviceTimeZone,
+} from '../../utils/ReminderDateTimeUtils';
 
 interface AddEventModalProps {
   open: boolean;
@@ -109,7 +121,6 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   const { appearanceMode } = useTheme();
   const isMidnight = appearanceMode === 'midnight';
   const accentColor = isMidnight ? colors.foreground : colors.primary;
-  const { currentCountry } = useCountry();
   const navigation = useNavigation<any>();
   const openNotificationPreferences = () => {
     navigation.navigate('MainTabs', {
@@ -178,6 +189,9 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   /* Task State */
   const [taskPriority, setTaskPriority] = useState('medium');
   const [taskIcon, setTaskIcon] = useState('format-list-checks');
+  const [taskRecurrence, setTaskRecurrence] = useState<TaskRecurrenceFormValue>(
+    createDefaultTaskRecurrenceForm(),
+  );
 
   const [reminder, setReminder] = useState(true);
   const [reminderTime, setReminderTime] = useState('15');
@@ -230,17 +244,17 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       setName(eventName);
       setDescription(eventToEdit.description || '');
       setNotes(eventToEdit.notes || '');
-      // Parse stored yyyy-MM-dd as a local calendar date (no timezone shifts)
+
+      let parsedStartDate = new Date();
       if (eventToEdit.date) {
         const [sy, sm, sd] = eventToEdit.date
           .split('-')
           .map(part => parseInt(part, 10));
-        setStartDate(
-          sy && sm && sd ? new Date(sy, sm - 1, sd, 0, 0, 0, 0) : new Date(),
-        );
-      } else {
-        setStartDate(new Date());
+        if (sy && sm && sd) {
+          parsedStartDate = new Date(sy, sm - 1, sd, 0, 0, 0, 0);
+        }
       }
+      setStartDate(parsedStartDate);
 
       if (eventToEdit.time === 'All Day') {
         setAllDay(true);
@@ -297,6 +311,28 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         setActiveTab('task');
         setTaskPriority(anyEvent.priority || 'medium');
         setTaskIcon(anyEvent.icon || 'format-list-checks');
+
+        const baseTaskId = normalizeVirtualCalendarId(anyEvent.id);
+        const storedTask = tasks.find(task => task.id === baseTaskId);
+        const taskEditSource = storedTask
+          ? {
+              ...storedTask,
+              ...anyEvent,
+              type: 'task',
+              name: anyEvent.title || storedTask.name,
+              date: anyEvent.date || storedTask.date,
+              dateString: anyEvent.date || storedTask.date,
+              time: anyEvent.time || storedTask.due,
+              dueDisplay: anyEvent.time || storedTask.due,
+              assigneeId:
+                anyEvent.memberId ||
+                anyEvent.assignee ||
+                storedTask.assignee,
+              reminderEnabled: storedTask.reminderEnabled,
+            }
+          : anyEvent;
+
+        setTaskRecurrence(mapTaskToRecurrenceForm(taskEditSource, parsedStartDate));
       } else {
         setActiveTab('event');
         setSelectedIcon(eventToEdit.icon || 'calendar-star');
@@ -400,6 +436,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
       setRepeatType('never');
       setRepeatEndDate(null);
+      setTaskRecurrence(createDefaultTaskRecurrenceForm(initDate));
       setReminder(true);
       setReminderTime(defaultEventReminderMinutes.toString());
       setShowRepeatOptions(false);
@@ -410,6 +447,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
     initialDate,
     initialTime,
     defaultEventReminderMinutes,
+    tasks,
   ]);
 
   useEffect(() => {
@@ -492,6 +530,79 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
     }
   }, [memberId]);
 
+  const handleDeleteItem = () => {
+    if (!eventToEdit) {
+      return;
+    }
+
+    const itemType = (eventToEdit as any).type === 'task' ? 'task' : 'event';
+    const itemName = itemType === 'task' ? 'Task' : 'Event';
+
+    if (itemType === 'task') {
+      const baseTaskId = normalizeVirtualCalendarId(eventToEdit.id);
+      const storedTask = tasks.find(task => task.id === baseTaskId);
+      const taskName = eventToEdit.title || storedTask?.name || 'Task';
+      const occurrenceDate =
+        eventToEdit.date ||
+        parseVirtualCalendarOccurrenceDate(eventToEdit.id) ||
+        storedTask?.date;
+
+      if (storedTask?.isRecurring) {
+        Alert.alert(
+          'Recurring Task',
+          `What would you like to do with "${taskName}"?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Skip This Time',
+              onPress: () => {
+                void deleteTask(eventToEdit.id, {
+                  mode: 'occurrence',
+                  occurrenceDate,
+                });
+                onOpenChange(false);
+              },
+            },
+            {
+              text: 'Delete Series',
+              style: 'destructive',
+              onPress: () => {
+                void deleteTask(eventToEdit.id, { mode: 'series' });
+                onOpenChange(false);
+              },
+            },
+          ],
+        );
+        return;
+      }
+
+      Alert.alert(`Delete ${itemName}`, `Are you sure you want to delete this ${itemType}?`, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            void deleteTask(eventToEdit.id, { mode: 'series' });
+            onOpenChange(false);
+          },
+        },
+      ]);
+      return;
+    }
+
+    Alert.alert(`Delete ${itemName}`, `Are you sure you want to delete this ${itemType}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          void deleteEvent(eventToEdit.id);
+          onOpenChange(false);
+        },
+      },
+    ]);
+  };
+
   const handleSave = async () => {
     try {
       if (!name.trim()) {
@@ -502,11 +613,9 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         return;
       }
 
-      const deviceTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      const fallbackTimeZone = deviceTimeZone || currentCountry.timeZone;
-      const eventTimeZone = eventToEdit?.timeZone || fallbackTimeZone;
+      const deviceTimeZone = getDeviceTimeZone();
+      const eventTimeZone = deviceTimeZone || eventToEdit?.timeZone || 'UTC';
 
-      // FIX: Use local time directly instead of converting to UTC to prevent time shifts
       const formattedDate = safeFormat(startDate, 'yyyy-MM-dd');
 
       let formattedTime: string;
@@ -531,24 +640,48 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       const reminderOffsetMinutes = reminder ? parseInt(reminderTime, 10) : -1;
 
       if (activeTab === 'task') {
+        const dueMoment = allDay
+          ? combineLocalDateAndTime(
+              startDate,
+              new Date(new Date().setHours(9, 0, 0, 0)),
+            )
+          : combineLocalDateAndTime(startDate, startTime);
+        const taskDueDisplay = allDay
+          ? 'All Day'
+          : formatDueDisplayTime(dueMoment);
+
+        const baseTaskId =
+          isEditing && eventToEdit
+            ? normalizeVirtualCalendarId(eventToEdit.id)
+            : undefined;
+        const storedTask = baseTaskId
+          ? tasks.find(task => task.id === baseTaskId)
+          : undefined;
+
+        const recurrencePayload = buildTaskRecurrenceWritePayload(
+          taskRecurrence,
+          formattedDate,
+          startDate,
+          { includeAnchor: !isEditing },
+        );
+        const taskPayload = {
+          name: name.trim(),
+          icon: taskIcon,
+          priority: taskPriority as any,
+          dateString: formattedDate,
+          dueDisplay: taskDueDisplay,
+          assigneeId: memberId,
+          reminderEnabled: storedTask?.reminderEnabled ?? true,
+          ...recurrencePayload,
+        };
+
         if (isEditing && eventToEdit) {
-          await updateTask(eventToEdit.id, {
-            name: name.trim(),
-            icon: taskIcon,
-            priority: taskPriority as any,
-            dateString: formattedDate,
-            dueDisplay: formattedTime,
-            assigneeId: memberId,
-          });
+          const recordId = normalizeVirtualCalendarId(eventToEdit.id);
+          await updateTask(recordId, taskPayload);
         } else {
           await addTask(
             {
-              name: name.trim(),
-              icon: taskIcon,
-              priority: taskPriority as any,
-              dateString: formattedDate,
-              dueDisplay: formattedTime,
-              assigneeId: memberId,
+              ...taskPayload,
               tab: 'My Tasks',
               status: 'pending',
             },
@@ -557,7 +690,8 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         }
       } else {
         if (isEditing && eventToEdit) {
-          await updateEvent(eventToEdit.id, {
+          const recordId = normalizeVirtualCalendarId(eventToEdit.id);
+          await updateEvent(recordId, {
             title: name.trim(),
             description: description.trim(),
             notes: notes.trim(),
@@ -1400,6 +1534,16 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                   )}
                 </View>
 
+                {activeTab === 'task' && (
+                  <TaskRecurrenceFields
+                    value={taskRecurrence}
+                    onChange={setTaskRecurrence}
+                    dueDate={startDate}
+                    disabled={!isOwner}
+                    sectionStyle={styles.fieldGroup}
+                  />
+                )}
+
                 {/* Repeat Options - EVENT ONLY */}
                 {activeTab === 'event' && (
                   <View style={styles.fieldGroup}>
@@ -1841,31 +1985,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                     styles.deleteButton,
                     { backgroundColor: colors.muted },
                   ]}
-                  onPress={() => {
-                    const itemType =
-                      (eventToEdit as any).type === 'task' ? 'task' : 'event';
-                    const itemName = itemType === 'task' ? 'Task' : 'Event';
-
-                    Alert.alert(
-                      `Delete ${itemName}`,
-                      `Are you sure you want to delete this ${itemType}?`,
-                      [
-                        { text: 'Cancel', style: 'cancel' },
-                        {
-                          text: 'Delete',
-                          style: 'destructive',
-                          onPress: () => {
-                            if (itemType === 'task') {
-                              deleteTask(eventToEdit.id);
-                            } else {
-                              deleteEvent(eventToEdit.id);
-                            }
-                            onOpenChange(false);
-                          },
-                        },
-                      ],
-                    );
-                  }}
+                  onPress={handleDeleteItem}
                 >
                   <Text
                     style={[styles.deleteButtonText, { color: colors.danger }]}

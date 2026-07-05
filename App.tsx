@@ -34,6 +34,7 @@ import { SyncService } from './src/services/SyncService';
 import NetInfo from '@react-native-community/netinfo';
 import { PermissionPromptRenderer } from './src/components/ui/PermissionPrompt';
 import { bootService } from './src/services/BootService';
+import { AppUpdateHost } from './src/components/updates/AppUpdateHost';
 import * as Sentry from '@sentry/react-native';
 import { reactNavigationIntegration } from './src/services/SentryNavigation';
 
@@ -224,6 +225,7 @@ const App = () => {
                           >
                             <ErrorBoundary>
                               <AppNavigator />
+                              <AppUpdateHost enabled={bootCompleted} />
                             </ErrorBoundary>
                           </SafeAreaView>
                         </SidebarProvider>

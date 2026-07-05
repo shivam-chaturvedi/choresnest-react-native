@@ -6,6 +6,7 @@ import { pullTableChangesWithCursor } from './PullCursorEngine';
 import { pushTableChanges } from './PushEngine';
 import { SYNC_TABLES } from './TableRegistry';
 import { TableChangeSet, TableFetchDescriptor } from './types';
+import { isUuid } from '../../utils/uuid';
 
 const logChangeSetSummary = (table: string, changeSet: TableChangeSet): void => {
     if (Config.NODE_ENV === 'production') {
@@ -24,7 +25,7 @@ const collectTableFetchResults = async (descriptors: TableFetchDescriptor[]): Pr
         if (result.status === 'fulfilled') {
             output[key] = result.value;
         } else {
-            console.error(`Error fetching ${key}:`, result.reason);
+            console.warn(`Sync pull skipped ${key}:`, result.reason);
             output[key] = { created: [], updated: [], deleted: [], latestUpdatedAt: 0 };
         }
     });
@@ -204,7 +205,11 @@ export class SyncOrchestrator {
             // Otherwise, filter created/updated records to only include allowed profiles or the active profile itself
             const filterByProfile = (record: any) => {
                 const pid = record.profile_id || record.profileId;
-                return pid === this.userId || (pid && allowedProfiles.has(pid));
+                if (!pid || !isUuid(pid)) {
+                    // Push sanitization overwrites profile_id with the auth UUID.
+                    return true;
+                }
+                return pid === this.userId || allowedProfiles.has(pid);
             };
 
             filteredChanges[tableName] = {

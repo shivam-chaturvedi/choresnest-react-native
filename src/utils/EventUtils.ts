@@ -1,6 +1,7 @@
 import { differenceInDays, isAfter, isBefore, isSameDay, startOfDay } from "date-fns";
 import { safeFormat, parseLocalDateTime } from "./SafeDateUtils";
 import { CalendarEvent, Task } from "../contexts/FamilyContext";
+import { isTaskRecurring, taskOccursOnDateString } from "./taskRecurrence";
 
 export interface CalendarEventWithMeta extends CalendarEvent {
     __cachedStart?: Date;
@@ -70,26 +71,47 @@ export const getEventsForDate = (
 
     const result: CalendarItem[] = [];
 
-    // Process Tasks (Simple date string match)
+    // Process Tasks (single occurrence + recurring virtual instances)
     tasks.forEach(task => {
-        if (task.date === targetDateStr && task.status !== 'done') {
+        if (task.status === 'done') {
+            return;
+        }
+
+        const taskTime =
+            task.due && task.due.match(/\d+:\d+\s*(AM|PM)/i) ? task.due : "All Day";
+
+        const pushTaskForDate = (displayDate: string, isVirtual: boolean) => {
             result.push({
                 ...task,
-                type: 'task', // explicit type for UI
+                type: 'task',
                 title: task.name,
-                time: task.due && task.due.match(/\d+:\d+\s*(AM|PM)/i) ? task.due : "All Day",
+                time: taskTime,
                 memberId: task.assignee,
-                // Adapt task fields to match CalendarEvent structure where needed
+                date: displayDate,
+                isVirtual,
+                originalDate: task.date,
+                id: isVirtual ? `${task.id}_${displayDate}` : task.id,
                 coordinates: undefined,
-                location: undefined
+                location: undefined,
             } as any);
+        };
+
+        if (!isTaskRecurring(task)) {
+            if (task.date === targetDateStr) {
+                pushTaskForDate(targetDateStr, false);
+            }
+            return;
+        }
+
+        if (taskOccursOnDateString(targetDateStr, task)) {
+            pushTaskForDate(targetDateStr, targetDateStr !== task.date);
         }
     });
 
     // Process Events
     events.forEach(event => {
         const eventTimeZone = ""; // unused with local dates, kept for type parity
-        const eventStartDate = getEventStartDate(event, "");
+        const eventStartDate = getEventStartDate(event);
         if (!eventStartDate) return;
 
         const eventEndDate = getEventEndDate(event, eventTimeZone, eventStartDate);

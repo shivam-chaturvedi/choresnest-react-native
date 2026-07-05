@@ -2,6 +2,8 @@ import Config from 'react-native-config';
 import { Q } from '@nozbe/watermelondb';
 import { getDatabase } from '../../database';
 import { isValidRecordForTable, mapLocalFieldToServer, transformRecordForSupabase } from './TransformationEngine';
+import { stripToRemoteColumns } from './SyncPayloadUtils';
+import { isUuid } from '../../utils/uuid';
 import { recordConflict } from './ConflictEngine';
 import { ConflictSeverity, ConflictType, TableChangeSet } from './types';
 import { supabase } from '../../config/supabase';
@@ -148,12 +150,36 @@ const fetchLocalVersions = async (table: string, ids: string[]): Promise<Map<str
     return versions;
 };
 
-const mergeWithServer = (serverRow: any, payload: Record<string, any>): Record<string, any> => {
-    if (!serverRow) {
-        return payload;
+const mergeWithServer = (_serverRow: any, payload: Record<string, any>): Record<string, any> => payload;
+
+const sanitizeUpsertRecord = (
+    table: string,
+    remoteTable: string,
+    record: Record<string, any>,
+    userId: string,
+    addProfileId: boolean,
+): Record<string, any> => {
+    const payload: Record<string, any> = { ...record };
+
+    if (addProfileId && isUuid(userId)) {
+        payload.profile_id = userId;
+    } else if (payload.profile_id && !isUuid(payload.profile_id)) {
+        delete payload.profile_id;
     }
-    return { ...serverRow, ...payload };
+
+    return stripToRemoteColumns(table, remoteTable, payload) as Record<string, any>;
 };
+
+const summarizeUpsertPayload = (records: Record<string, any>[]) =>
+    records.map(record => ({
+        keys: Object.keys(record),
+        id: record.id,
+        profile_id: record.profile_id,
+        assignee_id: record.assignee_id,
+        added_by_id: record.added_by_id,
+        member_id: record.member_id,
+        list_id: record.list_id,
+    }));
 
 const dedupeByConflictKey = (records: Record<string, any>[], conflictKey: string): Record<string, any>[] => {
     const trimmed = conflictKey
@@ -256,7 +282,26 @@ export const pushTableChanges = async ({
                 continue;
             }
             const changedFields = mapChangedFields(table, record);
-            const { payload, localVersion } = transformRecordForSupabase(table, record, userId, addProfileId, changedFields);
+            const { payload, localVersion } = transformRecordForSupabase(
+                table,
+                record,
+                userId,
+                addProfileId,
+                changedFields,
+                targetTable,
+            );
+            if (!payload?.id || Object.keys(payload).length === 0) {
+                console.warn(
+                    `[PushEngine] Skipping ${table} record ${record.id} because payload sanitization removed it.`,
+                );
+                continue;
+            }
+            if (addProfileId && !isUuid(payload.profile_id)) {
+                console.warn(
+                    `[PushEngine] Skipping ${table} record ${record.id} because profile_id is not a valid auth UUID.`,
+                );
+                continue;
+            }
             const serverRow = serverRows.get(record.id);
             const serverVersion = coerceVersion(serverRow?.version);
 
@@ -273,8 +318,14 @@ export const pushTableChanges = async ({
                 }
             }
 
-            const merged = mergeWithServer(serverRow, payload);
-            merged.version = localVersion > 0 ? localVersion : 1;
+            const merged = stripToRemoteColumns(
+                table,
+                targetTable,
+                {
+                    ...mergeWithServer(serverRow, payload),
+                    version: localVersion > 0 ? localVersion : 1,
+                },
+            ) as Record<string, any>;
 
             recordsToUpsert.push(merged);
         }
@@ -292,11 +343,18 @@ export const pushTableChanges = async ({
 
     const upsertChunks = chunkArray(uniqueRecords, SYNC_UPSERT_BATCH_SIZE);
     for (const chunk of upsertChunks) {
+        const sanitizedChunk = chunk.map(record =>
+            sanitizeUpsertRecord(table, targetTable, record, userId, addProfileId),
+        );
         try {
-            const { error } = await supabase.from(targetTable).upsert(chunk, { onConflict: conflictKey });
+            const { error } = await supabase.from(targetTable).upsert(sanitizedChunk, { onConflict: conflictKey });
             if (error) {
-                console.error(`Failed to upsert ${targetTable} (${chunk.length} records):`, error);
-                errors += chunk.length;
+                console.error(`Failed to upsert ${targetTable} (${sanitizedChunk.length} records):`, error);
+                console.error(
+                    `[Sync][Push] Upsert payload summary for ${targetTable}:`,
+                    summarizeUpsertPayload(sanitizedChunk),
+                );
+                errors += sanitizedChunk.length;
             }
             else {
                 logPushDebug('Upsert chunk succeeded', {

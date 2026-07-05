@@ -14,6 +14,8 @@ import { BackoffFailureType, ConflictRecord, TableChangeSet } from './sync/types
 import { resetWatermelonCursor } from './sync/cursor';
 import { REALTIME_WATCH_TABLES } from './sync/realtime/RealtimeWatchList';
 import { ProfileService } from './ProfileService';
+import { repairProfileScopedRecords } from './sync/SyncPayloadUtils';
+import { isUuid } from '../utils/uuid';
 
 const parseBooleanFlag = (value: string | undefined, defaultValue: boolean): boolean => {
     if (value === undefined || value === null) {
@@ -462,11 +464,21 @@ export const SyncService = {
             return;
         }
 
-        const activeProfileId = await ProfileService.getActiveProfileId();
-        if (!activeProfileId) {
-            console.log('No active profile ID resolved via ProfileService, skipping sync');
+        const authUserId = user.id;
+        if (!isUuid(authUserId)) {
+            console.log('Supabase session user id is not a valid UUID, skipping sync');
             return;
         }
+
+        const cachedProfileId = await ProfileService.getActiveProfileId();
+        if (cachedProfileId !== authUserId) {
+            console.warn(
+                `[SyncService] Reconciling cached profile id (${cachedProfileId ?? 'none'}) with auth user (${authUserId}).`,
+            );
+            await ProfileService.setActiveProfileId(authUserId);
+        }
+
+        const activeProfileId = authUserId;
 
         ensureRealtimeSubscription(() => {
             void this.requestSyncSoon();
@@ -508,6 +520,9 @@ export const SyncService = {
                 }
 
                 console.log(`🔄 Starting ${readOnly ? 'READ-ONLY' : 'FULL'} sync for profile:`, activeProfileId);
+                if (!readOnly) {
+                    await repairProfileScopedRecords(activeProfileId);
+                }
                 const orchestrator = new SyncOrchestrator(activeProfileId);
                 await orchestrator.run(readOnly);
 

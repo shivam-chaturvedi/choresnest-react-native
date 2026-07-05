@@ -26,6 +26,7 @@ import { PROFILE_COLORS } from "../constants/profileColors";
 import { useAuth } from "../contexts/AuthContext";
 import { MemberIcon } from "../components/ui";
 import Config from "react-native-config";
+import DeviceInfo from "react-native-device-info";
 import { withDeferredScreen } from "../components/layout/DeferredScreen";
 import { SupabaseService } from "../services/SupabaseService";
 import { useToast } from "../components/ui/Toast";
@@ -539,7 +540,9 @@ const MoreScreenContent: React.FC = () => {
             <Text style={[styles.logoutText, { color: colors.danger }]}>Sign Out</Text>
           </Pressable>
 
-          <Text style={[styles.version, { color: colors.mutedForeground }]}>Chores Nest v1.0.6 · Made with ❤️ families</Text>
+          <Text style={[styles.version, { color: colors.mutedForeground }]}>
+            Chores Nest v{DeviceInfo.getVersion()} · Made with ❤️ families
+          </Text>
         </View>
       </AppLayout>
 

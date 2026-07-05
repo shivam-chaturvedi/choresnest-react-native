@@ -1,41 +1,18 @@
 import { getDatabase } from '../../database';
 import { Q } from '@nozbe/watermelondb';
 import { TableChangeSet } from './types';
+import {
+    buildRemoteRecordPayload,
+    finalizeProfileScopedPayload,
+    pickRemotePayload,
+    TABLE_FIELD_MAPPINGS,
+} from './SyncPayloadUtils';
+import { isUuid } from '../../utils/uuid';
 
-const FIELD_MAPPINGS: Record<string, Record<string, string>> = {
-    events: {
-        dateString: 'date',
-    },
-    tasks: {
-        dateString: 'date',
-        dueDisplay: 'due_display',
-        assigneeId: 'assignee_id',
-        reminderEnabled: 'reminder_enabled',
-    },
-    list_items: {
-        isCompleted: 'is_completed',
-        addedById: 'added_by_id',
-        purchasedAt: 'purchased_at',
-        updatedAt: 'updated_at',
-    },
-    notes: {
-        isStarred: 'is_starred',
-        updatedAt: 'updated_at',
-        folderId: 'folder_id',
-        blocks: 'blocks_json',
-    },
-    documents: {
-        filePath: 'file_path',
-        localUri: 'local_uri',
-        remotePath: 'remote_path',
-        uploadStatus: 'upload_status',
-        uploadAttempts: 'upload_attempts',
-        lastUploadError: 'last_upload_error',
-        contentType: 'content_type',
-        fileSize: 'file_size',
-        checksum: 'checksum',
-        metadataVersion: 'metadata_version',
-    },
+const GLOBAL_FIELD_MAPPINGS: Record<string, string> = {
+    profileId: 'profile_id',
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
 };
 
 export const coerceTimestamp = (value: string | number | Date | undefined | null): number => {
@@ -203,8 +180,11 @@ const normalizePurchasedAt = (value: any): number | null => {
 };
 
 export const mapLocalFieldToServer = (table: string, field: string): string => {
-    const mappings = FIELD_MAPPINGS[table];
-    return mappings?.[field] ?? field;
+    const mappings = {
+        ...GLOBAL_FIELD_MAPPINGS,
+        ...(TABLE_FIELD_MAPPINGS[table] ?? {}),
+    };
+    return mappings[field] ?? field;
 };
 
 const coerceVersion = (value: any): number => {
@@ -224,22 +204,33 @@ export const transformRecordForSupabase = (
     userId: string,
     addProfileId: boolean,
     changedFields: string[] = [],
-    serverSnapshot?: Record<string, any>
+    remoteTable?: string,
 ): { payload: Record<string, any>; changedFields: string[]; localVersion: number } => {
-    const existingPid = record.profile_id || record.profileId;
-    const payload = addProfileId ? { ...record, profile_id: existingPid || userId } : { ...record };
-    const { _changed, _status, ...cleaned } = payload;
-    const transformed: any = { ...cleaned };
+    const targetRemoteTable = remoteTable ?? table;
 
-    const mappings = FIELD_MAPPINGS[table];
-    if (mappings) {
-        Object.keys(mappings).forEach(wmField => {
-            if (transformed[wmField] !== undefined) {
-                transformed[mappings[wmField]] = transformed[wmField];
-                delete transformed[wmField];
-            }
-        });
+    if (table === 'users') {
+        const localVersion = coerceVersion(record.version ?? 0);
+        const payload = buildRemoteRecordPayload(
+            'users',
+            targetRemoteTable,
+            record,
+            userId,
+            false,
+        );
+        return {
+            payload,
+            changedFields,
+            localVersion,
+        };
     }
+
+    let transformed = buildRemoteRecordPayload(
+        table,
+        targetRemoteTable,
+        record,
+        userId,
+        addProfileId,
+    );
 
     if (table === 'notes' && transformed.blocks_json !== undefined) {
         if (Array.isArray(transformed.blocks_json)) {
@@ -255,9 +246,8 @@ export const transformRecordForSupabase = (
     }
 
     if (table === 'documents') {
-        if (transformed.meta_json === undefined && transformed.meta !== undefined) {
-            transformed.meta_json = transformed.meta;
-            delete transformed.meta;
+        if (transformed.meta_json === undefined && record.meta !== undefined) {
+            transformed.meta_json = record.meta;
         }
         if (transformed.meta_json !== undefined && typeof transformed.meta_json !== 'string') {
             try {
@@ -270,47 +260,53 @@ export const transformRecordForSupabase = (
     }
 
     const now = new Date().toISOString();
-    const normalizedUpdatedAt = ensureIsoTimestamp(transformed.updated_at ?? transformed.updatedAt) ?? now;
-    const normalizedCreatedAt = ensureIsoTimestamp(transformed.created_at ?? transformed.createdAt) ?? normalizedUpdatedAt ?? now;
+    const normalizedUpdatedAt =
+        ensureIsoTimestamp(record.updated_at ?? record.updatedAt) ?? now;
+    const normalizedCreatedAt =
+        ensureIsoTimestamp(record.created_at ?? record.createdAt) ??
+        normalizedUpdatedAt ??
+        now;
 
     transformed.updated_at = normalizedUpdatedAt;
     transformed.created_at = normalizedCreatedAt;
 
     if (table === 'list_items') {
-        transformed.purchased_at = normalizePurchasedAt(transformed.purchased_at ?? transformed.purchasedAt);
-        if (transformed.purchasedAt !== undefined) {
-            delete transformed.purchasedAt;
-        }
+        transformed.purchased_at = normalizePurchasedAt(
+            transformed.purchased_at ?? record.purchasedAt,
+        );
     }
 
-    const localVersion = coerceVersion(transformed.version ?? record.version ?? 0);
+    const localVersion = coerceVersion(record.version ?? transformed.version ?? 0);
     transformed.version = localVersion;
 
     if (table === 'members') {
-        delete transformed.is_active;
-        delete transformed.isActive;
-        const memberFieldsToRemove = ['is_active', 'isActive'];
-        changedFields = changedFields.filter(field => !memberFieldsToRemove.includes(field));
+        changedFields = changedFields.filter(
+            field => field !== 'is_active' && field !== 'isActive',
+        );
     }
 
-    if (table === 'users') {
-        const {
-            is_guest,
-            has_completed_onboarding,
-            active_profile_id,
-            isGuest,
-            activeProfileId,
-            ...profilesPayload
-        } = transformed;
+    if (addProfileId && isUuid(userId)) {
+        transformed.profile_id = userId;
+    }
+
+    transformed = pickRemotePayload(table, targetRemoteTable, transformed);
+    const finalized = finalizeProfileScopedPayload(
+        table,
+        targetRemoteTable,
+        transformed,
+        userId,
+        addProfileId,
+    );
+    if (!finalized) {
         return {
-            payload: profilesPayload,
+            payload: {},
             changedFields,
             localVersion,
         };
     }
 
     return {
-        payload: transformed,
+        payload: finalized,
         changedFields,
         localVersion,
     };

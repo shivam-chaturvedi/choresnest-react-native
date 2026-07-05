@@ -7,6 +7,7 @@ import React, {
     useMemo,
     ReactNode,
 } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import { CountryConfiguration } from '../config/countries';
 import { CountryPreferenceService } from '../services/CountryPreferenceService';
 import { NotificationScheduler } from '../services/NotificationScheduler';
@@ -33,6 +34,27 @@ export const CountryProvider: React.FC<{ children: ReactNode }> = ({ children })
         });
         return () => {
             unsubscribe();
+        };
+    }, []);
+
+    useEffect(() => {
+        const rescheduleForDeviceTimeChange = () => {
+            NotificationScheduler.rescheduleAllMissing().catch(error => {
+                console.warn('Failed to reschedule notifications after device time change:', error);
+            });
+        };
+
+        const appStateSubscription = AppState.addEventListener(
+            'change',
+            (nextState: AppStateStatus) => {
+                if (nextState === 'active') {
+                    rescheduleForDeviceTimeChange();
+                }
+            },
+        );
+
+        return () => {
+            appStateSubscription.remove();
         };
     }, []);
 

@@ -3,19 +3,58 @@ import Task from '../database/models/Task';
 import Event from '../database/models/Event';
 import { NotificationScheduler, getActiveMemberId } from './NotificationScheduler';
 import { NotificationPreferencesService } from './NotificationPreferencesService';
-import { parseReminderDateTime } from '../utils/ReminderDateTimeUtils';
+import { parseReminderDateTime, resolveNextTaskReminderDateTime } from '../utils/ReminderDateTimeUtils';
 import { NotificationCenter, NotificationRoute } from './NotificationCenter';
 import { CountryPreferenceService } from './CountryPreferenceService';
 import { formatDateTime } from '../utils/countryFormatting';
 import { SyncService } from './SyncService';
+import {
+    encodeTaskRecurrenceDays,
+    encodeTaskSkippedDates,
+    formatTaskDateString,
+    getNextRecurringTaskDate,
+    isTaskRecurring,
+    normalizeTaskRecurrenceDays,
+    normalizeTaskRecurrenceRule,
+    normalizeTaskSkippedDates,
+} from '../utils/taskRecurrence';
 import { Q } from '@nozbe/watermelondb';
 import { map } from 'rxjs/operators';
 import { EMPTY } from 'rxjs';
 import { supabase } from '../config/supabase';
 import { ProfileService } from './ProfileService';
+import { isUuid, isWatermelonLocalId } from '../utils/uuid';
 import Config from 'react-native-config';
 
 const resolveProfileId = ProfileService.getActiveProfileId;
+
+const requireAuthProfileId = async (
+    explicitProfileId?: string | null,
+): Promise<string | null> => {
+    const candidate = explicitProfileId ?? (await resolveProfileId());
+    return isUuid(candidate) ? candidate : null;
+};
+
+const assertWritableProfile = (
+    recordProfileId: string | undefined,
+    authProfileId: string,
+    entityLabel: string,
+) => {
+    if (
+        recordProfileId &&
+        isUuid(recordProfileId) &&
+        recordProfileId !== authProfileId
+    ) {
+        throw new Error(`${entityLabel} does not belong to active profile`);
+    }
+};
+
+const shouldRepairProfileId = (
+    recordProfileId: string | undefined,
+    authProfileId: string,
+): boolean =>
+    recordProfileId !== authProfileId &&
+    (!recordProfileId || !isUuid(recordProfileId) || isWatermelonLocalId(recordProfileId));
 
 const syncAfterWrite = () => {
     void SyncService.requestSyncSoon();
@@ -78,11 +117,140 @@ const serializeTaskRecord = (task: Task) => ({
     tab: task.tab,
     notificationId: task.notificationId,
     reminderEnabled: task.reminderEnabled,
+    isRecurring: task.isRecurring,
+    recurrenceRule: task.recurrenceRule,
+    recurrenceInterval: task.recurrenceInterval,
+    recurrenceDaysOfWeek: task.recurrenceDaysOfWeek,
+    recurrenceEndDate: task.recurrenceEndDate,
+    recurrenceOccurrenceLimit: task.recurrenceOccurrenceLimit,
+    recurrenceCompletedCount: task.recurrenceCompletedCount,
+    recurrenceAnchorDate: task.recurrenceAnchorDate,
+    recurrenceSkippedDates: task.recurrenceSkippedDates,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
     version: task.version,
     deleted: task.deleted,
 });
+
+type TaskDeleteOptions = {
+    mode?: 'series' | 'occurrence';
+    occurrenceDate?: string;
+};
+
+const applyTaskRecurrenceFields = (task: Task, data: Partial<Task>) => {
+    const isRecurringTask = Boolean(data.isRecurring);
+    const normalizedRule = isRecurringTask
+        ? normalizeTaskRecurrenceRule(data.recurrenceRule) ?? 'weekly'
+        : undefined;
+    const anchorDate = data.recurrenceAnchorDate ?? data.dateString ?? task.dateString;
+
+    task.isRecurring = isRecurringTask;
+    task.recurrenceRule = isRecurringTask ? normalizedRule : undefined;
+    task.recurrenceInterval = isRecurringTask ? (data.recurrenceInterval ?? 1) : undefined;
+    task.recurrenceDaysOfWeek = isRecurringTask
+        ? encodeTaskRecurrenceDays(normalizeTaskRecurrenceDays(data.recurrenceDaysOfWeek))
+        : undefined;
+    task.recurrenceEndDate = isRecurringTask ? data.recurrenceEndDate : undefined;
+    task.recurrenceOccurrenceLimit = isRecurringTask ? data.recurrenceOccurrenceLimit : undefined;
+    task.recurrenceCompletedCount = isRecurringTask ? (data.recurrenceCompletedCount ?? 0) : 0;
+    task.recurrenceAnchorDate = isRecurringTask ? anchorDate : undefined;
+    task.recurrenceSkippedDates = isRecurringTask
+        ? encodeTaskSkippedDates(normalizeTaskSkippedDates(data.recurrenceSkippedDates))
+        : undefined;
+};
+
+const maybeAdvanceRecurringTask = (
+    task: Task,
+    now: number,
+    options: {
+        markCompleted?: boolean;
+        skipOccurrence?: boolean;
+        occurrenceDate?: string;
+    } = {},
+): boolean => {
+    if (!isTaskRecurring(task)) {
+        return false;
+    }
+
+    const nextCompletedCount = options.markCompleted
+        ? (task.recurrenceCompletedCount ?? 0) + 1
+        : task.recurrenceCompletedCount ?? 0;
+    const skippedDates = normalizeTaskSkippedDates(task.recurrenceSkippedDates);
+
+    if (options.skipOccurrence) {
+        const occurrenceToSkip = options.occurrenceDate || task.dateString;
+        if (!occurrenceToSkip) {
+            return false;
+        }
+
+        if (!skippedDates.includes(occurrenceToSkip)) {
+            skippedDates.push(occurrenceToSkip);
+        }
+        task.recurrenceSkippedDates = encodeTaskSkippedDates(skippedDates);
+        task.recurrenceCompletedCount = nextCompletedCount;
+
+        if (occurrenceToSkip !== task.dateString) {
+            task.updatedAt = now;
+            task.version = (task.version ?? 0) + 1;
+            return true;
+        }
+
+        const nextDate = getNextRecurringTaskDate(task.dateString, {
+            isRecurring: task.isRecurring,
+            recurrenceRule: task.recurrenceRule,
+            recurrenceInterval: task.recurrenceInterval,
+            recurrenceDaysOfWeek: task.recurrenceDaysOfWeek,
+            recurrenceEndDate: task.recurrenceEndDate,
+            recurrenceOccurrenceLimit: task.recurrenceOccurrenceLimit,
+            recurrenceCompletedCount: nextCompletedCount,
+            recurrenceAnchorDate: task.recurrenceAnchorDate,
+            recurrenceSkippedDates: skippedDates,
+        });
+
+        if (!nextDate) {
+            task.status = 'done';
+            task.reminderEnabled = false;
+            task.updatedAt = now;
+            task.version = (task.version ?? 0) + 1;
+            return false;
+        }
+
+        task.dateString = nextDate;
+        task.status = 'pending';
+        task.updatedAt = now;
+        task.version = (task.version ?? 0) + 1;
+        return true;
+    }
+
+    const nextDate = getNextRecurringTaskDate(task.dateString, {
+        isRecurring: task.isRecurring,
+        recurrenceRule: task.recurrenceRule,
+        recurrenceInterval: task.recurrenceInterval,
+        recurrenceDaysOfWeek: task.recurrenceDaysOfWeek,
+        recurrenceEndDate: task.recurrenceEndDate,
+        recurrenceOccurrenceLimit: task.recurrenceOccurrenceLimit,
+        recurrenceCompletedCount: nextCompletedCount,
+        recurrenceAnchorDate: task.recurrenceAnchorDate,
+        recurrenceSkippedDates: skippedDates,
+    });
+
+    task.recurrenceCompletedCount = nextCompletedCount;
+    task.recurrenceSkippedDates = encodeTaskSkippedDates(skippedDates);
+
+    if (!nextDate) {
+        task.status = 'done';
+        task.reminderEnabled = false;
+        task.updatedAt = now;
+        task.version = (task.version ?? 0) + 1;
+        return false;
+    }
+
+    task.dateString = nextDate;
+    task.status = 'pending';
+    task.updatedAt = now;
+    task.version = (task.version ?? 0) + 1;
+    return true;
+};
 
 const pushHomeNotification = async (
     title: string,
@@ -129,49 +297,78 @@ const handleTaskNotificationJob = async (taskId: string, options: TaskNotificati
 
         const shouldNotify = task.status !== 'done' && task.reminderEnabled;
         if (shouldNotify) {
-            const triggerDate = parseReminderDateTime(task.dateString, task.dueDisplay);
-            if (triggerDate && triggerDate > new Date()) {
+            const triggerDate = resolveNextTaskReminderDateTime({
+                dateString: task.dateString,
+                dueDisplay: task.dueDisplay,
+                isRecurring: task.isRecurring,
+                recurrenceRule: task.recurrenceRule,
+                recurrenceInterval: task.recurrenceInterval,
+                recurrenceDaysOfWeek: task.recurrenceDaysOfWeek,
+                recurrenceEndDate: task.recurrenceEndDate,
+                recurrenceOccurrenceLimit: task.recurrenceOccurrenceLimit,
+                recurrenceCompletedCount: task.recurrenceCompletedCount,
+                recurrenceAnchorDate: task.recurrenceAnchorDate,
+                recurrenceSkippedDates: task.recurrenceSkippedDates,
+            });
+
+            if (triggerDate) {
                 const reminderMinutes = await NotificationPreferencesService.getReminderTime('tasks');
                 const notificationTrigger = new Date(triggerDate.getTime() - reminderMinutes * 60000);
-                const newId = await NotificationScheduler.updateNotification(
-                    oldNotificationId || null,
-                    'tasks',
-                    {
-                        title: `Task: ${task.name}`,
-                        body: `Due ${task.dueDisplay || 'today'}! Priority: ${task.priority}`,
-                        data: { taskId: task.id }
-                    },
-                    notificationTrigger,
-                    {
-                        notifyCenter: true,
-                        promptForPermission: options.promptForPermission ?? false,
-                        promptForAlarm: options.promptForPermission ?? false,
-                    }
-                );
+                if (notificationTrigger > new Date()) {
+                    const newId = await NotificationScheduler.updateNotification(
+                        oldNotificationId || null,
+                        'tasks',
+                        {
+                            title: `Task: ${task.name}`,
+                            body: `Due ${task.dueDisplay || formatReminderDateTimeDisplay(triggerDate)}! Priority: ${task.priority}`,
+                            data: { taskId: task.id }
+                        },
+                        notificationTrigger,
+                        {
+                            notifyCenter: true,
+                            promptForPermission: options.promptForPermission ?? false,
+                            promptForAlarm: options.promptForPermission ?? false,
+                        }
+                    );
 
-                if (newId) {
+                    if (newId) {
+                        await getDatabase().write(async () => {
+                            await task.update(t => {
+                                t.notificationId = newId;
+                            });
+                        });
+
+                        if (options.showFeedback) {
+                            const formattedReminder = formatReminderDateTimeDisplay(notificationTrigger);
+                            void pushHomeNotification(
+                                "Task reminder updated",
+                                `${task.name} reminder set for ${formattedReminder}.`,
+                                "success",
+                                TASKS_ROUTE
+                            );
+                            await NotificationScheduler.notifyImmediateUpdate(
+                                'tasks',
+                                `Task reminder updated: ${task.name}`,
+                                `Reminder scheduled for ${formattedReminder}`,
+                                { taskId: task.id }
+                            );
+                        }
+                    }
+                } else if (oldNotificationId) {
+                    await NotificationScheduler.cancelNotification(oldNotificationId);
                     await getDatabase().write(async () => {
                         await task.update(t => {
-                            t.notificationId = newId;
+                            t.notificationId = undefined;
                         });
                     });
-
-                    if (options.showFeedback) {
-                        const formattedReminder = formatReminderDateTimeDisplay(notificationTrigger);
-                        void pushHomeNotification(
-                            "Task reminder updated",
-                            `${task.name} reminder set for ${formattedReminder}.`,
-                            "success",
-                            TASKS_ROUTE
-                        );
-                        await NotificationScheduler.notifyImmediateUpdate(
-                            'tasks',
-                            `Task reminder updated: ${task.name}`,
-                            `Reminder scheduled for ${formattedReminder}`,
-                            { taskId: task.id }
-                        );
-                    }
                 }
+            } else if (oldNotificationId) {
+                await NotificationScheduler.cancelNotification(oldNotificationId);
+                await getDatabase().write(async () => {
+                    await task.update(t => {
+                        t.notificationId = undefined;
+                    });
+                });
             }
         } else if (oldNotificationId) {
             await NotificationScheduler.cancelNotification(oldNotificationId);
@@ -443,8 +640,9 @@ export const TaskService = {
     },
 
     addTask: async (data: Partial<Task> & { profileId?: string | null }) => {
-        if (!data.profileId) {
-            console.warn('TaskService: Cannot add task without profileId');
+        const profileId = await requireAuthProfileId(data.profileId);
+        if (!profileId) {
+            console.warn('TaskService: Cannot add task without a valid auth profileId');
             return;
         }
 
@@ -453,16 +651,17 @@ export const TaskService = {
 
         await getDatabase().write(async () => {
             const task = await getDatabase().get<Task>('tasks').create(t => {
-                t.profileId = data.profileId!;
+                t.profileId = profileId;
                 t.name = data.name || 'Untitled';
                 t.status = data.status || 'pending';
                 t.priority = data.priority || 'medium';
-                t.dateString = data.dateString || new Date().toISOString().split('T')[0];
+                t.dateString = data.dateString || formatTaskDateString(new Date());
                 t.dueDisplay = data.dueDisplay || '';
                 t.assigneeId = data.assigneeId || '';
                 t.tab = data.tab || 'My Tasks';
                 t.icon = data.icon || 'format-list-checks';
                 t.reminderEnabled = data.reminderEnabled ?? true;
+                applyTaskRecurrenceFields(t, data);
                 t.createdAt = now;
                 t.updatedAt = now;
                 t.version = 1;
@@ -478,22 +677,29 @@ export const TaskService = {
     },
 
     updateTask: async (id: string, updates: Partial<Task>) => {
-        const profileId = await resolveProfileId();
+        const profileId = await requireAuthProfileId();
         if (!profileId) {
-            console.error('TaskService: No profileId for updateTask');
-            return;
+            throw new Error('TaskService: No valid auth profile for updateTask');
         }
 
         const now = Date.now();
 
         await getDatabase().write(async () => {
             const task = await getDatabase().get<Task>('tasks').find(id);
-            if (task.profileId !== profileId) {
-                console.warn('TaskService: Security violation - task does not belong to active profile');
-                return;
-            }
+            assertWritableProfile(task.profileId, profileId, 'Task');
 
             await task.update(tsk => {
+                if (shouldRepairProfileId(tsk.profileId, profileId)) {
+                    tsk.profileId = profileId;
+                }
+
+                const nextRule = normalizeTaskRecurrenceRule(updates.recurrenceRule ?? tsk.recurrenceRule);
+                const nextIsRecurring = updates.isRecurring ?? Boolean(nextRule && (updates.isRecurring ?? tsk.isRecurring));
+                const markCompleted =
+                    nextIsRecurring &&
+                    updates.status === 'done' &&
+                    tsk.status !== 'done';
+
                 if (updates.name !== undefined) tsk.name = updates.name;
                 if (updates.status !== undefined) tsk.status = updates.status;
                 if (updates.priority !== undefined) tsk.priority = updates.priority;
@@ -503,6 +709,24 @@ export const TaskService = {
                 if (updates.tab !== undefined) tsk.tab = updates.tab;
                 if (updates.icon !== undefined) tsk.icon = updates.icon;
                 if (updates.reminderEnabled !== undefined) tsk.reminderEnabled = updates.reminderEnabled;
+                applyTaskRecurrenceFields(tsk, {
+                    ...serializeTaskRecord(tsk),
+                    ...updates,
+                    isRecurring: nextIsRecurring,
+                    recurrenceRule: nextRule,
+                    recurrenceCompletedCount: updates.recurrenceCompletedCount ?? tsk.recurrenceCompletedCount,
+                    recurrenceAnchorDate:
+                        updates.recurrenceAnchorDate ??
+                        tsk.recurrenceAnchorDate ??
+                        tsk.dateString,
+                    recurrenceSkippedDates: updates.recurrenceSkippedDates ?? tsk.recurrenceSkippedDates,
+                } as Partial<Task>);
+
+                if (markCompleted) {
+                    maybeAdvanceRecurringTask(tsk, now, { markCompleted: true });
+                    return;
+                }
+
                 tsk.updatedAt = now;
                 tsk.version = (tsk.version ?? 0) + 1;
             });
@@ -512,7 +736,7 @@ export const TaskService = {
         syncAfterWrite();
     },
 
-    deleteTask: async (id: string) => {
+    deleteTask: async (id: string, options: TaskDeleteOptions = {}) => {
         const profileId = await resolveProfileId();
         if (!profileId) {
             console.error('TaskService: No profileId for deleteTask');
@@ -536,6 +760,13 @@ export const TaskService = {
                 if (task.profileId !== profileId) return;
 
                 await task.update(tsk => {
+                    if (options.mode === 'occurrence' && isTaskRecurring(tsk)) {
+                        maybeAdvanceRecurringTask(tsk, now, {
+                            skipOccurrence: true,
+                            occurrenceDate: options.occurrenceDate,
+                        });
+                        return;
+                    }
                     tsk.deleted = true;
                     tsk.updatedAt = now;
                     tsk.version = (tsk.version ?? 0) + 1;
@@ -546,8 +777,14 @@ export const TaskService = {
         });
         syncAfterWrite();
 
-        if (notificationId) {
-            NotificationScheduler.cancelNotification(notificationId).catch(err => console.error('Bg cancel failed', err));
+        if (notificationId && options.mode !== 'occurrence') {
+            NotificationScheduler.cancelNotification(notificationId).catch(err =>
+                console.error('Bg cancel failed', err),
+            );
+        }
+
+        if (options.mode === 'occurrence') {
+            enqueueTaskNotificationJob(id, { showFeedback: false });
         }
     },
 
@@ -565,8 +802,9 @@ export const TaskService = {
     },
 
     addEvent: async (data: Partial<Event> & { profileId?: string | null }) => {
-        if (!data.profileId) {
-            console.warn('TaskService: Cannot add event without profileId');
+        const profileId = await requireAuthProfileId(data.profileId);
+        if (!profileId) {
+            console.warn('TaskService: Cannot add event without a valid auth profileId');
             return;
         }
 
@@ -575,7 +813,7 @@ export const TaskService = {
 
         await getDatabase().write(async () => {
             const event = await getDatabase().get<Event>('events').create(e => {
-                e.profileId = data.profileId!;
+                e.profileId = profileId;
                 e.title = data.title || 'Untitled';
                 e.dateString = data.dateString || '';
                 e.time = data.time || '';
@@ -606,22 +844,22 @@ export const TaskService = {
     },
 
     updateEvent: async (id: string, updates: Partial<Event>) => {
-        const profileId = await resolveProfileId();
+        const profileId = await requireAuthProfileId();
         if (!profileId) {
-            console.error('TaskService: No profileId for updateEvent');
-            return;
+            throw new Error('TaskService: No valid auth profile for updateEvent');
         }
 
         const now = Date.now();
 
         await getDatabase().write(async () => {
             const event = await getDatabase().get<Event>('events').find(id);
-            if (event.profileId !== profileId) {
-                console.warn('TaskService: Security violation - event does not belong to active profile');
-                return;
-            }
+            assertWritableProfile(event.profileId, profileId, 'Event');
 
             await event.update(ev => {
+                if (shouldRepairProfileId(ev.profileId, profileId)) {
+                    ev.profileId = profileId;
+                }
+
                 if (updates.title !== undefined) ev.title = updates.title;
                 if (updates.dateString !== undefined) ev.dateString = updates.dateString;
                 if (updates.time !== undefined) ev.time = updates.time;
