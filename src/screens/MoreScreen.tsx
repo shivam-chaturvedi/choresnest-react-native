@@ -93,6 +93,10 @@ const MoreScreenContent: React.FC = () => {
     Keyboard.dismiss();
   };
   const ensurePhotoPermission = async (): Promise<boolean> => {
+    if (Platform.OS === 'android') {
+      return true;
+    }
+
     if (await checkPermission('photo')) {
       return true;
     }

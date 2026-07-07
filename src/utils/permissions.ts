@@ -2,7 +2,6 @@ import { Platform, Linking } from 'react-native';
 import {
     check,
     request,
-    requestMultiple,
     checkNotifications,
     requestNotifications,
     PERMISSIONS,
@@ -32,12 +31,13 @@ const getPermissionType = (type: Exclude<PermissionType, 'notification'>): Permi
             default: return null;
         }
     } else {
-        const androidVersion = typeof Platform.Version === 'string' ? parseInt(Platform.Version, 10) : Platform.Version;
         switch (type) {
             case 'camera': return PERMISSIONS.ANDROID.CAMERA;
-            case 'photo': return androidVersion >= 33 ? PERMISSIONS.ANDROID.READ_MEDIA_IMAGES : PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE;
+            // Android 13+ photo picker / SAF needs no broad media storage permission.
+            case 'photo':
+            case 'storage':
+                return null;
             case 'audio': return PERMISSIONS.ANDROID.RECORD_AUDIO;
-            case 'storage': return androidVersion >= 33 ? PERMISSIONS.ANDROID.READ_MEDIA_IMAGES : PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE;
             default: return null;
         }
     }
@@ -152,15 +152,13 @@ export const requestPermission = async (type: PermissionType, options?: { showSe
 
     try {
         if (Platform.OS === 'android' && type === 'audio') {
-            const androidVersion = typeof Platform.Version === 'string' ? parseInt(Platform.Version, 10) : Platform.Version;
-            if (androidVersion < 33) {
-                const results = await requestMultiple([
-                    PERMISSIONS.ANDROID.RECORD_AUDIO,
-                    PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE,
-                    PERMISSIONS.ANDROID.WRITE_EXTERNAL_STORAGE
-                ]);
-                return results[PERMISSIONS.ANDROID.RECORD_AUDIO] === RESULTS.GRANTED;
+            const result = await request(permission);
+            if (isStatusGranted(result)) return true;
+
+            if (result === RESULTS.BLOCKED || result === RESULTS.DENIED) {
+                await maybeShowSettingsPrompt(type);
             }
+            return false;
         }
 
         const result = await request(permission);

@@ -34,29 +34,8 @@ export const requestCameraPermission = async (): Promise<boolean> => {
 };
 
 export const requestStoragePermission = async (): Promise<boolean> => {
-    if (Platform.OS !== 'android') return true;
-
-    try {
-        if (Number(Platform.Version) >= 33) {
-            const result = await PermissionsAndroid.requestMultiple([
-                PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES,
-                PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO,
-                // Add other media types if needed
-            ]);
-            return result['android.permission.READ_MEDIA_IMAGES'] === PermissionsAndroid.RESULTS.GRANTED &&
-                result['android.permission.READ_MEDIA_VIDEO'] === PermissionsAndroid.RESULTS.GRANTED;
-        } else {
-            const result = await PermissionsAndroid.requestMultiple([
-                PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
-                PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
-            ]);
-            return result['android.permission.READ_EXTERNAL_STORAGE'] === PermissionsAndroid.RESULTS.GRANTED &&
-                result['android.permission.WRITE_EXTERNAL_STORAGE'] === PermissionsAndroid.RESULTS.GRANTED;
-        }
-    } catch (err) {
-        console.warn(err);
-        return false;
-    }
+    // Document/photo pickers use the system UI (SAF / Photo Picker) — no broad storage permission.
+    return true;
 };
 
 export const saveFileToStorage = async (uri: string, fileName: string): Promise<string> => {
@@ -86,16 +65,6 @@ export const saveFileToStorage = async (uri: string, fileName: string): Promise<
 
 export const pickDocument = async (): Promise<SavedDocument | null> => {
     try {
-        const shouldRequestStoragePermission =
-            Platform.OS === 'android' && Number(Platform.Version) < 33;
-        if (shouldRequestStoragePermission) {
-            const hasPermission = await requestStoragePermission();
-            if (!hasPermission) {
-                Alert.alert("Permission Denied", "Storage permission is required to access documents.");
-                return null;
-            }
-        }
-
         const results = await pick({
             type: [types.allFiles],
             mode: 'open',

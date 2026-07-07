@@ -413,29 +413,33 @@ export const AddNewRecipeModal: React.FC<AddNewRecipeModalProps> = (props) => {
     // ... handleImageUpload ...
     const handleImageUpload = async () => {
         try {
-            const hasPermission = await requestPermission('photo');
-            if (hasPermission) {
-                const result = await launchImageLibrary({
-                    mediaType: 'photo',
-                    selectionLimit: 5, // Allow multiple
-                    quality: 0.8,
-                });
-
-                if (result.assets) {
-                    const newUris = result.assets
-                        .map(asset => asset.uri)
-                        .filter((uri): uri is string => !!uri);
-
-                    const savedUris: string[] = [];
-                    for (const uri of newUris) {
-                        const saved = await saveRecipeImage(uri);
-                        savedUris.push(saved);
-                    }
-
-                    setImages(prev => [...prev, ...savedUris]);
-                    setLocalImageUris(prev => [...prev, ...savedUris]);
-                    showToast({ title: "Success", description: `${savedUris.length} image(s) added`, type: "success" });
+            if (Platform.OS === 'ios') {
+                const hasPermission = await requestPermission('photo');
+                if (!hasPermission) {
+                    return;
                 }
+            }
+
+            const result = await launchImageLibrary({
+                mediaType: 'photo',
+                selectionLimit: 5,
+                quality: 0.8,
+            });
+
+            if (result.assets) {
+                const newUris = result.assets
+                    .map(asset => asset.uri)
+                    .filter((uri): uri is string => !!uri);
+
+                const savedUris: string[] = [];
+                for (const uri of newUris) {
+                    const saved = await saveRecipeImage(uri);
+                    savedUris.push(saved);
+                }
+
+                setImages(prev => [...prev, ...savedUris]);
+                setLocalImageUris(prev => [...prev, ...savedUris]);
+                showToast({ title: "Success", description: `${savedUris.length} image(s) added`, type: "success" });
             }
         } catch (error) {
             console.error("Error selecting image:", error);
