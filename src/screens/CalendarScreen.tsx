@@ -16,6 +16,7 @@ import {
   TextInput,
   InteractionManager,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import {
   PanGestureHandler,
@@ -67,6 +68,7 @@ import { Day } from 'date-fns';
 import { getEventsForDate, CalendarEventWithMeta } from '../utils/EventUtils';
 import {
   parseDateTimeInZone,
+  parseLocalDateTime,
   safeFormatInTimeZone,
   safeTimeZone,
 } from '../utils/SafeDateUtils';
@@ -74,6 +76,7 @@ import { toZonedTime } from 'date-fns-tz';
 import { useObservableValue } from '../hooks/useObservableValue';
 import { TaskService } from '../services/TaskService';
 import { SyncService } from '../services/SyncService';
+import { NotificationScheduler } from '../services/NotificationScheduler';
 import type { Observable } from 'rxjs';
 import { withDeferredScreen } from '../components/layout/DeferredScreen';
 import { trackScreen } from '../services/analytics';
@@ -712,18 +715,13 @@ const CalendarScreenContent: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const events = useMemo<CalendarEventWithMeta[]>(() => {
-    const fallbackZone = timeZone;
     return rawEvents.reduce<CalendarEventWithMeta[]>((acc, record) => {
       const date = record.dateString || '';
       if (!date) return acc;
-      const sanitizedTimeZone = safeTimeZone(
-        (record as any).timeZone,
-        fallbackZone,
-      );
       const sanitizedTime = normalizeTimeString((record as any).time);
-      const parsedStart = parseDateTimeInZone(
+      // Use naive local parsing so calendar day matches the stored dateString
+      const parsedStart = parseLocalDateTime(
         date,
-        sanitizedTimeZone,
         sanitizedTime === 'All Day' ? undefined : sanitizedTime,
       );
       if (!parsedStart) return acc;
@@ -740,14 +738,10 @@ const CalendarScreenContent: React.FC = () => {
           ? sanitizedTime
           : undefined;
       const parsedEnd = rawEndDate
-        ? parseDateTimeInZone(rawEndDate, sanitizedTimeZone, endTimeArg) ||
-          parsedStart
+        ? parseLocalDateTime(rawEndDate, endTimeArg) || parsedStart
         : parsedStart;
       const parsedRecurrenceEnd = (record as any).recurrenceEndDate
-        ? parseDateTimeInZone(
-            (record as any).recurrenceEndDate,
-            sanitizedTimeZone,
-          )
+        ? parseLocalDateTime((record as any).recurrenceEndDate)
         : null;
 
       acc.push({
@@ -755,7 +749,7 @@ const CalendarScreenContent: React.FC = () => {
         date,
         time: sanitizedTime,
         endTime: sanitizedEndTime ?? (record as any).endTime,
-        timeZone: sanitizedTimeZone,
+        timeZone: safeTimeZone((record as any).timeZone, timeZone),
         __cachedStart: parsedStart,
         __cachedEnd: parsedEnd,
         __cachedRecurrenceEnd: parsedRecurrenceEnd,
@@ -764,26 +758,38 @@ const CalendarScreenContent: React.FC = () => {
     }, []);
   }, [rawEvents, timeZone]);
   const tasks = useMemo<Task[]>(() => {
-    const fallbackZone = timeZone;
     return rawTasks.reduce<Task[]>((acc, record) => {
       const date = (record as any).dateString || '';
       if (!date) return acc;
-      if (!parseDateTimeInZone(date, fallbackZone)) return acc;
+      if (!parseLocalDateTime(date)) return acc;
       const sanitizedTime = normalizeTimeString(
         (record as any).due || (record as any).dueDisplay,
       );
       acc.push({
-        ...record,
+        id: (record as any).id,
+        name: (record as any).name,
+        status: (record as any).status,
+        priority: (record as any).priority,
         date,
         due: sanitizedTime,
-        memberId:
-          (record as any).assigneeId || (record as any).memberId || undefined,
         assignee:
           (record as any).assigneeId || (record as any).memberId || undefined,
+        tab: (record as any).tab,
+        icon: (record as any).icon,
+        reminderEnabled: (record as any).reminderEnabled,
+        isRecurring: (record as any).isRecurring,
+        recurrenceRule: (record as any).recurrenceRule,
+        recurrenceInterval: (record as any).recurrenceInterval,
+        recurrenceDaysOfWeek: (record as any).recurrenceDaysOfWeek,
+        recurrenceEndDate: (record as any).recurrenceEndDate,
+        recurrenceOccurrenceLimit: (record as any).recurrenceOccurrenceLimit,
+        recurrenceCompletedCount: (record as any).recurrenceCompletedCount,
+        recurrenceAnchorDate: (record as any).recurrenceAnchorDate,
+        recurrenceSkippedDates: (record as any).recurrenceSkippedDates,
       });
       return acc;
     }, []);
-  }, [rawTasks, timeZone]);
+  }, [rawTasks]);
 
   const [activeView, setActiveView] = useState('Day');
   const [selectedDate, setSelectedDate] = useState(() =>
@@ -817,7 +823,40 @@ const CalendarScreenContent: React.FC = () => {
   );
 
   const isFocused = useIsFocused();
-  const { exactAlarmEnabled } = useExactAlarmPermission();
+  const { exactAlarmEnabled, refresh: refreshExactAlarm } =
+    useExactAlarmPermission();
+  const exactAlarmPromptedRef = useRef(false);
+
+  const handleEnableExactAlarm = useCallback(async () => {
+    const granted = await NotificationScheduler.ensureExactAlarm(true);
+    refreshExactAlarm();
+    if (!granted) {
+      Alert.alert(
+        'Exact alarms',
+        'Open Android settings and allow Exact Alarms so calendar reminders fire on time.',
+      );
+    }
+  }, [refreshExactAlarm]);
+
+  useEffect(() => {
+    if (!isFocused || exactAlarmEnabled || exactAlarmPromptedRef.current) {
+      return;
+    }
+    exactAlarmPromptedRef.current = true;
+    Alert.alert(
+      'Enable exact alarms',
+      'Calendar reminders need Exact Alarm permission to fire on time. Enable it now?',
+      [
+        { text: 'Not now', style: 'cancel' },
+        {
+          text: 'Enable',
+          onPress: () => {
+            void handleEnableExactAlarm();
+          },
+        },
+      ],
+    );
+  }, [isFocused, exactAlarmEnabled, handleEnableExactAlarm]);
 
   const showPermissionToast = (type: 'event' | 'task') => {
     ReactNativeHapticFeedback.trigger('notificationError', hapticOptions);
@@ -1098,9 +1137,7 @@ const CalendarScreenContent: React.FC = () => {
 
   const visibleMonthYear = useMemo(() => {
     const referenceDate =
-      activeView === 'Week' && weekDays.length > 0
-        ? weekDays[0]
-        : selectedDate;
+      activeView === 'Week' && weekDays.length > 0 ? weekDays[0] : selectedDate;
     return formatZoned(referenceDate, 'MMMM yyyy');
   }, [activeView, weekDays, selectedDate, formatZoned]);
 
@@ -1314,7 +1351,7 @@ const CalendarScreenContent: React.FC = () => {
 
   const [quickAddText, setQuickAddText] = useState('');
 
-  const handleQuickAdd = () => {
+  const handleQuickAdd = async () => {
     try {
       if (!quickAddText.trim()) return;
 
@@ -1330,7 +1367,7 @@ const CalendarScreenContent: React.FC = () => {
         title = title.replace(timeMatch[0], '').trim();
       }
 
-      addEvent({
+      await addEvent({
         title,
         dateString: formatZoned(selectedDate, 'yyyy-MM-dd'),
         time: timeString,
@@ -1342,6 +1379,12 @@ const CalendarScreenContent: React.FC = () => {
       setQuickAddText('');
     } catch (error) {
       console.error('Error in handleQuickAdd:', error);
+      Alert.alert(
+        'Error',
+        error instanceof Error
+          ? error.message
+          : 'Failed to add event. Please try again.',
+      );
     }
   };
 
@@ -2019,6 +2062,41 @@ const CalendarScreenContent: React.FC = () => {
           </View>
         </View>
 
+        {!exactAlarmEnabled && (
+          <Pressable
+            onPress={handleEnableExactAlarm}
+            style={[
+              styles.exactAlarmBanner,
+              {
+                backgroundColor: colors.warning + '18',
+                borderColor: colors.warning + '55',
+              },
+            ]}
+          >
+            <AppIcon name="alertCircle" size={18} color={colors.warning} />
+            <Text
+              style={{
+                flex: 1,
+                color: colors.foreground,
+                fontSize: 13,
+                marginHorizontal: 10,
+              }}
+            >
+              Exact alarm permission is required for reminders to fire on time.
+              Tap to enable.
+            </Text>
+            <Text
+              style={{
+                color: colors.primary,
+                fontWeight: '700',
+                fontSize: 12,
+              }}
+            >
+              Enable
+            </Text>
+          </Pressable>
+        )}
+
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           nestedScrollEnabled={true}
@@ -2108,13 +2186,14 @@ const CalendarScreenContent: React.FC = () => {
                   },
                 ]}
               >
-                <AppIcon name="chevronLeft" size={20} color={colors.foreground} />
+                <AppIcon
+                  name="chevronLeft"
+                  size={20}
+                  color={colors.foreground}
+                />
               </Pressable>
               <Text
-                style={[
-                  styles.visibleMonthLabel,
-                  { color: colors.foreground },
-                ]}
+                style={[styles.visibleMonthLabel, { color: colors.foreground }]}
               >
                 {visibleMonthYear}
               </Text>
@@ -2150,7 +2229,9 @@ const CalendarScreenContent: React.FC = () => {
                 },
               ]}
             >
-              <Text style={[styles.todayText, { color: accentColor }]}>Show Today</Text>
+              <Text style={[styles.todayText, { color: accentColor }]}>
+                Show Today
+              </Text>
             </Pressable>
           </View>
 

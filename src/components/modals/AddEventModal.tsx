@@ -14,7 +14,11 @@ import {
   Alert,
 } from 'react-native';
 import { useFamily, CalendarEvent } from '../../contexts/FamilyContext';
-import { useThemeColors, useTheme } from '../../contexts/ThemeContext';
+import {
+  useThemeColors,
+  useTheme,
+  useThemeRadius,
+} from '../../contexts/ThemeContext';
 import { AppIcon, AppIconName, CustomDateTimePicker } from '../ui';
 import { PROFILE_COLORS } from '../../constants/profileColors';
 import { NotificationPreferencesService } from '../../services/NotificationPreferencesService';
@@ -30,7 +34,10 @@ import {
   mapTaskToRecurrenceForm,
   TaskRecurrenceFormValue,
 } from '../../utils/taskFormUtils';
-import { normalizeVirtualCalendarId, parseVirtualCalendarOccurrenceDate } from '../../utils/virtualId';
+import {
+  normalizeVirtualCalendarId,
+  parseVirtualCalendarOccurrenceDate,
+} from '../../utils/virtualId';
 import {
   combineLocalDateAndTime,
   formatDueDisplayTime,
@@ -118,6 +125,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
     deleteTask,
   } = useFamily();
   const colors = useThemeColors();
+  const radius = useThemeRadius();
   const { appearanceMode } = useTheme();
   const isMidnight = appearanceMode === 'midnight';
   const accentColor = isMidnight ? colors.foreground : colors.primary;
@@ -204,7 +212,6 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
   const { exactAlarmEnabled, refresh: refreshExactAlarm } =
     useExactAlarmPermission();
-  const openPromptCounter = useRef(0);
   const [showExactAlarmPrompt, setShowExactAlarmPrompt] = useState(false);
 
   const membersRef = useRef(members);
@@ -325,14 +332,14 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
               time: anyEvent.time || storedTask.due,
               dueDisplay: anyEvent.time || storedTask.due,
               assigneeId:
-                anyEvent.memberId ||
-                anyEvent.assignee ||
-                storedTask.assignee,
+                anyEvent.memberId || anyEvent.assignee || storedTask.assignee,
               reminderEnabled: storedTask.reminderEnabled,
             }
           : anyEvent;
 
-        setTaskRecurrence(mapTaskToRecurrenceForm(taskEditSource, parsedStartDate));
+        setTaskRecurrence(
+          mapTaskToRecurrenceForm(taskEditSource, parsedStartDate),
+        );
       } else {
         setActiveTab('event');
         setSelectedIcon(eventToEdit.icon || 'calendar-star');
@@ -398,8 +405,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         const [y, m, d] = initialDate
           .split('-')
           .map(part => parseInt(part, 10));
-        initDate =
-          y && m && d ? new Date(y, m - 1, d, 0, 0, 0, 0) : new Date();
+        initDate = y && m && d ? new Date(y, m - 1, d, 0, 0, 0, 0) : new Date();
       } else {
         initDate = new Date();
       }
@@ -455,18 +461,14 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       setShowExactAlarmPrompt(false);
       return;
     }
-    openPromptCounter.current += 1;
-    const shouldShowPrompt =
-      !exactAlarmEnabled &&
-      !isEditing &&
-      openPromptCounter.current % 5 === 0;
-    setShowExactAlarmPrompt(shouldShowPrompt);
-  }, [open, exactAlarmEnabled, isEditing]);
+    // Always prompt explicitly when exact alarms are disabled
+    setShowExactAlarmPrompt(!exactAlarmEnabled);
+  }, [open, exactAlarmEnabled]);
 
   const handleEnableExactAlarm = async () => {
     const granted = await NotificationScheduler.ensureExactAlarm(true);
+    refreshExactAlarm();
     if (granted) {
-      refreshExactAlarm();
       setShowExactAlarmPrompt(false);
     }
   };
@@ -576,31 +578,39 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         return;
       }
 
-      Alert.alert(`Delete ${itemName}`, `Are you sure you want to delete this ${itemType}?`, [
+      Alert.alert(
+        `Delete ${itemName}`,
+        `Are you sure you want to delete this ${itemType}?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: () => {
+              void deleteTask(eventToEdit.id, { mode: 'series' });
+              onOpenChange(false);
+            },
+          },
+        ],
+      );
+      return;
+    }
+
+    Alert.alert(
+      `Delete ${itemName}`,
+      `Are you sure you want to delete this ${itemType}?`,
+      [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
-            void deleteTask(eventToEdit.id, { mode: 'series' });
+            void deleteEvent(eventToEdit.id);
             onOpenChange(false);
           },
         },
-      ]);
-      return;
-    }
-
-    Alert.alert(`Delete ${itemName}`, `Are you sure you want to delete this ${itemType}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          void deleteEvent(eventToEdit.id);
-          onOpenChange(false);
-        },
-      },
-    ]);
+      ],
+    );
   };
 
   const handleSave = async () => {
@@ -925,17 +935,14 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                   ]}
                 >
                   <AppIcon
-                    name="alertTriangle"
+                    name="alertCircle"
                     size={20}
                     color={colors.warning}
                   />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text
-                    style={[
-                      styles.exactAlarmTitle,
-                      { color: colors.warning },
-                    ]}
+                    style={[styles.exactAlarmTitle, { color: colors.warning }]}
                   >
                     Exact alarm permission required
                   </Text>
@@ -945,8 +952,8 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                       { color: colors.foreground },
                     ]}
                   >
-                    Exact alarm rights ensure reminders fire precisely. You
-                    will not receive time-critical notifications until this
+                    Exact alarm rights ensure reminders fire precisely. You will
+                    not receive time-critical notifications until this
                     permission is granted.
                   </Text>
                   <Pressable
@@ -1842,8 +1849,8 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                       Assign to
                     </Text>
                   </View>
-                <View style={styles.chipsContainer}>
-                  {members.map((member: any) => {
+                  <View style={styles.chipsContainer}>
+                    {members.map((member: any) => {
                       const profileColor =
                         PROFILE_COLORS.find(c => c.value === member.color)
                           ?.hex || colors.primary;
@@ -1879,51 +1886,53 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                           >
                             {member.name}
                           </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-
-              {activeTab === 'task' && (
-                <View
-                  style={[
-                    styles.notificationNotice,
-                    {
-                      backgroundColor: colors.card,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                >
-                  <View style={styles.notificationNoticeContent}>
-                    <AppIcon name="bell" size={18} color={colors.primary} />
-                    <Text
-                      style={[
-                        styles.notificationNoticeText,
-                        { color: colors.foreground },
-                      ]}
-                    >
-                      Reminder lead times for tasks are managed on the Notifications screen. Tap below to update the shared preference that drives every task reminder.
-                    </Text>
+                        </Pressable>
+                      );
+                    })}
                   </View>
-                  <Pressable
-                    style={[
-                      styles.notificationNoticeButton,
-                      { backgroundColor: colors.primary },
-                    ]}
-                    onPress={openNotificationPreferences}
-                  >
-                    <Text
-                      style={[
-                        styles.notificationNoticeButtonText,
-                        { color: colors.primaryForeground },
-                      ]}
-                    >
-                      Update notification preferences
-                    </Text>
-                  </Pressable>
                 </View>
-              )}
+
+                {activeTab === 'task' && (
+                  <View
+                    style={[
+                      styles.notificationNotice,
+                      {
+                        backgroundColor: colors.card,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <View style={styles.notificationNoticeContent}>
+                      <AppIcon name="bell" size={18} color={colors.primary} />
+                      <Text
+                        style={[
+                          styles.notificationNoticeText,
+                          { color: colors.foreground },
+                        ]}
+                      >
+                        Reminder lead times for tasks are managed on the
+                        Notifications screen. Tap below to update the shared
+                        preference that drives every task reminder.
+                      </Text>
+                    </View>
+                    <Pressable
+                      style={[
+                        styles.notificationNoticeButton,
+                        { backgroundColor: colors.primary },
+                      ]}
+                      onPress={openNotificationPreferences}
+                    >
+                      <Text
+                        style={[
+                          styles.notificationNoticeButtonText,
+                          { color: colors.primaryForeground },
+                        ]}
+                      >
+                        Update notification preferences
+                      </Text>
+                    </Pressable>
+                  </View>
+                )}
 
                 {/* Notes - EVENT ONLY */}
                 {activeTab === 'event' && (

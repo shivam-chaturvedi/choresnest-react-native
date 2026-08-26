@@ -128,20 +128,29 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         onAuthenticated();
       }
     } else {
-      const success = await signup(
+      const result = await signup(
         formData.email,
         formData.password,
         formData.name,
       );
       setIsSubmitting(false);
-      if (success) {
+      if (result === 'session') {
         void trackAuthMethodUsage('email', 'signup');
         showToast({
           type: 'success',
-          title: 'Account Created',
-          description: 'Please check your email to verify your account.',
+          title: 'Welcome!',
+          description: 'Your account is ready.',
         });
         onAuthenticated();
+      } else if (result === 'confirm_email') {
+        void trackAuthMethodUsage('email', 'signup');
+        showToast({
+          type: 'success',
+          title: 'Check your email',
+          description:
+            'If a confirmation email does not arrive within a few minutes, check spam and verify Supabase Auth SMTP / Confirm email is enabled for this project.',
+        });
+        setIsLogin(true);
       }
     }
   };

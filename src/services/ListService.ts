@@ -7,7 +7,7 @@ import { supabase } from '../config/supabase';
 import { ProfileService } from './ProfileService';
 
 const syncAfterWrite = () => {
-  void SyncService.requestSyncSoon();
+  void SyncService.requestSyncNow();
 };
 
 const fetchActiveProfileId = ProfileService.getActiveProfileId;

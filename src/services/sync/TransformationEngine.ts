@@ -290,6 +290,18 @@ export const transformRecordForSupabase = (
     }
 
     transformed = pickRemotePayload(table, targetRemoteTable, transformed);
+
+    // Folders remote column is `title` (NOT NULL). Never push null/empty title.
+    if (table === 'folders' || targetRemoteTable === 'folders') {
+      const title =
+        (typeof transformed.title === 'string' && transformed.title.trim()) ||
+        (typeof transformed.name === 'string' && transformed.name.trim()) ||
+        'Untitled';
+      transformed.title = title;
+      delete transformed.name;
+      delete transformed.color;
+    }
+
     const finalized = finalizeProfileScopedPayload(
         table,
         targetRemoteTable,
@@ -323,6 +335,13 @@ export const isValidRecordForTable = (record: any, table: string): boolean => {
     if (table === 'list_items' && (!record.list_id || String(record.list_id).trim() === '')) {
         safeWarn(`Skipping invalid list_items record ${record.id} (empty or missing list_id)`);
         return false;
+    }
+    if (table === 'folders') {
+        const title = String(record.title ?? record.name ?? '').trim();
+        if (!title) {
+            // Still allow push — transform fills "Untitled"
+            return true;
+        }
     }
     return true;
 };

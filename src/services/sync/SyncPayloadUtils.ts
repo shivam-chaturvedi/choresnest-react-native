@@ -52,6 +52,10 @@ export const TABLE_FIELD_MAPPINGS: Record<string, Record<string, string>> = {
     folderId: 'folder_id',
     blocks: 'blocks_json',
   },
+  folders: {
+    // Some older local rows used `name`; remote schema requires `title`
+    name: 'title',
+  },
   documents: {
     filePath: 'file_path',
     localUri: 'local_uri',
@@ -172,7 +176,7 @@ const REMOTE_COLUMNS_BY_TABLE: Record<string, ReadonlySet<string>> = {
     'metadata_version',
     'remote_delete_pending',
   ]),
-  folders: new Set([...SYNC_METADATA, 'name', 'icon', 'color']),
+  folders: new Set([...SYNC_METADATA, 'title', 'icon']),
   lists: new Set([...SYNC_METADATA, 'name', 'type', 'icon']),
   list_items: new Set([
     ...SYNC_METADATA,

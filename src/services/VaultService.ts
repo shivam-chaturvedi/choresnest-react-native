@@ -100,7 +100,9 @@ const deleteLocalFile = async (...uris: Array<string | undefined | null>) => {
     if (!uri) {
       continue;
     }
-    const normalized = uri.startsWith('file://') ? uri.replace(/^file:\/\//, '') : uri;
+    const normalized = uri.startsWith('file://')
+      ? uri.replace(/^file:\/\//, '')
+      : uri;
     if (!normalized || seen.has(normalized)) {
       continue;
     }
@@ -111,7 +113,10 @@ const deleteLocalFile = async (...uris: Array<string | undefined | null>) => {
         await RNFS.unlink(normalized);
       }
     } catch (error) {
-      console.warn('VaultService: Failed to delete local file', { uri: normalized, error });
+      console.warn('VaultService: Failed to delete local file', {
+        uri: normalized,
+        error,
+      });
     }
   }
 };
@@ -123,7 +128,7 @@ type DeleteDocumentResult = {
 const resolveProfileId = ProfileService.getActiveProfileId;
 
 const syncAfterWrite = () => {
-  void SyncService.requestSyncSoon();
+  void SyncService.requestSyncNow();
 };
 
 export const VaultService = {
@@ -417,7 +422,10 @@ export const VaultService = {
       });
 
       if (metadataNeedsIncrement && metadataVersionToSync !== undefined) {
-        void documentMetadataSyncService.markDocumentDirty(id, metadataVersionToSync);
+        void documentMetadataSyncService.markDocumentDirty(
+          id,
+          metadataVersionToSync,
+        );
       }
 
       if (updatedDoc) {
@@ -439,9 +447,12 @@ export const VaultService = {
     }
 
     const isGuestMode = profileId === GUEST_PROFILE_ID;
-    let snapshot:
-      | { localUri?: string | null; filePath?: string | null; remotePath?: string | null; profileId?: string }
-      | null = null;
+    let snapshot: {
+      localUri?: string | null;
+      filePath?: string | null;
+      remotePath?: string | null;
+      profileId?: string;
+    } | null = null;
 
     try {
       await getDatabase().write(async () => {
@@ -483,9 +494,14 @@ export const VaultService = {
       let online = false;
       try {
         const state = await NetInfo.fetch();
-        online = Boolean(state.isConnected && state.isInternetReachable !== false);
+        online = Boolean(
+          state.isConnected && state.isInternetReachable !== false,
+        );
       } catch (error) {
-        console.warn('VaultService: failed to determine network state before deletion', error);
+        console.warn(
+          'VaultService: failed to determine network state before deletion',
+          error,
+        );
       }
 
       const remoteResult = await vaultRemoteCleanupService.scheduleDeletion(

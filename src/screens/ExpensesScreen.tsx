@@ -8,6 +8,7 @@ import {
   Dimensions,
   Pressable,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { AppLayout } from '../components/layout';
@@ -24,6 +25,8 @@ import {
   BarChart3,
   PieChart as PieChartIcon,
   Edit2,
+  Pencil,
+  Trash2,
 } from 'lucide-react-native';
 import {
   AddExpenseModal,
@@ -495,6 +498,8 @@ export const ExpensesScreen: React.FC = () => {
   const [activeTab, setActiveTab] = useState('Overview');
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
   const [budgetModalOpen, setBudgetModalOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] =
+    useState<Transaction | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [viewDate, setViewDate] = useState(new Date()); // For month navigation in trend chart
   const { openSidebar } = useSidebar();
@@ -506,6 +511,8 @@ export const ExpensesScreen: React.FC = () => {
   const {
     transactions,
     addTransaction,
+    updateTransaction,
+    deleteTransaction,
     budgets,
     categoryColors,
     categoryIcons,
@@ -717,6 +724,48 @@ export const ExpensesScreen: React.FC = () => {
     }
   };
 
+  const handleUpdateExpense = (id: string, expense: ExpenseData) => {
+    try {
+      updateTransaction(id, {
+        name: expense.name,
+        amount: expense.amount,
+        date: expense.date,
+        icon: categoryIcons[expense.category] || '📦',
+        type: expense.type,
+        category: expense.category,
+      });
+      setEditingTransaction(null);
+    } catch (error) {
+      handleScreenError('handleUpdateExpense', error);
+    }
+  };
+
+  const handleEditTransaction = (tx: Transaction) => {
+    setEditingTransaction(tx);
+    setExpenseModalOpen(true);
+  };
+
+  const handleDeleteTransaction = (tx: Transaction) => {
+    Alert.alert(
+      'Delete Transaction',
+      `Delete "${tx.name}"? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            deleteTransaction(tx.id);
+            if (editingTransaction?.id === tx.id) {
+              setEditingTransaction(null);
+              setExpenseModalOpen(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   // --- Gesture Logic ---
   const handleSwipe = (direction: 'left' | 'right') => {
     const currentIndex = tabs.indexOf(activeTab);
@@ -755,7 +804,10 @@ export const ExpensesScreen: React.FC = () => {
     <AppLayout
       showNav={false}
       showAddButton={true}
-      onAddPress={() => setExpenseModalOpen(true)}
+      onAddPress={() => {
+        setEditingTransaction(null);
+        setExpenseModalOpen(true);
+      }}
     >
       <GestureDetector gesture={panGesture}>
         <ScrollView
@@ -1067,6 +1119,28 @@ export const ExpensesScreen: React.FC = () => {
                       {tx.type === 'income' ? '+' : '-'}
                       {formatCurrency(tx.amount)}
                     </Text>
+                    <View style={styles.txActions}>
+                      <Pressable
+                        onPress={() => handleEditTransaction(tx)}
+                        style={[
+                          styles.txActionBtn,
+                          { backgroundColor: colors.muted },
+                        ]}
+                        hitSlop={8}
+                      >
+                        <Pencil size={14} color={colors.foreground} />
+                      </Pressable>
+                      <Pressable
+                        onPress={() => handleDeleteTransaction(tx)}
+                        style={[
+                          styles.txActionBtn,
+                          { backgroundColor: colors.danger + '20' },
+                        ]}
+                        hitSlop={8}
+                      >
+                        <Trash2 size={14} color={colors.danger} />
+                      </Pressable>
+                    </View>
                   </View>
                 ))}
                 {transactions.length === 0 && (
@@ -1461,8 +1535,13 @@ export const ExpensesScreen: React.FC = () => {
 
       <AddExpenseModal
         visible={expenseModalOpen}
-        onClose={() => setExpenseModalOpen(false)}
+        onClose={() => {
+          setExpenseModalOpen(false);
+          setEditingTransaction(null);
+        }}
         onAdd={handleAddExpense}
+        onUpdate={handleUpdateExpense}
+        transactionToEdit={editingTransaction}
         budgets={budgets}
         currentSpending={categorySpending} // Now dynamic
         categoryColors={categoryColors}
@@ -1656,6 +1735,19 @@ const styles = StyleSheet.create({
   txAmount: {
     fontSize: 16,
     fontWeight: '700',
+  },
+  txActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginLeft: 8,
+  },
+  txActionBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   // Breakdown
   catName: {

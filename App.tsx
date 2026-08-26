@@ -40,10 +40,9 @@ import { reactNavigationIntegration } from './src/services/SentryNavigation';
 import Config from 'react-native-config';
 
 Sentry.init({
-  dsn:
-    Config.SENTRY_DSN ||
-    'https://89d6728a04ce8a7a66a67655e9bbe3fc@o4511009722466304.ingest.us.sentry.io/4511009726070784',
+  dsn: Config.SENTRY_DSN,
   environment: Config.SENTRY_ENVIRONMENT || Config.NODE_ENV || 'production',
+  enabled: Boolean(Config.SENTRY_DSN),
 
   // Adds more context data to events (IP address, cookies, user, etc.)
   // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/

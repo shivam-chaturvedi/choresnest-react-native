@@ -9,7 +9,7 @@ import React, {
 import { Linking } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Config from 'react-native-config';
-import { supabase } from '../config/supabase';
+import { supabase, supabaseUrl, supabaseKey } from '../config/supabase';
 import { SupabaseService } from '../services/SupabaseService';
 import { AppSettingsService } from '../services/AppSettingsService';
 import { ProfileBootstrapService } from '../services/ProfileBootstrapService';
@@ -47,7 +47,12 @@ interface AuthContextType {
    */
   sessionEpoch: number;
   login: (email: string, pass: string) => Promise<boolean>;
-  signup: (email: string, pass: string, name: string) => Promise<boolean>;
+  signup: (
+    email: string,
+    pass: string,
+    name: string,
+  ) => Promise<'session' | 'confirm_email' | false>;
+  resendConfirmationEmail: (email: string) => Promise<boolean>;
   signInWithGoogle: () => Promise<boolean>;
   loginAsGuest: () => Promise<void>;
   logout: () => Promise<void>;
@@ -69,7 +74,16 @@ interface AuthProviderProps {
 
 const FALLBACK_OAUTH_SCHEME = 'com.choresnest';
 const FALLBACK_OAUTH_HOST = 'auth-callback';
-const GOOGLE_OAUTH_REDIRECT_URI = 'https://choresnest.com/auth/callback';
+const NATIVE_OAUTH_REDIRECT_URI = `${FALLBACK_OAUTH_SCHEME}://${FALLBACK_OAUTH_HOST}`;
+
+/** Prefer env override, then native deep link (matches Android/iOS intent filters). */
+const resolveGoogleOAuthRedirectUri = (): string => {
+  const fromEnv = (Config.GOOGLE_OAUTH_REDIRECT_URI || '').trim();
+  if (fromEnv) {
+    return fromEnv;
+  }
+  return NATIVE_OAUTH_REDIRECT_URI;
+};
 
 const isRecognizedAuthCallbackUrl = (rawUrl?: string | null) => {
   if (!rawUrl) {
@@ -89,11 +103,60 @@ const isRecognizedAuthCallbackUrl = (rawUrl?: string | null) => {
       parsed.protocol === 'https:' &&
       normalizedHost === 'choresnest.com' &&
       (normalizedPath === '/auth/callback' ||
-        normalizedPath === '/reset-password');
+        normalizedPath === '/reset-password' ||
+        normalizedPath === '/confirm-email');
 
     return isFallbackScheme || isVerifiedLink;
   } catch {
     return false;
+  }
+};
+
+const assertGoogleProviderEnabled = async (): Promise<void> => {
+  try {
+    const settingsUrl = `${supabaseUrl}/auth/v1/settings`;
+    const response = await fetch(settingsUrl, {
+      headers: {
+        apikey: supabaseKey || '',
+        Authorization: `Bearer ${supabaseKey || ''}`,
+      },
+    });
+    if (!response.ok) {
+      console.warn(
+        'AuthContext: auth settings probe failed',
+        response.status,
+        supabaseUrl,
+      );
+      return;
+    }
+    const settings = await response.json();
+    const googleSetting = settings?.external?.google;
+    const googleEnabled =
+      googleSetting === true ||
+      googleSetting === 'true' ||
+      googleSetting?.enabled === true;
+    console.log('[AuthContext] Google provider status', {
+      supabaseUrl,
+      googleSetting,
+      googleEnabled,
+    });
+    if (!googleEnabled) {
+      throw new Error(
+        `Google sign-in is disabled on ${supabaseUrl}. Open that project in Supabase → Authentication → Providers → Google, enable it, and add redirect URLs com.choresnest://auth-callback and https://choresnest.com/auth/callback.`,
+      );
+    }
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.includes('Google sign-in is disabled')
+    ) {
+      throw error;
+    }
+    // Network/settings probe failures should not block OAuth attempt
+    console.warn(
+      'AuthContext: Could not preflight Google provider settings',
+      error,
+    );
   }
 };
 
@@ -158,7 +221,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
           });
           return null;
         });
-        const launchedFromAuthRedirect = isRecognizedAuthCallbackUrl(initialUrl);
+        const launchedFromAuthRedirect =
+          isRecognizedAuthCallbackUrl(initialUrl);
 
         // Immediately check local cached user to prevent UI blocking
         const cachedUserStr = await AsyncStorage.getItem('AUTH_USER');
@@ -220,8 +284,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
         // Check guest mode independently
         const guest = await AsyncStorage.getItem('IS_GUEST');
         if (guest === 'true') {
-            setIsGuest(true);
-            Sentry.setUser(null);
+          setIsGuest(true);
+          Sentry.setUser(null);
         }
 
         // Check Onboarding status globally across all profiles for this device
@@ -276,21 +340,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
           email: session.user.email!,
           name: session.user.user_metadata?.name,
         };
+
+        // CRITICAL: switch Watermelon DB profile BEFORE updating React user state.
+        // Each profile has its own SQLite file — setting user first caused FamilyContext
+        // to query the guest DB with the auth UUID (empty members until hard reload).
+        await AsyncStorage.multiRemove(['IS_GUEST', 'GUEST_PROFILE_ID']);
+        await AsyncStorage.setItem('AUTH_USER', JSON.stringify(userData));
+        await AsyncStorage.setItem('ACTIVE_PROFILE_ID', session.user.id);
+        await ProfileService.setActiveProfileId(session.user.id);
+
+        setIsGuest(false);
         setUser(userData);
         Sentry.setUser({
           id: userData.id,
           email: userData.email ?? undefined,
         });
-        setIsGuest(false);
         // Start token auto-refresh only when we have a real authenticated session
         supabase.auth.startAutoRefresh();
-        AsyncStorage.removeItem('IS_GUEST');
-        AsyncStorage.removeItem('GUEST_PROFILE_ID');
-        AsyncStorage.setItem('AUTH_USER', JSON.stringify(userData));
-        // Bind the new user's ID as the active profile before any query runs
-        AsyncStorage.setItem('ACTIVE_PROFILE_ID', session.user.id);
-        void ProfileService.setActiveProfileId(session.user.id);
         DocumentUploadScheduler.startForUser(session.user.id);
+        bumpEpoch();
 
         // Cache user record locally for guest-mode discovery
         try {
@@ -321,9 +389,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
           console.error('AuthContext: Failed to cache user record:', e);
         }
 
-        // Trigger sync in background — AppNavigator handles INITIAL_SESSION with 8s delay
+        // Trigger sync + member bootstrap in background — AppNavigator handles INITIAL_SESSION with delay
         if (_event !== 'INITIAL_SESSION') {
           (async () => {
+            try {
+              ProfileBootstrapService.resetCache();
+              await ProfileBootstrapService.bootstrap(session.user.id, {
+                force: true,
+              });
+              const { FamilyService } = await import(
+                '../services/FamilyService'
+              );
+              await FamilyService.cleanupSeededMeMembers(session.user.id);
+            } catch (err) {
+              console.warn('AuthContext: post-login bootstrap failed', err);
+            }
             try {
               const { SyncService } = await import('../services/SyncService');
               if (!SyncService.getSyncStatus()) {
@@ -470,7 +550,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
           parsed.protocol === 'https:' &&
           normalizedHost === 'choresnest.com' &&
           (normalizedPath === '/auth/callback' ||
-            normalizedPath === '/reset-password');
+            normalizedPath === '/reset-password' ||
+            normalizedPath === '/confirm-email');
 
         console.log('[AuthContext] processOAuthCallback', {
           rawUrl,
@@ -597,19 +678,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
       const loginPromise = USE_PROXY_AUTH
         ? proxyLogin(email, pass)
         : SupabaseService.signIn(email, pass);
-      const { error } = await Promise.race([loginPromise, timeoutPromise]);
+      const { data, error } = await Promise.race([loginPromise, timeoutPromise]);
       if (error) {
         const message = getHumanReadableMessage(error, 'login');
         onError?.('Login Failed', message);
         return false;
       }
 
+      // Switch DB immediately — don't wait for onAuthStateChange ordering
+      const sessionUser =
+        (data as any)?.session?.user ?? (data as any)?.user ?? null;
+      if (sessionUser?.id) {
+        await AsyncStorage.multiRemove(['IS_GUEST', 'GUEST_PROFILE_ID']);
+        await ProfileService.setActiveProfileId(sessionUser.id);
+      }
+
       // ✅ NON-DESTRUCTIVE: bump epoch so stale async work self-aborts.
       // Do NOT call DataCleanupService.clearDatabase() — it wipes local rows.
-      // The active profile will be set by onAuthStateChange above.
       bumpEpoch();
       console.log(
-        '[AuthContext] login: success — DB preserved. sessionEpoch:',
+        '[AuthContext] login: success — DB bound to',
+        sessionUser?.id,
+        'sessionEpoch:',
         epochRef.current,
       );
       return true;
@@ -624,26 +714,63 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
     email: string,
     pass: string,
     name: string,
-  ): Promise<boolean> => {
+  ): Promise<'session' | 'confirm_email' | false> => {
     ProfileBootstrapService.resetCache();
     try {
-      const signupPromise = USE_PROXY_AUTH
-        ? proxyRegister(email, pass)
-        : SupabaseService.signUp(email, pass, name);
-      const { error } = await signupPromise;
+      if (USE_PROXY_AUTH) {
+        const { error } = await proxyRegister(email, pass);
+        if (error) {
+          const message = getHumanReadableMessage(error, 'signup');
+          onError?.('Signup Failed', message);
+          return false;
+        }
+        bumpEpoch();
+        return 'session';
+      }
+
+      const { data, error } = await SupabaseService.signUp(email, pass, name);
       if (error) {
         const message = getHumanReadableMessage(error, 'signup');
         onError?.('Signup Failed', message);
         return false;
       }
 
-      // ✅ NON-DESTRUCTIVE: bump epoch only.
+      // Supabase returns an empty identities array when the email is already registered
+      const identities = data?.user?.identities;
+      if (data?.user && Array.isArray(identities) && identities.length === 0) {
+        onError?.(
+          'Account Exists',
+          'An account with this email already exists. Please sign in or reset your password.',
+        );
+        return false;
+      }
+
+      if (data?.session?.user) {
+        await ProfileService.setActiveProfileId(data.session.user.id);
+        bumpEpoch();
+        console.log(
+          '[AuthContext] signup: session created immediately. sessionEpoch:',
+          epochRef.current,
+        );
+        return 'session';
+      }
+
+      // Email confirmation required — do not enter the app yet
+      const confirmationSentAt = (data?.user as any)?.confirmation_sent_at;
+      if (!confirmationSentAt) {
+        console.warn(
+          '[AuthContext] signup: no confirmation_sent_at on user. Supabase may not have queued an email (check Auth email confirm + SMTP on project rikhklhxcdhxykxxqvsc).',
+        );
+      }
+
       bumpEpoch();
       console.log(
-        '[AuthContext] signup: success — DB preserved. sessionEpoch:',
-        epochRef.current,
+        '[AuthContext] signup: awaiting email confirmation for',
+        email,
+        'confirmation_sent_at=',
+        confirmationSentAt,
       );
-      return true;
+      return 'confirm_email';
     } catch (error: any) {
       const message = getHumanReadableMessage(error, 'signup');
       onError?.('Signup Failed', message);
@@ -651,13 +778,47 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
     }
   };
 
+  const resendConfirmationEmail = async (email: string): Promise<boolean> => {
+    try {
+      const { error } = await SupabaseService.resendSignupConfirmation(email);
+      if (error) {
+        const message = getHumanReadableMessage(error, 'signup');
+        onError?.('Could Not Resend Email', message);
+        return false;
+      }
+      return true;
+    } catch (error: any) {
+      const message = getHumanReadableMessage(error, 'signup');
+      onError?.('Could Not Resend Email', message);
+      return false;
+    }
+  };
+
   const signInWithGoogle = async (): Promise<boolean> => {
     try {
+      if (!supabaseUrl || !supabaseKey) {
+        throw new Error(
+          'Supabase is not configured. Check SUPABASE_URL and SUPABASE_ANON_KEY in your .env files, then rebuild the app.',
+        );
+      }
+
+      await assertGoogleProviderEnabled();
+
+      const redirectTo = resolveGoogleOAuthRedirectUri();
+      console.log('[AuthContext] Starting Google OAuth', {
+        supabaseUrl,
+        redirectTo,
+      });
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: GOOGLE_OAUTH_REDIRECT_URI,
+          redirectTo,
           skipBrowserRedirect: true,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'select_account',
+          },
         },
       });
 
@@ -668,6 +829,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
       const oauthUrl = data?.url;
       if (!oauthUrl) {
         throw new Error('Google OAuth did not return a redirect URL.');
+      }
+
+      // Surface provider-disabled responses before opening the browser when possible
+      if (
+        oauthUrl.includes('error=') ||
+        oauthUrl.includes('validation_failed') ||
+        oauthUrl.includes('provider%20is%20not%20enabled')
+      ) {
+        throw new Error(
+          'Google sign-in is disabled in Supabase. Enable Authentication → Providers → Google.',
+        );
+      }
+
+      const canOpen = await Linking.canOpenURL(oauthUrl);
+      if (!canOpen) {
+        throw new Error('Unable to open the Google sign-in browser.');
       }
 
       await Linking.openURL(oauthUrl);
@@ -688,6 +865,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
       console.log('AuthContext: loginAsGuest starting...');
       ProfileBootstrapService.resetCache();
 
+      // Mark guest session first so profile resolution is consistent everywhere
+      await AsyncStorage.setItem('IS_GUEST', 'true');
+      await AsyncStorage.removeItem('AUTH_USER');
+
       // ✅ NON-DESTRUCTIVE: set guest profile — no DB wipe.
       await ProfileService.setGuestProfileId();
 
@@ -697,8 +878,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
       setHasCompletedOnboarding(true);
       bumpEpoch();
 
-      await AsyncStorage.setItem('IS_GUEST', 'true');
-      await AsyncStorage.removeItem('AUTH_USER');
       console.log(
         'AuthContext: loginAsGuest complete. DB preserved. sessionEpoch:',
         epochRef.current,
@@ -799,6 +978,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
         sessionEpoch,
         login,
         signup,
+        resendConfirmationEmail,
         signInWithGoogle,
         loginAsGuest,
         logout,

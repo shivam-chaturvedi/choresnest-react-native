@@ -1,7 +1,12 @@
+import uuid from 'react-native-uuid';
+
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const WATERMELON_ID_REGEX = /^[a-zA-Z0-9._-]{1,100}$/;
+
+/** Generate a RFC4122 v4 UUID string. */
+export const uuidv4 = (): string => String(uuid.v4());
 
 export const isUuid = (value: unknown): value is string =>
   typeof value === 'string' && UUID_REGEX.test(value);

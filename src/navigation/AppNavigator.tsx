@@ -36,6 +36,7 @@ import { ProfileBootstrapService } from '../services/ProfileBootstrapService';
 import { ProfileService, GUEST_PROFILE_ID } from '../services/ProfileService';
 import { LocalCacheService } from '../services/LocalCacheService';
 import { reactNavigationIntegration } from '../services/SentryNavigation';
+import { useFamily } from '../contexts/FamilyContext';
 
 const Stack = createNativeStackNavigator();
 
@@ -92,6 +93,7 @@ const AppNavigatorInner = () => {
     isPasswordRecoveryFlow,
     sessionEpoch,
   } = useAuth();
+  const { members: familyMembers } = useFamily();
   const [showSplash, setShowSplash] = React.useState(true);
   const [hasMembersInDB, setHasMembersInDB] = React.useState<boolean | null>(
     null,
@@ -107,6 +109,17 @@ const AppNavigatorInner = () => {
   // Auto-sync hook - triggers sync on data changes (runs in background)
   // Hook checks isGuest internally, so it's safe to call always
   useAutoSync();
+
+  // Keep setup gate in sync when members appear in FamilyContext
+  React.useEffect(() => {
+    if (!isAuthenticated || isGuest || isLoading) {
+      return;
+    }
+    if ((familyMembers || []).length > 0) {
+      setHasMembersInDB(true);
+      setProfileOnboardingComplete(true);
+    }
+  }, [familyMembers, isAuthenticated, isGuest, isLoading]);
 
   // Timeout to hide splash screen after maximum wait time (don't wait forever)
   React.useEffect(() => {
@@ -377,7 +390,9 @@ const AppNavigatorInner = () => {
             console.log(
               'AppNavigator: Remote profile bootstrap found no members - new user, showing setup screen.',
             );
+            // Force setup even if a stale onboarding flag exists from a prior install
             setProfileOnboardingComplete(false);
+            setHasMembersInDB(false);
           }
         } catch (remoteErr) {
           console.warn(
@@ -454,7 +469,10 @@ const AppNavigatorInner = () => {
         // Filter by profile_id if we have one so we don't pick up another profile's rows
         if (pid) {
           const { Q: WQ } = require('@nozbe/watermelondb');
-          localQuery = membersCollection.query(WQ.where('profile_id', pid));
+          localQuery = membersCollection.query(
+            WQ.where('profile_id', pid),
+            WQ.where('deleted', false),
+          );
         }
         const localMembers = await localQuery.fetch();
         const existsLocally = localMembers.length > 0;
@@ -464,7 +482,20 @@ const AppNavigatorInner = () => {
             `AppNavigator: Found ${localMembers.length} members locally for profile ${pid}. Proceeding...`,
           );
           setHasMembersInDB(true);
-          // Don't return — still want to bootstrap in background for freshness
+          // Refresh from remote and remove any auto-seeded "Me" duplicates
+          void ProfileBootstrapService.bootstrap(pid, { force: true })
+            .then(async () => {
+              const { FamilyService } = await import(
+                '../services/FamilyService'
+              );
+              await FamilyService.cleanupSeededMeMembers(pid);
+            })
+            .catch(error => {
+              console.warn(
+                'AppNavigator: background force bootstrap failed',
+                error,
+              );
+            });
         }
 
         // 2. REMOTE BOOTSTRAP (with timeout) — only for authenticated, non-guest users
@@ -507,6 +538,11 @@ const AppNavigatorInner = () => {
                 setHasMembersInDB(true);
                 return;
               }
+              console.log(
+                'AppNavigator: Bootstrap found 0 members — routing to setup if needed',
+              );
+              setHasMembersInDB(false);
+              setProfileOnboardingComplete(false);
             }
           } catch (e) {
             console.warn('AppNavigator: Bootstrap skipped or timed out', e);
@@ -573,8 +609,12 @@ const AppNavigatorInner = () => {
     }
   }, [sessionEpoch, isAuthenticated]);
 
+  // Don't show main app until we know whether this profile has members
+  const membersCheckPending =
+    isAuthenticated && !isGuest && hasMembersInDB === null;
+
   const shouldShowInitialSetup =
-    hasMembersInDB === false && profileOnboardingComplete !== true;
+    isAuthenticated && !isGuest && hasMembersInDB === false;
   const navigatorKey = isPasswordRecoveryFlow
     ? 'password-recovery'
     : isAuthenticated
@@ -583,7 +623,13 @@ const AppNavigatorInner = () => {
 
   // Only show splash on initial load, not during auth operations
   // Don't wait for the member check; show UI once the essential boot sequence finishes
-  if (showSplash || isLoading || isBootChecking || !isCacheReady) {
+  if (
+    showSplash ||
+    isLoading ||
+    isBootChecking ||
+    !isCacheReady ||
+    membersCheckPending
+  ) {
     if (!showSplash && !isLoading && isBootChecking) {
       // Optional: Add a transition spinner if it takes too long between splash and app
     }
@@ -613,10 +659,21 @@ const AppNavigatorInner = () => {
               {() => (
                 <InitialSetupScreen
                   onComplete={async () => {
-                    const membersCollection = getDatabase().get('members');
-                    const members = await membersCollection.query().fetch();
+                    const pid = await ProfileService.getActiveProfileId();
+                    const membersCollection =
+                      getDatabase().get<Member>('members');
+                    const { Q: WQ } = require('@nozbe/watermelondb');
+                    const members = pid
+                      ? await membersCollection
+                          .query(
+                            WQ.where('profile_id', pid),
+                            WQ.where('deleted', false),
+                          )
+                          .fetch()
+                      : [];
 
                     setHasMembersInDB(members.length > 0);
+                    setProfileOnboardingComplete(members.length > 0);
                     setLocalOnboardingLoaded(true);
                   }}
                 />

@@ -20,6 +20,8 @@ if linkage != nil
   use_frameworks! :linkage => linkage.to_sym
 end
 
+use_modular_headers!
+
 target 'ChoresNest' do
   config = use_native_modules!
   pod 'simdjson', path: '../node_modules/@nozbe/simdjson', modular_headers: true

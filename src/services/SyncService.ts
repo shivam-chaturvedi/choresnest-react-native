@@ -3,32 +3,42 @@ import { supabase } from '../config/supabase';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { SyncOrchestrator } from './sync/SyncOrchestrator';
 import {
-    canSync as canPerformBackoff,
-    getNextSyncAllowedAt as getBackoffNextAttempt,
-    recordFailure as recordBackoffFailure,
-    recordSuccess as recordBackoffSuccess,
-    resetBackoff,
+  canSync as canPerformBackoff,
+  getNextSyncAllowedAt as getBackoffNextAttempt,
+  recordFailure as recordBackoffFailure,
+  recordSuccess as recordBackoffSuccess,
+  resetBackoff,
 } from './sync/BackoffEngine';
-import { clearConflictHistory, getConflictHistory } from './sync/ConflictEngine';
-import { BackoffFailureType, ConflictRecord, TableChangeSet } from './sync/types';
+import {
+  clearConflictHistory,
+  getConflictHistory,
+} from './sync/ConflictEngine';
+import {
+  BackoffFailureType,
+  ConflictRecord,
+  TableChangeSet,
+} from './sync/types';
 import { resetWatermelonCursor } from './sync/cursor';
 import { REALTIME_WATCH_TABLES } from './sync/realtime/RealtimeWatchList';
 import { ProfileService } from './ProfileService';
 import { repairProfileScopedRecords } from './sync/SyncPayloadUtils';
 import { isUuid } from '../utils/uuid';
 
-const parseBooleanFlag = (value: string | undefined, defaultValue: boolean): boolean => {
-    if (value === undefined || value === null) {
-        return defaultValue;
-    }
-    const normalized = value.trim().toLowerCase();
-    if (['false', '0', 'no', 'off'].includes(normalized)) {
-        return false;
-    }
-    if (['true', '1', 'yes', 'on'].includes(normalized)) {
-        return true;
-    }
+const parseBooleanFlag = (
+  value: string | undefined,
+  defaultValue: boolean,
+): boolean => {
+  if (value === undefined || value === null) {
     return defaultValue;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (['false', '0', 'no', 'off'].includes(normalized)) {
+    return false;
+  }
+  if (['true', '1', 'yes', 'on'].includes(normalized)) {
+    return true;
+  }
+  return defaultValue;
 };
 
 const SYNC_ENABLED_FLAG = parseBooleanFlag(Config.ENABLE_SYNC, true);
@@ -36,10 +46,10 @@ let hasLoggedSyncDisabledWarning = false;
 
 const MAX_CONSECUTIVE_FAILURES = 3;
 
-const SYNC_REQUEST_DELAY_MS = 1500;
+const SYNC_REQUEST_DELAY_MS = 100;
 const PERIODIC_SYNC_INTERVAL_MS = 1 * 60 * 1000; // 1 minute
 const LAST_SYNC_SUCCESS_KEY = 'LAST_SYNC_SUCCESS_AT';
-const MIN_SYNC_GAP_MS = 300;
+const MIN_SYNC_GAP_MS = 150;
 let lastSyncFinishedAt = 0;
 
 let realtimeChannel: RealtimeChannel | null = null;
@@ -49,93 +59,99 @@ let realtimeRetryTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingRealtimeTrigger: (() => void) | null = null;
 
 const scheduleRealtimeRetry = (triggerSync: () => void, delay?: number) => {
-    if (realtimeRetryTimer) {
-        clearTimeout(realtimeRetryTimer);
-    }
-    const wait = typeof delay === 'number' ? delay : getRealtimeBackoff();
-    lastRealtimeAttempt = Date.now();
-    realtimeRetryTimer = setTimeout(() => {
-        realtimeRetryTimer = null;
-        ensureRealtimeSubscription(triggerSync);
-    }, wait);
+  if (realtimeRetryTimer) {
+    clearTimeout(realtimeRetryTimer);
+  }
+  const wait = typeof delay === 'number' ? delay : getRealtimeBackoff();
+  lastRealtimeAttempt = Date.now();
+  realtimeRetryTimer = setTimeout(() => {
+    realtimeRetryTimer = null;
+    ensureRealtimeSubscription(triggerSync);
+  }, wait);
 };
 let isRealtimeConnecting = false;
 
 const getRealtimeBackoff = () => {
-    const base = Math.min(5000 * Math.pow(2, realtimeRetryCount), 60000);
-    const jitter = base * 0.3 * Math.random();
-    return base + jitter;
+  const base = Math.min(5000 * Math.pow(2, realtimeRetryCount), 60000);
+  const jitter = base * 0.3 * Math.random();
+  return base + jitter;
 };
 
 const ensureRealtimeSubscription = (triggerSync: () => void) => {
-    if (realtimeChannel || isRealtimeConnecting || realtimeRetryTimer) {
-        return;
-    }
-    lastRealtimeAttempt = Date.now();
-    pendingRealtimeTrigger = triggerSync;
+  if (realtimeChannel || isRealtimeConnecting || realtimeRetryTimer) {
+    return;
+  }
+  lastRealtimeAttempt = Date.now();
+  pendingRealtimeTrigger = triggerSync;
 
-    try {
-        isRealtimeConnecting = true;
-        realtimeChannel = supabase.channel('realtime_sync');
-        const watchTables = REALTIME_WATCH_TABLES;
-        watchTables.forEach((table) => {
-            realtimeChannel?.on('postgres_changes', { event: '*', schema: 'public', table }, () => {
-                triggerSync();
-            });
-        });
-        realtimeChannel.subscribe((status) => {
-            if (status === 'SUBSCRIBED') {
-                realtimeRetryCount = 0;
-                isRealtimeConnecting = false;
-            } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-                console.warn(`Realtime sync subscription failed with status: ${status}. Attempting backoff retry...`);
-                realtimeRetryCount++;
-                // Channel is already closing/closed; avoid calling unsubscribe()
-                // here to prevent the Realtime client from recursively firing
-                // additional close events and overflowing the JS stack.
-                teardownRealtimeSubscription(true);
-                isRealtimeConnecting = false;
-                scheduleRealtimeRetry(triggerSync);
-            } else if (status === 'TIMED_OUT') {
-                console.warn('Realtime sync subscription timed out.');
-                // Same as CLOSED/CHANNEL_ERROR: just clear our local reference
-                // and schedule a retry without calling unsubscribe() again.
-                teardownRealtimeSubscription(true);
-                isRealtimeConnecting = false;
-                scheduleRealtimeRetry(triggerSync);
-            } else {
-                isRealtimeConnecting = false;
-            }
-        });
-    } catch (e) {
-        console.error('Failed to initialize realtime channel:', e);
-        realtimeChannel = null;
+  try {
+    isRealtimeConnecting = true;
+    realtimeChannel = supabase.channel('realtime_sync');
+    const watchTables = REALTIME_WATCH_TABLES;
+    watchTables.forEach(table => {
+      realtimeChannel?.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table },
+        () => {
+          triggerSync();
+        },
+      );
+    });
+    realtimeChannel.subscribe(status => {
+      if (status === 'SUBSCRIBED') {
+        realtimeRetryCount = 0;
+        isRealtimeConnecting = false;
+      } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+        console.warn(
+          `Realtime sync subscription failed with status: ${status}. Attempting backoff retry...`,
+        );
         realtimeRetryCount++;
+        // Channel is already closing/closed; avoid calling unsubscribe()
+        // here to prevent the Realtime client from recursively firing
+        // additional close events and overflowing the JS stack.
+        teardownRealtimeSubscription(true);
         isRealtimeConnecting = false;
         scheduleRealtimeRetry(triggerSync);
-    }
+      } else if (status === 'TIMED_OUT') {
+        console.warn('Realtime sync subscription timed out.');
+        // Same as CLOSED/CHANNEL_ERROR: just clear our local reference
+        // and schedule a retry without calling unsubscribe() again.
+        teardownRealtimeSubscription(true);
+        isRealtimeConnecting = false;
+        scheduleRealtimeRetry(triggerSync);
+      } else {
+        isRealtimeConnecting = false;
+      }
+    });
+  } catch (e) {
+    console.error('Failed to initialize realtime channel:', e);
+    realtimeChannel = null;
+    realtimeRetryCount++;
+    isRealtimeConnecting = false;
+    scheduleRealtimeRetry(triggerSync);
+  }
 };
 
 const teardownRealtimeSubscription = (fromStatusCallback: boolean = false) => {
-    if (!realtimeChannel) {
-        return;
-    }
-    // When called from the Realtime status callback (CLOSED / CHANNEL_ERROR /
-    // TIMED_OUT), the channel is already in the process of leaving/closing.
-    // Calling unsubscribe() again causes the client to fire additional close
-    // events, which in turn re-enter our status callback and eventually
-    // overflow the call stack. In those cases we only clear our local refs.
-    if (!fromStatusCallback) {
-        realtimeChannel.unsubscribe();
-    }
-    realtimeChannel = null;
-    isRealtimeConnecting = false;
+  if (!realtimeChannel) {
+    return;
+  }
+  // When called from the Realtime status callback (CLOSED / CHANNEL_ERROR /
+  // TIMED_OUT), the channel is already in the process of leaving/closing.
+  // Calling unsubscribe() again causes the client to fire additional close
+  // events, which in turn re-enter our status callback and eventually
+  // overflow the call stack. In those cases we only clear our local refs.
+  if (!fromStatusCallback) {
+    realtimeChannel.unsubscribe();
+  }
+  realtimeChannel = null;
+  isRealtimeConnecting = false;
 };
 
 type SyncMode = 'manual' | 'periodic' | 'debounced' | 'force_full' | 'unknown';
 type SyncOptions = {
-    mode?: SyncMode;
-    bypassBackoff?: boolean;
+  mode?: SyncMode;
+  bypassBackoff?: boolean;
 };
 
 let lastSyncAttemptAt: number | null = null;
@@ -155,161 +171,180 @@ let periodicSyncTimer: ReturnType<typeof setInterval> | null = null;
 let lastSyncedProfileId: string | null = null;
 
 const logSyncDisabledWarning = () => {
-    if (hasLoggedSyncDisabledWarning) {
-        return;
-    }
-    hasLoggedSyncDisabledWarning = true;
-    console.log('Sync disabled via Config.ENABLE_SYNC=false; skipping sync requests.');
+  if (hasLoggedSyncDisabledWarning) {
+    return;
+  }
+  hasLoggedSyncDisabledWarning = true;
+  console.log(
+    'Sync disabled via Config.ENABLE_SYNC=false; skipping sync requests.',
+  );
 };
 
 const buildErrorContext = (error: any) => {
-    const message = (error?.message ?? '').toString().toLowerCase();
-    const status = error?.status;
-    const code = error?.code;
+  const message = (error?.message ?? '').toString().toLowerCase();
+  const status = error?.status;
+  const code = error?.code;
 
-    const isConcurrentError = message.includes('concurrent synchronization');
-    const isNetworkError = message.includes('network') || message.includes('fetch') || error?.code === 'ECONNABORTED';
-    const isAuthError =
-        code === 'PGRST301' ||
-        code === 'PGRST116' ||
-        message.includes('jwt') ||
-        message.includes('token') ||
-        status === 401;
-    const isRateLimit = message.includes('rate limit') || status === 429;
-    const isServerError = typeof status === 'number' && status >= 500;
-    const isRlsError = status === 403 || message.includes('row level security') || message.includes('rls');
-    const isValidationError = status === 400 || message.includes('invalid');
-    const isSchemaMismatch =
-        message.includes("could not find the 'version' column") || code === 'PGRST204' || message.includes('column "version"');
-    const isDuplicateCreateWarning =
-        message.includes('already exists locally') || message.includes('duplicate create');
+  const isConcurrentError = message.includes('concurrent synchronization');
+  const isNetworkError =
+    message.includes('network') ||
+    message.includes('fetch') ||
+    error?.code === 'ECONNABORTED';
+  const isAuthError =
+    code === 'PGRST301' ||
+    code === 'PGRST116' ||
+    message.includes('jwt') ||
+    message.includes('token') ||
+    status === 401;
+  const isRateLimit = message.includes('rate limit') || status === 429;
+  const isServerError = typeof status === 'number' && status >= 500;
+  const isRlsError =
+    status === 403 ||
+    code === '42501' ||
+    message.includes('row level security') ||
+    message.includes('row-level security') ||
+    // Avoid matching our own "Check device logs for RLS..." error text
+    (message.includes('violates') && message.includes('policy'));
+  const isValidationError = status === 400 || message.includes('invalid');
+  const isSchemaMismatch =
+    message.includes("could not find the 'version' column") ||
+    code === 'PGRST204' ||
+    message.includes('column "version"');
+  const isDuplicateCreateWarning =
+    message.includes('already exists locally') ||
+    message.includes('duplicate create');
 
-    let failureType: BackoffFailureType = 'unknown';
-    if (isConcurrentError) {
-        failureType = 'concurrency';
-    } else if (isDuplicateCreateWarning) {
-        failureType = 'duplicate_create';
-    } else if (isRateLimit) {
-        failureType = 'rateLimit';
-    } else if (isAuthError) {
-        failureType = 'auth';
-    } else if (isRlsError) {
-        failureType = 'rls';
-    } else if (isSchemaMismatch) {
-        failureType = 'schema_mismatch';
-    } else if (isValidationError) {
-        failureType = 'validation';
-    } else if (isServerError) {
-        failureType = 'server';
-    } else if (isNetworkError) {
-        failureType = 'network';
-    }
+  let failureType: BackoffFailureType = 'unknown';
+  if (isConcurrentError) {
+    failureType = 'concurrency';
+  } else if (isDuplicateCreateWarning) {
+    failureType = 'duplicate_create';
+  } else if (isRateLimit) {
+    failureType = 'rateLimit';
+  } else if (isAuthError) {
+    failureType = 'auth';
+  } else if (isRlsError) {
+    failureType = 'rls';
+  } else if (isSchemaMismatch) {
+    failureType = 'schema_mismatch';
+  } else if (isValidationError) {
+    failureType = 'validation';
+  } else if (isServerError) {
+    failureType = 'server';
+  } else if (isNetworkError) {
+    failureType = 'network';
+  }
 
-    return {
-        isConcurrentError,
-        isNetworkError,
-        isAuthError,
-        isRateLimit,
-        isRlsError,
-        isValidationError,
-        isSchemaMismatch,
-        isDuplicateCreateWarning,
-        failureType,
-    };
+  return {
+    isConcurrentError,
+    isNetworkError,
+    isAuthError,
+    isRateLimit,
+    isRlsError,
+    isValidationError,
+    isSchemaMismatch,
+    isDuplicateCreateWarning,
+    failureType,
+  };
 };
 
 // resetSyncCursors is only used by forceFullSync() — an explicit user action.
 // It is NOT called on logout/login/profile-switch (that would destroy cross-profile data).
 const resetSyncCursors = async (): Promise<void> => {
-    await resetWatermelonCursor();
+  await resetWatermelonCursor();
 };
 
 const formatSafeErrorMessage = (error: any): string => {
-    if (!error) {
-        return 'Sync failed';
-    }
-    if (typeof error === 'string') {
-        return error;
-    }
-    const message = error?.message ?? error?.toString?.() ?? 'Sync failed';
-    return message.split('\n')[0];
+  if (!error) {
+    return 'Sync failed';
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  const message = error?.message ?? error?.toString?.() ?? 'Sync failed';
+  return message.split('\n')[0];
 };
 
 const loadStoredLastSyncSuccess = async (): Promise<void> => {
-    if (hasInitializedLastSyncSuccess) {
-        return;
+  if (hasInitializedLastSyncSuccess) {
+    return;
+  }
+  try {
+    const AsyncStorage =
+      require('@react-native-async-storage/async-storage').default;
+    const stored = await AsyncStorage.getItem(LAST_SYNC_SUCCESS_KEY);
+    if (stored) {
+      const parsed = parseInt(stored, 10);
+      if (!Number.isNaN(parsed)) {
+        lastSyncSuccessAt = parsed;
+      }
     }
-    try {
-        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-        const stored = await AsyncStorage.getItem(LAST_SYNC_SUCCESS_KEY);
-        if (stored) {
-            const parsed = parseInt(stored, 10);
-            if (!Number.isNaN(parsed)) {
-                lastSyncSuccessAt = parsed;
-            }
-        }
-    } catch (error) {
-        console.warn('Failed to load last sync success timestamp:', error);
-    } finally {
-        hasInitializedLastSyncSuccess = true;
-    }
+  } catch (error) {
+    console.warn('Failed to load last sync success timestamp:', error);
+  } finally {
+    hasInitializedLastSyncSuccess = true;
+  }
 };
 
 void loadStoredLastSyncSuccess();
 
 const persistLastSyncSuccess = async (timestamp: number): Promise<void> => {
-    lastSyncSuccessAt = timestamp;
-    try {
-        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-        await AsyncStorage.setItem(LAST_SYNC_SUCCESS_KEY, timestamp.toString());
-    } catch (error) {
-        console.warn('Failed to persist last sync success timestamp:', error);
-    }
+  lastSyncSuccessAt = timestamp;
+  try {
+    const AsyncStorage =
+      require('@react-native-async-storage/async-storage').default;
+    await AsyncStorage.setItem(LAST_SYNC_SUCCESS_KEY, timestamp.toString());
+  } catch (error) {
+    console.warn('Failed to persist last sync success timestamp:', error);
+  }
 };
 
 const isGuestMode = async (): Promise<boolean> => {
-    try {
-        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-        const isGuest = await AsyncStorage.getItem('IS_GUEST');
-        return isGuest === 'true';
-    } catch (error) {
-        console.warn('Could not check guest status, continuing with sync');
-        return false;
-    }
+  try {
+    const AsyncStorage =
+      require('@react-native-async-storage/async-storage').default;
+    const isGuest = await AsyncStorage.getItem('IS_GUEST');
+    return isGuest === 'true';
+  } catch (error) {
+    console.warn('Could not check guest status, continuing with sync');
+    return false;
+  }
 };
 
 const ensureOnline = async (): Promise<boolean> => {
-    try {
-        const NetInfo = require('@react-native-community/netinfo').default;
-        const state = await NetInfo.fetch();
-        return state.isConnected ?? false;
-    } catch (error) {
-        console.warn('NetInfo not available, assuming online');
-        return true;
-    }
+  try {
+    const NetInfo = require('@react-native-community/netinfo').default;
+    const state = await NetInfo.fetch();
+    return state.isConnected ?? false;
+  } catch (error) {
+    console.warn('NetInfo not available, assuming online');
+    return true;
+  }
 };
 
 const getLastWriteSyncTime = async (): Promise<number | null> => {
-    try {
-        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-        const lastSyncStr = await AsyncStorage.getItem('LAST_WRITE_SYNC_TIME');
-        if (lastSyncStr) {
-            return parseInt(lastSyncStr, 10);
-        }
-        return null;
-    } catch (error) {
-        console.warn('Failed to get last write sync time:', error);
-        return null;
+  try {
+    const AsyncStorage =
+      require('@react-native-async-storage/async-storage').default;
+    const lastSyncStr = await AsyncStorage.getItem('LAST_WRITE_SYNC_TIME');
+    if (lastSyncStr) {
+      return parseInt(lastSyncStr, 10);
     }
+    return null;
+  } catch (error) {
+    console.warn('Failed to get last write sync time:', error);
+    return null;
+  }
 };
 
 const saveLastWriteSyncTime = async (): Promise<void> => {
-    try {
-        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-        await AsyncStorage.setItem('LAST_WRITE_SYNC_TIME', Date.now().toString());
-    } catch (error) {
-        console.warn('Failed to save last write sync time:', error);
-    }
+  try {
+    const AsyncStorage =
+      require('@react-native-async-storage/async-storage').default;
+    await AsyncStorage.setItem('LAST_WRITE_SYNC_TIME', Date.now().toString());
+  } catch (error) {
+    console.warn('Failed to save last write sync time:', error);
+  }
 };
 
 // shouldDoWriteSync is intentionally removed: the 1-hour gate was silently
@@ -318,502 +353,601 @@ const saveLastWriteSyncTime = async (): Promise<void> => {
 // already skips the push callback when there are no pending dirty records, so
 // a fine-grained gate here is both redundant and harmful.
 
-const applySyncTimeout = (callback: () => void): ReturnType<typeof setTimeout> =>
-    setTimeout(callback, 300000); // 5-minute timeout to accommodate large initial syncs
+const applySyncTimeout = (
+  callback: () => void,
+): ReturnType<typeof setTimeout> => setTimeout(callback, 300000); // 5-minute timeout to accommodate large initial syncs
 
 const handleSyncError = (error: any): void => {
-    // Silently ignore concurrent sync errors as they are expected when multiple triggers fire
-    if (error?.message?.includes('Concurrent synchronization is not allowed')) {
-        return;
-    }
+  // Silently ignore concurrent sync errors as they are expected when multiple triggers fire
+  if (error?.message?.includes('Concurrent synchronization is not allowed')) {
+    return;
+  }
 
-    console.error('✗ Sync failed:', error);
-    if (error?.message) {
-        console.error('Sync error details:', error.message);
-    }
-    if (error?.code) {
-        console.error('Sync error code:', error.code);
-    }
+  console.error('✗ Sync failed:', error);
+  if (error?.message) {
+    console.error('Sync error details:', error.message);
+  }
+  if (error?.code) {
+    console.error('Sync error code:', error.code);
+  }
 };
 
 export type ConflictSummary = ConflictRecord;
 export type { TableChangeSet } from './sync/types';
 
 export const SyncService = {
-    onSyncStatusChange: (listener: (isSyncing: boolean) => void) => {
-        syncListeners.add(listener);
-        return () => {
-            syncListeners.delete(listener);
-        };
-    },
+  onSyncStatusChange: (listener: (isSyncing: boolean) => void) => {
+    syncListeners.add(listener);
+    return () => {
+      syncListeners.delete(listener);
+    };
+  },
 
-    _notifySyncStatus: (syncing: boolean) => {
-        syncListeners.forEach(listener => listener(syncing));
-    },
+  _notifySyncStatus: (syncing: boolean) => {
+    syncListeners.forEach(listener => listener(syncing));
+  },
 
-    isOnline: ensureOnline,
+  isOnline: ensureOnline,
 
-    getLastWriteSyncTime,
+  getLastWriteSyncTime,
 
-    saveLastWriteSyncTime,
+  saveLastWriteSyncTime,
 
-    async requestSyncSoon(): Promise<void> {
-        if (!SYNC_ENABLED_FLAG) {
-            return;
+  async requestSyncSoon(): Promise<void> {
+    if (!SYNC_ENABLED_FLAG) {
+      return;
+    }
+
+    try {
+      const guest = await isGuestMode();
+      if (guest) {
+        return;
+      }
+    } catch (error) {
+      console.error(
+        'Failed to determine guest mode before scheduling sync:',
+        error,
+      );
+    }
+
+    if (isSyncing) {
+      pendingSyncRequest = true;
+      return;
+    }
+
+    // Reset debounce so the latest write still pushes quickly
+    if (syncSoonTimer) {
+      clearTimeout(syncSoonTimer);
+      syncSoonTimer = null;
+    }
+
+    syncSoonTimer = setTimeout(() => {
+      syncSoonTimer = null;
+      if (isSyncing) {
+        pendingSyncRequest = true;
+        return;
+      }
+      // Verify we aren't backing off before starting the debounced sync
+      if (!canPerformBackoff()) {
+        pendingSyncRequest = true; // Queue it for after backoff
+        return;
+      }
+      void this.sync(false, { mode: 'debounced' }).catch(err => {
+        if (!err?.message?.includes('Concurrent synchronization')) {
+          console.error('Scheduled sync failed:', err);
         }
+      });
+    }, SYNC_REQUEST_DELAY_MS);
+  },
 
-        try {
-            const guest = await isGuestMode();
-            if (guest) {
-                return;
-            }
-        } catch (error) {
-            console.error('Failed to determine guest mode before scheduling sync:', error);
-        }
+  /** Push local changes to Supabase as soon as possible (authenticated users only). */
+  async requestSyncNow(): Promise<void> {
+    if (!SYNC_ENABLED_FLAG) {
+      return;
+    }
 
-        if (isSyncing) {
-            pendingSyncRequest = true;
-            return;
-        }
+    try {
+      const guest = await isGuestMode();
+      if (guest) {
+        return;
+      }
+    } catch (error) {
+      console.error(
+        'Failed to determine guest mode before immediate sync:',
+        error,
+      );
+    }
 
-        if (syncSoonTimer) {
-            return;
-        }
+    if (syncSoonTimer) {
+      clearTimeout(syncSoonTimer);
+      syncSoonTimer = null;
+    }
 
-        syncSoonTimer = setTimeout(() => {
-            syncSoonTimer = null;
-            if (isSyncing) {
-                pendingSyncRequest = true;
-                return;
-            }
-            // Verify we aren't backing off before starting the debounced sync
-            if (!canPerformBackoff()) {
-                pendingSyncRequest = true; // Queue it for after backoff
-                return;
-            }
-            void this.sync(false, { mode: 'debounced' }).catch(err => {
-                if (!err?.message?.includes('Concurrent synchronization')) {
-                    console.error('Scheduled sync failed:', err);
-                }
-            });
-        }, SYNC_REQUEST_DELAY_MS);
-    },
+    if (isSyncing) {
+      pendingSyncRequest = true;
+      return;
+    }
 
-    async sync(readOnly = false, options: { finalPull?: boolean; mode?: SyncMode } = {}): Promise<void> {
-        if (!SYNC_ENABLED_FLAG) {
-            if (!hasLoggedSyncDisabledWarning) {
-                logSyncDisabledWarning();
-            }
-            return;
-        }
+    if (!canPerformBackoff()) {
+      pendingSyncRequest = true;
+      return;
+    }
 
-        if (syncPromise) {
-            console.log('Sync already in progress, returning existing promise to avoid overlap');
-            return syncPromise;
-        }
+    void this.sync(false, { mode: 'manual' }).catch(err => {
+      if (!err?.message?.includes('Concurrent synchronization')) {
+        console.error('Immediate sync failed:', err);
+      }
+    });
+  },
 
-        const now = Date.now();
-        if (now - lastSyncFinishedAt < MIN_SYNC_GAP_MS) {
-            console.log('Sync suppressed due to minimum gap protection');
-            return;
-        }
+  async sync(
+    readOnly = false,
+    options: { finalPull?: boolean; mode?: SyncMode } = {},
+  ): Promise<void> {
+    if (!SYNC_ENABLED_FLAG) {
+      if (!hasLoggedSyncDisabledWarning) {
+        logSyncDisabledWarning();
+      }
+      return;
+    }
 
-        if (__DEV__ && isSyncing && syncPromise === null) {
-            console.error('Invariant violation: isSyncing true but no syncPromise active');
-        }
+    if (syncPromise) {
+      console.log(
+        'Sync already in progress, returning existing promise to avoid overlap',
+      );
+      return syncPromise;
+    }
 
-        if (syncSoonTimer) {
-            clearTimeout(syncSoonTimer);
-            syncSoonTimer = null;
-        }
+    const now = Date.now();
+    if (now - lastSyncFinishedAt < MIN_SYNC_GAP_MS) {
+      console.log('Sync suppressed due to minimum gap protection');
+      return;
+    }
 
-        if (!canPerformBackoff()) {
-            const nextAttempt = new Date(getBackoffNextAttempt()).toISOString();
-            console.log(`Sync deferred until ${nextAttempt} due to recent failures/backoff.`);
-            return;
-        }
+    if (__DEV__ && isSyncing && syncPromise === null) {
+      console.error(
+        'Invariant violation: isSyncing true but no syncPromise active',
+      );
+    }
 
-        const mode = options.mode ?? 'unknown';
-        lastSyncMode = mode;
-        lastSyncAttemptAt = Date.now();
-        lastSyncErrorMessage = null;
+    if (syncSoonTimer) {
+      clearTimeout(syncSoonTimer);
+      syncSoonTimer = null;
+    }
 
-        try {
-            const guest = await isGuestMode();
-            if (guest) {
-                console.log('Guest mode detected - skipping sync (guests do not sync)');
-                return;
-            }
-        } catch (error) {
-            console.error('Failed to determine guest mode before sync:', error);
-        }
+    if (!canPerformBackoff()) {
+      const nextAttempt = new Date(getBackoffNextAttempt()).toISOString();
+      console.log(
+        `Sync deferred until ${nextAttempt} due to recent failures/backoff.`,
+      );
+      return;
+    }
 
-        const onlineBeforeAuth = await this.isOnline();
-        if (!onlineBeforeAuth) {
-            console.log('Device offline before auth check, skipping sync early');
-            return;
-        }
+    const mode = options.mode ?? 'unknown';
+    lastSyncMode = mode;
+    lastSyncAttemptAt = Date.now();
+    lastSyncErrorMessage = null;
 
-        const {
-            data: { session },
-            error: authError,
-        } = await supabase.auth.getSession();
-        const user = session?.user;
-        if (authError || !user) {
-            console.log('No user logged in or auth error, skipping sync', authError);
-            return;
-        }
+    try {
+      const guest = await isGuestMode();
+      if (guest) {
+        console.log('Guest mode detected - skipping sync (guests do not sync)');
+        return;
+      }
+    } catch (error) {
+      console.error('Failed to determine guest mode before sync:', error);
+    }
 
-        const authUserId = user.id;
-        if (!isUuid(authUserId)) {
-            console.log('Supabase session user id is not a valid UUID, skipping sync');
-            return;
-        }
+    const onlineBeforeAuth = await this.isOnline();
+    if (!onlineBeforeAuth) {
+      console.log('Device offline before auth check, skipping sync early');
+      return;
+    }
 
-        const cachedProfileId = await ProfileService.getActiveProfileId();
-        if (cachedProfileId !== authUserId) {
-            console.warn(
-                `[SyncService] Reconciling cached profile id (${cachedProfileId ?? 'none'}) with auth user (${authUserId}).`,
-            );
-            await ProfileService.setActiveProfileId(authUserId);
-        }
+    const {
+      data: { session },
+      error: authError,
+    } = await supabase.auth.getSession();
+    const user = session?.user;
+    if (authError || !user) {
+      console.log('No user logged in or auth error, skipping sync', authError);
+      return;
+    }
 
-        const activeProfileId = authUserId;
+    const authUserId = user.id;
+    if (!isUuid(authUserId)) {
+      console.log(
+        'Supabase session user id is not a valid UUID, skipping sync',
+      );
+      return;
+    }
 
-        ensureRealtimeSubscription(() => {
-            void this.requestSyncSoon();
-        });
+    const cachedProfileId = await ProfileService.getActiveProfileId();
+    if (cachedProfileId !== authUserId) {
+      console.warn(
+        `[SyncService] Reconciling cached profile id (${
+          cachedProfileId ?? 'none'
+        }) with auth user (${authUserId}).`,
+      );
+      await ProfileService.setActiveProfileId(authUserId);
+    }
 
-        await this.handleProfileSwitch(activeProfileId);
+    const activeProfileId = authUserId;
+
+    ensureRealtimeSubscription(() => {
+      void this.requestSyncSoon();
+    });
+
+    await this.handleProfileSwitch(activeProfileId);
+    if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+      console.log(
+        `Sync paused due to ${consecutiveFailures} consecutive failures. Will auto-retry after backoff window.`,
+      );
+      // Self-healing: schedule a single reset attempt after the backoff window
+      // so the block clears automatically instead of requiring an app restart.
+      const retryDelayMs = Math.max(
+        30_000,
+        getBackoffNextAttempt() - Date.now(),
+      );
+      setTimeout(() => {
         if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-            console.log(`Sync paused due to ${consecutiveFailures} consecutive failures. Will auto-retry after backoff window.`);
-            // Self-healing: schedule a single reset attempt after the backoff window
-            // so the block clears automatically instead of requiring an app restart.
-            const retryDelayMs = Math.max(30_000, getBackoffNextAttempt() - Date.now());
-            setTimeout(() => {
-                if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-                    console.log('[SyncService] Auto-resetting consecutiveFailures after backoff window.');
-                    consecutiveFailures = 0;
-                    resetBackoff();
-                    void this.requestSyncSoon();
-                }
-            }, retryDelayMs);
-            return;
+          console.log(
+            '[SyncService] Auto-resetting consecutiveFailures after backoff window.',
+          );
+          consecutiveFailures = 0;
+          resetBackoff();
+          void this.requestSyncSoon();
+        }
+      }, retryDelayMs);
+      return;
+    }
+
+    isSyncing = true;
+    this._notifySyncStatus(true);
+    lastSyncError = null;
+
+    syncPromise = (async () => {
+      let didTimeout = false;
+      let syncTimeout: ReturnType<typeof setTimeout> | null = applySyncTimeout(
+        () => {
+          didTimeout = true;
+          console.warn(
+            '⚠️ Sync timed out after 2 minutes but will wait for the orchestrator to finish.',
+          );
+        },
+      );
+
+      try {
+        const online = await this.isOnline();
+        if (!online) {
+          console.log('Device is offline, skipping sync');
+          return;
         }
 
-        isSyncing = true;
-        this._notifySyncStatus(true);
-        lastSyncError = null;
-
-        syncPromise = (async () => {
-            let didTimeout = false;
-            let syncTimeout: ReturnType<typeof setTimeout> | null = applySyncTimeout(() => {
-                didTimeout = true;
-                console.warn('⚠️ Sync timed out after 2 minutes but will wait for the orchestrator to finish.');
-            });
-
-            try {
-                const online = await this.isOnline();
-                if (!online) {
-                    console.log('Device is offline, skipping sync');
-                    return;
-                }
-
-                console.log(`🔄 Starting ${readOnly ? 'READ-ONLY' : 'FULL'} sync for profile:`, activeProfileId);
-                if (!readOnly) {
-                    await repairProfileScopedRecords(activeProfileId);
-                }
-                const orchestrator = new SyncOrchestrator(activeProfileId);
-                await orchestrator.run(readOnly);
-
-                console.log(`✓ ${readOnly ? 'Read-only' : 'Full'} sync completed successfully`);
-                recordBackoffSuccess();
-                consecutiveFailures = 0;
-
-                if (!readOnly) {
-                    await saveLastWriteSyncTime();
-                }
-                await persistLastSyncSuccess(Date.now());
-            } catch (error: any) {
-                lastSyncError = error;
-                handleSyncError(error);
-
-                const context = buildErrorContext(error);
-                if (!readOnly) {
-                    consecutiveFailures++;
-                    recordBackoffFailure(context.failureType);
-                }
-                lastSyncErrorMessage = formatSafeErrorMessage(error);
-
-                if (context.isConcurrentError) {
-                    console.warn('Concurrent sync detected - this is expected when multiple sync triggers fire');
-                    if (!readOnly) {
-                        consecutiveFailures = Math.max(0, consecutiveFailures - 1);
-                    }
-                }
-                if (context.isNetworkError) {
-                    console.error('Network error during sync - will retry when connection is restored');
-                    if (!readOnly) {
-                        consecutiveFailures = Math.max(0, consecutiveFailures - 1);
-                    }
-                }
-                if (context.isAuthError) {
-                    console.error('Authentication error during sync - user may need to re-login');
-                    if (!readOnly) {
-                        consecutiveFailures = MAX_CONSECUTIVE_FAILURES;
-                    }
-                }
-                if (context.isRateLimit) {
-                    console.warn('Rate limit hit during sync - pausing before retry');
-                }
-                if (context.isDuplicateCreateWarning) {
-                    console.warn('Duplicate create warning during sync; record already exists locally.');
-                }
-                if (context.isRlsError) {
-                    console.warn('Row-level security prevented sync write (often expected during profile transitions).');
-                    if (!readOnly) {
-                        consecutiveFailures = Math.max(0, consecutiveFailures - 1);
-                    }
-                }
-                if (context.isValidationError) {
-                    console.error('Validation error during sync - record payload may be malformed.');
-                    if (!readOnly) {
-                        consecutiveFailures = Math.max(0, consecutiveFailures - 1);
-                    }
-                }
-                if (context.isSchemaMismatch) {
-                    console.error('Schema mismatch detected during sync; ensure database migrations are current.');
-                }
-
-                if (!readOnly && consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-                    console.warn(`Sync paused after ${MAX_CONSECUTIVE_FAILURES} consecutive failures. Will retry on next trigger.`);
-                }
-            } finally {
-                if (syncTimeout) {
-                    clearTimeout(syncTimeout);
-                }
-                if (didTimeout) {
-                    console.warn('Sync completed after timing out; review logs if progress stalled.');
-                }
-                isSyncing = false;
-                syncPromise = null;
-                lastSyncFinishedAt = Date.now();
-                this._notifySyncStatus(false);
-                if (pendingSyncRequest) {
-                    pendingSyncRequest = false;
-                    const nextSyncDelay = Math.max(MIN_SYNC_GAP_MS, getBackoffNextAttempt() - Date.now());
-                    setTimeout(() => {
-                        void this.requestSyncSoon();
-                    }, nextSyncDelay);
-                }
-            }
-        })();
-
-        return syncPromise;
-    },
-
-    async handleProfileSwitch(activeProfileId: string): Promise<void> {
-        if (lastSyncedProfileId && lastSyncedProfileId !== activeProfileId) {
-            // Profile changed: reset in-memory state only.
-            // Do NOT reset sync cursors — each profile keeps its own continuation point
-            // so switching back to a profile continues from where it left off.
-            console.log(
-                `[SyncService] Profile switched: ${lastSyncedProfileId} → ${activeProfileId}. ` +
-                'Resetting in-memory state only (cursors preserved).'
-            );
-            consecutiveFailures = 0;
-            lastSyncError = null;
-            resetBackoff();
-            clearConflictHistory();
-            pendingSyncRequest = false;
-            if (syncSoonTimer) {
-                clearTimeout(syncSoonTimer);
-                syncSoonTimer = null;
-            }
+        console.log(
+          `🔄 Starting ${readOnly ? 'READ-ONLY' : 'FULL'} sync for profile:`,
+          activeProfileId,
+        );
+        if (!readOnly) {
+          await repairProfileScopedRecords(activeProfileId);
         }
-        lastSyncedProfileId = activeProfileId;
+        const orchestrator = new SyncOrchestrator(activeProfileId);
+        await orchestrator.run(readOnly);
 
-    },
-
-    getSyncStatus(): boolean {
-        return isSyncing;
-    },
-
-    isEnabled(): boolean {
-        return SYNC_ENABLED_FLAG;
-    },
-
-    isSyncing(): boolean {
-        return isSyncing;
-    },
-
-    getLastSyncError(): Error | null {
-        return lastSyncError;
-    },
-
-    getRecentConflicts(): ConflictRecord[] {
-        return getConflictHistory();
-    },
-
-    clearConflictHistory(): void {
-        clearConflictHistory();
-    },
-
-    getNextSyncAllowedAt(): number {
-        return getBackoffNextAttempt();
-    },
-
-    /**
-     * Resets all in-memory sync state AND the WatermelonDB global cursor.
-     * Used for forceFullSync() and similar explicit user-triggered resets.
-     * Does NOT need to be called on logout/profile-switch.
-     */
-    resetSyncState(): void {
+        console.log(
+          `✓ ${readOnly ? 'Read-only' : 'Full'} sync completed successfully`,
+        );
+        recordBackoffSuccess();
         consecutiveFailures = 0;
-        lastSyncError = null;
-        resetBackoff();
-        clearConflictHistory();
-        lastSyncedProfileId = null;
-        // NOTE: cursor reset is intentional here — this is the full-reset path.
-        void resetWatermelonCursor();
-        lastSyncAttemptAt = null;
-        lastSyncSuccessAt = null;
-        lastSyncErrorMessage = null;
-        lastSyncMode = 'unknown';
-    },
 
-    /**
-     * Resets in-memory counters and flags ONLY — does NOT reset sync cursors.
-     * Called by DataCleanupService.clearSessionCaches() on logout/profile-switch
-     * to clear stale retry counts without destroying cross-profile cursor state.
-     */
-    resetSyncStateInMemory(): void {
-        consecutiveFailures = 0;
-        lastSyncError = null;
-        lastSyncAttemptAt = null;
-        lastSyncErrorMessage = null;
-        resetBackoff();
-        // Deliberately NOT resetting lastSyncedProfileId or calling resetWatermelonCursor()
-        console.log('[SyncService] In-memory sync state cleared (cursors preserved)');
-    },
-
-    async forceFullSync(): Promise<void> {
-        console.log('🔁 Force full sync requested — resetting cursor and re-syncing all data from Supabase');
-        consecutiveFailures = 0;
-        lastSyncError = null;
-        resetBackoff();
-        clearConflictHistory();
-        // Reset the persisted cursor so ALL rows are re-fetched, even those with old updated_at
-        await resetWatermelonCursor();
-        lastSyncAttemptAt = null;
-        lastSyncSuccessAt = null;
-        lastSyncErrorMessage = null;
-        lastSyncMode = 'unknown';
-        // Immediately trigger a full sync
-        await this.sync(false, { mode: 'force_full' });
-    },
-
-    getLastSuccessfulSyncAt(): number | null {
-        return lastSyncSuccessAt;
-    },
-
-    getLastSyncAttemptAt(): number | null {
-        return lastSyncAttemptAt;
-    },
-
-    getLastSyncMode(): SyncMode {
-        return lastSyncMode;
-    },
-
-    getLastSyncSummary(): {
-        lastSuccessAt: number | null;
-        lastAttemptAt: number | null;
-        lastMode: SyncMode;
-        lastErrorMessage?: string;
-        nextAllowedAt: number;
-    } {
-        return {
-            lastSuccessAt: lastSyncSuccessAt,
-            lastAttemptAt: lastSyncAttemptAt,
-            lastMode: lastSyncMode,
-            lastErrorMessage: lastSyncErrorMessage ?? undefined,
-            nextAllowedAt: getBackoffNextAttempt(),
-        };
-    },
-
-    async refreshNow(): Promise<void> {
-        if (syncPromise) {
-            return syncPromise;
+        if (!readOnly) {
+          await saveLastWriteSyncTime();
         }
-        return this.sync(false);
-    },
+        await persistLastSyncSuccess(Date.now());
+      } catch (error: any) {
+        lastSyncError = error;
+        handleSyncError(error);
 
-    async manualSyncNow(): Promise<void> {
-        if (!SYNC_ENABLED_FLAG) {
-            return;
+        const context = buildErrorContext(error);
+        if (!readOnly) {
+          consecutiveFailures++;
+          recordBackoffFailure(context.failureType);
         }
-        if (syncSoonTimer) {
-            clearTimeout(syncSoonTimer);
-            syncSoonTimer = null;
+        lastSyncErrorMessage = formatSafeErrorMessage(error);
+
+        if (context.isConcurrentError) {
+          console.warn(
+            'Concurrent sync detected - this is expected when multiple sync triggers fire',
+          );
+          if (!readOnly) {
+            consecutiveFailures = Math.max(0, consecutiveFailures - 1);
+          }
         }
-        try {
-            const guest = await isGuestMode();
-            if (guest) {
-                console.log('Guest mode detected - manual sync skipped');
-                return;
-            }
-        } catch (error) {
-            console.error('Failed to check guest mode before manual sync:', error);
+        if (context.isNetworkError) {
+          console.error(
+            'Network error during sync - will retry when connection is restored',
+          );
+          if (!readOnly) {
+            consecutiveFailures = Math.max(0, consecutiveFailures - 1);
+          }
+        }
+        if (context.isAuthError) {
+          console.error(
+            'Authentication error during sync - user may need to re-login',
+          );
+          if (!readOnly) {
+            consecutiveFailures = MAX_CONSECUTIVE_FAILURES;
+          }
+        }
+        if (context.isRateLimit) {
+          console.warn('Rate limit hit during sync - pausing before retry');
+        }
+        if (context.isDuplicateCreateWarning) {
+          console.warn(
+            'Duplicate create warning during sync; record already exists locally.',
+          );
+        }
+        if (context.isRlsError) {
+          console.warn(
+            'Row-level security prevented sync write (often expected during profile transitions).',
+          );
+          if (!readOnly) {
+            consecutiveFailures = Math.max(0, consecutiveFailures - 1);
+          }
+        }
+        if (context.isValidationError) {
+          console.error(
+            'Validation error during sync - record payload may be malformed.',
+          );
+          if (!readOnly) {
+            consecutiveFailures = Math.max(0, consecutiveFailures - 1);
+          }
+        }
+        if (context.isSchemaMismatch) {
+          console.error(
+            'Schema mismatch detected during sync; ensure database migrations are current.',
+          );
         }
 
-        if (syncPromise) {
-            try {
-                await syncPromise;
-            } catch {
-                // previous sync handles its own logging
-            }
+        if (!readOnly && consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+          console.warn(
+            `Sync paused after ${MAX_CONSECUTIVE_FAILURES} consecutive failures. Will retry on next trigger.`,
+          );
         }
+      } finally {
+        if (syncTimeout) {
+          clearTimeout(syncTimeout);
+        }
+        if (didTimeout) {
+          console.warn(
+            'Sync completed after timing out; review logs if progress stalled.',
+          );
+        }
+        isSyncing = false;
+        syncPromise = null;
+        lastSyncFinishedAt = Date.now();
+        this._notifySyncStatus(false);
+        if (pendingSyncRequest) {
+          pendingSyncRequest = false;
+          const nextSyncDelay = Math.max(
+            MIN_SYNC_GAP_MS,
+            getBackoffNextAttempt() - Date.now(),
+          );
+          setTimeout(() => {
+            void this.requestSyncSoon();
+          }, nextSyncDelay);
+        }
+      }
+    })();
 
-        return this.sync(false, { mode: 'manual' });
-    },
+    return syncPromise;
+  },
 
-    startPeriodicSync(): void {
-        if (periodicSyncTimer) {
-            return;
-        }
-        periodicSyncTimer = setInterval(() => {
-            void this._runPeriodicSyncTick();
-        }, PERIODIC_SYNC_INTERVAL_MS);
-    },
+  async handleProfileSwitch(activeProfileId: string): Promise<void> {
+    if (lastSyncedProfileId && lastSyncedProfileId !== activeProfileId) {
+      // Profile changed: reset in-memory state only.
+      // Do NOT reset sync cursors — each profile keeps its own continuation point
+      // so switching back to a profile continues from where it left off.
+      console.log(
+        `[SyncService] Profile switched: ${lastSyncedProfileId} → ${activeProfileId}. ` +
+          'Resetting in-memory state only (cursors preserved).',
+      );
+      consecutiveFailures = 0;
+      lastSyncError = null;
+      resetBackoff();
+      clearConflictHistory();
+      pendingSyncRequest = false;
+      if (syncSoonTimer) {
+        clearTimeout(syncSoonTimer);
+        syncSoonTimer = null;
+      }
+    }
+    lastSyncedProfileId = activeProfileId;
+  },
 
-    stopPeriodicSync(): void {
-        if (periodicSyncTimer) {
-            clearInterval(periodicSyncTimer);
-            periodicSyncTimer = null;
-        }
-    },
+  getSyncStatus(): boolean {
+    return isSyncing;
+  },
 
-    async _runPeriodicSyncTick(): Promise<void> {
-        if (!SYNC_ENABLED_FLAG) {
-            return;
-        }
-        try {
-            const online = await this.isOnline();
-            if (!online) {
-                return;
-            }
-            const guest = await isGuestMode();
-            if (guest) {
-                return;
-            }
-            // Always run a full (non-read-only) sync so local changes are pushed on
-            // every periodic tick. WatermelonDB skips the push callback internally
-            // when there are no pending dirty records, so this is zero-cost when idle.
-            await this.sync(false, { mode: 'periodic' });
-        } catch (error) {
-            console.warn('Periodic sync tick failed:', error);
-        }
-    },
+  isEnabled(): boolean {
+    return SYNC_ENABLED_FLAG;
+  },
+
+  isSyncing(): boolean {
+    return isSyncing;
+  },
+
+  getLastSyncError(): Error | null {
+    return lastSyncError;
+  },
+
+  getRecentConflicts(): ConflictRecord[] {
+    return getConflictHistory();
+  },
+
+  clearConflictHistory(): void {
+    clearConflictHistory();
+  },
+
+  getNextSyncAllowedAt(): number {
+    return getBackoffNextAttempt();
+  },
+
+  /**
+   * Resets all in-memory sync state AND the WatermelonDB global cursor.
+   * Used for forceFullSync() and similar explicit user-triggered resets.
+   * Does NOT need to be called on logout/profile-switch.
+   */
+  resetSyncState(): void {
+    consecutiveFailures = 0;
+    lastSyncError = null;
+    resetBackoff();
+    clearConflictHistory();
+    lastSyncedProfileId = null;
+    // NOTE: cursor reset is intentional here — this is the full-reset path.
+    void resetWatermelonCursor();
+    lastSyncAttemptAt = null;
+    lastSyncSuccessAt = null;
+    lastSyncErrorMessage = null;
+    lastSyncMode = 'unknown';
+  },
+
+  /**
+   * Resets in-memory counters and flags ONLY — does NOT reset sync cursors.
+   * Called by DataCleanupService.clearSessionCaches() on logout/profile-switch
+   * to clear stale retry counts without destroying cross-profile cursor state.
+   */
+  resetSyncStateInMemory(): void {
+    consecutiveFailures = 0;
+    lastSyncError = null;
+    lastSyncAttemptAt = null;
+    lastSyncErrorMessage = null;
+    resetBackoff();
+    // Deliberately NOT resetting lastSyncedProfileId or calling resetWatermelonCursor()
+    console.log(
+      '[SyncService] In-memory sync state cleared (cursors preserved)',
+    );
+  },
+
+  async forceFullSync(): Promise<void> {
+    console.log(
+      '🔁 Force full sync requested — resetting cursor and re-syncing all data from Supabase',
+    );
+    consecutiveFailures = 0;
+    lastSyncError = null;
+    resetBackoff();
+    clearConflictHistory();
+    // Reset the persisted cursor so ALL rows are re-fetched, even those with old updated_at
+    await resetWatermelonCursor();
+    lastSyncAttemptAt = null;
+    lastSyncSuccessAt = null;
+    lastSyncErrorMessage = null;
+    lastSyncMode = 'unknown';
+    // Immediately trigger a full sync
+    await this.sync(false, { mode: 'force_full' });
+  },
+
+  getLastSuccessfulSyncAt(): number | null {
+    return lastSyncSuccessAt;
+  },
+
+  getLastSyncAttemptAt(): number | null {
+    return lastSyncAttemptAt;
+  },
+
+  getLastSyncMode(): SyncMode {
+    return lastSyncMode;
+  },
+
+  getLastSyncSummary(): {
+    lastSuccessAt: number | null;
+    lastAttemptAt: number | null;
+    lastMode: SyncMode;
+    lastErrorMessage?: string;
+    nextAllowedAt: number;
+  } {
+    return {
+      lastSuccessAt: lastSyncSuccessAt,
+      lastAttemptAt: lastSyncAttemptAt,
+      lastMode: lastSyncMode,
+      lastErrorMessage: lastSyncErrorMessage ?? undefined,
+      nextAllowedAt: getBackoffNextAttempt(),
+    };
+  },
+
+  async refreshNow(): Promise<void> {
+    if (syncPromise) {
+      return syncPromise;
+    }
+    return this.sync(false);
+  },
+
+  async manualSyncNow(): Promise<void> {
+    if (!SYNC_ENABLED_FLAG) {
+      return;
+    }
+    if (syncSoonTimer) {
+      clearTimeout(syncSoonTimer);
+      syncSoonTimer = null;
+    }
+    try {
+      const guest = await isGuestMode();
+      if (guest) {
+        console.log('Guest mode detected - manual sync skipped');
+        return;
+      }
+    } catch (error) {
+      console.error('Failed to check guest mode before manual sync:', error);
+    }
+
+    if (syncPromise) {
+      try {
+        await syncPromise;
+      } catch {
+        // previous sync handles its own logging
+      }
+    }
+
+    return this.sync(false, { mode: 'manual' });
+  },
+
+  startPeriodicSync(): void {
+    if (periodicSyncTimer) {
+      return;
+    }
+    periodicSyncTimer = setInterval(() => {
+      void this._runPeriodicSyncTick();
+    }, PERIODIC_SYNC_INTERVAL_MS);
+  },
+
+  stopPeriodicSync(): void {
+    if (periodicSyncTimer) {
+      clearInterval(periodicSyncTimer);
+      periodicSyncTimer = null;
+    }
+  },
+
+  async _runPeriodicSyncTick(): Promise<void> {
+    if (!SYNC_ENABLED_FLAG) {
+      return;
+    }
+    try {
+      const online = await this.isOnline();
+      if (!online) {
+        return;
+      }
+      const guest = await isGuestMode();
+      if (guest) {
+        return;
+      }
+      // Always run a full (non-read-only) sync so local changes are pushed on
+      // every periodic tick. WatermelonDB skips the push callback internally
+      // when there are no pending dirty records, so this is zero-cost when idle.
+      await this.sync(false, { mode: 'periodic' });
+    } catch (error) {
+      console.warn('Periodic sync tick failed:', error);
+    }
+  },
 };
 
 // Acceptance Checklist:

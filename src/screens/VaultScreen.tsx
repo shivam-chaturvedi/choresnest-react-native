@@ -275,7 +275,10 @@ export const VaultScreen: React.FC = () => {
     const status =
       update?.status ?? (doc.uploadStatus as DocumentUploadStatus | undefined);
     if (!status || status === 'uploaded') return null;
-    if (isGuestMode && (status === 'pending_upload' || status === 'uploading')) {
+    if (
+      isGuestMode &&
+      (status === 'pending_upload' || status === 'uploading')
+    ) {
       return null;
     }
     const percent =
@@ -406,7 +409,10 @@ export const VaultScreen: React.FC = () => {
           });
         }
       } catch (error) {
-        console.error('VaultScreen: failed to prepare document for viewing', error);
+        console.error(
+          'VaultScreen: failed to prepare document for viewing',
+          error,
+        );
         showToast({
           title: 'Unable to open file',
           description: 'We could not resolve the document locally.',
@@ -589,10 +595,7 @@ export const VaultScreen: React.FC = () => {
               )}
               {docDateLabel ? (
                 <Text
-                  style={[
-                    styles.docDate,
-                    { color: colors.mutedForeground },
-                  ]}
+                  style={[styles.docDate, { color: colors.mutedForeground }]}
                 >
                   {docDateLabel}
                 </Text>
@@ -605,9 +608,7 @@ export const VaultScreen: React.FC = () => {
                     paddingVertical: 2,
                     borderRadius: radius.sm,
                   }}
-                >
-                 
-                </View>
+                ></View>
               )}
             </View>
             {renderDocMeta(doc)}
@@ -642,7 +643,9 @@ export const VaultScreen: React.FC = () => {
   const handleDocumentDelete = useCallback(
     async (doc: VaultDocument) => {
       try {
-        const { remoteDeleteQueued } = await VaultService.deleteDocument(doc.id);
+        const { remoteDeleteQueued } = await VaultService.deleteDocument(
+          doc.id,
+        );
         setModalDocument(prev => (prev?.id === doc.id ? null : prev));
         setShowDetailsModal(false);
         showToast({
@@ -1138,7 +1141,7 @@ export const VaultScreen: React.FC = () => {
       return;
     }
 
-    addDocument({
+    const created = await addDocument({
       name: doc.documentName,
       type: doc.category as any,
       icon: CATEGORY_ICON_MAP[doc.category] || 'file-document',
@@ -1163,6 +1166,12 @@ export const VaultScreen: React.FC = () => {
       nextServiceDate: doc.nextServiceDate,
       cost: doc.cost,
     });
+
+    if (!created) {
+      throw new Error('Unable to save document to vault.');
+    }
+
+    refreshVaultList();
 
     // --- SYNC TO EXPENSES ---
     // Automatically add transaction if valid amount exists for Bills/Service/Insurance

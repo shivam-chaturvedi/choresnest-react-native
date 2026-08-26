@@ -12,12 +12,14 @@ import { TaskService } from '../services/TaskService';
 import { ListService } from '../services/ListService';
 import type { ListItemRecord } from '../services/ListService';
 import { VaultService } from '../services/VaultService';
-import { supabase } from '../config/supabase';
 import { ProfileService } from '../services/ProfileService';
 import { useAuth } from './AuthContext';
-import { GUEST_PROFILE_ID } from '../database';
+import { GUEST_PROFILE_ID, setActiveProfile } from '../database';
 import { isUuid } from '../utils/uuid';
-import { normalizeVirtualCalendarId, parseVirtualCalendarOccurrenceDate } from '../utils/virtualId';
+import {
+  normalizeVirtualCalendarId,
+  parseVirtualCalendarOccurrenceDate,
+} from '../utils/virtualId';
 
 // Re-export interfaces (keeping compatibility or updating as needed)
 export interface FamilyMember {
@@ -97,7 +99,8 @@ const parseStringArray = (value: unknown): string[] => {
 const parseNumberArray = (value: unknown): number[] => {
   if (Array.isArray(value)) {
     return value.filter(
-      (item): item is number => typeof item === 'number' && Number.isFinite(item),
+      (item): item is number =>
+        typeof item === 'number' && Number.isFinite(item),
     );
   }
 
@@ -214,7 +217,7 @@ const mapEventModelToCalendarEvent = (
 
 const mapTaskModelToTask = (
   taskModel: any,
-  membersById: Map<string, FamilyMember>,
+  _membersById: Map<string, FamilyMember>,
 ): Task => ({
   id: taskModel.id,
   name: taskModel.name,
@@ -222,10 +225,8 @@ const mapTaskModelToTask = (
   priority: taskModel.priority,
   due: taskModel.dueDisplay,
   date: taskModel.dateString || '',
-  assignee:
-    taskModel.assigneeId && membersById.has(taskModel.assigneeId)
-      ? taskModel.assigneeId
-      : undefined,
+  // Keep assigneeId even if member list hasn't loaded yet so "My Tasks" filters work
+  assignee: taskModel.assigneeId || undefined,
   tab: taskModel.tab,
   icon: taskModel.icon,
   reminderEnabled: taskModel.reminderEnabled,
@@ -251,8 +252,7 @@ const FamilyProviderInner: React.FC<{
   reloadLocalData: () => void;
   reloadKey: number;
 }> = ({ profileId, isGuest, children, reloadLocalData, reloadKey }) => {
-  const resolvedProfileId =
-    profileId ?? (isGuest ? GUEST_PROFILE_ID : null);
+  const resolvedProfileId = profileId ?? (isGuest ? GUEST_PROFILE_ID : null);
   const [familyName, setFamilyNameState] = useState('Chores Nest');
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [rawEvents, setRawEvents] = useState<any[]>([]);
@@ -372,10 +372,19 @@ const FamilyProviderInner: React.FC<{
   };
 
   // --- Observe Members ---
+  // Observe members — ensure DB is bound to this profile first
   useEffect(() => {
     if (!resolvedProfileId) {
       setMembers([]);
       return;
+    }
+    try {
+      setActiveProfile(resolvedProfileId);
+    } catch (error) {
+      console.warn(
+        'FamilyContext: setActiveProfile before observeMembers failed',
+        error,
+      );
     }
     try {
       const sub = FamilyService.observeMembers(resolvedProfileId).subscribe({
@@ -403,6 +412,46 @@ const FamilyProviderInner: React.FC<{
       console.error('Error setting up members subscription:', error);
     }
   }, [resolvedProfileId, reloadKey]);
+
+  // Guest: seed a single "Me" only when empty.
+  // Auth: bootstrap remote members first, then remove duplicate "Me" rows.
+  // Never auto-create "Me" for signed-in users (InitialSetup creates Admin).
+  useEffect(() => {
+    if (!resolvedProfileId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const run = async () => {
+      try {
+        if (isGuest) {
+          await FamilyService.ensureGuestDefaultMember(resolvedProfileId);
+          return;
+        }
+
+        const { ProfileBootstrapService } = await import(
+          '../services/ProfileBootstrapService'
+        );
+        await ProfileBootstrapService.bootstrap(resolvedProfileId, {
+          force: true,
+        });
+        if (cancelled) {
+          return;
+        }
+        await FamilyService.cleanupSeededMeMembers(resolvedProfileId);
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('FamilyContext: member bootstrap/cleanup failed', error);
+        }
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [isGuest, resolvedProfileId]);
 
   // --- Active Member Helper ---
   const activeMember = useMemo(() => {
@@ -445,8 +494,16 @@ const FamilyProviderInner: React.FC<{
   }, [members, setActiveMember]);
 
   const ensureProfileId = () => {
-    if (!resolvedProfileId || !isUuid(resolvedProfileId)) {
-      console.warn('FamilyContext: Valid auth profile ID unavailable for mutation');
+    if (!resolvedProfileId) {
+      console.warn('FamilyContext: Profile ID unavailable for mutation');
+      return null;
+    }
+    // Allow signed-in UUID profiles and local guest profile for offline writes
+    if (!isUuid(resolvedProfileId) && resolvedProfileId !== GUEST_PROFILE_ID) {
+      console.warn(
+        'FamilyContext: Invalid profile ID for mutation',
+        resolvedProfileId,
+      );
       return null;
     }
     return resolvedProfileId;
@@ -506,13 +563,19 @@ const FamilyProviderInner: React.FC<{
   const addTask = async (t: any, options: { source?: string } = {}) => {
     try {
       const pid = ensureProfileId();
-      if (!pid) return;
+      if (!pid) {
+        throw new Error(
+          'Cannot save task without an active profile. Please sign in or continue as guest.',
+        );
+      }
       const created = await TaskService.addTask({ ...t, profileId: pid });
 
       return created;
     } catch (error) {
       console.error('Failed to add task:', error);
-      throw new Error('Failed to add task. Please try again.');
+      throw error instanceof Error
+        ? error
+        : new Error('Failed to add task. Please try again.');
     }
   };
 
@@ -553,11 +616,17 @@ const FamilyProviderInner: React.FC<{
   const addEvent = async (e: any) => {
     try {
       const pid = ensureProfileId();
-      if (!pid) return;
+      if (!pid) {
+        throw new Error(
+          'Cannot save event without an active profile. Please sign in or continue as guest.',
+        );
+      }
       await TaskService.addEvent({ ...e, profileId: pid });
     } catch (error) {
       console.error('Failed to add event:', error);
-      throw new Error('Failed to add event. Please try again.');
+      throw error instanceof Error
+        ? error
+        : new Error('Failed to add event. Please try again.');
     }
   };
 
@@ -590,46 +659,48 @@ const FamilyProviderInner: React.FC<{
     }
 
     try {
-      const sub = VaultService.observeAllDocuments(resolvedProfileId).subscribe({
-        next: docs => {
-          try {
-            const g: any[] = [];
-            const m: Record<string, any[]> = {};
+      const sub = VaultService.observeAllDocuments(resolvedProfileId).subscribe(
+        {
+          next: docs => {
+            try {
+              const g: any[] = [];
+              const m: Record<string, any[]> = {};
 
-            docs.forEach(d => {
-              const meta = d.meta || {};
-              const cachedUri = VaultService.getCachedLocalUri(d.id);
-              const docUri = cachedUri ?? d.filePath;
-              const docObj = {
-                id: d.id,
-                name: d.name,
-                type: d.type,
-                icon: d.icon,
-                date: d.date,
-                memberId: d.memberId,
-                filePath: d.filePath,
-                uri: docUri, // Map for VaultUtils
-                uploadStatus: d.uploadStatus,
-                remotePath: d.remotePath,
-                ...meta, // Merge meta fields (expiryDate, etc.) to top level
-              };
-              if (d.memberId === 'global') {
-                g.push(docObj);
-              } else if (d.memberId) {
-                if (!m[d.memberId]) m[d.memberId] = [];
-                m[d.memberId].push(docObj);
-              }
-            });
-            setGlobalVault(g);
-            setMemberVaults(m);
-          } catch (error) {
-            console.error('Error processing vault documents:', error);
-          }
+              docs.forEach(d => {
+                const meta = d.meta || {};
+                const cachedUri = VaultService.getCachedLocalUri(d.id);
+                const docUri = cachedUri ?? d.filePath;
+                const docObj = {
+                  id: d.id,
+                  name: d.name,
+                  type: d.type,
+                  icon: d.icon,
+                  date: d.date,
+                  memberId: d.memberId,
+                  filePath: d.filePath,
+                  uri: docUri, // Map for VaultUtils
+                  uploadStatus: d.uploadStatus,
+                  remotePath: d.remotePath,
+                  ...meta, // Merge meta fields (expiryDate, etc.) to top level
+                };
+                if (d.memberId === 'global') {
+                  g.push(docObj);
+                } else if (d.memberId) {
+                  if (!m[d.memberId]) m[d.memberId] = [];
+                  m[d.memberId].push(docObj);
+                }
+              });
+              setGlobalVault(g);
+              setMemberVaults(m);
+            } catch (error) {
+              console.error('Error processing vault documents:', error);
+            }
+          },
+          error: error => {
+            console.error('Error observing vault:', error);
+          },
         },
-        error: error => {
-          console.error('Error observing vault:', error);
-        },
-      });
+      );
       return () => sub.unsubscribe();
     } catch (error) {
       console.error('Error setting up vault subscription:', error);
@@ -643,7 +714,9 @@ const FamilyProviderInner: React.FC<{
       return;
     }
     try {
-      const sub = ListService.observeShoppingListItems(resolvedProfileId).subscribe({
+      const sub = ListService.observeShoppingListItems(
+        resolvedProfileId,
+      ).subscribe({
         next: items => {
           setRawGroceryItems(items);
         },
@@ -721,7 +794,7 @@ const FamilyProviderInner: React.FC<{
         deleteTask,
 
         reloadLocalData,
-        profileId,
+        profileId: resolvedProfileId,
       }}
     >
       {children}
@@ -733,40 +806,33 @@ export const FamilyProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
   const { isGuest, user } = useAuth();
-  const [profileId, setProfileId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const reloadLocalData = useCallback(() => {
     setReloadKey(prev => prev + 1);
   }, []);
 
+  // Auth UUID is the profile id. Do not wait on AsyncStorage — that race left
+  // FamilyContext querying the guest SQLite DB after login until a hard reload.
+  const profileId = isGuest
+    ? GUEST_PROFILE_ID
+    : user?.id
+      ? user.id
+      : null;
+
   useEffect(() => {
-    let mounted = true;
-    const refreshProfile = async () => {
-      const pid = await ProfileService.getActiveProfileId();
-      if (mounted) {
-        setProfileId(pid);
-      }
-    };
-    refreshProfile();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async () => {
-      const pid = await ProfileService.getActiveProfileId();
-      if (mounted) {
-        setProfileId(pid);
-      }
-    });
-
-    return () => {
-      mounted = false;
-      subscription?.unsubscribe();
-    };
-  }, [isGuest, user?.id]);
+    if (!profileId) {
+      return;
+    }
+    try {
+      setActiveProfile(profileId);
+    } catch (error) {
+      console.warn('FamilyProvider: failed to switch active DB profile', error);
+    }
+  }, [profileId]);
 
   return (
     <FamilyProviderInner
-      key={`${String(profileId ?? 'guest')}:${reloadKey}`}
+      key={`${String(profileId ?? 'none')}:${reloadKey}`}
       profileId={profileId}
       isGuest={isGuest}
       reloadLocalData={reloadLocalData}

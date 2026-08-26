@@ -104,27 +104,31 @@ export const TasksScreen: React.FC = () => {
     };
 
     if (task.isRecurring) {
-      Alert.alert('Recurring Task', `What would you like to do with "${task.name}"?`, [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Skip This Time',
-          onPress: () => {
-            void deleteTask(task.id, {
-              mode: 'occurrence',
-              occurrenceDate: task.date,
-            });
-            clearEditingState();
+      Alert.alert(
+        'Recurring Task',
+        `What would you like to do with "${task.name}"?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Skip This Time',
+            onPress: () => {
+              void deleteTask(task.id, {
+                mode: 'occurrence',
+                occurrenceDate: task.date,
+              });
+              clearEditingState();
+            },
           },
-        },
-        {
-          text: 'Delete Series',
-          style: 'destructive',
-          onPress: () => {
-            void deleteTask(task.id, { mode: 'series' });
-            clearEditingState();
+          {
+            text: 'Delete Series',
+            style: 'destructive',
+            onPress: () => {
+              void deleteTask(task.id, { mode: 'series' });
+              clearEditingState();
+            },
           },
-        },
-      ]);
+        ],
+      );
       return;
     }
 
@@ -141,7 +145,7 @@ export const TasksScreen: React.FC = () => {
     ]);
   };
 
-  const handleSaveTask = (taskData: any) => {
+  const handleSaveTask = async (taskData: any) => {
     try {
       const formattedDate = safeFormat(taskData.dueDate, 'yyyy-MM-dd');
       const formattedTime = safeFormat(taskData.dueDate, 'hh:mm aa');
@@ -169,15 +173,19 @@ export const TasksScreen: React.FC = () => {
       };
 
       if (editingTask) {
-        void updateTask(editingTask.id, taskPayload);
+        await updateTask(editingTask.id, taskPayload);
       } else {
-        void addTask(
+        await addTask(
           {
             ...taskPayload,
             status: 'pending',
           },
           { source: 'TasksScreen' },
         );
+        // Switch to My Tasks so the newly assigned task is visible
+        if (taskData.person === activeMember?.id) {
+          setActiveTab('My Tasks');
+        }
         Alert.alert(
           'Success',
           `Task "${taskData.name}" created successfully!\nDate: ${formattedDate}\nTime: ${formattedTime}`,
@@ -186,6 +194,12 @@ export const TasksScreen: React.FC = () => {
       setEditingTask(undefined);
     } catch (error) {
       console.error('Error saving task:', error);
+      Alert.alert(
+        'Error',
+        error instanceof Error
+          ? error.message
+          : 'Failed to save task. Please try again.',
+      );
     }
   };
 
@@ -223,11 +237,7 @@ export const TasksScreen: React.FC = () => {
               setShowAddTask(true);
             }}
           >
-            <AppIcon
-              name="plus"
-              size={18}
-              color={colors.primaryForeground}
-            />
+            <AppIcon name="plus" size={18} color={colors.primaryForeground} />
           </Pressable>
         </View>
       </View>
@@ -260,7 +270,9 @@ export const TasksScreen: React.FC = () => {
                 style={[
                   styles.tabText,
                   {
-                    color: isActive ? colors.foreground : colors.mutedForeground,
+                    color: isActive
+                      ? colors.foreground
+                      : colors.mutedForeground,
                   },
                 ]}
               >
@@ -388,10 +400,7 @@ export const TasksScreen: React.FC = () => {
                 ]}
               >
                 <Text
-                  style={[
-                    styles.priorityText,
-                    { color: priorityStyle.color },
-                  ]}
+                  style={[styles.priorityText, { color: priorityStyle.color }]}
                 >
                   {priorityStyle.label}
                 </Text>
@@ -404,10 +413,7 @@ export const TasksScreen: React.FC = () => {
                   style={styles.metaIcon}
                 />
                 <Text
-                  style={[
-                    styles.metaText,
-                    { color: colors.mutedForeground },
-                  ]}
+                  style={[styles.metaText, { color: colors.mutedForeground }]}
                 >
                   {task.due}
                 </Text>
@@ -420,10 +426,7 @@ export const TasksScreen: React.FC = () => {
                   style={styles.metaIcon}
                 />
                 <Text
-                  style={[
-                    styles.metaText,
-                    { color: colors.mutedForeground },
-                  ]}
+                  style={[styles.metaText, { color: colors.mutedForeground }]}
                 >
                   {assignee}
                 </Text>
@@ -437,10 +440,7 @@ export const TasksScreen: React.FC = () => {
                     style={styles.metaIcon}
                   />
                   <Text
-                    style={[
-                      styles.metaText,
-                      { color: colors.mutedForeground },
-                    ]}
+                    style={[styles.metaText, { color: colors.mutedForeground }]}
                   >
                     {recurrenceLabel}
                   </Text>
@@ -487,7 +487,9 @@ export const TasksScreen: React.FC = () => {
               <Text
                 style={[styles.emptyText, { color: colors.mutedForeground }]}
               >
-                Add your first {activeTab === 'My Tasks' ? 'personal' : 'family'} task to get started.
+                Add your first{' '}
+                {activeTab === 'My Tasks' ? 'personal' : 'family'} task to get
+                started.
               </Text>
             </View>
           }

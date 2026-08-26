@@ -46,17 +46,20 @@ const isMissingRemoteTableError = (error: any, tableName: string): boolean => {
 };
 
 const syncAfterWrite = () => {
-  void SyncService.requestSyncSoon();
+  void SyncService.requestSyncNow();
 };
 
-const writeFamilyName = async (profileId: string, familySetting: SupabaseSettingRecord) => {
+const writeFamilyName = async (
+  profileId: string,
+  familySetting: SupabaseSettingRecord,
+) => {
   const now = Date.now();
   await getDatabase().write(async () => {
-    const settingsCollection = getDatabase().collections.get<Setting>('settings');
-    const existing = await settingsCollection.query(
-      Q.where('profile_id', profileId),
-      Q.where('key', 'family_name')
-    ).fetch();
+    const settingsCollection =
+      getDatabase().collections.get<Setting>('settings');
+    const existing = await settingsCollection
+      .query(Q.where('profile_id', profileId), Q.where('key', 'family_name'))
+      .fetch();
     const isDeleted = familySetting.deleted ?? false;
     if (existing.length > 0) {
       await existing[0].update(record => {
@@ -81,16 +84,21 @@ const writeFamilyName = async (profileId: string, familySetting: SupabaseSetting
   });
 };
 
-  const writeMembers = async (profileId: string, remoteMembers: SupabaseMemberRecord[]) => {
-    if (remoteMembers.length === 0) {
-      return 0;
-    }
+const writeMembers = async (
+  profileId: string,
+  remoteMembers: SupabaseMemberRecord[],
+) => {
+  if (remoteMembers.length === 0) {
+    return 0;
+  }
   const now = Date.now();
   const membersCollection = getDatabase().collections.get<Member>('members');
-  const existing = await membersCollection.query(
-    Q.where('profile_id', profileId)
-  ).fetch();
+  const existing = await membersCollection
+    .query(Q.where('profile_id', profileId))
+    .fetch();
   const existingById = new Map(existing.map(record => [record.id, record]));
+  const liveRemote = remoteMembers.filter(member => !(member.deleted ?? false));
+
   await getDatabase().write(async () => {
     for (const remote of remoteMembers) {
       const isDeleted = remote.deleted ?? false;
@@ -122,17 +130,55 @@ const writeFamilyName = async (profileId: string, familySetting: SupabaseSetting
         });
       }
     }
+
+    // Ensure exactly one active member after bootstrap import
+    const after = await membersCollection
+      .query(Q.where('profile_id', profileId), Q.where('deleted', false))
+      .fetch();
+    if (after.length > 0 && !after.some(m => m.isActive)) {
+      await after[0].update(record => {
+        record.isActive = true;
+        record.updatedAt = now;
+        record.version = (record.version ?? 0) + 1;
+      });
+    }
   });
-  return remoteMembers.filter(member => !member.deleted).length;
+
+  // Soft-delete local auto-seeded "Me" rows when real remote members arrived
+  if (liveRemote.length > 0) {
+    const { FamilyService } = await import('./FamilyService');
+    await FamilyService.cleanupSeededMeMembers(profileId);
+  }
+
+  return liveRemote.length;
 };
 
 export const ProfileBootstrapService = {
-  async bootstrap(profileId: string): Promise<ProfileBootstrapResult> {
+  async bootstrap(
+    profileId: string,
+    options?: { force?: boolean },
+  ): Promise<ProfileBootstrapResult> {
     if (!profileId) {
       return { memberCount: 0, hasMembers: false };
     }
 
-    if (lastProfileId === profileId && lastResult) {
+    if (
+      !options?.force &&
+      lastProfileId === profileId &&
+      lastResult &&
+      (lastResult.hasMembers || lastResult.memberCount > 0)
+    ) {
+      return lastResult;
+    }
+
+    // Avoid returning a cached empty miss forever after a failed/partial fetch
+    if (
+      !options?.force &&
+      lastProfileId === profileId &&
+      lastResult &&
+      pendingPromise == null &&
+      (lastResult as any).membersFetchSuccess === true
+    ) {
       return lastResult;
     }
 
@@ -154,20 +200,32 @@ export const ProfileBootstrapService = {
           .eq('profile_id', profileId);
 
         if (settingsResponse.error) {
-          console.warn('ProfileBootstrapService: failed to fetch settings', settingsResponse.error);
+          console.warn(
+            'ProfileBootstrapService: failed to fetch settings',
+            settingsResponse.error,
+          );
         } else if (settingsResponse.data) {
-          const familySetting = settingsResponse.data.find((setting: SupabaseSettingRecord) => setting.key === 'family_name' && setting.value);
+          const familySetting = settingsResponse.data.find(
+            (setting: SupabaseSettingRecord) =>
+              setting.key === 'family_name' && setting.value,
+          );
           if (familySetting) {
             try {
               await writeFamilyName(profileId, familySetting);
               familyName = familySetting.value ?? undefined;
             } catch (writeError) {
-              console.error('ProfileBootstrapService: failed to write family name', writeError);
+              console.error(
+                'ProfileBootstrapService: failed to write family name',
+                writeError,
+              );
             }
           }
         }
       } catch (error) {
-        console.error('ProfileBootstrapService: unexpected error while fetching settings', error);
+        console.error(
+          'ProfileBootstrapService: unexpected error while fetching settings',
+          error,
+        );
       }
 
       try {
@@ -181,11 +239,17 @@ export const ProfileBootstrapService = {
               'ProfileBootstrapService: remote members table is missing. Apply the latest Supabase migrations before enabling sync.',
             );
           } else {
-            console.warn('ProfileBootstrapService: failed to fetch members', membersResponse.error);
+            console.warn(
+              'ProfileBootstrapService: failed to fetch members',
+              membersResponse.error,
+            );
           }
         } else if (membersResponse.data) {
           membersFetchSuccess = true;
-          memberCount = await writeMembers(profileId, membersResponse.data as SupabaseMemberRecord[]);
+          memberCount = await writeMembers(
+            profileId,
+            membersResponse.data as SupabaseMemberRecord[],
+          );
           hasMembers = memberCount > 0;
         }
       } catch (error) {
@@ -194,16 +258,20 @@ export const ProfileBootstrapService = {
             'ProfileBootstrapService: remote members table is missing. Apply the latest Supabase migrations before enabling sync.',
           );
         } else {
-          console.warn('ProfileBootstrapService: unexpected error while fetching members', error);
+          console.warn(
+            'ProfileBootstrapService: unexpected error while fetching members',
+            error,
+          );
         }
       }
 
-      const result: ProfileBootstrapResult & { membersFetchSuccess?: boolean } = {
-        familyName,
-        memberCount,
-        hasMembers: hasMembers || memberCount > 0,
-        membersFetchSuccess,
-      };
+      const result: ProfileBootstrapResult & { membersFetchSuccess?: boolean } =
+        {
+          familyName,
+          memberCount,
+          hasMembers: hasMembers || memberCount > 0,
+          membersFetchSuccess,
+        };
 
       lastResult = result;
       pendingPromise = null;

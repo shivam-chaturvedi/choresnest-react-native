@@ -22,12 +22,14 @@ DerivedData
 
 # Env files only (secrets)
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-.env.development
-.env.production
+.env.*
+!.env.example
+
+# Sentry auth tokens / CLI credentials (never commit)
+**/sentry.properties
+.sentryclirc
+*.sentryclirc
+.sentry/
 
 # Android/IntelliJ build artifacts
 build/

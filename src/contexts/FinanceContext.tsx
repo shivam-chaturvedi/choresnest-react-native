@@ -119,7 +119,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode }> = ({
   );
   const profileId = useActiveProfileId();
   const syncAfterWrite = useCallback(() => {
-    void SyncService.requestSyncSoon();
+    void SyncService.requestSyncNow();
   }, []);
 
   useEffect(() => {

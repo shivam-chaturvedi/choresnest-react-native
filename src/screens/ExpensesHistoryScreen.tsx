@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   View,
   Text,
@@ -6,59 +12,102 @@ import {
   Pressable,
   FlatList,
   ScrollView,
+  Alert,
+  TextInput,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { AppLayout } from '../components/layout';
-import { useTheme, useThemeColors, useThemeRadius } from '../contexts/ThemeContext';
+import {
+  useTheme,
+  useThemeColors,
+  useThemeRadius,
+} from '../contexts/ThemeContext';
 import { useFinance, Transaction } from '../contexts/FinanceContext';
 import { DateTimePicker } from '../components/ui/SimpleDatePicker';
-import { ChevronLeft } from 'lucide-react-native';
-import { formatMonthKey, formatMonthLabel, parseTransactionDate, toDate } from '../utils/financeDateUtils';
+import { ChevronLeft, Pencil, Search, Trash2, X } from 'lucide-react-native';
+import {
+  formatMonthKey,
+  formatMonthLabel,
+  parseTransactionDate,
+} from '../utils/financeDateUtils';
 import { useCountry } from '../contexts/CountryContext';
 import { IconGlyph } from '../components/ui/IconGlyph';
-
-type HistoryFilter = 'month' | 'week' | 'year' | 'custom';
+import {
+  AddExpenseModal,
+  ExpenseData,
+} from '../components/modals/AddExpenseModal';
+import { CATEGORY_COLOR_FALLBACK } from '../constants/categoryColors';
+import {
+  filterHistoryTransactions,
+  formatCategoryLabel,
+  getKnownCategoryLabels,
+  HistoryPeriodFilter,
+  normalizeCategoryKey,
+  summarizeHistoryTransactions,
+} from '../utils/transactionHistoryFilters';
 
 const getWeekStartIso = (): string => {
   const today = new Date();
   const start = new Date(today);
   start.setDate(today.getDate() - today.getDay());
-  return start.toISOString().split('T')[0];
+  const y = start.getFullYear();
+  const m = `${start.getMonth() + 1}`.padStart(2, '0');
+  const d = `${start.getDate()}`.padStart(2, '0');
+  return `${y}-${m}-${d}`;
 };
 
-type TransactionWithDate = Transaction & { dateObj: Date };
-
-const formatWeekRangeLabel = (start: string): string => {
-  const startDate = toDate(start) || new Date();
+const formatWeekRangeLabel = (startIso: string): string => {
+  const [y, m, d] = startIso.split('-').map(Number);
+  const startDate = new Date(y, m - 1, d);
   const endDate = new Date(startDate);
   endDate.setDate(endDate.getDate() + 6);
-  const formatOptions: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
-  return `${startDate.toLocaleDateString('en-US', formatOptions)} - ${endDate.toLocaleDateString('en-US', formatOptions)}`;
+  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+  return `${startDate.toLocaleDateString(
+    'en-US',
+    opts,
+  )} - ${endDate.toLocaleDateString('en-US', opts)}`;
 };
+
+type DatedTx = Transaction & { dateObj: Date };
 
 export const ExpensesHistoryScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const colors = useThemeColors();
   const radius = useThemeRadius();
   const { appearanceMode } = useTheme();
-  const isLightAppearance = appearanceMode === 'light' || appearanceMode === 'cream';
-  const { transactions } = useFinance();
+  const isLightAppearance =
+    appearanceMode === 'light' || appearanceMode === 'cream';
+  const {
+    transactions,
+    updateTransaction,
+    deleteTransaction,
+    budgets,
+    categoryColors,
+    categoryIcons,
+  } = useFinance();
   const { formatCurrency } = useCountry();
+  const searchInputRef = useRef<TextInput>(null);
 
-  const [historyFilter, setHistoryFilter] = useState<HistoryFilter>('month');
+  const [historyFilter, setHistoryFilter] =
+    useState<HistoryPeriodFilter>('month');
   const [historyMonth, setHistoryMonth] = useState(formatMonthKey(new Date()));
   const [historyWeekStart, setHistoryWeekStart] = useState(getWeekStartIso());
-  const [historyYear, setHistoryYear] = useState(new Date().getFullYear().toString());
+  const [historyYear, setHistoryYear] = useState(
+    new Date().getFullYear().toString(),
+  );
   const [historyCustomStart, setHistoryCustomStart] = useState('');
   const [historyCustomEnd, setHistoryCustomEnd] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [editingTransaction, setEditingTransaction] =
+    useState<Transaction | null>(null);
+  const [expenseModalOpen, setExpenseModalOpen] = useState(false);
 
   const monthOptions = useMemo(() => {
     const unique = new Set<string>();
     transactions.forEach(tx => {
       const date = parseTransactionDate(tx);
-      if (date) {
-        unique.add(formatMonthKey(date));
-      }
+      if (date) unique.add(formatMonthKey(date));
     });
     unique.add(formatMonthKey(new Date()));
     return Array.from(unique)
@@ -72,132 +121,211 @@ export const ExpensesHistoryScreen: React.FC = () => {
     }
   }, [historyMonth, monthOptions]);
 
-  const transactionsWithDate = useMemo(() => {
-    return transactions
-      .map(tx => {
-        const parsed = parseTransactionDate(tx);
-        if (!parsed) return null;
-        return { ...tx, dateObj: parsed };
-      })
-      .filter((tx): tx is TransactionWithDate => Boolean(tx));
-  }, [transactions]);
-
   const yearOptions = useMemo(() => {
     const uniqueYears = new Set<string>();
-    transactionsWithDate.forEach(tx => {
-      uniqueYears.add(tx.dateObj.getFullYear().toString());
+    transactions.forEach(tx => {
+      const date = parseTransactionDate(tx);
+      if (date) uniqueYears.add(String(date.getFullYear()));
     });
-    uniqueYears.add(new Date().getFullYear().toString());
-    return Array.from(uniqueYears)
-      .sort((a, b) => Number(b) - Number(a));
-  }, [transactionsWithDate]);
+    uniqueYears.add(String(new Date().getFullYear()));
+    return Array.from(uniqueYears).sort((a, b) => Number(b) - Number(a));
+  }, [transactions]);
 
-  const filteredTransactions = useMemo(() => {
-    const monthKey = historyMonth || formatMonthKey(new Date());
-    return transactionsWithDate
-      .filter(tx => {
-        const txDate = tx.dateObj;
-        switch (historyFilter) {
-          case 'month': {
-            const [year, month] = monthKey.split('-').map(Number);
-            return txDate.getFullYear() === year && txDate.getMonth() + 1 === month;
-          }
-          case 'week': {
-            const start = toDate(historyWeekStart);
-            if (!start) return true;
-            const end = new Date(start);
-            end.setDate(end.getDate() + 6);
-            end.setHours(23, 59, 59, 999);
-            return txDate >= start && txDate <= end;
-          }
-          case 'year': {
-            const yearDate = toDate(historyYear);
-            if (!yearDate) return true;
-            return txDate.getFullYear() === yearDate.getFullYear();
-          }
-          case 'custom': {
-            const start = toDate(historyCustomStart);
-            const end = toDate(historyCustomEnd);
-            if (start && end) {
-              const endInclusive = new Date(end);
-              endInclusive.setHours(23, 59, 59, 999);
-              return txDate >= start && txDate <= endInclusive;
-            }
-            if (start) {
-              return txDate >= start;
-            }
-            if (end) {
-              const endInclusive = new Date(end);
-              endInclusive.setHours(23, 59, 59, 999);
-              return txDate <= endInclusive;
-            }
-            return true;
-          }
-          default:
-            return true;
-        }
-      })
-      .sort((a, b) => b.dateObj.getTime() - a.dateObj.getTime());
-  }, [transactionsWithDate, historyFilter, historyMonth, historyWeekStart, historyYear, historyCustomStart, historyCustomEnd]);
-
-  const summary = useMemo(() => {
-    const totals = { income: 0, expense: 0 };
-    filteredTransactions.forEach(tx => {
-      if (tx.type === 'income') {
-        totals.income += tx.amount;
-      } else {
-        totals.expense += tx.amount;
-      }
+  const availableCategories = useMemo(() => {
+    const used = new Map<string, number>();
+    transactions.forEach(tx => {
+      const key = normalizeCategoryKey(tx.category || 'other');
+      used.set(key, (used.get(key) || 0) + 1);
     });
-    return {
-      count: filteredTransactions.length,
-      income: totals.income,
-      expense: totals.expense,
-    };
-  }, [filteredTransactions]);
 
-  const weekPickerOpener = useRef<() => void>();
+    const known = getKnownCategoryLabels();
+    const keys = new Set<string>([...Object.keys(known), ...used.keys()]);
+
+    return Array.from(keys)
+      .map(id => ({
+        id,
+        label: formatCategoryLabel(id),
+        color: categoryColors[id] ?? CATEGORY_COLOR_FALLBACK,
+        icon: categoryIcons[id] || '📦',
+        count: used.get(id) || 0,
+      }))
+      .sort((a, b) => {
+        if (b.count !== a.count) return b.count - a.count;
+        return a.label.localeCompare(b.label);
+      });
+  }, [transactions, categoryColors, categoryIcons]);
+
+  const filteredTransactions = useMemo(
+    () =>
+      filterHistoryTransactions(transactions, {
+        period: historyFilter,
+        monthKey: historyMonth || formatMonthKey(new Date()),
+        weekStartIso: historyWeekStart,
+        year: historyYear,
+        customStart: historyCustomStart,
+        customEnd: historyCustomEnd,
+        searchQuery,
+        selectedCategories,
+      }) as DatedTx[],
+    [
+      transactions,
+      historyFilter,
+      historyMonth,
+      historyWeekStart,
+      historyYear,
+      historyCustomStart,
+      historyCustomEnd,
+      searchQuery,
+      selectedCategories,
+    ],
+  );
+
+  const summary = useMemo(
+    () => summarizeHistoryTransactions(filteredTransactions),
+    [filteredTransactions],
+  );
+
+  const hasCategoryFilter = selectedCategories.length > 0;
+  const hasSearchQuery = searchQuery.length > 0;
+
+  const weekPickerOpener = useRef<(() => void) | undefined>(undefined);
   const registerWeekPickerOpener = useCallback((openFn: () => void) => {
     weekPickerOpener.current = openFn;
   }, []);
 
+  const toggleCategory = useCallback((categoryId: string) => {
+    const key = normalizeCategoryKey(categoryId);
+    setSelectedCategories(prev =>
+      prev.includes(key) ? prev.filter(c => c !== key) : [...prev, key],
+    );
+  }, []);
+
+  const clearCategories = useCallback(() => {
+    setSelectedCategories([]);
+  }, []);
+
+  const onSearchChange = useCallback((text: string) => {
+    setSearchQuery(text);
+  }, []);
+
+  const clearSearch = useCallback(() => {
+    setSearchQuery('');
+    requestAnimationFrame(() => searchInputRef.current?.focus());
+  }, []);
+
+  const categorySpending = useMemo(() => {
+    return transactions
+      .filter(t => t.type === 'expense')
+      .reduce((acc, t) => {
+        acc[t.category] = (acc[t.category] || 0) + t.amount;
+        return acc;
+      }, {} as Record<string, number>);
+  }, [transactions]);
+
+  const handleEditTransaction = useCallback((item: Transaction) => {
+    setEditingTransaction(item);
+    setExpenseModalOpen(true);
+  }, []);
+
+  const handleDeleteTransaction = useCallback(
+    (item: Transaction) => {
+      Alert.alert(
+        'Delete Transaction',
+        `Delete "${item.name}"? This cannot be undone.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: () => {
+              deleteTransaction(item.id);
+              setEditingTransaction(prev =>
+                prev?.id === item.id ? null : prev,
+              );
+              setExpenseModalOpen(open =>
+                editingTransaction?.id === item.id ? false : open,
+              );
+            },
+          },
+        ],
+      );
+    },
+    [deleteTransaction, editingTransaction?.id],
+  );
+
+  const handleUpdateExpense = useCallback(
+    (id: string, expense: ExpenseData) => {
+      updateTransaction(id, {
+        name: expense.name,
+        amount: expense.amount,
+        date: expense.date,
+        icon: categoryIcons[expense.category] || '📦',
+        type: expense.type,
+        category: expense.category,
+      });
+      setEditingTransaction(null);
+      setExpenseModalOpen(false);
+    },
+    [updateTransaction, categoryIcons],
+  );
+
   const renderFilterControls = () => {
     const weekRangeLabel = formatWeekRangeLabel(historyWeekStart);
-    const normalizedYearOptions = yearOptions.length ? yearOptions : [new Date().getFullYear().toString()];
+    const normalizedYearOptions = yearOptions.length
+      ? yearOptions
+      : [new Date().getFullYear().toString()];
 
     return (
       <View style={styles.filterSection}>
         <View style={styles.filterTabs}>
-          {(['month', 'week', 'year', 'custom'] as HistoryFilter[]).map(filter => (
-            <Pressable
-              key={filter}
-              onPress={() => setHistoryFilter(filter)}
-              style={[
-                styles.filterTab,
-                { borderColor: colors.border },
-                historyFilter === filter && {
-                  borderColor: colors.primary,
-                  backgroundColor: colors.success + '15',
-                },
-              ]}
-            >
-              <Text style={[
-                styles.filterTabText,
-                { color: historyFilter === filter ? colors.success : colors.mutedForeground }
-              ]}>
-                {filter.toUpperCase()}
-              </Text>
-            </Pressable>
-          ))}
+          {(['month', 'week', 'year', 'custom'] as HistoryPeriodFilter[]).map(
+            filter => (
+              <Pressable
+                key={filter}
+                onPress={() => setHistoryFilter(filter)}
+                style={[
+                  styles.filterTab,
+                  { borderColor: colors.border },
+                  historyFilter === filter && {
+                    borderColor: colors.primary,
+                    backgroundColor: colors.success + '15',
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.filterTabText,
+                    {
+                      color:
+                        historyFilter === filter
+                          ? colors.success
+                          : colors.mutedForeground,
+                    },
+                  ]}
+                >
+                  {filter.toUpperCase()}
+                </Text>
+              </Pressable>
+            ),
+          )}
         </View>
         <View style={styles.filterControls}>
           {historyFilter === 'month' && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.monthScroll}
-          >
-              {(monthOptions.length ? monthOptions : [{ value: formatMonthKey(new Date()), label: formatMonthLabel(formatMonthKey(new Date())) }]).map(monthValue => (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.monthScroll}
+              keyboardShouldPersistTaps="always"
+            >
+              {(monthOptions.length
+                ? monthOptions
+                : [
+                    {
+                      value: formatMonthKey(new Date()),
+                      label: formatMonthLabel(formatMonthKey(new Date())),
+                    },
+                  ]
+              ).map(monthValue => (
                 <Pressable
                   key={monthValue.value}
                   onPress={() => setHistoryMonth(monthValue.value)}
@@ -212,20 +340,29 @@ export const ExpensesHistoryScreen: React.FC = () => {
                 >
                   <Text
                     style={{
-                      color: historyMonth === monthValue.value
-                        ? isLightAppearance ? '#0f172a' : colors.primaryForeground
-                        : isLightAppearance ? '#0f172a' : colors.foreground,
+                      color:
+                        historyMonth === monthValue.value
+                          ? isLightAppearance
+                            ? '#0f172a'
+                            : colors.primaryForeground
+                          : isLightAppearance
+                          ? '#0f172a'
+                          : colors.foreground,
                     }}
                   >
                     {monthValue.label}
                   </Text>
                 </Pressable>
               ))}
-          </ScrollView>
+            </ScrollView>
           )}
           {historyFilter === 'week' && (
             <View style={styles.weekSelector}>
-              <Text style={[styles.weekLabel, { color: colors.mutedForeground }]}>Week range</Text>
+              <Text
+                style={[styles.weekLabel, { color: colors.mutedForeground }]}
+              >
+                Week range
+              </Text>
               <View style={styles.weekPickerRow}>
                 <DateTimePicker
                   value={historyWeekStart}
@@ -240,18 +377,22 @@ export const ExpensesHistoryScreen: React.FC = () => {
                   onPress={() => weekPickerOpener.current?.()}
                   hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
                 >
-                  <Text style={[styles.weekRangeText, { color: colors.foreground }]}>{weekRangeLabel}</Text>
-                  <Text style={[styles.weekRangeHint, { color: colors.mutedForeground }]}>Aligned to the selected start date</Text>
+                  <Text
+                    style={[styles.weekRangeText, { color: colors.foreground }]}
+                  >
+                    {weekRangeLabel}
+                  </Text>
                 </Pressable>
               </View>
             </View>
           )}
           {historyFilter === 'year' && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.yearScroll}
-          >
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.yearScroll}
+              keyboardShouldPersistTaps="always"
+            >
               {normalizedYearOptions.map(yearValue => (
                 <Pressable
                   key={yearValue}
@@ -267,21 +408,33 @@ export const ExpensesHistoryScreen: React.FC = () => {
                 >
                   <Text
                     style={{
-                      color: historyYear === yearValue
-                        ? isLightAppearance ? '#0f172a' : colors.primaryForeground
-                        : isLightAppearance ? '#0f172a' : colors.foreground,
+                      color:
+                        historyYear === yearValue
+                          ? isLightAppearance
+                            ? '#0f172a'
+                            : colors.primaryForeground
+                          : isLightAppearance
+                          ? '#0f172a'
+                          : colors.foreground,
                     }}
                   >
                     {yearValue}
                   </Text>
                 </Pressable>
               ))}
-          </ScrollView>
+            </ScrollView>
           )}
           {historyFilter === 'custom' && (
             <View style={styles.customRangeRow}>
               <View style={styles.dateField}>
-                <Text style={[styles.dateFieldLabel, { color: colors.mutedForeground }]}>Start date & time</Text>
+                <Text
+                  style={[
+                    styles.dateFieldLabel,
+                    { color: colors.mutedForeground },
+                  ]}
+                >
+                  Start
+                </Text>
                 <DateTimePicker
                   value={historyCustomStart}
                   onChange={setHistoryCustomStart}
@@ -291,7 +444,14 @@ export const ExpensesHistoryScreen: React.FC = () => {
                 />
               </View>
               <View style={styles.dateField}>
-                <Text style={[styles.dateFieldLabel, { color: colors.mutedForeground }]}>End date & time</Text>
+                <Text
+                  style={[
+                    styles.dateFieldLabel,
+                    { color: colors.mutedForeground },
+                  ]}
+                >
+                  End
+                </Text>
                 <DateTimePicker
                   value={historyCustomEnd}
                   onChange={setHistoryCustomEnd}
@@ -307,86 +467,358 @@ export const ExpensesHistoryScreen: React.FC = () => {
     );
   };
 
-  const renderItem = ({ item }: { item: TransactionWithDate }) => (
-    <View style={[styles.txRow, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radius.md }]}>
-      <View style={[styles.txIcon, { backgroundColor: colors.muted }]}>
-        <IconGlyph icon={item.icon} size={18} color={colors.foreground} />
-      </View>
-      <View style={styles.txDetails}>
-        <Text style={[styles.txTitle, { color: colors.foreground }]} numberOfLines={1}>{item.name}</Text>
-        <Text style={[styles.txMeta, { color: colors.mutedForeground }]}>
-          {item.category} • {item.dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-        </Text>
-      </View>
-      <Text style={[
-        styles.txAmount,
-        item.type === 'income' ? { color: colors.success } : { color: colors.danger }
-      ]}>
-        {item.type === 'income' ? '+' : '-'}{formatCurrency(item.amount)}
-      </Text>
-    </View>
-  );
-
   const renderListHeader = () => (
-    <>
-      <View style={styles.headerRow}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-          <ChevronLeft size={24} color={colors.foreground} />
-        </Pressable>
-        <View>
-          <Text style={[styles.screenTitle, { color: colors.foreground }]}>Transaction History</Text>
-          <Text style={[styles.screenSubtitle, { color: colors.mutedForeground }]}>Review every entry and filter by period.</Text>
-        </View>
-        <View style={{ width: 36 }} />
-      </View>
+    <View>
       {renderFilterControls()}
       <View style={styles.summarySection}>
-        {/* Transactions card - full width at top */}
-        <View style={[styles.summaryCardFull, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.md }]}>
-          <Text style={[styles.summaryLabel, { color: colors.mutedForeground }]}>Transactions</Text>
-          <Text style={[styles.summaryValue, { color: colors.foreground }]}>{summary.count}</Text>
+        <View
+          style={[
+            styles.summaryCardFull,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              borderRadius: radius.md,
+            },
+          ]}
+        >
+          <Text
+            style={[styles.summaryLabel, { color: colors.mutedForeground }]}
+          >
+            Transactions
+          </Text>
+          <Text style={[styles.summaryValue, { color: colors.foreground }]}>
+            {summary.count}
+          </Text>
         </View>
-        {/* Income and Expenses - 50/50 row */}
         <View style={styles.summaryRow}>
-          <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.md }]}>
-            <Text style={[styles.summaryLabel, { color: colors.success }]}>Income</Text>
-            <Text style={[styles.summaryValue, { color: colors.success }]} numberOfLines={1} adjustsFontSizeToFit>{formatCurrency(summary.income)}</Text>
+          <View
+            style={[
+              styles.summaryCard,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderRadius: radius.md,
+              },
+            ]}
+          >
+            <Text style={[styles.summaryLabel, { color: colors.success }]}>
+              Income
+            </Text>
+            <Text
+              style={[styles.summaryValue, { color: colors.success }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
+              {formatCurrency(summary.income)}
+            </Text>
           </View>
-          <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radius.md }]}>
-            <Text style={[styles.summaryLabel, { color: colors.danger }]}>Expenses</Text>
-            <Text style={[styles.summaryValue, { color: colors.danger }]} numberOfLines={1} adjustsFontSizeToFit>{formatCurrency(summary.expense)}</Text>
+          <View
+            style={[
+              styles.summaryCard,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderRadius: radius.md,
+              },
+            ]}
+          >
+            <Text style={[styles.summaryLabel, { color: colors.danger }]}>
+              Expenses
+            </Text>
+            <Text
+              style={[styles.summaryValue, { color: colors.danger }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
+              {formatCurrency(summary.expense)}
+            </Text>
           </View>
         </View>
       </View>
-      <View style={{ marginBottom: 8 }}>
-        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-          Showing {summary.count} transactions
-        </Text>
-      </View>
-    </>
-  );
-
-  const emptyComponent = () => (
-    <View style={styles.emptyState}>
-      <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-        No transactions match the selected period.
+      <Text
+        style={[
+          styles.sectionTitle,
+          { color: colors.foreground, marginBottom: 8 },
+        ]}
+      >
+        Showing {summary.count} transaction{summary.count === 1 ? '' : 's'}
       </Text>
     </View>
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: DatedTx }) => (
+      <View
+        style={[
+          styles.txRow,
+          {
+            borderColor: colors.border,
+            backgroundColor: colors.card,
+            borderRadius: radius.md,
+          },
+        ]}
+      >
+        <View style={[styles.txIcon, { backgroundColor: colors.muted }]}>
+          <IconGlyph icon={item.icon} size={18} color={colors.foreground} />
+        </View>
+        <View style={styles.txDetails}>
+          <Text
+            style={[styles.txTitle, { color: colors.foreground }]}
+            numberOfLines={1}
+          >
+            {item.name}
+          </Text>
+          <Text
+            style={[styles.txMeta, { color: colors.mutedForeground }]}
+            numberOfLines={1}
+          >
+            {formatCategoryLabel(item.category)} •{' '}
+            {item.dateObj.toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+            })}
+          </Text>
+          <Text
+            style={[
+              styles.txAmountInline,
+              item.type === 'income'
+                ? { color: colors.success }
+                : { color: colors.danger },
+            ]}
+          >
+            {item.type === 'income' ? '+' : '-'}
+            {formatCurrency(item.amount)}
+          </Text>
+        </View>
+        <View style={styles.txActions}>
+          <Pressable
+            onPress={() => handleEditTransaction(item)}
+            style={[styles.txActionBtn, { backgroundColor: colors.muted }]}
+            hitSlop={8}
+          >
+            <Pencil size={14} color={colors.foreground} />
+          </Pressable>
+          <Pressable
+            onPress={() => handleDeleteTransaction(item)}
+            style={[
+              styles.txActionBtn,
+              { backgroundColor: colors.danger + '20' },
+            ]}
+            hitSlop={8}
+          >
+            <Trash2 size={14} color={colors.danger} />
+          </Pressable>
+        </View>
+      </View>
+    ),
+    [
+      colors,
+      radius.md,
+      formatCurrency,
+      handleEditTransaction,
+      handleDeleteTransaction,
+    ],
   );
 
   return (
     <AppLayout showNav={false} showAddButton={false} disableScroll>
-      <View style={[styles.screenContainer, { backgroundColor: colors.background }]}>
+      <View
+        style={[styles.screenContainer, { backgroundColor: colors.background }]}
+      >
+        <View style={styles.stickyChrome}>
+          <View style={styles.headerRow}>
+            <Pressable
+              onPress={() => navigation.goBack()}
+              style={styles.backButton}
+            >
+              <ChevronLeft size={24} color={colors.foreground} />
+            </Pressable>
+            <View style={styles.headerTextWrap}>
+              <Text style={[styles.screenTitle, { color: colors.foreground }]}>
+                Transaction History
+              </Text>
+              <Text
+                style={[
+                  styles.screenSubtitle,
+                  { color: colors.mutedForeground },
+                ]}
+              >
+                Type to search · tap categories to filter
+              </Text>
+            </View>
+            <View style={{ width: 36 }} />
+          </View>
+
+          <View
+            style={[
+              styles.searchBar,
+              {
+                backgroundColor: colors.muted,
+                borderColor: colors.border,
+                borderRadius: radius.md,
+              },
+            ]}
+          >
+            <Search size={16} color={colors.mutedForeground} />
+            <TextInput
+              ref={searchInputRef}
+              style={[styles.searchInput, { color: colors.foreground }]}
+              placeholder="Search by name, category, amount..."
+              placeholderTextColor={colors.mutedForeground}
+              value={searchQuery}
+              onChangeText={onSearchChange}
+              autoCorrect={false}
+              autoCapitalize="none"
+              returnKeyType="search"
+              blurOnSubmit={false}
+              importantForAutofill="no"
+            />
+            {hasSearchQuery ? (
+              <Pressable
+                onPress={clearSearch}
+                hitSlop={10}
+                style={styles.clearSearchBtn}
+              >
+                <X size={16} color={colors.mutedForeground} />
+              </Pressable>
+            ) : null}
+          </View>
+
+          <Text
+            style={[styles.categoryBarLabel, { color: colors.mutedForeground }]}
+          >
+            Categories
+            {hasCategoryFilter
+              ? ` · ${selectedCategories.length} selected`
+              : ''}
+          </Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryChipRow}
+            keyboardShouldPersistTaps="always"
+          >
+            <Pressable
+              onPress={clearCategories}
+              style={[
+                styles.categoryChip,
+                {
+                  borderColor: !hasCategoryFilter
+                    ? colors.primary
+                    : colors.border,
+                  backgroundColor: !hasCategoryFilter
+                    ? colors.primary + '20'
+                    : colors.card,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.categoryChipText,
+                  {
+                    color: !hasCategoryFilter
+                      ? colors.primary
+                      : colors.foreground,
+                  },
+                ]}
+              >
+                All
+              </Text>
+            </Pressable>
+
+            {availableCategories.map(cat => {
+              const selected = selectedCategories.includes(cat.id);
+              return (
+                <Pressable
+                  key={cat.id}
+                  onPress={() => toggleCategory(cat.id)}
+                  style={[
+                    styles.categoryChip,
+                    {
+                      borderColor: selected ? cat.color : colors.border,
+                      backgroundColor: selected
+                        ? cat.color + '22'
+                        : colors.card,
+                    },
+                  ]}
+                >
+                  <IconGlyph
+                    icon={cat.icon}
+                    size={14}
+                    color={colors.foreground}
+                  />
+                  <Text
+                    style={[
+                      styles.categoryChipText,
+                      { color: colors.foreground },
+                    ]}
+                  >
+                    {cat.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+
+            {hasCategoryFilter ? (
+              <Pressable
+                onPress={clearCategories}
+                style={styles.clearCategoriesChip}
+              >
+                <Text
+                  style={{
+                    color: colors.primary,
+                    fontWeight: '700',
+                    fontSize: 13,
+                  }}
+                >
+                  Clear
+                </Text>
+              </Pressable>
+            ) : null}
+          </ScrollView>
+        </View>
+
         <FlatList
+          style={styles.list}
           data={filteredTransactions}
-          keyExtractor={item => item.id.toString()}
+          keyExtractor={item => item.id}
           renderItem={renderItem}
           ListHeaderComponent={renderListHeader}
-          ListEmptyComponent={emptyComponent}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Text
+                style={[styles.emptyText, { color: colors.mutedForeground }]}
+              >
+                {hasSearchQuery || hasCategoryFilter
+                  ? 'No transactions match your search or categories.'
+                  : 'No transactions match the selected period.'}
+              </Text>
+            </View>
+          }
           contentContainerStyle={styles.listContent}
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+          keyboardShouldPersistTaps="always"
+          keyboardDismissMode="none"
+          removeClippedSubviews={false}
+          initialNumToRender={12}
+          windowSize={7}
+          maxToRenderPerBatch={12}
         />
       </View>
+      <AddExpenseModal
+        visible={expenseModalOpen}
+        onClose={() => {
+          setExpenseModalOpen(false);
+          setEditingTransaction(null);
+        }}
+        onAdd={() => {}}
+        onUpdate={handleUpdateExpense}
+        transactionToEdit={editingTransaction}
+        budgets={budgets}
+        currentSpending={categorySpending}
+        categoryColors={categoryColors}
+      />
     </AppLayout>
   );
 };
@@ -396,14 +828,26 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 16,
   },
+  stickyChrome: {
+    paddingTop: 12,
+    paddingBottom: 8,
+    gap: 10,
+    zIndex: 2,
+  },
+  list: {
+    flex: 1,
+  },
   listContent: {
     paddingBottom: 40,
-    paddingTop: 16,
+    paddingTop: 4,
+    flexGrow: 1,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+  },
+  headerTextWrap: {
+    flex: 1,
   },
   backButton: {
     padding: 6,
@@ -415,6 +859,51 @@ const styles = StyleSheet.create({
   },
   screenSubtitle: {
     fontSize: 12,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    minHeight: 46,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    paddingVertical: 10,
+  },
+  clearSearchBtn: {
+    padding: 4,
+  },
+  categoryBarLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  categoryChipRow: {
+    gap: 8,
+    alignItems: 'center',
+    paddingRight: 8,
+    paddingBottom: 4,
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  categoryChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  clearCategoriesChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   filterSection: {
     marginBottom: 16,
@@ -478,10 +967,6 @@ const styles = StyleSheet.create({
   weekRangeText: {
     fontSize: 14,
     fontWeight: '600',
-  },
-  weekRangeHint: {
-    fontSize: 11,
-    marginTop: 2,
   },
   yearScroll: {
     gap: 8,
@@ -555,6 +1040,8 @@ const styles = StyleSheet.create({
   },
   txDetails: {
     flex: 1,
+    minWidth: 0,
+    paddingRight: 8,
   },
   txTitle: {
     fontSize: 16,
@@ -562,10 +1049,24 @@ const styles = StyleSheet.create({
   },
   txMeta: {
     fontSize: 12,
+    marginTop: 2,
   },
-  txAmount: {
-    fontSize: 16,
+  txAmountInline: {
+    fontSize: 15,
     fontWeight: '700',
+    marginTop: 4,
+  },
+  txActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  txActionBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyState: {
     padding: 30,

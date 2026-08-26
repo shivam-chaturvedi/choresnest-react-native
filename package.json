@@ -7,7 +7,8 @@
     "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",
-    "test": "jest"
+    "test": "jest",
+    "test:sync": "jest --testPathPattern=__tests__/sync/.*\\.test\\.ts$ --runInBand"
   },
   "dependencies": {
     "@notifee/react-native": "^9.1.8",
@@ -24,7 +25,7 @@
     "@react-navigation/native": "^7.1.14",
     "@react-navigation/native-stack": "^6.9.12",
     "@rneui/themed": "^5.0.0",
-    "@sentry/react-native": "^8.3.0",
+    "@sentry/react-native": "^8.23.0",
     "@supabase/supabase-js": "^2.93.3",
     "date-fns": "^4.1.0",
     "date-fns-tz": "^3.2.0",

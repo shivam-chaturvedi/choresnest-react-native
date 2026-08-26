@@ -109,7 +109,7 @@ const HomeScreenContent: React.FC = () => {
   const [showSearch, setShowSearch] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [showFamilyInfo, setShowFamilyInfo] = useState(false);
-  
+
   // Modals
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [showAddTask, setShowAddTask] = useState(false);
@@ -276,12 +276,9 @@ const HomeScreenContent: React.FC = () => {
   useEffect(() => {
     NotificationCenter.setActiveProfileId(profileId ?? null);
     setManualNotifications(NotificationCenter.getNotifications(profileId));
-    const unsubscribe = NotificationCenter.subscribe(
-      items => {
-        setManualNotifications(items);
-      },
-      profileId,
-    );
+    const unsubscribe = NotificationCenter.subscribe(items => {
+      setManualNotifications(items);
+    }, profileId);
     return () => unsubscribe();
   }, [profileId]);
 
@@ -837,11 +834,32 @@ const HomeScreenContent: React.FC = () => {
                     clearTimeout(reloadBannerTimer.current);
                   }
                   setIsReloadingMembers(true);
-                  reloadLocalData();
-                  reloadBannerTimer.current = setTimeout(
-                    () => setIsReloadingMembers(false),
-                    1500,
-                  );
+                  void (async () => {
+                    try {
+                      const pid = profileId;
+                      if (pid && !isGuest) {
+                        const { ProfileBootstrapService } = await import(
+                          '../services/ProfileBootstrapService'
+                        );
+                        const { FamilyService } = await import(
+                          '../services/FamilyService'
+                        );
+                        ProfileBootstrapService.resetCache();
+                        await ProfileBootstrapService.bootstrap(pid, {
+                          force: true,
+                        });
+                        await FamilyService.cleanupSeededMeMembers(pid);
+                      }
+                    } catch (error) {
+                      console.warn('HomeScreen: reload members failed', error);
+                    } finally {
+                      reloadLocalData();
+                      reloadBannerTimer.current = setTimeout(
+                        () => setIsReloadingMembers(false),
+                        600,
+                      );
+                    }
+                  })();
                 }}
                 disabled={isReloadingMembers}
                 style={({ pressed }) => [
@@ -897,7 +915,7 @@ const HomeScreenContent: React.FC = () => {
               </View>
               <View style={styles.cardHeaderRight}>
                 <Pressable
-                  onPress={() => setShowFamilyInfo((prev) => !prev)}
+                  onPress={() => setShowFamilyInfo(prev => !prev)}
                   style={({ pressed }) => ({
                     marginRight: 8,
                     padding: 6,
@@ -949,8 +967,8 @@ const HomeScreenContent: React.FC = () => {
                   ]}
                 >
                   Profiles keep each member's tasks and reminders separate. Tap
-                  any avatar to switch to their view or hit the + button to invite
-                  someone new so the whole family stays tracked together.
+                  any avatar to switch to their view or hit the + button to
+                  invite someone new so the whole family stays tracked together.
                 </Text>
               </View>
             )}
@@ -1527,7 +1545,7 @@ const HomeScreenContent: React.FC = () => {
                 ]}
               >
                 <AppIcon
-                  name="alertTriangle"
+                  name="alertCircle"
                   size={18}
                   color="#c27c00"
                   style={{ marginRight: 8 }}
@@ -1804,9 +1822,17 @@ const HomeScreenContent: React.FC = () => {
                   >
                     {selectedEvent.icon ? (
                       isAppIconName(selectedEvent.icon) ? (
-                        <AppIcon name={selectedEvent.icon} size={24} color={accentColor} />
+                        <AppIcon
+                          name={selectedEvent.icon}
+                          size={24}
+                          color={accentColor}
+                        />
                       ) : (
-                        <MaterialCommunityIcons name={selectedEvent.icon} size={24} color={accentColor} />
+                        <MaterialCommunityIcons
+                          name={selectedEvent.icon}
+                          size={24}
+                          color={accentColor}
+                        />
                       )
                     ) : (
                       <Text style={[styles.detailIcon, { color: accentColor }]}>
